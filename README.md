@@ -1,5 +1,9 @@
 # Espresso Sequencer
 
+[![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
+[![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
+[![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
+
 The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
 Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2
 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
@@ -77,6 +81,8 @@ done
 Note: if the sequencer shows a `"Connection refused"` error you may need to use `127.0.0.1` instead of `localhost` when
 connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking
 is enabled.
+
+For running a full demo natively run `just demo-native`.
 
 ### Contracts
 

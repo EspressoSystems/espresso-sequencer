@@ -1,44 +1,32 @@
 use crate::{
-    Error, L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId,
-    MAX_NMT_DEPTH,
+    l1_client::{L1Client, L1ClientOptions, L1Snapshot},
+    L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH,
 };
 use ark_serialize::CanonicalSerialize;
+use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot::traits::Block as HotShotBlock;
-use hotshot_query_service::QueryableBlock;
-use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeScheme,
+use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::{
+    data::VidCommitment,
+    traits::block_contents::{vid_commitment, BlockHeader, BlockPayload},
 };
+use jf_primitives::merkle_tree::{
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, LookupResult, MerkleCommitment,
+    MerkleTreeScheme,
+};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Debug, Display};
+use std::{
+    env,
+    fmt::{Debug, Display},
+    time::Duration,
+};
 use time::OffsetDateTime;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    // Would be nice to use #[serde(flatten)] here, but unfortunately it doesn't work with bincode.
-    pub metadata: Metadata,
-    pub transactions_root: NMTRoot,
-}
-
-impl Header {
-    pub fn timestamp(&self) -> u64 {
-        self.metadata.timestamp
-    }
-
-    pub fn l1_head(&self) -> u64 {
-        self.metadata.l1_head
-    }
-
-    pub fn l1_finalized(&self) -> Option<&L1BlockInfo> {
-        self.metadata.l1_finalized.as_ref()
-    }
-}
-
-/// Metadata shared by block headers and full blocks.
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-pub struct Metadata {
+    pub height: u64,
     pub timestamp: u64,
 
     /// The Espresso block header includes a reference to the current head of the L1 chain.
@@ -81,43 +69,173 @@ pub struct Metadata {
     /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
     /// `Some`.
     pub l1_finalized: Option<L1BlockInfo>,
+
+    pub payload_commitment: VidCommitment,
+    pub transactions_root: NMTRoot,
+}
+
+impl Committable for Header {
+    fn commit(&self) -> Commitment<Self> {
+        RawCommitmentBuilder::new(&Self::tag())
+            .u64_field("height", self.height)
+            .u64_field("timestamp", self.timestamp)
+            .u64_field("l1_head", self.l1_head)
+            .optional("l1_finalized", &self.l1_finalized)
+            .constant_str("payload_commitment")
+            .fixed_size_bytes(&self.payload_commitment.into())
+            .field("transactions_root", self.transactions_root.commit())
+            .finalize()
+    }
+
+    fn tag() -> String {
+        "BLOCK".into()
+    }
+}
+
+impl Committable for NMTRoot {
+    fn commit(&self) -> Commitment<Self> {
+        let mut comm_bytes = vec![];
+        self.root
+            .serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        RawCommitmentBuilder::new(&Self::tag())
+            .var_size_field("root", &comm_bytes)
+            .finalize()
+    }
+
+    fn tag() -> String {
+        "NMTROOT".into()
+    }
 }
 
 impl Header {
-    pub fn commit(&self) -> Commitment<Block> {
-        RawCommitmentBuilder::new(&Block::tag())
-            .u64_field("timestamp", self.timestamp())
-            .u64_field("l1_head", self.l1_head())
-            .array_field(
-                "l1_finalized",
-                self.l1_finalized()
-                    .iter()
-                    .map(|block| block.commit())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
-            .field("transactions_root", self.transactions_root.commit())
-            .finalize()
+    fn from_info(
+        payload_commitment: VidCommitment,
+        transactions_root: NMTRoot,
+        parent: &Self,
+        mut l1: L1Snapshot,
+        mut timestamp: u64,
+    ) -> Self {
+        // Increment height.
+        let height = parent.height + 1;
+
+        // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
+        // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
+        // are lying about the current time, or our clock is just lagging.
+        if timestamp < parent.timestamp {
+            tracing::warn!(
+                "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
+                parent.timestamp
+            );
+            timestamp = parent.timestamp;
+        }
+
+        // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
+        // accurate.
+        if l1.head < parent.l1_head {
+            tracing::warn!(
+                "L1 head {} behind parent {}, L1 client may be lagging",
+                l1.head,
+                parent.l1_head
+            );
+            l1.head = parent.l1_head;
+        }
+        if l1.finalized < parent.l1_finalized {
+            tracing::warn!(
+                "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
+                l1.finalized,
+                parent.l1_finalized
+            );
+            l1.finalized = parent.l1_finalized;
+        }
+
+        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
+        // only happen if our clock is badly out of sync with L1.
+        if let Some(l1_block) = &l1.finalized {
+            let l1_timestamp = l1_block.timestamp.as_u64();
+            if timestamp < l1_timestamp {
+                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
+                timestamp = l1_timestamp;
+            }
+        }
+
+        Self {
+            height,
+            timestamp,
+            l1_head: l1.head,
+            l1_finalized: l1.finalized,
+            payload_commitment,
+            transactions_root,
+        }
+    }
+}
+
+impl BlockHeader for Header {
+    type Payload = Payload;
+
+    fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
+        // The HotShot APIs should be redesigned so that
+        // * they are async
+        // * new blocks being created have access to the application state, which in our case could
+        //   contain an already connected L1 client.
+        // For now, as a workaround, we will create a new L1 client based on environment variables
+        // and use `block_on` to query it.
+        let l1 = if let Some(l1_client) = &*L1_CLIENT {
+            block_on(l1_client.snapshot())
+        } else {
+            // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
+            L1Snapshot {
+                finalized: None,
+                head: 0,
+            }
+        };
+
+        Self::from_info(
+            payload_commitment,
+            transactions_root,
+            parent,
+            l1,
+            OffsetDateTime::now_utc().unix_timestamp() as u64,
+        )
+    }
+
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    ) {
+        let (payload, transactions_root) = Payload::genesis();
+        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
+        let header = Self {
+            // The genesis header needs to be completely deterministic, so we can't sample real
+            // timestamps or L1 values.
+            height: 0,
+            timestamp: 0,
+            l1_head: 0,
+            l1_finalized: None,
+            payload_commitment,
+            transactions_root,
+        };
+        (header, payload, transactions_root)
+    }
+
+    fn block_number(&self) -> u64 {
+        self.height
+    }
+
+    fn payload_commitment(&self) -> VidCommitment {
+        self.payload_commitment
+    }
+
+    fn metadata(&self) -> NMTRoot {
+        self.transactions_root
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-pub struct Block {
-    metadata: Metadata,
-
+pub struct Payload {
     #[serde(with = "nmt_serializer")]
     pub(crate) transaction_nmt: TransactionNMT,
-}
-
-impl Block {
-    pub fn header(&self) -> Header {
-        Header {
-            metadata: self.metadata.clone(),
-            transactions_root: NMTRoot {
-                root: self.transaction_nmt.commitment().digest(),
-            },
-        }
-    }
 }
 
 mod nmt_serializer {
@@ -145,7 +263,7 @@ mod nmt_serializer {
     }
 }
 
-impl QueryableBlock for Block {
+impl QueryablePayload for Payload {
     type TransactionIndex = u64;
     type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
@@ -169,43 +287,51 @@ impl QueryableBlock for Block {
     }
 }
 
-impl HotShotBlock for Block {
-    type Error = Error;
-
+impl BlockPayload for Payload {
+    type Error = bincode::Error;
     type Transaction = Transaction;
+    type Metadata = NMTRoot;
+    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
-    fn add_transaction_raw(
-        &self,
-        tx: &Self::Transaction,
-    ) -> std::result::Result<Self, Self::Error> {
-        let mut new = self.clone();
-        new.transaction_nmt
-            .push(tx.clone())
-            .map_err(|e| Error::MerkleTreeError {
-                error: e.to_string(),
-            })?;
-        Ok(new)
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        let mut transactions = transactions.into_iter().collect::<Vec<_>>();
+        transactions.sort_by_key(|tx| tx.vm());
+        let transaction_nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, transactions).unwrap();
+        let root = NMTRoot {
+            root: transaction_nmt.commitment().digest(),
+        };
+        Ok((Self { transaction_nmt }, root))
     }
 
-    fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        self.transaction_nmt
-            .leaves()
-            .map(|tx| tx.commit())
-            .collect()
+    fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        // TODO for now, we panic if the transactions are not properly encoded. This only works as
+        // long as all proposers are honest. We should soon replace this with the VID-specific
+        // payload implementation in block2.rs.
+        bincode::deserialize(encoded_transactions.collect::<Vec<u8>>().as_slice()).unwrap()
     }
 
-    fn new() -> Self {
-        // HotShot calls `new()` to create a "dummy" block for various reasons, so we just give it
-        // the genesis block. Creating a real block, with a proper L1 block info, will be handled by
-        // [`State::next_block`].
-        Self::genesis()
+    fn genesis() -> (Self, Self::Metadata) {
+        Self::from_transactions([]).unwrap()
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(bincode::serialize(self)?.into_iter())
+    }
+
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate().map(|(_, tx)| tx.commit()).collect()
     }
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::state::TestableBlock for Block {
+impl hotshot_types::traits::state::TestableBlock for Payload {
     fn genesis() -> Self {
-        Block::genesis()
+        BlockPayload::genesis().0
     }
 
     fn txn_count(&self) -> u64 {
@@ -213,107 +339,67 @@ impl hotshot_types::traits::state::TestableBlock for Block {
     }
 }
 
-impl Display for Block {
+impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl Committable for Block {
-    fn commit(&self) -> Commitment<Self> {
-        self.header().commit()
-    }
-
-    fn tag() -> String {
-        "BLOCK".into()
-    }
-}
-
-impl Committable for NMTRoot {
-    fn commit(&self) -> Commitment<Self> {
-        let mut comm_bytes = vec![];
-        self.root
-            .serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
-        RawCommitmentBuilder::new(&Self::tag())
-            .var_size_field("root", &comm_bytes)
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "NMTROOT".into()
-    }
-}
-
-impl Block {
-    pub fn genesis() -> Self {
-        Self {
-            metadata: Metadata {
-                timestamp: 0,
-                l1_head: 0,
-                l1_finalized: None,
-            },
-            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
-        }
-    }
-
-    pub fn from_l1(l1_finalized: Option<L1BlockInfo>, l1_head: u64) -> Self {
-        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
-
-        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
-        // only happen if our clock is badly out of sync with L1.
-        if let Some(l1_block) = &l1_finalized {
-            let l1_timestamp = l1_block.timestamp.as_u64();
-            if l1_timestamp > timestamp {
-                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}");
-                timestamp = l1_timestamp;
-            }
-        }
-
-        Self {
-            metadata: Metadata {
-                timestamp,
-                l1_head,
-                l1_finalized,
-            },
-            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
-        }
-    }
-
-    /// Visit all transactions in this block.
-    pub fn transactions(&self) -> impl ExactSizeIterator<Item = &Transaction> + '_ {
-        self.transaction_nmt.leaves()
-    }
-
+impl Payload {
     /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
     /// and the root of the NMT
     pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
         self.transaction_nmt.get_namespace_proof(vm_id)
     }
+}
 
-    /// Currently, HotShot consensus does not enforce any relationship between
-    /// the NMT root and the block commitment. This returns the NMT root of the block,
-    /// mocking the consistency check between the block and NMT commitments.
-    pub fn get_nmt_root(&self) -> NMTRoot {
-        NMTRoot {
-            root: self.transaction_nmt.commitment().digest(),
+lazy_static! {
+    pub(crate) static ref L1_CLIENT: Option<L1Client> = {
+        let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_WS_PROVIDER") else {
+            #[cfg(any(test, feature = "testing"))]
+            {
+                tracing::warn!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
+                return None;
+            }
+            #[cfg(not(any(test, feature = "testing")))]
+            {
+                panic!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER must be set.");
+            }
+        };
+
+        let mut opt = L1ClientOptions::with_url(url.parse().unwrap());
+        // For testing with a pre-merge geth node that does not support the finalized block tag we
+        // allow setting an environment variable to use the latest block instead. This feature is
+        // used in the OP devnet which uses the docker images built in this repo. Therefore it's not
+        // hidden behind the testing flag.
+        if let Ok(val) = env::var("ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG") {
+            match val.as_str() {
+               "y" | "yes" | "t"|  "true" | "on" | "1"  => {
+                    tracing::warn!(
+                        "ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG is set. Using latest block tag\
+                         instead of finalized block tag. This is suitable for testing but not production."
+                    );
+                    opt = opt.with_latest_block_tag();
+                },
+                "n" | "no" | "f" | "false" | "off" | "0" => {}
+                _ => panic!("invalid ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG value: {}", val)
+            }
         }
-    }
 
-    /// The block's timestamp.
-    pub fn timestamp(&self) -> u64 {
-        self.metadata.timestamp
-    }
-
-    /// The number of the most recent L1 block when this block was sequenced.
-    pub fn l1_head(&self) -> u64 {
-        self.metadata.l1_head
-    }
-
-    /// Information about the finalized L1 block with which this sequencer block is synchronized.
-    pub fn l1_finalized(&self) -> Option<&L1BlockInfo> {
-        self.metadata.l1_finalized.as_ref()
-    }
+        block_on(async move {
+            // Starting the client can fail due to transient errors in the L1 RPC. This could make
+            // it very annoying to start up the sequencer node, so retry until we succeed.
+            loop {
+                match opt.clone().start().await {
+                    Ok(client) => break Some(client),
+                    Err(err) => {
+                        tracing::error!("failed to start L1 client, retrying: {err}");
+                        sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        })
+    };
 }
 
 #[cfg(test)]
@@ -355,7 +441,6 @@ mod reference {
         pub static ref NMT_ROOT: Value = load_reference!("nmt_root");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
-        pub static ref BLOCK: Value = load_reference!("block");
     }
 
     fn reference_test<T: DeserializeOwned, C: Committable>(
@@ -402,23 +487,186 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
+            "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
             |header| header.commit(),
         );
     }
+}
 
-    #[test]
-    fn test_reference_block() {
-        reference_test::<Block, _>(
-            BLOCK.clone(),
-            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
-            |block| block.commit(),
-        );
+#[cfg(test)]
+mod test_headers {
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
+    #[derive(Debug, Default)]
+    #[must_use]
+    struct TestCase {
+        // Parent header info.
+        parent_timestamp: u64,
+        parent_l1_head: u64,
+        parent_l1_finalized: Option<L1BlockInfo>,
+
+        // Environment at the time the new header is created.
+        l1_head: u64,
+        l1_finalized: Option<L1BlockInfo>,
+        timestamp: u64,
+
+        // Expected new header info.
+        expected_timestamp: u64,
+        expected_l1_head: u64,
+        expected_l1_finalized: Option<L1BlockInfo>,
+    }
+
+    impl TestCase {
+        fn run(self) {
+            setup_logging();
+            setup_backtrace();
+
+            // Check test case validity.
+            assert!(self.expected_timestamp >= self.parent_timestamp);
+            assert!(self.expected_l1_head >= self.parent_l1_head);
+            assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
+
+            let genesis = Header::genesis().0;
+
+            let mut parent = genesis.clone();
+            parent.timestamp = self.parent_timestamp;
+            parent.l1_head = self.parent_l1_head;
+            parent.l1_finalized = self.parent_l1_finalized;
+
+            let header = Header::from_info(
+                genesis.payload_commitment,
+                genesis.transactions_root,
+                &parent,
+                L1Snapshot {
+                    head: self.l1_head,
+                    finalized: self.l1_finalized,
+                },
+                self.timestamp,
+            );
+            assert_eq!(header.height, parent.height + 1);
+            assert_eq!(header.timestamp, self.expected_timestamp);
+            assert_eq!(header.l1_head, self.expected_l1_head);
+            assert_eq!(header.l1_finalized, self.expected_l1_finalized);
+        }
+    }
+
+    fn l1_block(number: u64) -> L1BlockInfo {
+        L1BlockInfo {
+            number,
+            ..Default::default()
+        }
     }
 
     #[test]
-    fn test_header_block_commitment_equivalence() {
-        let block: Block = serde_json::from_value(BLOCK.clone()).unwrap();
-        assert_eq!(block.commit(), block.header().commit());
+    fn test_new_header() {
+        // Simplest case: building on genesis, L1 info and timestamp unchanged.
+        TestCase::default().run()
+    }
+
+    #[test]
+    fn test_new_header_advance_timestamp() {
+        TestCase {
+            timestamp: 1,
+            expected_timestamp: 1,
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_advance_l1_block() {
+        TestCase {
+            parent_l1_head: 0,
+            parent_l1_finalized: Some(l1_block(0)),
+
+            l1_head: 1,
+            l1_finalized: Some(l1_block(1)),
+
+            expected_l1_head: 1,
+            expected_l1_finalized: Some(l1_block(1)),
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_advance_l1_finalized_from_none() {
+        TestCase {
+            l1_finalized: Some(l1_block(1)),
+            expected_l1_finalized: Some(l1_block(1)),
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_timestamp_behind_finalized_l1_block() {
+        let l1_finalized = Some(L1BlockInfo {
+            number: 1,
+            timestamp: 1.into(),
+            ..Default::default()
+        });
+        TestCase {
+            l1_head: 1,
+            l1_finalized,
+            timestamp: 0,
+
+            expected_l1_head: 1,
+            expected_l1_finalized: l1_finalized,
+            expected_timestamp: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_timestamp_behind() {
+        TestCase {
+            parent_timestamp: 1,
+            timestamp: 0,
+            expected_timestamp: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_head_behind() {
+        TestCase {
+            parent_l1_head: 1,
+            l1_head: 0,
+            expected_l1_head: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_finalized_behind_some() {
+        TestCase {
+            parent_l1_finalized: Some(l1_block(1)),
+            l1_finalized: Some(l1_block(0)),
+            expected_l1_finalized: Some(l1_block(1)),
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_finalized_behind_none() {
+        TestCase {
+            parent_l1_finalized: Some(l1_block(0)),
+            l1_finalized: None,
+            expected_l1_finalized: Some(l1_block(0)),
+
+            ..Default::default()
+        }
+        .run()
     }
 }

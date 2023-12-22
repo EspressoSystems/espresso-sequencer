@@ -22,6 +22,22 @@ contract StakeTable is AbstractStakeTable {
     /// account.
     error NodeAlreadyRegistered();
 
+    /// Error raised when a user tries to make a deposit or request an exit but does not control the
+    /// node public key.
+    error Unauthenticated();
+
+    /// Error raised when a user tries to deposit before the registration is complete.
+    error PrematureDeposit();
+
+    /// Error raised when a user tries to exit before the registration is complete.
+    error PrematureExit();
+
+    /// Error raised when a user tries to deposit while an exit request is in progress.
+    error ExitRequestInProgress();
+
+    // Error raised when a user tries to withdraw funds before the exit escrow period is over.
+    error PrematureWithdrawal();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
 
@@ -31,21 +47,41 @@ contract StakeTable is AbstractStakeTable {
     /// Total restaked stake locked for the latest stake table (HEAD).
     uint256 public totalRestakedStake;
 
-    /// Size of the registration queue for the next available epoch.
-    uint64 public numRegistrations;
-
-    /// Size of the exit queue for the next available epoch.
-    uint64 public numPendingExits;
-
     /// Address of the native token contract.
     address public tokenAddress;
 
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    constructor(address _tokenAddress, address _lightClientAddress) {
+    /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
+    /// get the correct epoch
+    uint64 public _firstAvailableRegistrationEpoch;
+    /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
+    /// total pending queue size!)
+    uint64 public _numPendingRegistrations;
+
+    /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
+    /// epoch
+    uint64 public _firstAvailableExitEpoch;
+    /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
+    /// queue size!)
+    uint64 public _numPendingExits;
+
+    uint64 public maxChurnRate;
+
+    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
+
+        maxChurnRate = churnRate;
+
+        // A set of hardcoded stakers is defined for the first epoch.
+        _firstAvailableRegistrationEpoch = 1;
+        _numPendingRegistrations = 0;
+
+        // It is not possible to exit during the first epoch.
+        _firstAvailableExitEpoch = 1;
+        _numPendingExits = 0;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -85,30 +121,89 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    /// @notice Get the next available epoch for new registration.
-    /// @return Number of the epoch when the user can register.
-    function nextRegistrationEpoch() external view override returns (uint64) {
-        // TODO implement queue logic
-        return currentEpoch() + 1;
+    /// @notice Get the next available epoch and queue size in that epoch
+    function nextRegistrationEpoch() external view override returns (uint64, uint64) {
+        uint64 epoch;
+        uint64 queueSize;
+
+        if (_firstAvailableRegistrationEpoch < currentEpoch() + 1) {
+            epoch = currentEpoch() + 1;
+            queueSize = 0;
+        } else if (_numPendingRegistrations >= maxChurnRate) {
+            epoch = _firstAvailableRegistrationEpoch + 1;
+            queueSize = 0;
+        } else {
+            epoch = _firstAvailableRegistrationEpoch;
+            queueSize = _numPendingRegistrations;
+        }
+        return (epoch, queueSize);
+    }
+
+    // @notice Update the registration queue
+    // @param epoch next available registration epoch
+    // @param queueSize current size of the registration queue (after insertion of new element in
+    // the queue)
+    function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
+        _firstAvailableRegistrationEpoch = epoch;
+        _numPendingRegistrations = queueSize + 1;
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view override returns (uint64) {
-        return numRegistrations;
+        return _numPendingRegistrations;
     }
 
-    /// @notice Get the next available epoch for exit
-    function nextExitEpoch() external view override returns (uint64) {
-        if (numPendingExits == 0) {
-            return 0;
+    /// @notice Get the next available epoch for exit and queue size in that epoch
+    function nextExitEpoch() external view override returns (uint64, uint64) {
+        uint64 epoch;
+        uint64 queueSize;
+
+        if (_firstAvailableExitEpoch < currentEpoch() + 1) {
+            epoch = currentEpoch() + 1;
+            queueSize = 0;
+        } else if (_numPendingExits >= maxChurnRate) {
+            epoch = _firstAvailableExitEpoch + 1;
+            queueSize = 0;
         } else {
-            return 1;
+            epoch = _firstAvailableExitEpoch;
+            queueSize = _numPendingExits;
         }
+        return (epoch, queueSize);
+    }
+
+    // @notice Update the exit queue
+    // @param epoch next available exit epoch
+    // @param queueSize current size of the exit queue (after insertion of new element in the queue)
+    function appendExitQueue(uint64 epoch, uint64 queueSize) private {
+        _firstAvailableExitEpoch = epoch;
+        _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExit() external view override returns (uint64) {
-        return numPendingExits;
+    function numPendingExits() external view override returns (uint64) {
+        return _numPendingExits;
+    }
+
+    /// @notice Defines the exit escrow period for a node.
+    /// TODO discuss Alex, Jeb. How much do we want to specify this function? Also marked as public
+    /// for easier testing.
+    /// @dev To put this function into context let us consider the following workflow: requestExit
+    /// --> (queueing) --> Exited --> (escrow) --> Witdrawable. The first phase is about waiting in
+    /// queue due to rate-limiting on exit, the wait is dependent on the exit amount and currently
+    /// exit traffic. At the point of "Exited", the node is officially off duty, and stops
+    /// participating in consensus.
+    ///  The second phase is about slashable security, the wait is dependent only on amount, during
+    /// which period cryptographic evidence of misbehavior (e.g. double-voting) might still lead to
+    /// the forfeit of stakes. From the point of `Withdrawable` onwards, the staker can freely
+    /// withdraw.
+    /// @param node node which is assigned an exit escrow period.
+    /// @return Number of epochs post exit after which funds can be withdrawn.
+    function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
+        if (node.balance > 100) {
+            return 10;
+        } else {
+            return 5;
+        }
     }
 
     /// @notice Register a validator in the stake table, transfer of tokens incurred!
@@ -148,10 +243,11 @@ contract StakeTable is AbstractStakeTable {
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        uint64 registerEpoch = this.nextRegistrationEpoch();
+        (uint64 registerEpoch, uint64 queueSize) = this.nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
+        appendRegistrationQueue(registerEpoch, queueSize);
 
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
@@ -182,7 +278,8 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Deposit more stakes to registered keys
-    ///
+    /// @dev TODO this implementation will be revisited later. See
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
@@ -191,9 +288,33 @@ contract StakeTable is AbstractStakeTable {
         override
         returns (uint64, uint64)
     {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].balance += amount;
-        return (0, 0);
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // The deposit must come from the node's registered account.
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
+        }
+
+        // A node cannot deposit more tokens while it waiting to register.
+        uint64 _currentEpoch = currentEpoch();
+        if (_currentEpoch <= node.registerEpoch) {
+            revert PrematureDeposit();
+        }
+
+        // A node cannot deposit more tokens if an exit request is in progress.
+        if (node.exitEpoch != 0) {
+            revert ExitRequestInProgress();
+        }
+
+        nodes[key].balance += amount;
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+
+        emit Deposit(_hashBlsKey(blsVK), uint256(amount));
+
+        uint64 effectiveEpoch = _currentEpoch + 1;
+
+        return (nodes[key].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
@@ -201,8 +322,33 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key to exit
     /// @return success status
     function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].exitEpoch = 0;
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // The exit request must come from the node's withdrawal account.
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
+        }
+
+        // Cannot request to exit if an exit request is already in progress.
+        if (node.exitEpoch != 0) {
+            revert ExitRequestInProgress();
+        }
+
+        // Cannot exit before becoming an active participant. Activation happens one epoch after the
+        // node's registration epoch, due to the consensus-imposed activation waiting period.
+        if (currentEpoch() < node.registerEpoch + 1) {
+            revert PrematureExit();
+        }
+
+        // Prepare the node to exit.
+        (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
+        nodes[key].exitEpoch = exitEpoch;
+
+        appendExitQueue(exitEpoch, queueSize);
+
+        emit Exit(key, exitEpoch);
+
         return true;
     }
 
@@ -212,8 +358,17 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint64) {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].balance = 0;
-        return 0;
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+            revert PrematureWithdrawal();
+        }
+        uint64 balance = node.balance;
+        SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
+
+        delete nodes[key];
+
+        return balance;
     }
 }

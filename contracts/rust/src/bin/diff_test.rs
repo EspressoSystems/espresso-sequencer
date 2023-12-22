@@ -3,7 +3,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
-use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
+use ark_std::rand::{rngs::StdRng, SeedableRng};
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},

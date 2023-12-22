@@ -50,7 +50,7 @@
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
       RUSTFLAGS =
-        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
 
@@ -193,6 +193,10 @@
             nixWithFlakes
             nixpkgs-fmt
             entr
+            process-compose
+            # `postgresql` defaults to an older version (15), so we select the latest version (16)
+            # explicitly.
+            postgresql_16
 
             # Figures
             graphviz

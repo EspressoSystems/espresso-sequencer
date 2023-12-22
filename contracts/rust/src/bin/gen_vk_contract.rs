@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use hotshot_contract::jf_helpers::ParsedVerifyingKey;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 
 fn main() {
@@ -21,9 +22,11 @@ fn main() {
             powers_of_g: srs.powers_of_g,
             h: srs.h,
             beta_h: srs.beta_h,
+            powers_of_h: vec![srs.h, srs.beta_h],
         }
     };
-    let (_, vk) = hotshot_state_prover::preprocess(&srs).expect("Circuit preprocess failed");
+    let (_, vk) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        .expect("Circuit preprocess failed");
     let vk: ParsedVerifyingKey = vk.into();
 
     // calculate the path to solidity file

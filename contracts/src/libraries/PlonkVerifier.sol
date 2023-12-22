@@ -97,7 +97,7 @@ library PlonkVerifier {
     ) external view returns (bool) {
         _validateProof(proof);
         for (uint256 i = 0; i < publicInput.length; i++) {
-            BN254.validateScalarField(publicInput[i]);
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
         PcsInfo[] memory pcsInfos = new PcsInfo[](1);
         pcsInfos[0] = _preparePcsInfo(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
@@ -129,7 +129,7 @@ library PlonkVerifier {
             _validateProof(proofs[i]);
             // validate public input are all proper scalar fields
             for (uint256 j = 0; j < publicInputs[i].length; j++) {
-                BN254.validateScalarField(publicInputs[i][j]);
+                BN254.validateScalarField(BN254.ScalarField.wrap(publicInputs[i][j]));
             }
             // prepare pcs info
             pcsInfos[i] = _preparePcsInfo(
@@ -298,8 +298,8 @@ library PlonkVerifier {
         Poly.EvalData memory evalData
     ) internal pure returns (uint256 res) {
         uint256 p = BN254.R_MOD;
-        uint256 lagrangeOneEval = evalData.lagrangeOne;
-        uint256 piEval = evalData.piEval;
+        uint256 lagrangeOneEval = BN254.ScalarField.unwrap(evalData.lagrangeOne);
+        uint256 piEval = BN254.ScalarField.unwrap(evalData.piEval);
         uint256 perm = 1;
 
         assembly {
@@ -474,11 +474,11 @@ library PlonkVerifier {
 
         // Compute A := A0 + r * A1 + ... + r^{m-1} * Am
         {
-            uint256[] memory scalars = new uint256[](2 * pcsLen);
+            BN254.ScalarField[] memory scalars = new BN254.ScalarField[](2 * pcsLen);
             BN254.G1Point[] memory bases = new BN254.G1Point[](2 * pcsLen);
             uint256 rBase = 1;
             for (uint256 i = 0; i < pcsLen; i++) {
-                scalars[2 * i] = rBase;
+                scalars[2 * i] = BN254.ScalarField.wrap(rBase);
                 bases[2 * i] = pcsInfos[i].openingProof;
 
                 {
@@ -488,7 +488,7 @@ library PlonkVerifier {
                     assembly {
                         tmp := mulmod(rBase, u, p)
                     }
-                    scalars[2 * i + 1] = tmp;
+                    scalars[2 * i + 1] = BN254.ScalarField.wrap(tmp);
                 }
                 bases[2 * i + 1] = pcsInfos[i].shiftedOpeningProof;
 
@@ -501,13 +501,13 @@ library PlonkVerifier {
 
         // Compute B := B0 + r * B1 + ... + r^{m-1} * Bm
         {
-            uint256[] memory scalars;
+            BN254.ScalarField[] memory scalars;
             BN254.G1Point[] memory bases;
             {
                 // variable scoping to avoid "Stack too deep"
                 uint256 scalarsLenPerInfo = pcsInfos[0].commScalars.length;
                 uint256 totalScalarsLen = (2 + scalarsLenPerInfo) * pcsInfos.length + 1;
-                scalars = new uint256[](totalScalarsLen);
+                scalars = new BN254.ScalarField[](totalScalarsLen);
                 bases = new BN254.G1Point[](totalScalarsLen);
             }
             uint256 sumEvals = 0;
@@ -523,7 +523,7 @@ library PlonkVerifier {
                             // slither-disable-next-line variable-scope
                             tmp := mulmod(rBase, s, p)
                         }
-                        scalars[idx] = tmp;
+                        scalars[idx] = BN254.ScalarField.wrap(tmp);
                     }
                     bases[idx] = pcsInfos[i].commBases[j];
                     idx += 1;
@@ -537,7 +537,7 @@ library PlonkVerifier {
                         // slither-disable-next-line variable-scope
                         tmp := mulmod(rBase, evalPoint, p)
                     }
-                    scalars[idx] = tmp;
+                    scalars[idx] = BN254.ScalarField.wrap(tmp);
                 }
                 bases[idx] = pcsInfos[i].openingProof;
                 idx += 1;
@@ -552,7 +552,7 @@ library PlonkVerifier {
                         // slither-disable-next-line variable-scope
                         tmp := mulmod(rBase, mulmod(u, nextEvalPoint, p), p)
                     }
-                    scalars[idx] = tmp;
+                    scalars[idx] = BN254.ScalarField.wrap(tmp);
                 }
                 bases[idx] = pcsInfos[i].shiftedOpeningProof;
                 idx += 1;
@@ -567,14 +567,19 @@ library PlonkVerifier {
                     }
                 }
             }
-            scalars[idx] = BN254.negate(sumEvals);
+            scalars[idx] = BN254.negate(BN254.ScalarField.wrap(sumEvals));
             bases[idx] = BN254.P1();
             b1 = BN254.negate(BN254.multiScalarMul(bases, scalars));
         }
 
         // Check e(A, [x]2) ?= e(B, [1]2)
-        BN254.G2Point memory betaH =
-            BN254.G2Point({ x0: BETA_H_X0, x1: BETA_H_X1, y0: BETA_H_Y0, y1: BETA_H_Y1 });
+        // TODO the tests pass but it feels wrong.
+        BN254.G2Point memory betaH = BN254.G2Point({
+            x0: BN254.BaseField.wrap(BETA_H_X1),
+            x1: BN254.BaseField.wrap(BETA_H_X0),
+            y0: BN254.BaseField.wrap(BETA_H_Y1),
+            y1: BN254.BaseField.wrap(BETA_H_Y0)
+        });
 
         return BN254.pairingProd2(a1, betaH, b1, BN254.P2());
     }
@@ -740,10 +745,10 @@ library PlonkVerifier {
         // q_lc
         // ============
         // q_1...q_4
-        scalars[2] = proof.wireEval0;
-        scalars[3] = proof.wireEval1;
-        scalars[4] = proof.wireEval2;
-        scalars[5] = proof.wireEval3;
+        scalars[2] = BN254.ScalarField.unwrap(proof.wireEval0);
+        scalars[3] = BN254.ScalarField.unwrap(proof.wireEval1);
+        scalars[4] = BN254.ScalarField.unwrap(proof.wireEval2);
+        scalars[5] = BN254.ScalarField.unwrap(proof.wireEval3);
         bases[2] = verifyingKey.q1;
         bases[3] = verifyingKey.q2;
         bases[4] = verifyingKey.q3;
@@ -813,7 +818,7 @@ library PlonkVerifier {
         // q_o and q_c
         // ============
         // q_o
-        scalars[12] = p - proof.wireEval4;
+        scalars[12] = p - BN254.ScalarField.unwrap(proof.wireEval4);
         bases[12] = verifyingKey.qO;
         // q_c
         scalars[13] = 1;
@@ -837,7 +842,7 @@ library PlonkVerifier {
         // ============================================
 
         // first one is 1-zeta^n
-        scalars[15] = p - evalData.vanishEval;
+        scalars[15] = p - BN254.ScalarField.unwrap(evalData.vanishEval);
         bases[15] = proof.split0;
         assembly {
             // tmp = zeta^{n+2}

@@ -12,6 +12,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{H256, U256},
 };
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_state_prover::circuit::PublicInput;
 use hotshot_state_prover::Proof;
@@ -28,8 +29,6 @@ use jf_utils::test_rng;
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
-
-const STAKE_TABLE_CAPACITY: usize = 40;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
@@ -68,7 +67,7 @@ impl MockLedger {
         // credit: https://github.com/EspressoSystems/HotShot/blob/5554b7013b00e6034691b533299b44f3295fa10d/crates/hotshot-state-prover/src/lib.rs#L176
         let mut rng = test_rng();
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut rng);
-        let st = stake_table_for_testing(pp.st_cap, &qc_keys, &state_keys);
+        let st = stake_table_for_testing(&qc_keys, &state_keys);
         let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
         // arbitrary commitment values as they don't affect logic being tested
@@ -314,11 +313,10 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 
 /// Helper function for test
 pub(crate) fn stake_table_for_testing(
-    capacity: usize,
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(capacity);
+    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(STAKE_TABLE_CAPACITY);
     // Registering keys
     bls_keys
         .iter()

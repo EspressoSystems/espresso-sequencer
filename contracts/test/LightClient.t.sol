@@ -9,6 +9,7 @@ import "forge-std/Test.sol";
 
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
+import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
@@ -34,6 +35,10 @@ contract LightClientCommonTest is Test {
         assertEq(frozenSTComm, expectedStakeTableComm);
     }
 
+    function assertEq(BN254.ScalarField a, BN254.ScalarField b) public {
+        assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
+    }
+
     /// @dev assertEq for `struct LightClientState`
     function assertEqState(LC.LightClientState memory a, LC.LightClientState memory b) public {
         assert(a.viewNum == b.viewNum);
@@ -51,11 +56,11 @@ contract LightClientCommonTest is Test {
         (
             uint64 viewNum,
             uint64 blockHeight,
-            uint256 blockCommRoot,
-            uint256 feeLedgerComm,
-            uint256 stakeTableBlsKeyComm,
-            uint256 stakeTableSchnorrKeyComm,
-            uint256 stakeTableAmountComm,
+            BN254.ScalarField blockCommRoot,
+            BN254.ScalarField feeLedgerComm,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm,
             uint256 threshold
         ) = lc.genesisState();
 
@@ -76,11 +81,11 @@ contract LightClientCommonTest is Test {
         (
             uint64 viewNum,
             uint64 blockHeight,
-            uint256 blockCommRoot,
-            uint256 feeLedgerComm,
-            uint256 stakeTableBlsKeyComm,
-            uint256 stakeTableSchnorrKeyComm,
-            uint256 stakeTableAmountComm,
+            BN254.ScalarField blockCommRoot,
+            BN254.ScalarField feeLedgerComm,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm,
             uint256 threshold
         ) = lc.finalizedState();
 
@@ -132,15 +137,15 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
-        badGenesis.stakeTableBlsKeyComm = 0;
+        badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
         lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
-        badGenesis.stakeTableSchnorrKeyComm = 0;
+        badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
         lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
-        badGenesis.stakeTableAmountComm = 0;
+        badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
         lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
