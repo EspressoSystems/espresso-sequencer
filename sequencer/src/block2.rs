@@ -153,62 +153,16 @@ impl BlockPayload {
             })
             .as_ref()
     }
-}
 
-/// Returns the byte range for a tx in the block payload bytes.
-///
-/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
-/// Lots of ugly type conversion and checked arithmetic.
-fn tx_payload_range(
-    tx_table_range_start: &Option<TxTableEntry>,
-    tx_table_range_end: &TxTableEntry,
-    tx_table_len: &TxTableEntry,
-    block_payload_byte_len: usize,
-) -> Option<Range<usize>> {
-    // TODO(817) allow arbitrary tx_table_len
-    // eg: if overflow then just return a 0-length tx
-    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
-        .ok()?
-        .checked_add(1)?
-        .checked_mul(TxTableEntry::byte_len())?;
-    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
-        .ok()?
-        .checked_add(tx_bodies_offset)?;
-    let end = usize::try_from(tx_table_range_end.clone())
-        .ok()?
-        .checked_add(tx_bodies_offset)?;
-    let end = std::cmp::max(start, end);
-    let start = std::cmp::min(start, block_payload_byte_len);
-    let end = std::cmp::min(end, block_payload_byte_len);
-    Some(start..end)
-}
-
-impl QueryablePayload for BlockPayload {
-    type TransactionIndex = u32;
-    type Iter<'a> = Range<Self::TransactionIndex>;
-    type InclusionProof = TxInclusionProof;
-
-    fn len(&self) -> usize {
-        // The number of txs in a block is defined as the minimum of:
-        // (1) the number of txs indicated in the tx table
-        // (2) the number of tx table entries that could fit into the payload
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
-        //
-        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
-        std::cmp::min(
-            self.get_tx_table_len_as().unwrap_or(0),
-            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
-        )
-    }
-
-    fn iter(&self) -> Self::Iter<'_> {
-        0..self.len().try_into().unwrap_or(0)
-    }
-
-    fn transaction_with_proof(
+    // TODO temporary until upstream `QueryablePayload` trait is updated to add `metadata` arg
+    pub fn tx_with_proof(
         &self,
-        index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        index: &<Self as QueryablePayload>::TransactionIndex,
+        _metadata: &<Self as hotshot::traits::BlockPayload>::Metadata,
+    ) -> Option<(
+        <Self as hotshot::traits::BlockPayload>::Transaction,
+        <Self as QueryablePayload>::InclusionProof,
+    )> {
         let index_usize = usize::try_from(*index).ok()?;
         if index_usize >= self.len() {
             return None; // error: index out of bounds
@@ -280,6 +234,64 @@ impl QueryablePayload for BlockPayload {
                 },
             },
         ))
+    }
+}
+
+/// Returns the byte range for a tx in the block payload bytes.
+///
+/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
+/// Lots of ugly type conversion and checked arithmetic.
+fn tx_payload_range(
+    tx_table_range_start: &Option<TxTableEntry>,
+    tx_table_range_end: &TxTableEntry,
+    tx_table_len: &TxTableEntry,
+    block_payload_byte_len: usize,
+) -> Option<Range<usize>> {
+    // TODO(817) allow arbitrary tx_table_len
+    // eg: if overflow then just return a 0-length tx
+    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
+        .ok()?
+        .checked_add(1)?
+        .checked_mul(TxTableEntry::byte_len())?;
+    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = usize::try_from(tx_table_range_end.clone())
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = std::cmp::max(start, end);
+    let start = std::cmp::min(start, block_payload_byte_len);
+    let end = std::cmp::min(end, block_payload_byte_len);
+    Some(start..end)
+}
+
+impl QueryablePayload for BlockPayload {
+    type TransactionIndex = u32;
+    type Iter<'a> = Range<Self::TransactionIndex>;
+    type InclusionProof = TxInclusionProof;
+
+    fn len(&self) -> usize {
+        // The number of txs in a block is defined as the minimum of:
+        // (1) the number of txs indicated in the tx table
+        // (2) the number of tx table entries that could fit into the payload
+        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
+        //
+        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
+        std::cmp::min(
+            self.get_tx_table_len_as().unwrap_or(0),
+            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
+        )
+    }
+
+    fn iter(&self) -> Self::Iter<'_> {
+        0..self.len().try_into().unwrap_or(0)
+    }
+
+    fn transaction_with_proof(
+        &self,
+        _index: &Self::TransactionIndex,
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        panic!("temporary: use tx_with_proofs until deps are updated")
     }
 }
 
