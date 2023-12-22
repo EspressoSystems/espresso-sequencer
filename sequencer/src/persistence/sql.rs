@@ -64,11 +64,13 @@ pub type Persistence = DataSource;
 #[async_trait]
 impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
+        tracing::info!("loading config from Postgres");
         // Select the most recent config (although there should only be one).
         let Some(row) = self
             .query_opt_static("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
             .await?
         else {
+            tracing::info!("config not found");
             return Ok(None);
         };
         let config = row.try_get("config")?;
@@ -76,6 +78,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+        tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
         self.transaction()
             .await?

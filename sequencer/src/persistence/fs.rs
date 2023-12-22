@@ -43,15 +43,18 @@ impl Persistence {
 #[async_trait]
 impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
-        if !self.config_path().is_file() {
+        let path = self.config_path();
+        if !path.is_file() {
+            tracing::info!("config not found at {}", path.display());
             return Ok(None);
         }
-        Ok(Some(NetworkConfig::from_file(
-            self.config_path().display().to_string(),
-        )?))
+        tracing::info!("loading config from {}", path.display());
+        Ok(Some(NetworkConfig::from_file(path.display().to_string())?))
     }
 
     async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
-        Ok(cfg.to_file(self.config_path().display().to_string())?)
+        let path = self.config_path();
+        tracing::info!("saving config to {}", path.display());
+        Ok(cfg.to_file(path.display().to_string())?)
     }
 }
