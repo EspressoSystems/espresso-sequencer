@@ -16,8 +16,11 @@ impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self> {
-        let mut cfg =
-            Config::default().migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
+        let mut cfg = match opt.uri {
+            Some(uri) => uri.parse()?,
+            None => Config::default(),
+        };
+        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
 
         if let Some(host) = opt.host {
             cfg = cfg.host(host);

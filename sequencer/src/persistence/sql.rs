@@ -7,6 +7,18 @@ use hotshot_query_service::data_source::sql::Query;
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
 pub struct Options {
+    /// Postgres URI.
+    ///
+    /// This is a shorthand for setting a number of other options all at once. The URI has the
+    /// following format ([brackets] indicate optional segments):
+    ///
+    ///   postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]
+    ///
+    /// Options set explicitly via other env vars or flags will take precedence, so you can use this
+    /// URI to set a baseline and then use other parameters to override or add configuration. In
+    /// addition, there are some parameters which cannot be set via the URI, such as TLS.
+    pub uri: Option<String>,
+
     /// Hostname for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]
     pub host: Option<String>,
