@@ -157,11 +157,11 @@ impl BlockPayload {
     // TODO temporary until upstream `QueryablePayload` trait is updated to add `metadata` arg
     pub fn tx_with_proof(
         &self,
-        index: &<Self as QueryablePayload>::TransactionIndex,
+        index: &TxIndex,
         _metadata: &<Self as hotshot::traits::BlockPayload>::Metadata,
     ) -> Option<(
         <Self as hotshot::traits::BlockPayload>::Transaction,
-        <Self as QueryablePayload>::InclusionProof,
+        TxInclusionProof,
     )> {
         let index_usize = usize::try_from(*index).ok()?;
         if index_usize >= self.len() {
@@ -265,37 +265,42 @@ fn tx_payload_range(
     Some(start..end)
 }
 
-impl QueryablePayload for BlockPayload {
-    type TransactionIndex = u32;
-    type Iter<'a> = Range<Self::TransactionIndex>;
-    type InclusionProof = TxInclusionProof;
+// TODO temporary until I fix Iter
+// impl QueryablePayload for BlockPayload {
+//     type TransactionIndex = TxIndex;
+//     type Iter<'a> = Range<Self::TransactionIndex>;
+//     type InclusionProof = TxInclusionProof;
 
-    fn len(&self) -> usize {
-        // The number of txs in a block is defined as the minimum of:
-        // (1) the number of txs indicated in the tx table
-        // (2) the number of tx table entries that could fit into the payload
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
-        //
-        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
-        std::cmp::min(
-            self.get_tx_table_len_as().unwrap_or(0),
-            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
-        )
-    }
+//     fn len(&self) -> usize {
+//         // The number of txs in a block is defined as the minimum of:
+//         // (1) the number of txs indicated in the tx table
+//         // (2) the number of tx table entries that could fit into the payload
+//         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
+//         //
+//         // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
+//         std::cmp::min(
+//             self.get_tx_table_len_as().unwrap_or(0),
+//             (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
+//         )
+//     }
 
-    fn iter(&self) -> Self::Iter<'_> {
-        0..self.len().try_into().unwrap_or(0)
-    }
+//     fn iter(&self) -> Self::Iter<'_> {
+//         0..self.len().try_into().unwrap_or(0)
+//     }
 
-    fn transaction_with_proof(
-        &self,
-        _index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        panic!("temporary: use tx_with_proofs until deps are updated")
-    }
+//     fn transaction_with_proof(
+//         &self,
+//         _index: &Self::TransactionIndex,
+//     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+//         panic!("temporary: use tx_with_proofs until deps are updated")
+//     }
+// }
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct TxIndex {
+    ns_index: usize, // index into the namespace table
+    tx_index: usize, // index into a tx table
 }
-
-type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
@@ -321,6 +326,7 @@ impl TxInclusionProof {
         &self,
         tx: &Transaction,
         tx_index: TxIndex,
+        metadata: &<BlockPayload as hotshot::traits::BlockPayload>::Metadata,
         vid: &V,
         vid_commit: &V::Commit,
         vid_common: &V::Common,
@@ -382,6 +388,7 @@ impl TxInclusionProof {
 
         // Verify proof for tx table entries.
         // Start index missing for the 0th tx
+        // TODO this is unreadable;
         let index: usize = tx_index.try_into().ok()?;
         let mut tx_table_range_bytes =
             Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
@@ -494,20 +501,20 @@ mod tx_table_entry {
         }
     }
 
-    impl TryFrom<TxIndex> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<TxIndex>>::Error;
+    // impl TryFrom<TxIndex> for TxTableEntry {
+    //     type Error = <TxTableEntryWord as TryFrom<TxIndex>>::Error;
 
-        fn try_from(value: TxIndex) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for TxIndex {
-        type Error = <TxIndex as TryFrom<TxTableEntryWord>>::Error;
+    //     fn try_from(value: TxIndex) -> Result<Self, Self::Error> {
+    //         TxTableEntryWord::try_from(value).map(Self)
+    //     }
+    // }
+    // impl TryFrom<TxTableEntry> for TxIndex {
+    //     type Error = <TxIndex as TryFrom<TxTableEntryWord>>::Error;
 
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            TxIndex::try_from(value.0)
-        }
-    }
+    //     fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
+    //         TxIndex::try_from(value.0)
+    //     }
+    // }
 
     impl TryFrom<VmId> for TxTableEntry {
         type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
@@ -569,7 +576,8 @@ mod boilerplate {
         }
 
         fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
-            self.enumerate().map(|(_, tx)| tx.commit()).collect()
+            // self.enumerate().map(|(_, tx)| tx.commit()).collect()
+            todo!()
         }
     }
 
