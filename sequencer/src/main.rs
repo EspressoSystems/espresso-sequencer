@@ -1,10 +1,10 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use futures::{future::FutureExt, stream::StreamExt};
-use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions, SequencerNode},
+    context::SequencerContext,
     init_node, init_static, network,
     options::{Modules, Options},
     persistence, NetworkParams, Node, SeqTypes,
@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     let mut modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
 
-    let mut handle = if let Some(storage) = modules.storage_fs.take() {
+    let mut context = if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(modules, opt, storage).await?
     } else if let Some(storage) = modules.storage_sql.take() {
         init_with_storage(modules, opt, storage).await?
@@ -32,10 +32,14 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Start doing consensus.
-    handle.hotshot.start_consensus().await;
+    context.consensus().hotshot.start_consensus().await;
 
     // Wait for events just to keep the process from exiting before consensus exits.
-    let mut events = handle.get_event_stream(Default::default()).await.0;
+    let mut events = context
+        .consensus_mut()
+        .get_event_stream(Default::default())
+        .await
+        .0;
     while let Some(event) = events.next().await {
         tracing::debug!(?event);
     }
@@ -47,7 +51,7 @@ async fn init_with_storage<S>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-) -> anyhow::Result<SystemContextHandle<SeqTypes, Node<network::Web>>>
+) -> anyhow::Result<SequencerContext<SeqTypes, Node<network::Web>>>
 where
     S: DataSourceOptions,
 {
@@ -83,10 +87,6 @@ where
                 .await?;
             context
         }
-        None => {
-            init_node(network_params, &NoMetrics, storage_opt.create().await?)
-                .await?
-                .0
-        }
+        None => init_node(network_params, &NoMetrics, storage_opt.create().await?).await?,
     })
 }

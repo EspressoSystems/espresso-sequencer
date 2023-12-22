@@ -232,7 +232,6 @@ mod test_helpers {
 
         let height = context.consensus().get_decided_leaf().await.get_height();
         sleep(std::time::Duration::from_secs(1)).await;
-        std::println!("Decided block height: {}", height);
         let _signature = client
             .get::<StateSignature>(&format!("state-signature/block/{}", height))
             .send()

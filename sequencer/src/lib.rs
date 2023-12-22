@@ -267,8 +267,8 @@ pub struct NetworkParams {
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    config_path: Option<&Path>,
-) -> SequencerContext<SeqTypes, Node<network::Web>> {
+    persistence: impl SequencerPersistence,
+) -> anyhow::Result<SequencerContext<SeqTypes, Node<network::Web>>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -335,7 +335,7 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    SequencerContext::new(
+    Ok(SequencerContext::new(
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
@@ -348,7 +348,7 @@ pub async fn init_node(
         .await,
         node_index,
         state_key_pair,
-    )
+    ))
 }
 
 #[cfg(any(test, feature = "testing"))]
