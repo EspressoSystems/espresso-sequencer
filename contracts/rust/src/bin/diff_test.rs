@@ -1,6 +1,7 @@
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
+use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
@@ -22,9 +23,10 @@ use jf_plonk::{
 };
 use jf_primitives::constants::CS_ID_BLS_BN254;
 use jf_primitives::pcs::prelude::Commitment;
-use jf_primitives::signatures::bls_over_bn254::KeyPair as BLSKeyPair;
 use jf_primitives::signatures::bls_over_bn254::Signature;
+use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair};
 use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
+use sha3::Keccak256;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -75,6 +77,8 @@ enum Action {
     GenClientWallet,
     /// Get mock genesis light client state
     MockGenesis,
+    /// Generate internal hash values for the BLS signature scheme
+    GenBLSHashes,
 }
 
 #[allow(clippy::type_complexity)]
@@ -447,6 +451,26 @@ fn main() {
 
             let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
             let res = (ledger.get_state(), voting_st_comm, frozen_st_comm);
+            println!("{}", res.encode_hex());
+        }
+        Action::GenBLSHashes => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=message");
+            }
+
+            // Same as in the hash_to_curve function
+            // See https://github.com/EspressoSystems/jellyfish/blob/6c2c08f4e966fd1d454d48bcf30bd41a952f9f76/primitives/src/signatures/bls_over_bn254.rs#L310
+            let hasher_init = &[1u8];
+            let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
+
+            let message_bytes = cli.args[0].parse::<Bytes>().unwrap();
+
+            let field_elem: Fq = hasher.hash_to_field(&message_bytes, 1)[0];
+            let fq_u256 = field_to_u256::<Fq>(field_elem);
+            let hash_to_curve_elem: G1Affine = hash_to_curve::<Keccak256>(&message_bytes).into();
+            let hash_to_curve_elem_parsed: ParsedG1Point = hash_to_curve_elem.into();
+
+            let res = (fq_u256, hash_to_curve_elem_parsed);
             println!("{}", res.encode_hex());
         }
     };
