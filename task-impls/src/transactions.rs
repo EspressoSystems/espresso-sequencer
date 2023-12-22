@@ -169,12 +169,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
+                let mut make_block = false;
                 if *view - *self.cur_view > 1 {
                     error!("View changed by more than 1 going to view {:?}", view);
+                    make_block = self.membership.get_leader(view) == self.public_key;
                 }
                 self.cur_view = view;
 
-                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
+                // return if we aren't the next leader or we skipped last view and aren't the current leader.
+                if !make_block && self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     return None;
                 }
 
@@ -228,11 +231,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 // send the sequenced transactions to VID and DA tasks
+                let block_view = if make_block { view } else { view + 1 };
                 self.event_stream
                     .publish(HotShotEvent::TransactionsSequenced(
                         encoded_transactions,
                         metadata,
-                        view + 1,
+                        block_view,
                     ))
                     .await;
 
@@ -283,7 +287,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 match result {
                     Err(_) => {
                         // Fall through below to updating new block
-                        error!(
+                        debug!(
                             "propose_max_round_time passed, sending transactions we have so far"
                         );
                     }

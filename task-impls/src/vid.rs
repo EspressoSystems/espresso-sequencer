@@ -20,17 +20,14 @@ use hotshot_types::{
 };
 use hotshot_types::{
     data::{test_srs, VidScheme, VidSchemeTrait},
-    traits::{
-        block_contents::{NUM_CHUNKS, NUM_STORAGE_NODES},
-        network::ConsensusIntentEvent,
-    },
+    traits::network::ConsensusIntentEvent,
 };
 
 use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -54,7 +51,7 @@ pub struct VIDTaskState<
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
     /// Network for all nodes
     pub network: Arc<I::QuorumNetwork>,
-    /// Membership for teh quorum
+    /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
@@ -81,12 +78,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
+                // get the number of quorum committee members to be used for VID calculation
+                let num_quorum_committee = self.membership.total_nodes();
+
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-                let srs = test_srs(NUM_STORAGE_NODES);
-                // TODO We are using constant numbers for now, but they will change as the quorum size
-                // changes.
-                // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                let srs = test_srs(num_quorum_committee);
+
+                // calculate the last power of two
+                // TODO change after https://github.com/EspressoSystems/jellyfish/issues/339
+                // issue: https://github.com/EspressoSystems/HotShot/issues/2152
+                let chunk_size = 1 << num_quorum_committee.ilog2();
+
+                // calculate vid shares
+                let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
                 let vid_disperse = vid.disperse(encoded_transactions.clone()).unwrap();
 
                 // send the commitment and metadata to consensus for block building
@@ -94,18 +98,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
                         vid_disperse.commit,
                         metadata,
+                        view_number,
                     ))
                     .await;
 
                 // send the block to the VID dispersal function
                 self.event_stream
                     .publish(HotShotEvent::BlockReady(
-                        VidDisperse {
-                            view_number,
-                            payload_commitment: vid_disperse.commit,
-                            shares: vid_disperse.shares,
-                            common: vid_disperse.common,
-                        },
+                        VidDisperse::from_membership(view_number, vid_disperse, &self.membership),
                         view_number,
                     ))
                     .await;
@@ -137,7 +137,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 

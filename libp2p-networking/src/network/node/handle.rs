@@ -88,7 +88,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     /// constructs a new node listening on `known_addr`
     #[instrument]
     pub async fn new(config: NetworkNodeConfig, id: usize) -> Result<Self, NetworkNodeHandleError> {
-        //`randomly assigned port
+        // randomly assigned port
         let listen_addr = config
             .bound_addr
             .clone()
@@ -297,7 +297,7 @@ impl<S> NetworkNodeHandle<S> {
         let pid = self.get_record_timeout::<PeerId>(&key, dht_timeout).await?;
 
         // pid lookup for routing
-        self.lookup_pid(pid).await?;
+        // self.lookup_pid(pid).await?;
 
         Ok(pid)
     }

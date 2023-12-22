@@ -15,7 +15,7 @@ use hotshot_types::{
 };
 use hotshot_types::{
     simple_vote::QuorumData,
-    traits::{consensus_api::ConsensusSharedApi, election::Membership},
+    traits::{consensus_api::ConsensusApi, election::Membership},
 };
 
 use std::collections::HashMap;
@@ -82,7 +82,6 @@ async fn build_vote(
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
@@ -125,7 +124,7 @@ async fn test_consensus_task() {
         add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
     };
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }
 
 #[cfg(test)]
@@ -175,5 +174,5 @@ async fn test_consensus_vote() {
         add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
     };
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }

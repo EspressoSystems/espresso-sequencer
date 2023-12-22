@@ -1,12 +1,14 @@
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::node_types::{MemoryImpl, TestTypes};
+use hotshot_testing::{
+    block_types::TestTransaction,
+    node_types::{MemoryImpl, TestTypes},
+};
 use hotshot_types::{
-    block_impl::VIDTransaction,
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        block_contents::vid_commitment, consensus_api::ConsensusSharedApi,
+        block_contents::vid_commitment, consensus_api::ConsensusApi, election::Membership,
         node_implementation::NodeType, state::ConsensusTime,
     },
 };
@@ -33,9 +35,17 @@ async fn test_da_task() {
         inner: handle.hotshot.inner.clone(),
     };
     let pub_key = *api.public_key();
-    let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = vid_commitment(&encoded_transactions);
+    let transactions = vec![TestTransaction(vec![0])];
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let payload_commitment = vid_commitment(
+        &encoded_transactions,
+        handle
+            .hotshot
+            .inner
+            .memberships
+            .quorum_membership
+            .total_nodes(),
+    );
     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
     let signature =
@@ -85,7 +95,7 @@ async fn test_da_task() {
         api.public_key(),
         api.private_key(),
     )
-    .expect("Failed to sign da vote");
+    .expect("Failed to sign DAData");
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
     output.insert(HotShotEvent::DAProposalRecv(message, pub_key), 1);
@@ -95,5 +105,5 @@ async fn test_da_task() {
 
     let build_fn = |task_runner, event_stream| add_da_task(task_runner, event_stream, handle);
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }

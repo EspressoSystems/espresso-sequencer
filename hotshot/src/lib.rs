@@ -19,8 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-#[cfg(feature = "demo")]
-pub mod demo;
 /// Contains traits consumed by [`HotShot`]
 pub mod traits;
 /// Contains types used by the crate
@@ -57,11 +55,10 @@ use hotshot_types::{
     error::StorageSnafu,
     message::{
         DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
-        SequencingMessage,
     },
     simple_certificate::QuorumCertificate,
     traits::{
-        consensus_api::{ConsensusApi, ConsensusSharedApi},
+        consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
         node_implementation::{ChannelMaps, NodeType, SendToTasks},
         signature_key::SignatureKey,
@@ -248,6 +245,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
             saved_payloads,
+            saved_da_certs: HashMap::new(),
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
@@ -408,10 +406,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             ChannelStream<HotShotEvent<TYPES>>,
         ),
         HotShotError<TYPES>,
-    >
-    where
-        SystemContext<TYPES, I>: HotShotType<TYPES, I>,
-    {
+    > {
         // Save a clone of the storage for the handle
         let hotshot = Self::new(
             public_key,
@@ -534,116 +529,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     }
 }
 
-/// [`HotShot`] implementations that depend on [`TYPES::ConsensusType`].
-#[async_trait]
-pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Get the [`hotstuff`] field of [`HotShot`].
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>>;
-
-    /// Spawn all tasks that operate on the given [`HotShot`].
-    ///
-    /// For a list of which tasks are being spawned, see this module's documentation.
-    async fn run_tasks(self) -> SystemContextHandle<TYPES, I>;
-
-    // decide which handler to call based on the message variant and `transmit_type`
-    // async fn handle_message(&self, item: Message<TYPES>, transmit_type: TransmitType) {
-    //     match (item.kind, transmit_type) {
-    //         (MessageKind::Consensus(msg), TransmitType::Broadcast) => {
-    //             self.handle_broadcast_consensus_message(msg, item.sender)
-    //                 .await;
-    //         }
-    //         (MessageKind::Consensus(msg), TransmitType::Direct) => {
-    //             self.handle_direct_consensus_message(msg, item.sender).await;
-    //         }
-    //         (MessageKind::Data(msg), TransmitType::Broadcast) => {
-    //             self.handle_broadcast_data_message(msg, item.sender).await;
-    //         }
-    //         (MessageKind::Data(msg), TransmitType::Direct) => {
-    //             self.handle_direct_data_message(msg, item.sender).await;
-    //         }
-    //         (MessageKind::_Unreachable(_), _) => unimplemented!(),
-    //     };
-    // }
-
-    // Handle an incoming [`ConsensusMessage`] that was broadcasted on the network.
-    // async fn handle_broadcast_consensus_message(
-    //     &self,
-    //     msg: I::ConsensusMessage,
-    //     sender: TYPES::SignatureKey,
-    // );
-
-    // Handle an incoming [`ConsensusMessage`] directed at this node.
-    // async fn handle_direct_consensus_message(
-    //     &self,
-    //     msg: I::ConsensusMessage,
-    //     sender: TYPES::SignatureKey,
-    // );
-
-    // Handle an incoming [`DataMessage`] that was broadcasted on the network
-    // async fn handle_broadcast_data_message(
-    //     &self,
-    //     msg: DataMessage<TYPES>,
-    //     _sender: TYPES::SignatureKey,
-    // ) {
-    //     // TODO validate incoming broadcast message based on sender signature key
-    //     match msg {
-    //         DataMessage::SubmitTransaction(transaction, _view_number) => {
-    //             let size = bincode_opts().serialized_size(&transaction).unwrap_or(0);
-    //
-    //             // The API contract requires the hash to be unique
-    //             // so we can assume entry == incoming txn
-    //             // even if eq not satisfied
-    //             // so insert is an idempotent operation
-    //             let mut new = false;
-    //             self.transactions()
-    //                 .modify(|txns| {
-    //                     new = txns.insert(transaction.commit(), transaction).is_none();
-    //                 })
-    //                 .await;
-    //
-    //             if new {
-    //                 // If this is a new transaction, update metrics.
-    //                 let consensus = self.consensus().read().await;
-    //                 consensus.metrics.outstanding_transactions.update(1);
-    //                 consensus
-    //                     .metrics
-    //                     .outstanding_transactions_memory_size
-    //                     .update(i64::try_from(size).unwrap_or_else(|e| {
-    //                         warn!("Conversion failed: {e}. Using the max value.");
-    //                         i64::MAX
-    //                     }));
-    //             }
-    //         }
-    //     }
-    // }
-
-    // Handle an incoming [`DataMessage`] that directed at this node
-    // #[allow(clippy::unused_async)] // async for API compatibility reasons
-    // async fn handle_direct_data_message(
-    //     &self,
-    //     msg: DataMessage<TYPES>,
-    //     _sender: TYPES::SignatureKey,
-    // ) {
-    //     debug!(?msg, "Incoming direct data message");
-    //     match msg {
-    //         DataMessage::SubmitTransaction(_, _) => {
-    //             // Log exceptional situation and proceed
-    //             warn!(?msg, "Broadcast message received over direct channel");
-    //         }
-    //     }
-    // }
-}
-
-#[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> HotShotType<TYPES, I>
-    for SystemContext<TYPES, I>
-{
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
+    #[must_use]
+    pub fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
         &self.inner.consensus
     }
 
+    /// Spawn all tasks that operate on [`HotShot`].
+    ///
+    /// For a list of which tasks are being spawned, see this module's documentation.
     #[allow(clippy::too_many_lines)]
-    async fn run_tasks(self) -> SystemContextHandle<TYPES, I> {
+    pub async fn run_tasks(self) -> SystemContextHandle<TYPES, I> {
         // ED Need to set first first number to 1, or properly trigger the change upon start
         let task_runner = TaskRunner::new();
         let registry = task_runner.registry.clone();
@@ -742,7 +639,7 @@ pub struct HotShotConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
     for HotShotConsensusApi<TYPES, I>
 {
     fn total_nodes(&self) -> NonZeroUsize {
@@ -763,12 +660,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I>
 
     fn min_transactions(&self) -> usize {
         self.inner.config.min_transactions
-    }
-
-    /// Generates and encodes a vote token
-
-    async fn should_start_round(&self, _: TYPES::Time) -> bool {
-        false
     }
 
     async fn send_event(&self, event: Event<TYPES>) {
@@ -800,120 +691,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I>
         storage.append_single_view(view_to_insert).await?;
         storage.cleanup_storage_up_to_view(old_anchor_view).await?;
         storage.commit().await?;
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
-    for HotShotConsensusApi<TYPES, I>
-{
-    async fn send_direct_message(
-        &self,
-        recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES>,
-    ) -> std::result::Result<(), NetworkError> {
-        let inner = self.inner.clone();
-        debug!(?message, ?recipient, "send_direct_message");
-        async_spawn_local(async move {
-            inner
-                .networks
-                .quorum_network
-                .direct_message(
-                    Message {
-                        sender: inner.public_key.clone(),
-                        kind: MessageKind::from_consensus_message(message),
-                    },
-                    recipient,
-                )
-                .await
-        });
-        Ok(())
-    }
-
-    async fn send_direct_da_message(
-        &self,
-        recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES>,
-    ) -> std::result::Result<(), NetworkError> {
-        let inner = self.inner.clone();
-        debug!(?message, ?recipient, "send_direct_message");
-        async_spawn_local(async move {
-            inner
-                .networks
-                .da_network
-                .direct_message(
-                    Message {
-                        sender: inner.public_key.clone(),
-                        kind: MessageKind::from_consensus_message(message),
-                    },
-                    recipient,
-                )
-                .await
-        });
-        Ok(())
-    }
-
-    // TODO (DA) Refactor ConsensusApi and HotShot to use SystemContextInner directly.
-    // <https://github.com/EspressoSystems/HotShot/issues/1194>
-    async fn send_broadcast_message(
-        &self,
-        message: SequencingMessage<TYPES>,
-    ) -> std::result::Result<(), NetworkError> {
-        debug!(?message, "send_broadcast_message");
-        self.inner
-            .networks
-            .quorum_network
-            .broadcast_message(
-                Message {
-                    sender: self.inner.public_key.clone(),
-                    kind: MessageKind::from_consensus_message(message),
-                },
-                &self.inner.memberships.quorum_membership.clone(),
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn send_da_broadcast(
-        &self,
-        message: SequencingMessage<TYPES>,
-    ) -> std::result::Result<(), NetworkError> {
-        debug!(?message, "send_da_broadcast_message");
-        self.inner
-            .networks
-            .da_network
-            .broadcast_message(
-                Message {
-                    sender: self.inner.public_key.clone(),
-                    kind: MessageKind::from_consensus_message(message),
-                },
-                &self.inner.memberships.da_membership.clone(),
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn send_transaction(
-        &self,
-        message: DataMessage<TYPES>,
-    ) -> std::result::Result<(), NetworkError> {
-        debug!(?message, "send_broadcast_message");
-        let api = self.clone();
-        async_spawn(async move {
-            let _result = api
-                .inner
-                .networks
-                .da_network
-                .broadcast_message(
-                    Message {
-                        sender: api.inner.public_key.clone(),
-                        kind: MessageKind::from(message),
-                    },
-                    &api.inner.memberships.da_membership.clone(),
-                )
-                .await;
-        });
         Ok(())
     }
 }

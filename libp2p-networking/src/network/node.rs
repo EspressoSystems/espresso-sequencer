@@ -13,7 +13,8 @@ pub use self::{
 use super::{
     behaviours::gossip::GossipBehaviour,
     error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
-    gen_transport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal, NetworkNodeType,
+    gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal,
+    NetworkNodeType,
 };
 
 use crate::network::{
@@ -35,7 +36,6 @@ use futures::{select, FutureExt, StreamExt};
 use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use libp2p::core::transport::ListenerId;
 use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::Boxed},
     gossipsub::{
         Behaviour as Gossipsub, ConfigBuilder as GossipsubConfigBuilder,
         Message as GossipsubMessage, MessageAuthenticity, MessageId, Topic, ValidationMode,
@@ -150,7 +150,7 @@ impl NetworkNode {
     /// Currently:
     ///   * Generates a random key pair and associated [`PeerId`]
     ///   * Launches a hopefully production ready transport:
-    ///       QUIC v1 (RFC 9000) + DNS + Websocket + XX auth
+    ///       QUIC v1 (RFC 9000) + DNS
     ///   * Generates a connection to the "broadcast" topic
     ///   * Creates a swarm to manage peers and events
     #[instrument]
@@ -163,7 +163,7 @@ impl NetworkNode {
         };
         let peer_id = PeerId::from(identity.public());
         debug!(?peer_id);
-        let transport: Boxed<(PeerId, StreamMuxerBox)> = gen_transport(identity.clone()).await?;
+        let transport: BoxedTransport = gen_transport(identity.clone()).await?;
         trace!("Launched network transport");
         // Generate the swarm
         let mut swarm: Swarm<NetworkDef> = {

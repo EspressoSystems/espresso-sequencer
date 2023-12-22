@@ -9,9 +9,9 @@ use displaydoc::Display;
 use crate::{
     data::{Leaf, VidCommitment},
     error::HotShotError,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{DACertificate, QuorumCertificate},
     traits::{
-        metrics::{Counter, Gauge, Histogram, Label, Metrics},
+        metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
         node_implementation::NodeType,
     },
     utils::Terminator,
@@ -35,6 +35,10 @@ pub struct Consensus<TYPES: NodeType> {
     /// The phases that are currently loaded in memory
     // TODO(https://github.com/EspressoSystems/hotshot/issues/153): Allow this to be loaded from `Storage`?
     pub state_map: BTreeMap<TYPES::Time, View<TYPES>>,
+
+    /// All the DA certs we've received for current and future views.
+    /// view -> DA cert
+    pub saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// cur_view from pseudocode
     pub cur_view: TYPES::Time,
@@ -66,9 +70,7 @@ pub struct Consensus<TYPES: NodeType> {
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
 #[derive(Clone, Debug)]
 pub struct ConsensusMetricsValue {
-    /// The values that are being tracked
-    pub values: Arc<Mutex<InnerConsensusMetrics>>,
-    /// The number of last synced synced block height
+    /// The number of last synced block height
     pub last_synced_block_height: Box<dyn Gauge>,
     /// The number of last decided view
     pub last_decided_view: Box<dyn Gauge>,
@@ -205,14 +207,8 @@ impl Label for ConsensusMetrics {
 impl ConsensusMetricsValue {
     /// Create a new instance of this [`ConsensusMetricsValue`] struct, setting all the counters and gauges
     #[must_use]
-    pub fn new() -> Self {
-        let values = Arc::default();
-        let metrics: Box<dyn Metrics> = Box::new(ConsensusMetrics {
-            prefix: String::new(),
-            values: Arc::clone(&values),
-        });
+    pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
-            values,
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
             last_decided_view: metrics.create_gauge(String::from("last_decided_view"), None),
@@ -233,7 +229,7 @@ impl ConsensusMetricsValue {
 
 impl Default for ConsensusMetricsValue {
     fn default() -> Self {
-        Self::new()
+        Self::new(&*NoMetrics::boxed())
     }
 }
 
@@ -318,6 +314,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             );
         }
         // perform gc
+        self.saved_da_certs
+            .retain(|view_number, _| *view_number >= old_anchor_view);
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_payload_commitment())

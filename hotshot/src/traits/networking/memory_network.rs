@@ -255,7 +255,12 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         Box::new(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            MemoryNetwork::new(pubkey, NetworkingMetricsValue::new(), master.clone(), None)
+            MemoryNetwork::new(
+                pubkey,
+                NetworkingMetricsValue::default(),
+                master.clone(),
+                None,
+            )
         })
     }
 

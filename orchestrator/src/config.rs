@@ -2,7 +2,6 @@ use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
-use std::fs;
 use std::{
     env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -10,8 +9,14 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
+use std::{fs, path::Path};
+use surf_disco::Url;
+use thiserror::Error;
 use toml;
 use tracing::error;
+
+use crate::client::OrchestratorClient;
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
@@ -52,9 +57,22 @@ pub struct Libp2pConfigFile {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct WebServerConfig {
-    pub url: String,
-    pub port: u16,
+    pub url: Url,
     pub wait_between_polls: Duration,
+}
+
+#[derive(Error, Debug)]
+pub enum NetworkConfigError {
+    #[error("Failed to read NetworkConfig from file")]
+    ReadFromFileError(std::io::Error),
+    #[error("Failed to deserialize loaded NetworkConfig")]
+    DeserializeError(serde_json::Error),
+    #[error("Failed to write NetworkConfig to file")]
+    WriteToFileError(std::io::Error),
+    #[error("Failed to serialize NetworkConfig")]
+    SerializeError(serde_json::Error),
+    #[error("Failed to recursively create path to NetworkConfig")]
+    FailedToCreatePath(std::io::Error),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -76,6 +94,159 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub config: HotShotConfig<KEY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
+}
+
+pub enum NetworkConfigSource {
+    Orchestrator,
+    File,
+}
+
+impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
+    /// Asynchronously retrieves a `NetworkConfig` either from a file or from an orchestrator.
+    ///
+    /// This function takes an `OrchestratorClient`, an identity string, and an optional file path.
+    ///
+    /// If a file path is provided, the function will first attempt to load the `NetworkConfig` from the file.
+    /// If the file does not exist or cannot be read, the function will fall back to retrieving the `NetworkConfig` from the orchestrator.
+    /// In this case, if the path to the file does not exist, it will be created.
+    /// The retrieved `NetworkConfig` is then saved back to the file for future use.
+    ///
+    /// If no file path is provided, the function will directly retrieve the `NetworkConfig` from the orchestrator.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - An `OrchestratorClient` used to retrieve the `NetworkConfig` from the orchestrator.
+    /// * `identity` - A string representing the identity for which to retrieve the `NetworkConfig`.
+    /// * `file` - An optional string representing the path to the file from which to load the `NetworkConfig`.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a tuple containing a `NetworkConfig` and a `NetworkConfigSource`. The `NetworkConfigSource` indicates whether the `NetworkConfig` was loaded from a file or retrieved from the orchestrator.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let client = OrchestratorClient::new();
+    /// let identity = "my_identity".to_string();
+    /// let file = Some("/path/to/my/config".to_string());
+    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file).await;
+    /// ```
+    pub async fn from_file_or_orchestrator(
+        client: &OrchestratorClient,
+        file: Option<String>,
+    ) -> (NetworkConfig<K, E>, NetworkConfigSource) {
+        if let Some(file) = file {
+            // if we pass in file, try there first
+            match Self::from_file(file.clone()) {
+                Ok(config) => (config, NetworkConfigSource::File),
+                Err(e) => {
+                    // fallback to orchestrator
+                    error!("{e}, falling back to orchestrator");
+
+                    let config = client.get_config(client.identity.clone()).await;
+
+                    // save to file if we fell back
+                    if let Err(e) = config.to_file(file) {
+                        error!("{e}");
+                    };
+
+                    (config, NetworkConfigSource::Orchestrator)
+                }
+            }
+        } else {
+            error!("Retrieving config from the orchestrator");
+
+            // otherwise just get from orchestrator
+            (
+                client.get_config(client.identity.clone()).await,
+                NetworkConfigSource::Orchestrator,
+            )
+        }
+    }
+
+    /// Loads a `NetworkConfig` from a file.
+    ///
+    /// This function takes a file path as a string, reads the file, and then deserializes the contents into a `NetworkConfig`.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - A string representing the path to the file from which to load the `NetworkConfig`.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a `Result` that contains a `NetworkConfig` if the file was successfully read and deserialized, or a `NetworkConfigError` if an error occurred.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the file cannot be read or if the contents cannot be deserialized into a `NetworkConfig`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let file = "/path/to/my/config".to_string();
+    /// let config = NetworkConfig::from_file(file).unwrap();
+    /// ```
+    pub fn from_file(file: String) -> Result<Self, NetworkConfigError> {
+        // read from file
+        let data = match fs::read(file) {
+            Ok(data) => data,
+            Err(e) => {
+                return Err(NetworkConfigError::ReadFromFileError(e));
+            }
+        };
+
+        // deserialize
+        match serde_json::from_slice(&data) {
+            Ok(data) => Ok(data),
+            Err(e) => Err(NetworkConfigError::DeserializeError(e)),
+        }
+    }
+
+    /// Serializes the `NetworkConfig` and writes it to a file.
+    ///
+    /// This function takes a file path as a string, serializes the `NetworkConfig` into JSON format using `serde_json` and then writes the serialized data to the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - A string representing the path to the file where the `NetworkConfig` should be saved.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a `Result` that contains `()` if the `NetworkConfig` was successfully serialized and written to the file, or a `NetworkConfigError` if an error occurred.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the `NetworkConfig` cannot be serialized or if the file cannot be written.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let file = "/path/to/my/config".to_string();
+    /// let config = NetworkConfig::from_file(file);
+    /// config.to_file(file).unwrap();
+    /// ```
+    pub fn to_file(&self, file: String) -> Result<(), NetworkConfigError> {
+        // ensure the directory containing the config file exists
+        if let Some(dir) = Path::new(&file).parent() {
+            if let Err(e) = fs::create_dir_all(dir) {
+                return Err(NetworkConfigError::FailedToCreatePath(e));
+            }
+        }
+
+        // serialize
+        let serialized = match serde_json::to_string_pretty(self) {
+            Ok(data) => data,
+            Err(e) => {
+                return Err(NetworkConfigError::SerializeError(e));
+            }
+        };
+
+        // write to file
+        match fs::write(file, serialized) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(NetworkConfigError::WriteToFileError(e)),
+        }
+    }
 }
 
 impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {

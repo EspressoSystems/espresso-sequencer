@@ -375,7 +375,7 @@ impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for CombinedCommChann
 
 #[cfg(test)]
 mod test {
-    use hotshot_types::block_impl::VIDTransaction;
+    use hotshot_testing::block_types::TestTransaction;
 
     use super::*;
     use tracing::instrument;
@@ -412,8 +412,8 @@ mod test {
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     #[instrument]
     async fn test_hash_calculation() {
-        let message1 = VIDTransaction(vec![0; 32]);
-        let message2 = VIDTransaction(vec![1; 32]);
+        let message1 = TestTransaction(vec![0; 32]);
+        let message2 = TestTransaction(vec![1; 32]);
 
         assert_eq!(calculate_hash_of(&message1), calculate_hash_of(&message1));
         assert_ne!(calculate_hash_of(&message1), calculate_hash_of(&message2));
@@ -426,8 +426,8 @@ mod test {
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     #[instrument]
     async fn test_cache_integrity() {
-        let message1 = VIDTransaction(vec![0; 32]);
-        let message2 = VIDTransaction(vec![1; 32]);
+        let message1 = TestTransaction(vec![0; 32]);
+        let message2 = TestTransaction(vec![1; 32]);
 
         let mut cache = Cache::new(3);
 

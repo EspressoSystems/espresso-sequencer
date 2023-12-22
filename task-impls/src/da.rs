@@ -1,6 +1,6 @@
 use crate::{
     events::HotShotEvent,
-    vote::{spawn_vote_accumulator, AccumulatorInfo},
+    vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
 use async_lock::RwLock;
 
@@ -14,6 +14,7 @@ use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
     message::Proposal,
+    simple_certificate::DACertificate,
     simple_vote::{DAData, DAVote},
     traits::{
         block_contents::vid_commitment,
@@ -29,9 +30,13 @@ use hotshot_types::{
 };
 use sha2::{Digest, Sha256};
 
+use crate::vote::HandleVoteEvent;
 use snafu::Snafu;
 use std::{marker::PhantomData, sync::Arc};
 use tracing::{debug, error, instrument, warn};
+
+/// Alias for Optional type for Vote Collectors
+type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -57,11 +62,16 @@ pub struct DATaskState<
     /// Membership for the DA committee
     pub da_membership: Arc<TYPES::Membership>,
 
+    /// Membership for the quorum committee
+    /// We need this only for calculating the proper VID scheme
+    /// from the number of nodes in the quorum.
+    pub quorum_membership: Arc<TYPES::Membership>,
+
     /// Network for DA
     pub da_network: Arc<I::CommitteeNetwork>,
 
-    /// The view and ID of the current vote collection task, if there is one.
-    pub vote_collector: Option<(TYPES::Time, usize, usize)>,
+    /// The current vote collection task, if there is one.
+    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DAVote<TYPES>, DACertificate<TYPES>>>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
@@ -113,7 +123,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
-                let payload_commitment = vid_commitment(&proposal.data.encoded_transactions);
+                let payload_commitment = vid_commitment(
+                    &proposal.data.encoded_transactions,
+                    self.quorum_membership.total_nodes(),
+                );
                 let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
 
                 // ED Is this the right leader?
@@ -177,18 +190,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("We are not the committee leader for view {} are we leader for next view? {}", *view, self.da_membership.get_leader(view + 1) == self.public_key);
                     return None;
                 }
-                let collection_view =
-                    if let Some((collection_view, collection_id, _)) = &self.vote_collector {
-                        // TODO: Is this correct for consecutive leaders?
-                        if view > *collection_view {
-                            self.registry.shutdown_task(*collection_id).await;
-                        }
-                        *collection_view
-                    } else {
-                        TYPES::Time::new(0)
-                    };
+                let mut collector = self.vote_collector.write().await;
 
-                if view > collection_view {
+                let maybe_task = collector.take();
+
+                if maybe_task.is_none()
+                    || vote.get_view_number() > maybe_task.as_ref().unwrap().view
+                {
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
@@ -198,14 +206,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         id: self.id,
                         registry: self.registry.clone(),
                     };
-                    let name = "DA Vote Collection";
-                    self.vote_collector =
-                        spawn_vote_accumulator(&info, vote.clone(), event, name.to_string()).await;
-                } else if let Some((_, _, stream_id)) = self.vote_collector {
-                    self.event_stream
-                        .direct_message(stream_id, HotShotEvent::DAVoteRecv(vote.clone()))
-                        .await;
-                };
+                    *collector = create_vote_accumulator::<
+                        TYPES,
+                        DAVote<TYPES>,
+                        DACertificate<TYPES>,
+                    >(&info, vote.clone(), event)
+                    .await;
+                } else {
+                    let result = maybe_task.unwrap().handle_event(event.clone()).await;
+
+                    if result.0 == Some(HotShotTaskCompleted::ShutDown) {
+                        // The protocol has finished
+                        return None;
+                    }
+                    *collector = Some(result.1);
+                }
             }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
@@ -213,7 +228,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 
@@ -266,8 +281,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let Ok(signature) =
                     TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash)
                 else {
-                    // TODO is this correct?
-                    // Should we be doing more?
                     error!("Failed to sign block payload!");
                     return None;
                 };

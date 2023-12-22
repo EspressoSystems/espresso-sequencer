@@ -12,6 +12,7 @@ use ethereum_types::U256;
 use tracing::error;
 
 use crate::{
+    simple_certificate::Threshold,
     simple_vote::Voteable,
     traits::{
         election::Membership,
@@ -50,6 +51,9 @@ The votes all must be over the `Commitment` associated type.
 pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
+
+    /// Threshold Functions
+    type Threshold: Threshold<TYPES>;
 
     /// Build a certificate from the data commitment and the quorum of signers
     fn create_signed_certificate(

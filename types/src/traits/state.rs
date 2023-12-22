@@ -5,7 +5,6 @@
 
 use crate::traits::BlockPayload;
 use commit::Committable;
-use espresso_systems_common::hotshot::tag;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     error::Error,
@@ -123,98 +122,4 @@ pub trait TestableBlock: BlockPayload + Debug {
 
     /// the number of transactions in this block
     fn txn_count(&self) -> u64;
-}
-
-/// Dummy implementation of `State` for unit tests
-pub mod dummy {
-    use super::{tag, Committable, Debug, Hash, Serialize, State, TestableState};
-    use crate::{
-        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        data::ViewNumber,
-    };
-    use rand::Rng;
-    use serde::Deserialize;
-
-    /// Dummy error
-    #[derive(Debug)]
-    pub struct DummyError;
-
-    impl std::error::Error for DummyError {}
-
-    impl std::fmt::Display for DummyError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("A bad thing happened")
-        }
-    }
-
-    /// The dummy state
-    #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct DummyState {
-        /// Some dummy data
-        nonce: u64,
-    }
-
-    impl Committable for DummyState {
-        fn commit(&self) -> commit::Commitment<Self> {
-            commit::RawCommitmentBuilder::new("Dummy State Comm")
-                .u64_field("Nonce", self.nonce)
-                .finalize()
-        }
-
-        fn tag() -> String {
-            tag::DUMMY_STATE.to_string()
-        }
-    }
-
-    impl DummyState {
-        /// Generate a random `DummyState`
-        pub fn random(r: &mut dyn rand::RngCore) -> Self {
-            Self {
-                nonce: r.gen_range(1..1_000_000),
-            }
-        }
-    }
-
-    impl State for DummyState {
-        type Error = DummyError;
-        type BlockHeader = VIDBlockHeader;
-        type BlockPayload = VIDBlockPayload;
-        type Time = ViewNumber;
-
-        fn validate_block(
-            &self,
-            _block_header: &Self::BlockHeader,
-            _view_number: &Self::Time,
-        ) -> bool {
-            false
-        }
-
-        fn initialize() -> Self {
-            let mut state = Self::default();
-            state.nonce += 1;
-            state
-        }
-
-        fn append(
-            &self,
-            _block_header: &Self::BlockHeader,
-            _view_number: &Self::Time,
-        ) -> Result<Self, Self::Error> {
-            Ok(Self {
-                nonce: self.nonce + 1,
-            })
-        }
-
-        fn on_commit(&self) {}
-    }
-
-    impl TestableState for DummyState {
-        fn create_random_transaction(
-            _state: Option<&Self>,
-            _: &mut dyn rand::RngCore,
-            _: u64,
-        ) -> VIDTransaction {
-            VIDTransaction(vec![0u8])
-        }
-    }
 }

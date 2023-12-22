@@ -11,6 +11,7 @@ use async_compatibility_layer::{
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
+use derive_more::{Deref, DerefMut};
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
     message::{Message, MessagePurpose},
@@ -25,12 +26,17 @@ use hotshot_types::{
     },
 };
 use hotshot_web_server::{self, config};
-use rand::random;
+use lru::LruCache;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
+use surf_disco::Url;
 
 use hotshot_types::traits::network::ViewMessage;
+use std::collections::BTreeMap;
 use std::{
-    collections::{hash_map::Entry, BTreeSet, HashMap},
+    collections::{btree_map::Entry, BTreeSet},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -49,6 +55,15 @@ impl<TYPES: NodeType> WebCommChannel<TYPES> {
     pub fn new(network: Arc<WebServerNetwork<TYPES>>) -> Self {
         Self(network)
     }
+}
+
+/// # Note
+///
+/// This function uses `DefaultHasher` instead of cryptographic hash functions like SHA-256 because of an `AsRef` requirement.
+fn hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
 
 /// The web server network state
@@ -93,6 +108,79 @@ impl<TYPES: NodeType> WebServerNetwork<TYPES> {
     }
 }
 
+/// `TaskChannel` is a type alias for an unbounded sender channel that sends `ConsensusIntentEvent`s.
+///
+/// This channel is used to send events to a task. The `K` type parameter is the type of the key used in the `ConsensusIntentEvent`.
+///
+/// # Examples
+///
+/// ```
+/// let (tx, _rx): (TaskChannel<MyKey>, _) = tokio::sync::mpsc::unbounded_channel();
+/// ```
+///
+/// # Note
+///
+/// This type alias is used in the context of a `TaskMap`, where each task is represented by a `TaskChannel`.
+type TaskChannel<K> = UnboundedSender<ConsensusIntentEvent<K>>;
+
+/// `TaskMap` is a wrapper around a `BTreeMap` that maps view numbers to tasks.
+///
+/// Each task is represented by a `TaskChannel` that can be used to send events to the task.
+/// The key `K` is a type that implements the `SignatureKey` trait.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate::TaskMap;
+/// let mut map: TaskMap<MyKey> = TaskMap::default();
+/// ```
+///
+/// # Note
+///
+/// This struct is `Clone`, `Deref`, and `DerefMut`, so it can be used just like a `BTreeMap`.
+#[derive(Debug, Clone, Deref, DerefMut)]
+struct TaskMap<K: SignatureKey>(BTreeMap<u64, TaskChannel<K>>);
+
+impl<K: SignatureKey> Default for TaskMap<K> {
+    fn default() -> Self {
+        Self(BTreeMap::default())
+    }
+}
+
+impl<K: SignatureKey> TaskMap<K> {
+    /// Prunes tasks that are polling for a view less than or equal to `current_view - 2`.
+    ///
+    /// This method cancels and removes all entries in the task map that are polling for a view less than or equal to `current_view - 2`.
+    /// The cancellation is performed by sending a `cancel_event` to the task.
+    ///
+    /// # Arguments
+    ///
+    /// * `current_view` - The current view number. Tasks polling for a view less than or equal to `current_view - 2` will be pruned.
+    /// * `cancel_event_fn` - A function that takes a view number and returns a `ConsensusIntentEvent` to be sent to the task for cancellation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut map: TaskMap<MyKey> = TaskMap::default();
+    /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal).await;
+    /// ```
+    async fn prune_tasks(
+        &mut self,
+        current_view: u64,
+        cancel_event_fn: fn(u64) -> ConsensusIntentEvent<K>,
+    ) {
+        let cutoff_view = current_view.saturating_sub(2);
+        let views_to_remove: Vec<_> = self.range(..cutoff_view).map(|(key, _)| *key).collect();
+
+        for view in views_to_remove {
+            let task = self.remove(&view);
+            if let Some(task) = task {
+                let _ = task.send(cancel_event_fn(view)).await;
+            }
+        }
+    }
+}
+
 /// Represents the core of web server networking
 #[derive(Debug)]
 struct Inner<TYPES: NodeType> {
@@ -117,26 +205,23 @@ struct Inner<TYPES: NodeType> {
     tx_index: Arc<RwLock<u64>>,
 
     /// Task map for quorum proposals.
-    proposal_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    proposal_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for quorum votes.
-    vote_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    vote_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for VID disperse data
-    vid_disperse_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    vid_disperse_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for DACs.
-    dac_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    dac_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for view sync certificates.
-    view_sync_cert_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    view_sync_cert_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for view sync votes.
-    view_sync_vote_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    view_sync_vote_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for transactions
-    txn_task_map:
-        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    txn_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
+    /// Task polling for latest quorum propsal
+    latest_quorum_proposal_task: Arc<RwLock<Option<TaskChannel<TYPES::SignatureKey>>>>,
+    /// Task polling for latest view sync proposal
+    latest_view_sync_proposal_task: Arc<RwLock<Option<TaskChannel<TYPES::SignatureKey>>>>,
 }
 
 impl<TYPES: NodeType> Inner<TYPES> {
@@ -150,6 +235,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
     ) -> Result<(), NetworkError> {
         let mut vote_index = 0;
         let mut tx_index = 0;
+        let mut seen_proposals = LruCache::new(NonZeroUsize::new(100).unwrap());
 
         if message_purpose == MessagePurpose::Data {
             tx_index = *self.tx_index.read().await;
@@ -159,7 +245,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
         while self.running.load(Ordering::Relaxed) {
             let endpoint = match message_purpose {
                 MessagePurpose::Proposal => config::get_proposal_route(view_number),
-                MessagePurpose::CurrentProposal => config::get_recent_proposal_route(),
+                MessagePurpose::LatestQuorumProposal => config::get_latest_quorum_proposal_route(),
+                MessagePurpose::LatestViewSyncProposal => {
+                    config::get_latest_view_sync_proposal_route()
+                }
                 MessagePurpose::Vote => config::get_vote_route(view_number, vote_index),
                 MessagePurpose::Data => config::get_transactions_route(tx_index),
                 MessagePurpose::Internal => unimplemented!(),
@@ -221,7 +310,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 //     }
                                 // }
                             }
-                            MessagePurpose::CurrentProposal => {
+                            MessagePurpose::LatestQuorumProposal => {
                                 // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                                 self.broadcast_poll_queue
                                     .write()
@@ -229,6 +318,20 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                     .push(deserialized_messages[0].clone());
 
                                 return Ok(());
+                            }
+                            MessagePurpose::LatestViewSyncProposal => {
+                                let mut broadcast_poll_queue =
+                                    self.broadcast_poll_queue.write().await;
+
+                                for cert in &deserialized_messages {
+                                    let hash = hash(&cert);
+                                    if seen_proposals.put(hash, ()).is_none() {
+                                        broadcast_poll_queue.push(cert.clone());
+                                    }
+                                }
+
+                                // additional sleep to reduce load on web server
+                                async_sleep(Duration::from_millis(300)).await;
                             }
                             MessagePurpose::Vote => {
                                 // error!(
@@ -303,7 +406,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 // TODO ED Need to add vote indexing to web server for view sync certs
                                 for cert in &deserialized_messages {
                                     vote_index += 1;
-                                    broadcast_poll_queue.push(cert.clone());
+                                    let hash = hash(cert);
+                                    if seen_proposals.put(hash, ()).is_none() {
+                                        broadcast_poll_queue.push(cert.clone());
+                                    }
                                 }
                             }
 
@@ -329,6 +435,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                         ConsensusIntentEvent::CancelPollForVotes(event_view)
                         | ConsensusIntentEvent::CancelPollForProposal(event_view)
                         | ConsensusIntentEvent::CancelPollForDAC(event_view)
+                        | ConsensusIntentEvent::CancelPollForViewSyncCertificate(event_view)
                         | ConsensusIntentEvent::CancelPollForVIDDisperse(event_view)
                         | ConsensusIntentEvent::CancelPollForViewSyncVotes(event_view) => {
                             if view_number == event_view {
@@ -346,6 +453,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 debug!("Shutting down polling task for view {}", event_view);
                                 return Ok(());
                             }
+                        }
+
+                        ConsensusIntentEvent::CancelPollForLatestViewSyncProposal => {
+                            return Ok(());
                         }
 
                         _ => {
@@ -427,7 +538,7 @@ pub struct SendMsg<M: NetworkMsg> {
 }
 
 /// A message being received from the web server
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct RecvMsg<M: NetworkMsg> {
     /// The optional message being received
@@ -472,22 +583,15 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
     /// # Panics
     /// if the web server url is malformed
     pub fn create(
-        url: &str,
-        port: u16,
+        url: Url,
         wait_between_polls: Duration,
         key: TYPES::SignatureKey,
         is_da_server: bool,
     ) -> Self {
-        let base_url_string = format!("{url}:{port}");
-        info!("Connecting to web server at {base_url_string:?} is da: {is_da_server}");
-
-        let base_url = base_url_string.parse();
-        if base_url.is_err() {
-            error!("Web server url {:?} is malformed", base_url_string);
-        }
+        info!("Connecting to web server at {url:?} is da: {is_da_server}");
 
         // TODO ED Wait for healthcheck
-        let client = surf_disco::Client::<ClientError>::new(base_url.unwrap());
+        let client = surf_disco::Client::<ClientError>::new(url);
 
         let inner = Arc::new(Inner {
             broadcast_poll_queue: Arc::default(),
@@ -506,6 +610,8 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             view_sync_cert_task_map: Arc::default(),
             view_sync_vote_task_map: Arc::default(),
             txn_task_map: Arc::default(),
+            latest_quorum_proposal_task: Arc::default(),
+            latest_view_sync_proposal_task: Arc::default(),
         });
 
         inner.connected.store(true, Ordering::Relaxed);
@@ -527,7 +633,9 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             MessagePurpose::Proposal => config::post_proposal_route(*view_number),
             MessagePurpose::Vote => config::post_vote_route(*view_number),
             MessagePurpose::Data => config::post_transactions_route(),
-            MessagePurpose::Internal | MessagePurpose::CurrentProposal => {
+            MessagePurpose::Internal
+            | MessagePurpose::LatestQuorumProposal
+            | MessagePurpose::LatestViewSyncProposal => {
                 return Err(WebServerNetworkError::EndpointError)
             }
             MessagePurpose::ViewSyncProposal => {
@@ -774,8 +882,6 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         );
 
         // TODO ED Need to handle canceling tasks that don't receive their expected output (such a proposal that never comes)
-        // TODO ED Need to GC all old views, not just singular views, could lead to a network leak
-
         match event {
             ConsensusIntentEvent::PollForProposal(view_number) => {
                 // Check if we already have a task for this (we shouldn't)
@@ -802,20 +908,13 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // GC proposal collection if we are two views in the future
-                if let Some((_, sender)) = task_map.remove_entry(&view_number.wrapping_sub(2)) {
-                    // Send task cancel message to old task
-
-                    // If task already exited we expect an error
-                    let _res = sender
-                        .send(ConsensusIntentEvent::CancelPollForProposal(
-                            view_number.wrapping_sub(2),
-                        ))
-                        .await;
-                }
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForProposal)
+                    .await;
             }
             ConsensusIntentEvent::PollForVIDDisperse(view_number) => {
                 // Check if we already have a task for this (we shouldn't)
@@ -842,39 +941,70 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // GC proposal collection if we are two views in the future
-                if let Some((_, sender)) = task_map.remove_entry(&view_number.wrapping_sub(2)) {
-                    // Send task cancel message to old task
-
-                    // If task already exited we expect an error
-                    let _res = sender
-                        .send(ConsensusIntentEvent::CancelPollForVIDDisperse(
-                            view_number.wrapping_sub(2),
-                        ))
-                        .await;
-                }
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForVIDDisperse)
+                    .await;
             }
-            ConsensusIntentEvent::PollForCurrentProposal => {
-                // create new task
-                let (_, receiver) = unbounded();
+            ConsensusIntentEvent::PollForLatestQuorumProposal => {
+                let mut proposal_task = self.inner.latest_quorum_proposal_task.write().await;
+                if proposal_task.is_none() {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    *proposal_task = Some(sender);
 
-                async_spawn({
-                    let inner_clone = self.inner.clone();
-                    async move {
-                        if let Err(e) = inner_clone
-                            .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
-                            .await
-                        {
-                            warn!(
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::LatestQuorumProposal, 1)
+                                .await
+                            {
+                                warn!(
                                 "Background receive proposal polling encountered an error: {:?}",
                                 e
                             );
+                            }
+                            let mut proposal_task =
+                                inner_clone.latest_quorum_proposal_task.write().await;
+                            *proposal_task = None;
                         }
-                    }
-                });
+                    });
+                }
+            }
+            ConsensusIntentEvent::PollForLatestViewSyncProposal => {
+                let mut latest_view_sync_proposal_task =
+                    self.inner.latest_view_sync_proposal_task.write().await;
+                if latest_view_sync_proposal_task.is_none() {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    *latest_view_sync_proposal_task = Some(sender);
+
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(
+                                    receiver,
+                                    MessagePurpose::LatestViewSyncProposal,
+                                    1,
+                                )
+                                .await
+                            {
+                                warn!(
+                                "Background receive proposal polling encountered an error: {:?}",
+                                e
+                            );
+                            }
+                            let mut latest_view_sync_proposal_task =
+                                inner_clone.latest_view_sync_proposal_task.write().await;
+                            *latest_view_sync_proposal_task = None;
+                        }
+                    });
+                }
             }
             ConsensusIntentEvent::PollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;
@@ -897,21 +1027,13 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // GC proposal collection if we are two views in the future
-                // TODO ED This won't work for vote collection, last task is more than 2 view ago depending on size of network, will need to rely on cancel task from consensus
-                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
-                    // Send task cancel message to old task
-
-                    // If task already exited we expect an error
-                    let _res = sender
-                        .send(ConsensusIntentEvent::CancelPollForVotes(
-                            view_number.wrapping_sub(2),
-                        ))
-                        .await;
-                }
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForVotes)
+                    .await;
             }
 
             ConsensusIntentEvent::PollForDAC(view_number) => {
@@ -935,20 +1057,13 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // GC proposal collection if we are two views in the future
-                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
-                    // Send task cancel message to old task
-
-                    // If task already exited we expect an error
-                    let _res = sender
-                        .send(ConsensusIntentEvent::CancelPollForDAC(
-                            view_number.wrapping_sub(2),
-                        ))
-                        .await;
-                }
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForDAC)
+                    .await;
             }
 
             ConsensusIntentEvent::CancelPollForVotes(view_number) => {
@@ -960,6 +1075,17 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                     // If task already exited we expect an error
                     let _res = sender
                         .send(ConsensusIntentEvent::CancelPollForVotes(view_number))
+                        .await;
+                }
+            }
+
+            ConsensusIntentEvent::CancelPollForLatestViewSyncProposal => {
+                let mut latest_view_sync_proposal_task =
+                    self.inner.latest_view_sync_proposal_task.write().await;
+
+                if let Some(thing) = latest_view_sync_proposal_task.take() {
+                    let _res = thing
+                        .send(ConsensusIntentEvent::CancelPollForLatestViewSyncProposal)
                         .await;
                 }
             }
@@ -989,10 +1115,16 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // TODO ED Do we need to GC before returning?  Or will view sync task handle that?
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(
+                        view_number,
+                        ConsensusIntentEvent::CancelPollForViewSyncCertificate,
+                    )
+                    .await;
             }
             ConsensusIntentEvent::PollForViewSyncVotes(view_number) => {
                 let mut task_map = self.inner.view_sync_vote_task_map.write().await;
@@ -1019,8 +1151,16 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
+
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(
+                        view_number,
+                        ConsensusIntentEvent::CancelPollForViewSyncVotes,
+                    )
+                    .await;
             }
 
             ConsensusIntentEvent::CancelPollForViewSyncCertificate(view_number) => {
@@ -1053,7 +1193,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
             }
             ConsensusIntentEvent::PollForTransactions(view_number) => {
                 let mut task_map = self.inner.txn_task_map.write().await;
-                if let std::collections::hash_map::Entry::Vacant(e) = task_map.entry(view_number) {
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
                     // create new task
                     let (sender, receiver) = unbounded();
                     e.insert(sender);
@@ -1072,10 +1212,13 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
-                // TODO ED Do we need to GC before returning?  Or will view sync task handle that?
+                // Cancel old, stale tasks
+                task_map
+                    .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForTransactions)
+                    .await;
             }
             ConsensusIntentEvent::CancelPollForTransactions(view_number) => {
                 let mut task_map = self.inner.txn_task_map.write().await;
@@ -1107,16 +1250,24 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
-        let url = "http://localhost";
-        // TODO ED Restrict this to be an open port using portpicker
-        let port = random::<u16>();
+
+        // pick random, unused port
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+
+        let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
         info!("Launching web server on port {port}");
         // Start web server
-        async_spawn(hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
-            Some(server_shutdown),
-            url.to_owned(),
-            port,
-        ));
+        async_spawn(async {
+            match hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
+                Some(server_shutdown),
+                url,
+            )
+            .await
+            {
+                Ok(()) => error!("Web server future finished unexpectedly"),
+                Err(e) => error!("Web server task failed: {e}"),
+            }
+        });
 
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let known_nodes = (0..expected_node_count as u64)
@@ -1130,9 +1281,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         // Start each node's web server client
         Box::new(move |id| {
             let sender = Arc::clone(&sender);
+            let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
             let mut network = WebServerNetwork::create(
-                "http://localhost",
-                port,
+                url,
                 Duration::from_millis(100),
                 known_nodes[id as usize].clone(),
                 is_da,
