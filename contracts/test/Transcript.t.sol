@@ -8,7 +8,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { VkTest } from "./stubs/Transfer1In2Out24DepthVk.sol";
+import { VkTest } from "./mocks/Transfer1In2Out24DepthVk.sol";
 
 // Target contract
 import { Transcript as T } from "../src/libraries/Transcript.sol";
@@ -46,7 +46,7 @@ contract Transcript_appendFieldElement_Test is Test {
         uint256 fieldElement
     ) external {
         fieldElement = bound(fieldElement, 0, BN254.R_MOD - 1);
-        BN254.validateScalarField(fieldElement);
+        BN254.validateScalarField(BN254.ScalarField.wrap(fieldElement));
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -57,7 +57,7 @@ contract Transcript_appendFieldElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendFieldElement(fieldElement);
+        transcript.appendFieldElement(BN254.ScalarField.wrap(fieldElement));
         assertEq(updated.transcript, transcript.transcript);
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);
@@ -73,8 +73,9 @@ contract Transcript_appendGroupElement_Test is Test {
         uint256 randScalar
     ) external {
         randScalar = bound(randScalar, 0, BN254.R_MOD - 1);
-        BN254.validateScalarField(randScalar);
-        BN254.G1Point memory randPoint = BN254.scalarMul(BN254.P1(), randScalar);
+        BN254.validateScalarField(BN254.ScalarField.wrap(randScalar));
+        BN254.G1Point memory randPoint =
+            BN254.scalarMul(BN254.P1(), BN254.ScalarField.wrap(randScalar));
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -93,7 +94,7 @@ contract Transcript_appendGroupElement_Test is Test {
 
     /// @dev Test special case where the identity point (or infinity) is appended.
     function test_appendInfinityPoint_succeeds(T.TranscriptData memory transcript) external {
-        BN254.G1Point memory infinity = BN254.G1Point(0, 0);
+        BN254.G1Point memory infinity = BN254.infinity();
         assert(BN254.isInfinity(infinity));
 
         string[] memory cmds = new string[](4);
@@ -145,7 +146,7 @@ contract Transcript_appendVkAndPubInput_Test is Test {
     ) external {
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
-            BN254.validateScalarField(publicInput[i]);
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
 

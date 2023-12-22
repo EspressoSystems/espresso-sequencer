@@ -224,20 +224,22 @@ impl MockLedger {
                 powers_of_g: srs.powers_of_g,
                 h: srs.h,
                 beta_h: srs.beta_h,
+                powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = hotshot_state_prover::preprocess(&srs)
+        let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
             .expect("Fail to preprocess state prover circuit");
-        let (proof, pi) = hotshot_state_prover::generate_state_update_proof(
-            &mut self.rng,
-            &pk,
-            &self.st,
-            &bit_vec,
-            &sigs,
-            &self.state,
-            &self.threshold,
-        )
-        .expect("Fail to generate state proof");
+        let (proof, pi) =
+            hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+                &mut self.rng,
+                &pk,
+                &self.st,
+                &bit_vec,
+                &sigs,
+                &self.state,
+                &self.threshold,
+            )
+            .expect("Fail to generate state proof");
         (pi, proof)
     }
 
@@ -314,7 +316,7 @@ pub(crate) fn stake_table_for_testing(
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
+    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(STAKE_TABLE_CAPACITY);
     // Registering keys
     bls_keys
         .iter()

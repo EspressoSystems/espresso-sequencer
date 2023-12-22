@@ -53,7 +53,7 @@ case $KERNEL in
   darwin)
   # Build in docker container
   docker run \
-    -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS \
+    -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS -e CARGO_TARGET_DIR \
     -v $(pwd):/work \
     -v $HOME/.cargo/registry:/root/.cargo/registry \
     -it ghcr.io/espressosystems/devops-rust:stable \
@@ -71,8 +71,8 @@ cleanup(){
 }
 
 mkdir -p ${WORKDIR}/target/$ARCH/release
-for binary in "orchestrator" "web-server" "sequencer" "cli" "commitment-task"; do
-  cp -v target/release/$binary ${WORKDIR}/target/$ARCH/release
+for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "reset-storage"; do
+  cp -v "${CARGO_TARGET_DIR}/release/$binary" ${WORKDIR}/target/$ARCH/release
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
     patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary

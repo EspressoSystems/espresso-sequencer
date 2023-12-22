@@ -131,35 +131,35 @@ pub mod light_client {
                                 name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("feeLedgerComm"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -214,35 +214,35 @@ pub mod light_client {
                                 name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("feeLedgerComm"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
 use commit::{Commitment, Committable};
@@ -59,12 +60,40 @@ impl AnvilOptions {
     pub async fn spawn(self) -> Anvil {
         let state_dir = TempDir::new().unwrap();
         let (child, url) = Anvil::spawn_server(&self, Some(state_dir.path())).await;
-        Anvil {
+        let anvil: Anvil = Anvil {
             child,
             url,
             state_dir,
             opt: self,
+        };
+
+        // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
+        // do not work until at least one block has been mined. Send a transaction to force the
+        // mining of a block.
+        anvil
+            .provider()
+            .send_transaction(
+                TransactionRequest {
+                    to: Some(Address::zero().into()),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
+        while let Err(err) = anvil
+            .provider()
+            .fee_history(1, BlockNumber::Latest, &[])
+            .await
+        {
+            tracing::warn!("RPC is not ready: {err}");
+            sleep(Duration::from_millis(200)).await;
         }
+
+        anvil
     }
 }
 
@@ -306,12 +335,13 @@ pub async fn wait_for_rpc(
         tracing::debug!("Waiting for JSON-RPC at {url}, retrying in {interval:?}");
         sleep(interval).await;
     }
+
     Err(format!("No JSON-RPC at {url}"))
 }
 
 pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
     let mut buf = vec![];
-    comm.serialize(&mut buf).unwrap();
+    comm.serialize_uncompressed(&mut buf).unwrap();
     let state_comm: [u8; 32] = buf.try_into().unwrap();
     U256::from_little_endian(&state_comm)
 }
@@ -319,20 +349,19 @@ pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
 pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, SerializationError> {
     let mut commit_bytes = [0; 32];
     comm.to_little_endian(&mut commit_bytes);
-    Commitment::deserialize(&*commit_bytes.to_vec())
+    Commitment::deserialize_uncompressed_unchecked(&*commit_bytes.to_vec())
 }
 
 pub async fn contract_send<M: Middleware, T: Detokenize>(
     call: &ContractCall<M, T>,
-) -> Option<(TransactionReceipt, u64)>
+) -> Result<(TransactionReceipt, u64), anyhow::Error>
 where
     M::Provider: Clone,
 {
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            tracing::error!("error sending transaction: {}", err);
-            return None;
+            return Err(anyhow!("error sending transaction: {}", err));
         }
     };
 
@@ -341,23 +370,22 @@ where
     tracing::debug!("submitted contract call {}", hash);
 
     if !wait_for_transaction_to_be_mined(&provider, hash).await {
-        return None;
+        return Err(anyhow!("transaction not mined"));
     }
 
     let receipt = match provider.get_transaction_receipt(hash).await {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
-            tracing::error!("contract call {hash}: no receipt");
-            return None;
+            return Err(anyhow!("contract call {hash}: no receipt"));
         }
         Err(err) => {
-            tracing::error!("contract call {hash}: error getting transaction receipt: {err}");
-            return None;
+            return Err(anyhow!(
+                "contract call {hash}: error getting transaction receipt: {err}"
+            ))
         }
     };
     if receipt.status != Some(1.into()) {
-        tracing::error!("contract call {hash}: transaction reverted");
-        return None;
+        return Err(anyhow!("contract call {hash}: transaction reverted"));
     }
 
     // If a transaction is mined and we get a receipt for it, the block number should _always_ be
@@ -365,7 +393,7 @@ where
     let block_number = receipt
         .block_number
         .expect("transaction mined but block number not set");
-    Some((receipt, block_number.as_u64()))
+    Ok((receipt, block_number.as_u64()))
 }
 
 async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
@@ -404,7 +432,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
         sleep(interval).await;
     }
 
-    tracing::error!("contraact call {hash:?}: not mined after {retries} retries");
+    tracing::error!("contract call {hash:?}: not mined after {retries} retries");
     false
 }
 

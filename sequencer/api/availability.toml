@@ -62,27 +62,3 @@ where a `Header` has the schema:
 
 All timestamps are denominated in an integer number of seconds.
 """
-
-[route.getheader]
-PATH = ["header/:height"]
-":height" = "Integer"
-DOC = """
-If the header at the provided height is available, returns
-
-```json
-{
-    "metadata": {
-      "timestamp": "integer",
-      "l1_head": "integer",
-      "l1_finalized": {
-          "timestamp": "integer",
-          "number": "integer",
-          "hash": "TaggedBase64"
-      },
-    }
-    "transactions_root": {
-        "root": ["integer"]
-    }
-}
-```
-"""
