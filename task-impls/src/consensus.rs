@@ -1055,7 +1055,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     is_genesis: false,
                 });
                 if self.quorum_membership.get_leader(view) == self.public_key
-                    && self.consensus.read().await.high_qc.get_view_number() == view
+                    && self.consensus.read().await.high_qc.get_view_number() + 1 == view
                 {
                     self.publish_proposal_if_able(view, None).await;
                 }
