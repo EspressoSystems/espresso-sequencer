@@ -99,7 +99,7 @@ async fn test_vid_task() {
     );
 
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
         1,
     );
     output.insert(

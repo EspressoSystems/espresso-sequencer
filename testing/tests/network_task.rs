@@ -129,7 +129,7 @@ async fn test_network_task() {
     );
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 2);
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
         2, // 2 occurrences: both from the VID task
     );
     output.insert(

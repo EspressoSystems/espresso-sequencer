@@ -91,6 +91,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     SendPayloadCommitmentAndMetadata(
         VidCommitment,
         <TYPES::BlockPayload as BlockPayload>::Metadata,
+        TYPES::Time,
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     TransactionsSequenced(
