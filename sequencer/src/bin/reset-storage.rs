@@ -1,8 +1,8 @@
 use clap::Parser;
 use hotshot_query_service::data_source::VersionedDataSource;
-use sequencer::api::{
-    data_source::{DataSourceOptions, SequencerDataSource},
-    options,
+use sequencer::{
+    api::data_source::{DataSourceOptions, SequencerDataSource},
+    persistence::{self},
 };
 
 /// Reset the persistent storage of a sequencer.
@@ -12,9 +12,9 @@ use sequencer::api::{
 #[derive(Clone, Debug, Parser)]
 enum Options {
     /// Reset file system storage.
-    Fs(options::Fs),
+    Fs(persistence::fs::Options),
     /// Reset SQL storage.
-    Sql(options::Sql),
+    Sql(persistence::sql::Options),
 }
 
 #[async_std::main]
@@ -26,9 +26,13 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn reset_storage<O: DataSourceOptions>(mut opt: O) -> anyhow::Result<()> {
-    opt.reset_storage();
-    let mut ds = O::DataSource::create(opt).await?;
+async fn reset_storage<O: DataSourceOptions>(opt: O) -> anyhow::Result<()> {
+    // Reset query service storage.
+    let mut ds = O::DataSource::create(opt.clone(), true).await?;
     ds.commit().await?;
+
+    // Reset consensus storage.
+    opt.reset().await?;
+
     Ok(())
 }

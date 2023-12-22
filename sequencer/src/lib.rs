@@ -6,6 +6,7 @@ pub mod hotshot_commitment;
 pub mod options;
 use url::Url;
 mod l1_client;
+pub mod persistence;
 mod state;
 pub mod transaction;
 mod vm;
@@ -24,10 +25,7 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::{NetworkConfig, NetworkConfigSource},
-};
+use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -43,10 +41,10 @@ use hotshot_types::{
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme,
 };
+use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::net::Ipv4Addr;
-use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -266,21 +264,34 @@ pub struct NetworkParams {
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    config_path: Option<&Path>,
-) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
+    persistence: impl SequencerPersistence,
+) -> anyhow::Result<(SystemContextHandle<SeqTypes, Node<network::Web>>, u64)> {
     // Orchestrator client
-    let config_path = config_path.map(|path| path.display().to_string());
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         public_ip: None,
-        network_config_file: config_path.clone(),
+        network_config_file: None,
     };
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string()).await;
 
-    let (mut config, config_source) =
-        NetworkConfig::from_file_or_orchestrator(&orchestrator_client, config_path.clone()).await;
+    let mut config = match persistence.load_config().await? {
+        Some(config) => {
+            tracing::info!("loaded network config from storage, rejoining existing network");
+            config
+        }
+        None => {
+            tracing::info!("loading network config from orchestrator");
+            let config = orchestrator_client.get_config(public_ip.to_string()).await;
+            tracing::info!("loaded config, we are node {}", config.node_index);
+            tracing::info!("waiting for orchestrated start");
+            orchestrator_client
+                .wait_for_all_nodes_ready(config.node_index)
+                .await;
+            config
+        }
+    };
     let node_index = config.node_index;
 
     // Generate public keys and this node's private keys.
@@ -314,29 +325,13 @@ pub async fn init_node(
         _pd: Default::default(),
     };
 
-    match config_source {
-        NetworkConfigSource::Orchestrator => {
-            // If we are connecting for the first time and doing an orchestrated start, wait for
-            // other nodes to connect.
-            tracing::info!("waiting for orchestrated start");
-            orchestrator_client
-                .wait_for_all_nodes_ready(node_index)
-                .await;
-        }
-        NetworkConfigSource::File => {
-            // If we are loading from a file, the network is already running and we are doing a
-            // restart.
-            tracing::info!("rejoining existing network");
-        }
-    }
-
     // The web server network doesn't have any metrics. By creating and dropping a
     // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
     // populated, so that monitoring software built to work with network-related metrics doesn't
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    (
+    Ok((
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
@@ -348,7 +343,7 @@ pub async fn init_node(
         )
         .await,
         node_index,
-    )
+    ))
 }
 
 #[cfg(any(test, feature = "testing"))]
