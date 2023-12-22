@@ -5,12 +5,12 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
