@@ -24,7 +24,7 @@ use hotshot_types::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
-        block_contents::BlockHeader,
+        block_contents::{vid_commitment, BlockHeader},
         consensus_api::ConsensusApi,
         election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -224,8 +224,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     &self.public_key,
                     &self.private_key,
                 );
-
-                self.payload_commitment_and_metadata = None;
+                if let Some((payload_commit, meta)) = &self.payload_commitment_and_metadata {
+                    let (genesis_payload, genesis_meta) =
+                        <TYPES::BlockPayload as BlockPayload>::genesis();
+                    let genesis_commitment = vid_commitment(
+                        &genesis_payload.encode().unwrap().collect(),
+                        self.quorum_membership.total_nodes(),
+                    );
+                    if meta == &genesis_meta && payload_commit == &genesis_commitment {
+                        self.payload_commitment_and_metadata = None;
+                    }
+                }
                 let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
                 if let GeneralConsensusMessage::Vote(vote) = message {
