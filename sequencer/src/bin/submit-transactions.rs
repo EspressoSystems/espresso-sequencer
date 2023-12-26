@@ -15,7 +15,8 @@ use hotshot_query_service::{
     availability::{BlockQueryData, QueryablePayload},
     Error,
 };
-use rand::{thread_rng, Rng, RngCore};
+use rand::{Rng, RngCore, SeedableRng};
+use rand_chacha::ChaChaRng;
 use sequencer::{options::parse_duration, SeqTypes, Transaction};
 use snafu::Snafu;
 use std::{collections::HashSet, time::Duration};
@@ -53,6 +54,10 @@ struct Options {
     #[clap(long, default_value = "1000")]
     channel_bound: usize,
 
+    /// Seed for reproducible randomness.
+    #[clap(long)]
+    seed: Option<u64>,
+
     /// Number of parallel tasks to run.
     #[clap(short, long, default_value = "1")]
     jobs: usize,
@@ -78,6 +83,10 @@ async fn main() {
     let opt = Options::parse();
     let (sender, mut receiver) = mpsc::channel(opt.channel_bound);
 
+    let seed = opt.seed.unwrap_or_else(random_seed);
+    tracing::info!("PRNG seed: {seed}");
+    let mut rng = ChaChaRng::seed_from_u64(seed);
+
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
     let client = Client::<Error>::new(opt.url.clone());
     let block_height: usize = client
@@ -94,7 +103,11 @@ async fn main() {
 
     // Spawn tasks to submit transactions.
     for _ in 0..opt.jobs {
-        spawn(submit_transactions(opt.clone(), sender.clone()));
+        spawn(submit_transactions(
+            opt.clone(),
+            sender.clone(),
+            ChaChaRng::from_rng(&mut rng).unwrap(),
+        ));
     }
 
     // Keep track of the results.
@@ -129,10 +142,14 @@ async fn main() {
     );
 }
 
-async fn submit_transactions(opt: Options, mut sender: Sender<Commitment<Transaction>>) {
+async fn submit_transactions(
+    opt: Options,
+    mut sender: Sender<Commitment<Transaction>>,
+    mut rng: ChaChaRng,
+) {
     let client = Client::<Error>::new(opt.url.clone());
     loop {
-        let tx = random_transaction(&opt);
+        let tx = random_transaction(&opt, &mut rng);
         let hash = tx.commit();
         tracing::debug!(
             "submitting transaction {hash} for namespace {} of size {}",
@@ -156,9 +173,7 @@ async fn submit_transactions(opt: Options, mut sender: Sender<Commitment<Transac
     }
 }
 
-fn random_transaction(opt: &Options) -> Transaction {
-    let mut rng = thread_rng();
-
+fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
     let vm = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
@@ -166,4 +181,8 @@ fn random_transaction(opt: &Options) -> Transaction {
     rng.fill_bytes(&mut payload);
 
     Transaction::new(vm.into(), payload)
+}
+
+fn random_seed() -> u64 {
+    ChaChaRng::from_entropy().next_u64()
 }
