@@ -1,10 +1,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use cld::ClDuration;
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use sequencer::{PubKey, MAX_NMT_DEPTH};
+use sequencer::{options::parse_duration, PubKey, MAX_NMT_DEPTH};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
@@ -106,19 +105,6 @@ struct Args {
     /// Maximum number of transactions in a block.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_MAX_TRANSACTIONS")]
     max_transactions: Option<NonZeroUsize>,
-}
-
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

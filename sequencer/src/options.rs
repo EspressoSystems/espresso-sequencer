@@ -95,11 +95,11 @@ impl Options {
 }
 
 #[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
+pub struct ParseDurationError {
     reason: String,
 }
 
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
     ClDuration::from_str(s)
         .map(Duration::from)
         .map_err(|err| ParseDurationError {

@@ -1,5 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use derive_more::{From, Into};
+use derive_more::{Display, From, Into};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::Namespace;
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,7 @@ use crate::transaction::{ApplicationTransaction, Transaction};
     Serialize,
     Deserialize,
     Debug,
+    Display,
     PartialEq,
     Eq,
     Hash,
@@ -22,6 +23,7 @@ use crate::transaction::{ApplicationTransaction, Transaction};
     PartialOrd,
     Ord,
 )]
+#[display(fmt = "{_0}")]
 pub struct VmId(pub(crate) u64);
 
 pub trait Vm {
