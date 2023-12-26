@@ -24,7 +24,7 @@ contract LightClientTest is LC {
         LC.LightClientState memory state,
         bool isNewEpoch,
         IPlonkVerifier.PlonkProof memory proof
-    ) internal override {
+    ) internal view override {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[] memory publicInput = preparePublicInput(state, isNewEpoch);
 

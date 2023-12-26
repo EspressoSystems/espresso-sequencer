@@ -45,3 +45,7 @@ path = "src/bin/diff_test.rs"
 [[bin]]
 name = "gen-vk-contract"
 path = "src/bin/gen_vk_contract.rs"
+
+[[bin]]
+name = "eval-domain"
+path = "src/bin/eval_domain.rs"
