@@ -62,6 +62,8 @@ contract LightClient {
     error MissingLastBlockForCurrentEpoch(uint64 expectedBlockHeight);
     /// @notice Invalid user inputs: wrong format or non-sensible arguments
     error InvalidArgs();
+    /// @notice Wrong plonk proof or public inputs.
+    error InvalidProof();
 
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, othrewise it's impossible to
@@ -116,10 +118,7 @@ contract LightClient {
         BN254.validateScalarField(newState.stakeTableAmountComm);
 
         // check plonk proof
-        // TODO: (alex) replace the vk with the correct one
-        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
-        uint256[] memory publicInput = preparePublicInput(newState, isNewEpoch);
-        PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
+        verifyProof(newState, isNewEpoch, proof);
 
         // upon successful verification, update state.
         // If the newState is in a new epoch, only then should we increment the `currentEpoch`, and
@@ -159,6 +158,21 @@ contract LightClient {
             publicInput[7] = finalizedState.threshold;
         }
         return publicInput;
+    }
+
+    /// @dev Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK used
+    /// in inherited contracts.
+    function verifyProof(
+        LightClientState memory state,
+        bool isNewEpoch,
+        IPlonkVerifier.PlonkProof memory proof
+    ) internal virtual {
+        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
+        uint256[] memory publicInput = preparePublicInput(state, isNewEpoch);
+
+        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+            revert InvalidProof();
+        }
     }
 
     /// @notice Advance to the next epoch (without any precondition check!)

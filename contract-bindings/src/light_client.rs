@@ -408,6 +408,13 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("InvalidProof"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("InvalidProof"),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("MissingLastBlockForCurrentEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("MissingLastBlockForCurrentEpoch",),
@@ -593,6 +600,21 @@ pub mod light_client {
     )]
     #[etherror(name = "InvalidArgs", abi = "InvalidArgs()")]
     pub struct InvalidArgs;
+    ///Custom Error type `InvalidProof` with signature `InvalidProof()` and selector `0x09bde339`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(name = "InvalidProof", abi = "InvalidProof()")]
+    pub struct InvalidProof;
     ///Custom Error type `MissingLastBlockForCurrentEpoch` with signature `MissingLastBlockForCurrentEpoch(uint64)` and selector `0x1b2335f8`
     #[derive(
         Clone,
@@ -641,6 +663,7 @@ pub mod light_client {
     )]
     pub enum LightClientErrors {
         InvalidArgs(InvalidArgs),
+        InvalidProof(InvalidProof),
         MissingLastBlockForCurrentEpoch(MissingLastBlockForCurrentEpoch),
         OutdatedState(OutdatedState),
         /// The standard solidity revert string, with selector
@@ -660,6 +683,9 @@ pub mod light_client {
             if let Ok(decoded) = <InvalidArgs as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::InvalidArgs(decoded));
             }
+            if let Ok(decoded) = <InvalidProof as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::InvalidProof(decoded));
+            }
             if let Ok(decoded) =
                 <MissingLastBlockForCurrentEpoch as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -675,6 +701,7 @@ pub mod light_client {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
                 Self::InvalidArgs(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::InvalidProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::MissingLastBlockForCurrentEpoch(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -689,6 +716,8 @@ pub mod light_client {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
                 _ if selector
                     == <InvalidArgs as ::ethers::contract::EthError>::selector() => true,
+                _ if selector
+                    == <InvalidProof as ::ethers::contract::EthError>::selector() => true,
                 _ if selector
                     == <MissingLastBlockForCurrentEpoch as ::ethers::contract::EthError>::selector() => {
                     true
@@ -705,6 +734,7 @@ pub mod light_client {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::InvalidArgs(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
                 Self::MissingLastBlockForCurrentEpoch(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -721,6 +751,11 @@ pub mod light_client {
     impl ::core::convert::From<InvalidArgs> for LightClientErrors {
         fn from(value: InvalidArgs) -> Self {
             Self::InvalidArgs(value)
+        }
+    }
+    impl ::core::convert::From<InvalidProof> for LightClientErrors {
+        fn from(value: InvalidProof) -> Self {
+            Self::InvalidProof(value)
         }
     }
     impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientErrors {
