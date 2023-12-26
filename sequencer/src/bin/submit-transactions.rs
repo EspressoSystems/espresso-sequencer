@@ -32,6 +32,14 @@ struct Options {
     #[clap(long, default_value = "1kb", value_parser = parse_size)]
     max_size: usize,
 
+    /// Minimum namespace ID to submit to.
+    #[clap(long, default_value = "10000")]
+    min_namespace: u64,
+
+    /// Maximum namespace ID to submit to.
+    #[clap(long, default_value = "10010")]
+    max_namespace: u64,
+
     /// Optional delay between submitting transactions.
     ///
     /// Can be used to moderate the rate of submission.
@@ -78,7 +86,7 @@ async fn main() {
         .await
         .unwrap();
     let mut blocks = client
-        .socket(&format!("availability/stream/blocks/{block_height}"))
+        .socket(&format!("availability/stream/blocks/{}", block_height - 1))
         .subscribe()
         .await
         .unwrap();
@@ -122,9 +130,9 @@ async fn main() {
 }
 
 async fn submit_transactions(opt: Options, mut sender: Sender<Commitment<Transaction>>) {
-    let client = Client::<Error>::new(opt.url);
+    let client = Client::<Error>::new(opt.url.clone());
     loop {
-        let tx = random_transaction(opt.min_size, opt.max_size);
+        let tx = random_transaction(&opt);
         let hash = tx.commit();
         tracing::debug!(
             "submitting transaction {hash} for namespace {} of size {}",
@@ -148,12 +156,12 @@ async fn submit_transactions(opt: Options, mut sender: Sender<Commitment<Transac
     }
 }
 
-fn random_transaction(min_size: usize, max_size: usize) -> Transaction {
+fn random_transaction(opt: &Options) -> Transaction {
     let mut rng = thread_rng();
 
-    let vm = rng.next_u64();
+    let vm = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
-    let len = rng.gen_range(min_size..=max_size);
+    let len = rng.gen_range(opt.min_size..=opt.max_size);
     let mut payload = vec![0; len];
     rng.fill_bytes(&mut payload);
 
