@@ -4,7 +4,7 @@ use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
-use ark_std::rand::{rngs::StdRng, SeedableRng};
+use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::ParsedG2Point;
 use ethers::{
@@ -13,7 +13,7 @@ use ethers::{
 };
 use hotshot_contract::{
     jf_helpers::*,
-    light_client::{MockLedger, MockSystemParam},
+    light_client::{MockLedger, MockSystemParam, ParsedLightClientState},
 };
 use itertools::multiunzip;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
@@ -82,6 +82,8 @@ enum Action {
     GenBLSHashes,
     /// Generate BLS keys and a signature
     GenBLSSig,
+    /// Get a consecutive finalized light client states
+    MockConsecutiveFinalizedStates,
 }
 
 #[allow(clippy::type_complexity)]
@@ -436,17 +438,56 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockGenesis => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numBlockPerEpoch");
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators");
             }
 
             let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
             let pp = MockSystemParam::init(block_per_epoch);
-            let num_validators = 200;
-            let ledger = MockLedger::init(pp, num_validators);
+            let ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
             let res = (ledger.get_state(), voting_st_comm, frozen_st_comm);
+            println!("{}", res.encode_hex());
+        }
+        Action::MockConsecutiveFinalizedStates => {
+            if cli.args.len() != 4 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators,arg3=numRegs,arg4=numExit");
+            }
+
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
+            let num_reg = cli.args[2].parse::<u64>().unwrap();
+            let num_exit = cli.args[3].parse::<u64>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
+            let mut ledger = MockLedger::init(pp, num_init_validators as usize);
+
+            let mut new_states: Vec<ParsedLightClientState> = vec![];
+            let mut proofs: Vec<ParsedPlonkProof> = vec![];
+            for i in 1..block_per_epoch + 2 {
+                // only update stake table at the last block, as it would only take effect in next epoch anyway.
+                if i == block_per_epoch {
+                    ledger.sync_stake_table(num_reg as usize, num_exit as usize);
+                }
+
+                // random number of notorized but not finalized block
+                if ledger.rng.gen_bool(0.5) {
+                    let num_non_blk = ledger.rng.gen_range(0..5);
+                    for _ in 0..num_non_blk {
+                        ledger.elapse_without_block();
+                    }
+                }
+
+                ledger.elapse_with_block();
+
+                let (pi, proof) = ledger.gen_state_proof();
+                new_states.push(pi.into());
+                proofs.push(proof.into());
+            }
+
+            let res = (new_states, proofs);
             println!("{}", res.encode_hex());
         }
         Action::GenBLSHashes => {

@@ -191,6 +191,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("frozenThreshold"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("frozenThreshold"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("genesisState"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("genesisState"),
@@ -374,6 +390,22 @@ pub mod light_client {
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
                 ),
+                (
+                    ::std::borrow::ToOwned::to_owned("votingThreshold"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("votingThreshold"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
             ]),
             events: ::core::convert::From::from([(
                 ::std::borrow::ToOwned::to_owned("NewState"),
@@ -528,6 +560,14 @@ pub mod light_client {
                 .method_hash([56, 43, 33, 90], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `frozenThreshold` (0xca6fe855) function
+        pub fn frozen_threshold(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([202, 111, 232, 85], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `genesisState` (0xd24d933d) function
         pub fn genesis_state(
             &self,
@@ -564,6 +604,14 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
                 .method_hash([118, 182, 183, 203], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `votingThreshold` (0x62827733) function
+        pub fn voting_threshold(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([98, 130, 119, 51], ())
                 .expect("method not found (this should never happen)")
         }
         ///Gets the contract's `NewState` event
@@ -871,6 +919,21 @@ pub mod light_client {
         abi = "frozenStakeTableCommitment()"
     )]
     pub struct FrozenStakeTableCommitmentCall;
+    ///Container type for all input parameters for the `frozenThreshold` function with signature `frozenThreshold()` and selector `0xca6fe855`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "frozenThreshold", abi = "frozenThreshold()")]
+    pub struct FrozenThresholdCall;
     ///Container type for all input parameters for the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -920,6 +983,21 @@ pub mod light_client {
         abi = "votingStakeTableCommitment()"
     )]
     pub struct VotingStakeTableCommitmentCall;
+    ///Container type for all input parameters for the `votingThreshold` function with signature `votingThreshold()` and selector `0x62827733`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "votingThreshold", abi = "votingThreshold()")]
+    pub struct VotingThresholdCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientCalls {
@@ -928,9 +1006,11 @@ pub mod light_client {
         CurrentEpoch(CurrentEpochCall),
         FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
+        FrozenThreshold(FrozenThresholdCall),
         GenesisState(GenesisStateCall),
         NewFinalizedState(NewFinalizedStateCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
+        VotingThreshold(VotingThresholdCall),
     }
     impl ::ethers::core::abi::AbiDecode for LightClientCalls {
         fn decode(
@@ -961,6 +1041,11 @@ pub mod light_client {
             {
                 return Ok(Self::FrozenStakeTableCommitment(decoded));
             }
+            if let Ok(decoded) =
+                <FrozenThresholdCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::FrozenThreshold(decoded));
+            }
             if let Ok(decoded) = <GenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::GenesisState(decoded));
@@ -974,6 +1059,11 @@ pub mod light_client {
                 <VotingStakeTableCommitmentCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::VotingStakeTableCommitment(decoded));
+            }
+            if let Ok(decoded) =
+                <VotingThresholdCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::VotingThreshold(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
@@ -990,11 +1080,13 @@ pub mod light_client {
                 Self::FrozenStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::FrozenThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VotingStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::VotingThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
     }
@@ -1006,9 +1098,11 @@ pub mod light_client {
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
+                Self::FrozenThreshold(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
+                Self::VotingThreshold(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
@@ -1037,6 +1131,11 @@ pub mod light_client {
             Self::FrozenStakeTableCommitment(value)
         }
     }
+    impl ::core::convert::From<FrozenThresholdCall> for LightClientCalls {
+        fn from(value: FrozenThresholdCall) -> Self {
+            Self::FrozenThreshold(value)
+        }
+    }
     impl ::core::convert::From<GenesisStateCall> for LightClientCalls {
         fn from(value: GenesisStateCall) -> Self {
             Self::GenesisState(value)
@@ -1050,6 +1149,11 @@ pub mod light_client {
     impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientCalls {
         fn from(value: VotingStakeTableCommitmentCall) -> Self {
             Self::VotingStakeTableCommitment(value)
+        }
+    }
+    impl ::core::convert::From<VotingThresholdCall> for LightClientCalls {
+        fn from(value: VotingThresholdCall) -> Self {
+            Self::VotingThreshold(value)
         }
     }
     ///Container type for all return fields from the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
@@ -1131,6 +1235,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct FrozenStakeTableCommitmentReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `frozenThreshold` function with signature `frozenThreshold()` and selector `0xca6fe855`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct FrozenThresholdReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -1168,6 +1286,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct VotingStakeTableCommitmentReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `votingThreshold` function with signature `votingThreshold()` and selector `0x62827733`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct VotingThresholdReturn(pub ::ethers::core::types::U256);
     ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
     #[derive(
         Clone,

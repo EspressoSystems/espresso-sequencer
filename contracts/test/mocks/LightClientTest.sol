@@ -20,13 +20,13 @@ contract LightClientTest is LC {
     }
 
     /// @dev override the production-implementation with test VK.
-    function verifyProof(
-        LC.LightClientState memory state,
-        bool isNewEpoch,
-        IPlonkVerifier.PlonkProof memory proof
-    ) internal view override {
+    function verifyProof(LC.LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
+        internal
+        view
+        override
+    {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
-        uint256[] memory publicInput = preparePublicInput(state, isNewEpoch);
+        uint256[] memory publicInput = preparePublicInput(state);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
             revert InvalidProof();

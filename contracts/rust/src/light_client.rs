@@ -1,5 +1,7 @@
 //! Helpers and test mocks for Light Client logic
 
+use std::collections::HashMap;
+
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_std::rand::rngs::StdRng;
 use ark_std::rand::{CryptoRng, Rng, RngCore};
@@ -12,7 +14,6 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{H256, U256},
 };
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_state_prover::circuit::PublicInput;
 use hotshot_state_prover::Proof;
@@ -29,6 +30,8 @@ use jf_utils::test_rng;
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+
+const STAKE_TABLE_CAPACITY: usize = 10;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
@@ -52,13 +55,14 @@ impl MockSystemParam {
 /// its logic is completely divergent from a real light client or HotShot
 pub struct MockLedger {
     pp: MockSystemParam,
-    rng: StdRng,
+    pub rng: StdRng,
     epoch: u64,
     state: LightClientState<F>,
     st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     qc_keys: Vec<BLSVerKey>,
     state_keys: Vec<(SchnorrSignKey, SchnorrVerKey)>,
+    key_archive: HashMap<BLSVerKey, SchnorrSignKey>,
 }
 
 impl MockLedger {
@@ -67,6 +71,10 @@ impl MockLedger {
         // credit: https://github.com/EspressoSystems/HotShot/blob/5554b7013b00e6034691b533299b44f3295fa10d/crates/hotshot-state-prover/src/lib.rs#L176
         let mut rng = test_rng();
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut rng);
+        let mut key_archive = HashMap::new();
+        for i in 0..qc_keys.len() {
+            key_archive.insert(qc_keys[i], state_keys[i].0.clone());
+        }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
         let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
@@ -90,13 +98,16 @@ impl MockLedger {
             threshold,
             qc_keys,
             state_keys,
+            key_archive,
         }
     }
 
     /// Elapse a view with a new finalized block
     pub fn elapse_with_block(&mut self) {
         // if the new block is the first block of an epoch, update epoch
-        if (self.state.block_height + 1) % (self.pp.blk_per_epoch as usize) == 0 {
+        if self.state.block_height != 0
+            && self.state.block_height % self.pp.blk_per_epoch as usize == 0
+        {
             self.epoch += 1;
             self.st.advance();
             self.threshold = self
@@ -125,6 +136,7 @@ impl MockLedger {
     /// Update stake table with `num_reg` number of new registrations and `num_exit` number of exits on L1
     pub fn sync_stake_table(&mut self, num_reg: usize, num_exit: usize) {
         // ensure input parameter won't exceed stake table capacity
+        let before_st_size = self.qc_keys.len();
         assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
 
         // process exits/deregister
@@ -151,9 +163,13 @@ impl MockLedger {
             self.st
                 .register(bls_key, amount, schnorr_key.1.clone())
                 .unwrap_or_else(|_| panic!("failed to deregister {i}-th key"));
+            self.key_archive.insert(bls_key, schnorr_key.0.clone());
             self.qc_keys.push(bls_key);
             self.state_keys.push(schnorr_key);
         }
+
+        assert!(self.qc_keys.len() == self.state_keys.len());
+        assert!(self.qc_keys.len() == before_st_size + num_reg - num_exit);
     }
 
     /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
@@ -178,7 +194,13 @@ impl MockLedger {
     pub fn gen_state_proof(&mut self) -> (PublicInput<F>, Proof) {
         let state_msg: [F; 7] = self.state.clone().into();
 
-        let st_size = self.qc_keys.len();
+        let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
+            .st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .collect();
+        let st_size = st.len();
+
         // find a quorum whose accumulated weights exceed threshold
         let mut bit_vec = vec![false; st_size];
         let mut total_weight = U256::from(0);
@@ -190,10 +212,7 @@ impl MockLedger {
             }
 
             bit_vec[signer_idx] = true;
-            total_weight += self
-                .st
-                .lookup(SnapshotVersion::LastEpochStart, &self.qc_keys[signer_idx])
-                .unwrap();
+            total_weight += st[signer_idx].1;
         }
 
         let sigs = bit_vec
@@ -203,7 +222,7 @@ impl MockLedger {
                 if *b {
                     SchnorrSignatureScheme::<EdwardsConfig>::sign(
                         &(),
-                        &self.state_keys[i].0,
+                        self.key_archive.get(&st[i].0).unwrap(),
                         state_msg,
                         &mut self.rng,
                     )
@@ -216,7 +235,7 @@ impl MockLedger {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = crs::aztec20::kzg10_setup(2u64.pow(20) as usize + 2)
+            let srs = crs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -323,7 +342,7 @@ pub(crate) fn stake_table_for_testing(
         .enumerate()
         .zip(schnorr_keys)
         .for_each(|((i, bls_key), schnorr_key)| {
-            st.register(*bls_key, U256::from((i + 1) as u32), schnorr_key.1.clone())
+            st.register(*bls_key, U256::from((i + 10) as u32), schnorr_key.1.clone())
                 .unwrap()
         });
     // Freeze the stake table
@@ -335,14 +354,14 @@ pub(crate) fn stake_table_for_testing(
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
 pub struct ParsedLightClientState {
-    view_num: u64,
-    block_height: u64,
-    block_comm_root: U256,
-    fee_ledger_comm: U256,
-    bls_key_comm: U256,
-    schnorr_key_comm: U256,
-    amount_comm: U256,
-    threshold: U256,
+    pub view_num: u64,
+    pub block_height: u64,
+    pub block_comm_root: U256,
+    pub fee_ledger_comm: U256,
+    pub bls_key_comm: U256,
+    pub schnorr_key_comm: U256,
+    pub amount_comm: U256,
+    pub threshold: U256,
 }
 
 impl FromStr for ParsedLightClientState {

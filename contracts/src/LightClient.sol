@@ -26,9 +26,13 @@ contract LightClient {
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
     /// of last epoch)
     bytes32 public votingStakeTableCommitment;
+    /// @notice The quorum threshold for the stake table used in current voting
+    uint256 public votingThreshold;
     /// @notice The commitment of the stake table frozen for change (i.e. snapshot at the start of
     /// last epoch)
     bytes32 public frozenStakeTableCommitment;
+    /// @notice The quorum threshold for the frozen stake table
+    uint256 public frozenThreshold;
 
     // === Data Structure ===
     //
@@ -53,7 +57,9 @@ contract LightClient {
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
-    event NewState(uint64 indexed viewNum, uint64 indexed blockHeight, uint256 blockCommRoot);
+    event NewState(
+        uint64 indexed viewNum, uint64 indexed blockHeight, BN254.ScalarField blockCommRoot
+    );
 
     /// @notice The state is outdated and older than currently known `finalizedState`
     error OutdatedState();
@@ -86,7 +92,9 @@ contract LightClient {
         BLOCKS_PER_EPOCH = numBlockPerEpoch;
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
+        votingThreshold = genesis.threshold;
         frozenStakeTableCommitment = initStakeTableComm;
+        frozenThreshold = genesis.threshold;
     }
 
     // === State Modifying APIs ===
@@ -105,7 +113,7 @@ contract LightClient {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = (currentEpoch + 1) * BLOCKS_PER_EPOCH - 1;
+        uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
@@ -117,58 +125,47 @@ contract LightClient {
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
 
-        // check plonk proof
-        verifyProof(newState, isNewEpoch, proof);
-
-        // upon successful verification, update state.
-        // If the newState is in a new epoch, only then should we increment the `currentEpoch`, and
-        // update the stake table. The `finalizedState` (before update) should have the
-        // `epochEndingBlockHeight`
+        // If the newState is in a new epoch, increment the `currentEpoch`, update the stake table.
         if (isNewEpoch) {
             _advanceEpoch();
         }
 
+        // check plonk proof
+        verifyProof(newState, proof);
+
+        // upon successful verification, update the latest finalized state
         finalizedState = newState;
-        emit NewState(
-            newState.viewNum, newState.blockHeight, BN254.ScalarField.unwrap(newState.blockCommRoot)
-        );
+        emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
 
     // === Pure or View-only APIs ===
     /// @dev Transform a state into an array of field elements, prepared as public inputs of the
     /// plonk proof verification
-    /// @param isNewEpoch Indicate if the `state` is in the new epoch, thus won't reuse threshold
-    /// from `finalizedState`
-    function preparePublicInput(LightClientState memory state, bool isNewEpoch)
+    function preparePublicInput(LightClientState memory state)
         internal
         view
         returns (uint256[] memory)
     {
         uint256[] memory publicInput = new uint256[](8);
-        publicInput[0] = uint256(state.viewNum);
-        publicInput[1] = uint256(state.blockHeight);
-        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[3] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[4] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
-        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
-        if (isNewEpoch) {
-            publicInput[7] = state.threshold;
-        } else {
-            publicInput[7] = finalizedState.threshold;
-        }
+        publicInput[0] = votingThreshold;
+        publicInput[1] = uint256(state.viewNum);
+        publicInput[2] = uint256(state.blockHeight);
+        publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
+        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
         return publicInput;
     }
 
     /// @dev Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK used
     /// in inherited contracts.
-    function verifyProof(
-        LightClientState memory state,
-        bool isNewEpoch,
-        IPlonkVerifier.PlonkProof memory proof
-    ) internal virtual {
+    function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
+        internal
+        virtual
+    {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
-        uint256[] memory publicInput = preparePublicInput(state, isNewEpoch);
+        uint256[] memory publicInput = preparePublicInput(state);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
             revert InvalidProof();
@@ -181,6 +178,10 @@ contract LightClient {
         bytes32 newStakeTableComm = computeStakeTableComm(finalizedState);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
+
+        votingThreshold = frozenThreshold;
+        frozenThreshold = finalizedState.threshold;
+
         currentEpoch += 1;
     }
 

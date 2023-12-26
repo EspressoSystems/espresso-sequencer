@@ -115,10 +115,12 @@ contract StakeTable_Test is Test {
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
 
-        string[] memory cmds = new string[](3);
+        uint64 numInitValidators = 5;
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
         cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numInitValidators);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =

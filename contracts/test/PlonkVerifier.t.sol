@@ -226,8 +226,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         bytes memory result = vm.ffi(cmds);
         (
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            // solhint-disable-next-line no-unused-vars
-            uint256[][] memory publicInputs,
+            ,
             IPlonkVerifier.PlonkProof[] memory proofs,
             bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
@@ -251,8 +250,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         (
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
-            // solhint-disable-next-line no-unused-vars
-            IPlonkVerifier.PlonkProof[] memory proofs,
+            ,
             bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
@@ -274,8 +272,6 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
             IPlonkVerifier.PlonkProof[] memory proofs,
-            // solhint-disable-next-line no-unused-vars
-            bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])

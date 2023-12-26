@@ -6,30 +6,35 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
+import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientTest as LCTest } from "./mocks/LightClientTest.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
-    LC lc;
-    uint32 public constant BLOCKS_PER_EPOCH_TEST = 2;
+    LCTest lc;
+    uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
+    // this constant should be consistent with `hotshot_contract::light_client.rs`
+    uint64 internal constant STAKE_TABLE_CAPACITY = 10;
 
     /// @dev initialized ledger like genesis and system params
     function init() public {
-        string[] memory cmds = new string[](3);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
         cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state, bytes32 votingSTComm, bytes32 frozenSTComm) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         genesis = state;
-        lc = new LC(genesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
         assertEq(frozenSTComm, expectedStakeTableComm);
@@ -109,7 +114,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 
     /// @dev Test the constructor has initialized the contract state properly, espeically genesis
     /// block.
-    function test_GenesisInitialized() external {
+    function test_CorrectInitialization() external {
         assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);
         assertEqState(getGenesisState(), genesis);
         assertEqState(getFinalizedState(), genesis);
@@ -118,40 +123,151 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
         assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
+        assertEq(lc.votingThreshold(), genesis.threshold);
+        assertEq(lc.frozenThreshold(), genesis.threshold);
     }
 
-    // TODO: malformed genesis would revert
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
         badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
         badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
+
+        // zero-valued threshold would revert
+        badGenesis.threshold = 0;
+        vm.expectRevert(LC.InvalidArgs.selector);
+        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        badGenesis.threshold = genesis.threshold; // revert to correct
 
         // zero-valued BLOCK_PER_EPOCH would revert
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LC(genesis, 0);
+        lc = new LCTest(genesis, 0);
+    }
+}
+
+contract LightClient_newFinalizedState_Test is LightClientCommonTest {
+    function setUp() public {
+        init();
+    }
+
+    /// @dev Test happy path for (BLOCK_PER_EPOCH + 1) consecutive new finalized blocks
+    /// forge-config: default.fuzz.runs = 1
+    /// forge-config: ci.fuzz.runs = 10
+    function testFuzz_ConsecutiveUpdate(
+        uint64 numInitValidators,
+        uint64 numRegistrations,
+        uint64 numExits
+    ) external {
+        numInitValidators = uint64(bound(numInitValidators, 1, STAKE_TABLE_CAPACITY));
+        numRegistrations =
+            uint64(bound(numRegistrations, 0, STAKE_TABLE_CAPACITY - numInitValidators));
+        numExits = uint64(bound(numExits, 0, numInitValidators));
+
+        // since we have have a fuzzer-provided `numInitValidators`, we should instantiate light
+        // client contract separately in each test run
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-genesis";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numInitValidators);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory state,,) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        genesis = state;
+        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+
+        // Generating a few consecutive states and proofs
+        cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numInitValidators);
+        cmds[4] = vm.toString(numRegistrations);
+        cmds[5] = vm.toString(numExits);
+
+        result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+        assert(
+            states.length == BLOCKS_PER_EPOCH_TEST + 1 && proofs.length == BLOCKS_PER_EPOCH_TEST + 1
+        );
+
+        for (uint256 i = 0; i < BLOCKS_PER_EPOCH_TEST + 1; i++) {
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+            lc.newFinalizedState(states[i], proofs[i]);
+
+            // check if LightClient.sol states are updated correctly
+            assertEqState(getFinalizedState(), states[i]);
+            // check against hardcoded epoch advancement expectation
+            if (i == BLOCKS_PER_EPOCH_TEST) {
+                // first block of a new epoch (from epoch 2) should update the following
+                assertEq(lc.currentEpoch(), 2);
+                bytes32 genesisComm = lc.computeStakeTableComm(genesis);
+                LC.LightClientState memory lastBlockInFirstEpoch = states[i - 1];
+                bytes32 firstEpochComm = lc.computeStakeTableComm(lastBlockInFirstEpoch);
+                assertEq(lc.votingStakeTableCommitment(), genesisComm);
+                assertEq(lc.frozenStakeTableCommitment(), firstEpochComm);
+                assertEq(lc.votingThreshold(), genesis.threshold);
+                assertEq(lc.frozenThreshold(), lastBlockInFirstEpoch.threshold);
+            } else {
+                assertEq(lc.currentEpoch(), 1);
+                bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
+                assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
+                assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
+                assertEq(lc.votingThreshold(), genesis.threshold);
+                assertEq(lc.frozenThreshold(), genesis.threshold);
+            }
+        }
+    }
+
+    /// @dev Test happy path for updating after skipping a few epochs
+    function test_UpdateAfterSkippedEpochs() external pure {
+        return;
+    }
+
+    /// @dev Test unhappy path when a valid but oudated finalized state is submitted
+    function test_RevertWhen_OutdatedStateSubmitted() external pure {
+        return;
+    }
+
+    /// @dev Test unhappy path when the last block of current epoch is skipped before block of the
+    /// next/future epoch is submitted.
+    function test_RevertWhen_EpochEndingBlockSkipped() external pure {
+        return;
+    }
+
+    /// @dev Test unhappy path when user inputs contain malformed field elements
+    function test_RevertWhen_MalformedFieldElements() external pure {
+        return;
+    }
+
+    /// @dev Test unhappy path when the plonk proof or the public inputs are wrong
+    function test_RevertWhen_WrongProofOrWrongPublicInput() external pure {
+        return;
     }
 }
