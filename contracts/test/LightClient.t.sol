@@ -245,9 +245,38 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         }
     }
 
-    /// @dev Test happy path for updating after skipping a few epochs
-    function test_UpdateAfterSkippedEpochs() external pure {
-        return;
+    /// @dev Test happy path for updating after skipping a few blocks (but not an epoch)
+    /// forge-config: default.fuzz.runs = 4
+    /// forge-config: ci.fuzz.runs = 10
+    function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped, uint32 numBlockPerEpoch)
+        external
+    {
+        numBlockPerEpoch = uint32(bound(numBlockPerEpoch, 2, 10));
+        numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
+
+        // re-assign LightClient with the same genesis but different numBlockPerEpoch
+        lc = new LCTest(genesis, numBlockPerEpoch);
+
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-skip-blocks";
+        cmds[2] = vm.toString(numBlockPerEpoch);
+        cmds[3] = vm.toString(numBlockSkipped);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory state, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(state.viewNum, state.blockHeight, state.blockCommRoot);
+        lc.newFinalizedState(state, proof);
+
+        assertEq(lc.currentEpoch(), 1);
+        bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
+        assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
+        assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
+        assertEq(lc.votingThreshold(), genesis.threshold);
+        assertEq(lc.frozenThreshold(), genesis.threshold);
     }
 
     /// @dev Test unhappy path when a valid but oudated finalized state is submitted

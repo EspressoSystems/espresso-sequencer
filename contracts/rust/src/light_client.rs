@@ -31,7 +31,8 @@ type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
-const STAKE_TABLE_CAPACITY: usize = 10;
+/// Stake table capacity used for testing
+pub const STAKE_TABLE_CAPACITY: usize = 10;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {

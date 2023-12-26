@@ -13,7 +13,7 @@ use ethers::{
 };
 use hotshot_contract::{
     jf_helpers::*,
-    light_client::{MockLedger, MockSystemParam, ParsedLightClientState},
+    light_client::{MockLedger, MockSystemParam, ParsedLightClientState, STAKE_TABLE_CAPACITY},
 };
 use itertools::multiunzip;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
@@ -84,6 +84,8 @@ enum Action {
     GenBLSSig,
     /// Get a consecutive finalized light client states
     MockConsecutiveFinalizedStates,
+    /// Get a light client state that skipped a few blocks
+    MockSkipBlocks,
 }
 
 #[allow(clippy::type_complexity)]
@@ -488,6 +490,29 @@ fn main() {
             }
 
             let res = (new_states, proofs);
+            println!("{}", res.encode_hex());
+        }
+        Action::MockSkipBlocks => {
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped");
+            }
+
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_block_skipped = cli.args[1].parse::<u32>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
+            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
+
+            // random stake table update
+            ledger.sync_stake_table(4, 3);
+            for _ in 0..num_block_skipped {
+                ledger.elapse_with_block();
+            }
+
+            let (pi, proof) = ledger.gen_state_proof();
+            let pi_parsed: ParsedLightClientState = pi.into();
+            let proof_parsed: ParsedPlonkProof = proof.into();
+            let res = (pi_parsed, proof_parsed);
             println!("{}", res.encode_hex());
         }
         Action::GenBLSHashes => {
