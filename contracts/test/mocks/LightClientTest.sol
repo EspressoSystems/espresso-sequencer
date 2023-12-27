@@ -19,6 +19,11 @@ contract LightClientTest is LC {
         currentEpoch = newEpoch;
     }
 
+    /// @dev Directly mutate `finalizedState` variable for test
+    function setFinalizedState(LC.LightClientState memory state) public {
+        finalizedState = state;
+    }
+
     /// @dev override the production-implementation with test VK.
     function verifyProof(LC.LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
         internal

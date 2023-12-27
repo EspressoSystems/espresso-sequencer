@@ -76,16 +76,18 @@ enum Action {
     TestOnly,
     /// Generate Client Wallet
     GenClientWallet,
-    /// Get mock genesis light client state
-    MockGenesis,
     /// Generate internal hash values for the BLS signature scheme
     GenBLSHashes,
     /// Generate BLS keys and a signature
     GenBLSSig,
+    /// Get mock genesis light client state
+    MockGenesis,
     /// Get a consecutive finalized light client states
     MockConsecutiveFinalizedStates,
     /// Get a light client state that skipped a few blocks
     MockSkipBlocks,
+    /// Get light client states when missing ending block of an epoch
+    MockMissEndingBlock,
 }
 
 #[allow(clippy::type_complexity)]
@@ -493,12 +495,17 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
-            if cli.args.len() != 2 {
-                panic!("Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped");
+            if cli.args.len() < 2 || cli.args.len() > 3 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped,arg3(opt)=requireValidProof");
             }
 
             let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
             let num_block_skipped = cli.args[1].parse::<u32>().unwrap();
+            let require_valid_proof: bool = if cli.args.len() == 3 {
+                cli.args[2].parse::<bool>().unwrap()
+            } else {
+                true
+            };
 
             let pp = MockSystemParam::init(block_per_epoch);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
@@ -509,10 +516,46 @@ fn main() {
                 ledger.elapse_with_block();
             }
 
+            let res = if require_valid_proof {
+                let (pi, proof) = ledger.gen_state_proof();
+                let pi_parsed: ParsedLightClientState = pi.into();
+                let proof_parsed: ParsedPlonkProof = proof.into();
+                (pi_parsed, proof_parsed)
+            } else {
+                let pi_parsed = ledger.get_state();
+                let proof_parsed = ParsedPlonkProof::dummy(&mut ledger.rng);
+                (pi_parsed, proof_parsed)
+            };
+            println!("{}", res.encode_hex());
+        }
+        Action::MockMissEndingBlock => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numBlockPerEpoch");
+            }
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
+            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
+
+            let mut new_states: Vec<ParsedLightClientState> = vec![];
+            let mut proofs: Vec<ParsedPlonkProof> = vec![];
+
+            ledger.elapse_with_block();
+            // first block in epoch 1
             let (pi, proof) = ledger.gen_state_proof();
-            let pi_parsed: ParsedLightClientState = pi.into();
-            let proof_parsed: ParsedPlonkProof = proof.into();
-            let res = (pi_parsed, proof_parsed);
+            new_states.push(pi.into());
+            proofs.push(proof.into());
+
+            // skipping all remaining blocks in epoch 1, including the last/ending block
+            for _ in 2..block_per_epoch + 1 {
+                ledger.elapse_with_block();
+            }
+            // first block in epoch 2
+            ledger.elapse_with_block();
+            new_states.push(ledger.get_state());
+            proofs.push(ParsedPlonkProof::dummy(&mut ledger.rng)); // we don't need correct proof here
+
+            let res = (new_states, proofs);
             println!("{}", res.encode_hex());
         }
         Action::GenBLSHashes => {

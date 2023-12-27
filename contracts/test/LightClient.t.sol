@@ -280,23 +280,171 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     }
 
     /// @dev Test unhappy path when a valid but oudated finalized state is submitted
-    function test_RevertWhen_OutdatedStateSubmitted() external pure {
-        return;
+    function test_RevertWhen_OutdatedStateSubmitted() external {
+        uint32 numBlockSkipped = 1;
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-skip-blocks";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numBlockSkipped);
+        cmds[4] = vm.toString(false);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        LC.LightClientState memory state = genesis;
+        state.viewNum = 10;
+        lc.setFinalizedState(state);
+
+        // outdated view num
+        vm.expectRevert(LC.OutdatedState.selector);
+        lc.newFinalizedState(newState, proof);
+
+        // outdated block height
+        state.viewNum = genesis.viewNum;
+        state.blockHeight = numBlockSkipped + 1;
+        vm.expectRevert(LC.OutdatedState.selector);
+        lc.newFinalizedState(newState, proof);
     }
 
     /// @dev Test unhappy path when the last block of current epoch is skipped before block of the
     /// next/future epoch is submitted.
-    function test_RevertWhen_EpochEndingBlockSkipped() external pure {
-        return;
+    function test_RevertWhen_EpochEndingBlockSkipped() external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-miss-ending-block";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        // first update with the first block in epoch 1, which should pass
+        lc.newFinalizedState(states[0], proofs[0]);
+        // then directly update with the first block in epoch 2, which should fail
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LC.MissingLastBlockForCurrentEpoch.selector, BLOCKS_PER_EPOCH_TEST
+            )
+        );
+        lc.newFinalizedState(states[1], proofs[1]);
     }
 
     /// @dev Test unhappy path when user inputs contain malformed field elements
-    function test_RevertWhen_MalformedFieldElements() external pure {
-        return;
+    function test_RevertWhen_MalformedFieldElements() external {
+        uint32 numBlockSkipped = 1;
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-skip-blocks";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numBlockSkipped);
+        cmds[4] = vm.toString(false);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        LC.LightClientState memory badState = newState;
+
+        // invalid scalar for blockCommRoot
+        badState.blockCommRoot = BN254.ScalarField.wrap(BN254.R_MOD);
+        vm.expectRevert("Bn254: invalid scalar field");
+        lc.newFinalizedState(badState, proof);
+        badState.blockCommRoot = newState.blockCommRoot;
+
+        // invalid scalar for feeLedgerComm
+        badState.feeLedgerComm = BN254.ScalarField.wrap(BN254.R_MOD + 1);
+        vm.expectRevert("Bn254: invalid scalar field");
+        lc.newFinalizedState(badState, proof);
+        badState.feeLedgerComm = newState.feeLedgerComm;
+
+        // invalid scalar for stakeTableBlsKeyComm
+        badState.stakeTableBlsKeyComm = BN254.ScalarField.wrap(BN254.R_MOD + 2);
+        vm.expectRevert("Bn254: invalid scalar field");
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
+
+        // invalid scalar for stakeTableSchnorrKeyComm
+        badState.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(BN254.R_MOD + 3);
+        vm.expectRevert("Bn254: invalid scalar field");
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
+
+        // invalid scalar for stakeTableAmountComm
+        badState.stakeTableAmountComm = BN254.ScalarField.wrap(BN254.R_MOD + 4);
+        vm.expectRevert("Bn254: invalid scalar field");
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableAmountComm = newState.stakeTableAmountComm;
     }
 
     /// @dev Test unhappy path when the plonk proof or the public inputs are wrong
-    function test_RevertWhen_WrongProofOrWrongPublicInput() external pure {
-        return;
+    function test_RevertWhen_WrongProofOrWrongPublicInput() external {
+        uint32 numBlockSkipped = 1;
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-skip-blocks";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(numBlockSkipped);
+        cmds[4] = vm.toString(true);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        BN254.ScalarField randScalar = BN254.ScalarField.wrap(1234);
+        LC.LightClientState memory badState = newState;
+
+        // wrong view num
+        badState.viewNum = newState.viewNum + 2;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.viewNum = newState.viewNum;
+
+        // wrong block height
+        badState.blockHeight = newState.blockHeight + 1;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.blockHeight = newState.blockHeight;
+
+        // wrong blockCommRoot
+        badState.blockCommRoot = randScalar;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.blockCommRoot = newState.blockCommRoot;
+
+        // wrong feeLedgerComm
+        badState.feeLedgerComm = randScalar;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.feeLedgerComm = newState.feeLedgerComm;
+
+        // wrong stakeTableBlsKeyComm
+        badState.stakeTableBlsKeyComm = randScalar;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
+
+        // wrong stakeTableSchnorrKeyComm
+        badState.stakeTableSchnorrKeyComm = randScalar;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
+
+        // wrong stakeTableAmountComm
+        badState.stakeTableAmountComm = randScalar;
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(badState, proof);
+        badState.stakeTableAmountComm = newState.stakeTableAmountComm;
+
+        cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "dummy-proof";
+        cmds[2] = vm.toString(uint64(42));
+
+        result = vm.ffi(cmds);
+        (V.PlonkProof memory dummyProof) = abi.decode(result, (V.PlonkProof));
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(newState, dummyProof);
     }
 }
