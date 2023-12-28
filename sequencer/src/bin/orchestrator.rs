@@ -1,5 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use derive_more::From;
+use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
@@ -105,6 +107,26 @@ struct Args {
     /// Maximum number of transactions in a block.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_MAX_TRANSACTIONS")]
     max_transactions: Option<NonZeroUsize>,
+
+    /// Seed to use for generating node keys.
+    ///
+    /// The seed is a 32 byte integer, encoded in hex.
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
+    keygen_seed: [u8; 32],
+}
+
+#[derive(Debug, Snafu, From)]
+enum ParseSeedError {
+    #[snafu(display("seed must be valid hex: {source}"))]
+    Hex { source: FromHexError },
+
+    #[snafu(display("wrong length for seed {length} (expected 32)"))]
+    WrongLength { length: usize },
+}
+
+fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
+    <[u8; 32]>::try_from(hex::decode(s)?)
+        .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
