@@ -371,15 +371,15 @@ async fn run_request_response_increment_all(
     requestee_handle.modify_state(|s| *s += 1).await;
     info!("RR REQUESTEE IS {:?}", requestee_handle.peer_id());
     let mut futs = Vec::new();
-    for (_i, h) in handles.iter().enumerate() {
-        if h.lookup_pid(requestee_handle.peer_id()).await.is_err() {
+    for handle in handles.iter() {
+        if handle.lookup_pid(requestee_handle.peer_id()).await.is_err() {
             error!("ERROR LOOKING UP REQUESTEE ADDRS");
         }
         // NOTE uncomment if debugging
         // let _ = h.print_routing_table().await;
         // skip `requestee_handle`
-        if h.peer_id() != requestee_handle.peer_id() {
-            let requester_handle = h.clone();
+        if handle.peer_id() != requestee_handle.peer_id() {
+            let requester_handle = handle.clone();
             futs.push(run_request_response_increment(
                 requester_handle,
                 requestee_handle.clone(),

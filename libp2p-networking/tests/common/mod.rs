@@ -190,7 +190,7 @@ pub async fn spin_up_swarms<S: Debug + Default>(
             .collect::<Vec<_>>()
     );
 
-    for (_idx, handle) in handles[0..num_of_nodes].iter().enumerate() {
+    for handle in handles[0..num_of_nodes].iter() {
         let to_share = bootstrap_addrs.clone();
         handle
             .add_known_peers(
