@@ -163,3 +163,10 @@ processes:
         condition: process_healthy
       demo-l1-network:
         condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_COMMITMENT_TASK_PORT
+        path: /healthcheck
+      failure_threshold: 100
