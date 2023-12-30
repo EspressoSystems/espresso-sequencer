@@ -1,75 +1,25 @@
+use hotshot_testing::completion_task::CompletionTaskDescription;
+use hotshot_testing::completion_task::TimeBasedCompletionTaskDescription;
+use hotshot_testing::node_types::TestTypes;
+use hotshot_testing::node_types::{Libp2pImpl, MemoryImpl};
+use hotshot_testing::test_builder::TestMetadata;
 use hotshot_testing_macros::cross_tests;
 
 cross_tests!(
-     DemoType: [ (hotshot::demos::vdemo::VDemoState) ],
-     SignatureKey: [ hotshot_types::traits::signature_key::bn254::BLSPubKey ],
-     CommChannel: [ hotshot::traits::implementations::MemoryCommChannel ],
-     Storage: [ hotshot::traits::implementations::MemoryStorage ],
-     Time: [ hotshot_types::data::ViewNumber ],
-     TestName: single_permanent_failure_fast,
-     TestBuilder: hotshot_testing::test_builder::TestBuilder {
-         metadata: hotshot_testing::test_builder::TestMetadata {
-             total_nodes: 7,
-             start_nodes: 7,
-             num_succeeds: 10,
-             timing_data: hotshot_testing::test_builder::TimingData {
-                 next_view_timeout: 1000,
-                 ..hotshot_testing::test_builder::TimingData::default()
-             },
-             failure_threshold: 20,
-             ..hotshot_testing::test_builder::TestMetadata::default()
-         },
-         setup:
-             Some(hotshot_testing::round_builder::RoundSetupBuilder {
-                 scheduled_changes: vec![
-                     hotshot_testing::round_builder::ChangeNode {
-                         idx: 5,
-                         view: 1,
-                         updown: hotshot_testing::round_builder::UpDown::Down
-                     },
-                 ],
-                 ..Default::default()
-             }),
-         check: None
-     },
-    Slow: false,
-);
-
-cross_tests!(
-     DemoType: [ (hotshot::demos::vdemo::VDemoState) ],
-     SignatureKey: [ hotshot_types::traits::signature_key::bn254::BLSPubKey ],
-     CommChannel: [ hotshot::traits::implementations::MemoryCommChannel ],
-     Storage: [ hotshot::traits::implementations::MemoryStorage ],
-     Time: [ hotshot_types::data::ViewNumber ],
-     TestName: double_permanent_failure_fast,
-     TestBuilder: hotshot_testing::test_builder::TestBuilder {
-         metadata: hotshot_testing::test_builder::TestMetadata {
-             total_nodes: 7,
-             start_nodes: 7,
-             num_succeeds: 10,
-             failure_threshold: 20,
-             timing_data: hotshot_testing::test_builder::TimingData {
-                 next_view_timeout: 1000,
-                 ..hotshot_testing::test_builder::TimingData::default()
-             },
-             ..hotshot_testing::test_builder::TestMetadata::default()
-         },
-         setup:
-             Some(hotshot_testing::round_builder::RoundSetupBuilder {
-                 scheduled_changes: vec![
-                     hotshot_testing::round_builder::ChangeNode {
-                         idx: 5,
-                         view: 1,
-                         updown: hotshot_testing::round_builder::UpDown::Down
-                     },
-                     hotshot_testing::round_builder::ChangeNode {
-                         idx: 6,
-                         view: 1,
-                         updown: hotshot_testing::round_builder::UpDown::Down },
-                 ],
-                 ..Default::default()
-             }),
-         check: None
-     },
-    Slow: false,
+     Metadata:
+         TestMetadata {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                TimeBasedCompletionTaskDescription {
+                    duration: std::time::Duration::from_secs(60),
+                },
+            ),
+            ..TestMetadata::default()
+        },
+    Ignore: false,
+    TestName: single_permanent_failure_fast,
+    // types that implement nodetype
+    Types: [TestTypes],
+    // forall impl in Impls, forall type in Types, impl : NodeImplementation<type>
+    Impls: [MemoryImpl, Libp2pImpl],
 );
