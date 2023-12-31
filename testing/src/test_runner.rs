@@ -5,7 +5,8 @@ use super::{
 };
 use crate::{
     spinning_task::{ChangeNode, UpDown},
-    test_launcher::{Networks, TestLauncher}, view_sync_task::ViewSyncTask,
+    test_launcher::{Networks, TestLauncher},
+    view_sync_task::ViewSyncTask,
 };
 use hotshot::{types::SystemContextHandle, Memberships};
 
@@ -146,18 +147,18 @@ where
         .await;
         task_runner = task_runner.add_task(id, "Test Overall Safety Task".to_string(), task);
 
-        /// add view sync task
+        // add view sync task
         let view_sync_task_state = ViewSyncTask {
-            test_event_stream: test_event_stream.clone(),
             handles: nodes.clone(),
-            hit_view_sync: HashMap::new(),
+            hit_view_sync: HashSet::new(),
         };
 
         let (id, task) = (launcher.view_sync_task_generator)(
             view_sync_task_state,
             registry.clone(),
             test_event_stream.clone(),
-        ).await;
+        )
+        .await;
         task_runner = task_runner.add_task(id, "View Sync Task".to_string(), task);
 
         // wait for networks to be ready

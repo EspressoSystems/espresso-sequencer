@@ -1,26 +1,34 @@
-use std::{sync::Arc, collections::{HashSet, HashMap}};
-use futures::FutureExt;
-use hotshot_task::task::HotShotTaskTypes;
 use async_compatibility_layer::channel::UnboundedStream;
-use hotshot_task::{task_impls::{TaskBuilder, HSTWithEventAndMessage}, task::{FilterEvent, HandleMessage, HandleEvent, TS}, MergeN, event_stream::ChannelStream};
+use futures::FutureExt;
+use hotshot_task::task::{HotShotTaskCompleted, HotShotTaskTypes};
+use hotshot_task::{
+    event_stream::ChannelStream,
+    task::{FilterEvent, HandleEvent, HandleMessage, TS},
+    task_impls::{HSTWithEventAndMessage, TaskBuilder},
+    MergeN,
+};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_types::traits::node_implementation::{TestableNodeImplementation, NodeType};
+use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
 use snafu::Snafu;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 
 /// ViewSync Task error
-#[derive(Snafu, Debug)]
-pub struct ViewSyncTaskErr {}
+#[derive(Snafu, Debug, Clone)]
+pub struct ViewSyncTaskErr {
+    hit_view_sync: HashSet<usize>,
+}
 
 /// ViewSync task state
 pub struct ViewSyncTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
-    /// the global event stream
-    pub(crate) test_event_stream: ChannelStream<GlobalTestEvent>,
     /// the node handles
     pub(crate) handles: Vec<Node<TYPES, I>>,
     /// nodes that hit view sync
-    pub(crate) hit_view_sync: HashMap<usize, <TYPES as NodeType>::Time>
+    pub(crate) hit_view_sync: HashSet<usize>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for ViewSyncTask<TYPES, I> {}
@@ -42,7 +50,7 @@ pub enum ShouldHitViewSync {
     /// the node should not hit view sync
     No,
     /// don't care if the node should hit view sync
-    DontCare
+    Ignore,
 }
 
 /// Description for a view sync task.
@@ -52,7 +60,7 @@ pub enum ViewSyncTaskDescription {
     Threshold(usize, usize),
     /// node idx -> whether or not the node should hit view sync
     /// if node not in map, assumed to be `ShouldHItViewSync::DontCare`
-    Precise(HashMap<usize, ShouldHitViewSync>)
+    Precise(HashMap<usize, ShouldHitViewSync>),
 }
 
 impl ViewSyncTaskDescription {
@@ -61,44 +69,125 @@ impl ViewSyncTaskDescription {
     ) -> TaskGenerator<ViewSyncTask<TYPES, I>> {
         Box::new(move |mut state, mut registry, test_event_stream| {
             async move {
-
-                let event_handler = HandleEvent::<ViewSyncTaskTypes<TYPES, I>>(Arc::new(move |event, state| {
-                    async move {
-                        match event {
-                            GlobalTestEvent::ShutDown => {
-                                todo!()
-                                    // logic checking stuff
+                let event_handler =
+                    HandleEvent::<ViewSyncTaskTypes<TYPES, I>>(Arc::new(move |event, state| {
+                        let self_dup = self.clone();
+                        async move {
+                            match event {
+                                GlobalTestEvent::ShutDown => match self_dup.clone() {
+                                    ViewSyncTaskDescription::Threshold(min, max) => {
+                                        let num_hits = state.hit_view_sync.len();
+                                        if min <= num_hits && num_hits <= max {
+                                            (Some(HotShotTaskCompleted::ShutDown), state)
+                                        } else {
+                                            (
+                                                Some(HotShotTaskCompleted::Error(Box::new(
+                                                    ViewSyncTaskErr {
+                                                        hit_view_sync: state.hit_view_sync.clone(),
+                                                    },
+                                                ))),
+                                                state,
+                                            )
+                                        }
+                                    }
+                                    ViewSyncTaskDescription::Precise(map) => {
+                                        for (id, should_hit) in map {
+                                            match should_hit {
+                                                ShouldHitViewSync::Yes => {
+                                                    if !state.hit_view_sync.contains(&id) {
+                                                        return (
+                                                            Some(HotShotTaskCompleted::Error(
+                                                                Box::new(ViewSyncTaskErr {
+                                                                    hit_view_sync: state
+                                                                        .hit_view_sync
+                                                                        .clone(),
+                                                                }),
+                                                            )),
+                                                            state,
+                                                        );
+                                                    }
+                                                }
+                                                ShouldHitViewSync::No => {
+                                                    if state.hit_view_sync.contains(&id) {
+                                                        return (
+                                                            Some(HotShotTaskCompleted::Error(
+                                                                Box::new(ViewSyncTaskErr {
+                                                                    hit_view_sync: state
+                                                                        .hit_view_sync
+                                                                        .clone(),
+                                                                }),
+                                                            )),
+                                                            state,
+                                                        );
+                                                    }
+                                                }
+                                                ShouldHitViewSync::Ignore => {}
+                                            }
+                                        }
+                                        (Some(HotShotTaskCompleted::ShutDown), state)
+                                    }
+                                },
                             }
                         }
-                    }.boxed()
-
-                }));
+                        .boxed()
+                    }));
 
                 let message_handler = HandleMessage::<ViewSyncTaskTypes<TYPES, I>>(Arc::new(
-                        move |msg, mut state| {
-                            todo!()
+                    // NOTE: could short circuit on entering view sync if we're not supposed to
+                    // enter view sync. I opted not to do this just to gather more information
+                    // (since we'll fail the test later anyway)
+                    move |(id, msg), mut state| {
+                        async move {
+                            match msg {
+                                // all the view sync events
+                                HotShotEvent::ViewSyncTimeout(_, _, _)
+                                | HotShotEvent::ViewSyncPreCommitVoteRecv(_)
+                                | HotShotEvent::ViewSyncCommitVoteRecv(_)
+                                | HotShotEvent::ViewSyncFinalizeVoteRecv(_)
+                                | HotShotEvent::ViewSyncPreCommitVoteSend(_)
+                                | HotShotEvent::ViewSyncCommitVoteSend(_)
+                                | HotShotEvent::ViewSyncFinalizeVoteSend(_)
+                                | HotShotEvent::ViewSyncPreCommitCertificate2Recv(_)
+                                | HotShotEvent::ViewSyncCommitCertificate2Recv(_)
+                                | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
+                                | HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
+                                | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
+                                | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
+                                | HotShotEvent::ViewSyncTrigger(_) => {
+                                    state.hit_view_sync.insert(id);
+                                }
+                                _ => (),
+                            }
+                            (None, state)
                         }
-                        ));
+                        .boxed()
+                    },
+                ));
                 let mut streams = vec![];
                 for handle in &mut state.handles {
-                    let stream = handle.handle.get_internal_event_stream_known_impl(FilterEvent::default()).await.0;
+                    let stream = handle
+                        .handle
+                        .get_internal_event_stream_known_impl(FilterEvent::default())
+                        .await
+                        .0;
                     streams.push(stream);
                 }
 
                 let builder = TaskBuilder::<ViewSyncTaskTypes<TYPES, I>>::new(
                     "Test Completion Task".to_string(),
-                    )
-                    .register_event_stream(test_event_stream, FilterEvent::default())
-                    .await
-                    .register_registry(&mut registry)
-                    .await
-                    .register_state(state)
-                    .register_event_handler(event_handler)
-                    .register_message_handler(message_handler)
-                    .register_message_stream(MergeN::new(streams));
+                )
+                .register_event_stream(test_event_stream, FilterEvent::default())
+                .await
+                .register_registry(&mut registry)
+                .await
+                .register_state(state)
+                .register_event_handler(event_handler)
+                .register_message_handler(message_handler)
+                .register_message_stream(MergeN::new(streams));
                 let task_id = builder.get_task_id().unwrap();
                 (task_id, ViewSyncTaskTypes::build(builder).launch())
-            }.boxed()
+            }
+            .boxed()
         })
 
         // match self {
@@ -110,5 +199,4 @@ impl ViewSyncTaskDescription {
         //     }
         // }
     }
-
 }

@@ -12,7 +12,8 @@ use hotshot_types::{
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
 use crate::{
     spinning_task::SpinningTaskDescription,
-    test_launcher::{ResourceGenerators, TestLauncher}, view_sync_task::ViewSyncTaskDescription,
+    test_launcher::{ResourceGenerators, TestLauncher},
+    view_sync_task::ViewSyncTaskDescription,
 };
 
 use super::{
@@ -59,7 +60,7 @@ pub struct TestMetadata {
     /// timing data
     pub timing_data: TimingData,
     /// view sync check task
-    pub view_sync_properties: ViewSyncTaskDescription
+    pub view_sync_properties: ViewSyncTaskDescription,
 }
 
 impl Default for TimingData {
@@ -182,7 +183,7 @@ impl Default for TestMetadata {
                     duration: Duration::from_millis(10000),
                 },
             ),
-            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes)
+            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
         }
     }
 }
