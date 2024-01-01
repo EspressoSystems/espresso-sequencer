@@ -37,6 +37,9 @@ async fn test_catchup() {
     metadata.start_nodes = 18;
     metadata.total_nodes = 20;
 
+    metadata.view_sync_properties =
+        hotshot_testing::view_sync_task::ViewSyncTaskDescription::Threshold(0, 20);
+
     metadata.spinning_properties = SpinningTaskDescription {
         // Start the nodes before their leadership.
         node_changes: vec![(15, catchup_nodes)],
