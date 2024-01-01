@@ -125,11 +125,13 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// use hotshot_orchestrator::config::NetworkConfig;
+    /// use hotshot_orchestrator::client::OrchestratorClient;
     /// let client = OrchestratorClient::new();
     /// let identity = "my_identity".to_string();
     /// let file = Some("/path/to/my/config".to_string());
-    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file).await;
+    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file);
     /// ```
     pub async fn from_file_or_orchestrator(
         client: &OrchestratorClient,
@@ -182,7 +184,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// use hotshot_orchestrator::config::NetworkConfig;
     /// let file = "/path/to/my/config".to_string();
     /// let config = NetworkConfig::from_file(file).unwrap();
     /// ```
@@ -220,7 +223,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// use hotshot_orchestrator::config::NetworkConfig;
     /// let file = "/path/to/my/config".to_string();
     /// let config = NetworkConfig::from_file(file);
     /// config.to_file(file).unwrap();
