@@ -1,3 +1,6 @@
+//! Web server for HotShot
+
+/// Configuration for the webserver
 pub mod config;
 
 use crate::config::{MAX_TXNS, MAX_VIEWS, TX_BATCH_SIZE};
@@ -132,16 +135,22 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
 
 /// Trait defining methods needed for the `WebServerState`
 pub trait WebServerDataSource<KEY> {
+    /// get proposal
     fn get_proposal(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get latest quanrum proposal
     fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get latest view sync proposal
     fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get view sync proposal
     fn get_view_sync_proposal(
         &self,
         view_number: u64,
         index: u64,
     ) -> Result<Option<Vec<Vec<u8>>>, Error>;
 
+    /// get vote
     fn get_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get view sync votes
     fn get_view_sync_votes(
         &self,
         view_number: u64,
@@ -149,29 +158,47 @@ pub trait WebServerDataSource<KEY> {
     ) -> Result<Option<Vec<Vec<u8>>>, Error>;
 
     #[allow(clippy::type_complexity)]
+    /// get transactions
     fn get_transactions(&self, index: u64) -> Result<Option<(u64, Vec<Vec<u8>>)>, Error>;
+    /// get da certificate
     fn get_da_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// post vote
     fn post_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
+    /// post view sync vote
     fn post_view_sync_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
 
+    /// post proposal
     fn post_proposal(&mut self, view_number: u64, proposal: Vec<u8>) -> Result<(), Error>;
+    /// post view sync proposal
     fn post_view_sync_proposal(&mut self, view_number: u64, proposal: Vec<u8>)
         -> Result<(), Error>;
 
+    /// post data avaiability certificate
     fn post_da_certificate(&mut self, view_number: u64, cert: Vec<u8>) -> Result<(), Error>;
+    /// post transaction
     fn post_transaction(&mut self, txn: Vec<u8>) -> Result<(), Error>;
+    /// post staketable
     fn post_staketable(&mut self, key: Vec<u8>) -> Result<(), Error>;
+    /// post completed transaction
     fn post_completed_transaction(&mut self, block: Vec<u8>) -> Result<(), Error>;
+    /// post secret proposal
     fn post_secret_proposal(&mut self, _view_number: u64, _proposal: Vec<u8>) -> Result<(), Error>;
+    /// post proposal
     fn proposal(&self, view_number: u64) -> Option<(String, Vec<u8>)>;
 
+    /// post vid disperal
     fn post_vid_disperse(&mut self, view_number: u64, disperse: Vec<u8>) -> Result<(), Error>;
+    /// post vid vote
     fn post_vid_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
+    /// post vid certificate
     fn post_vid_certificate(&mut self, view_number: u64, certificate: Vec<u8>)
         -> Result<(), Error>;
 
+    /// get vid dispersal
     fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get vid votes
     fn get_vid_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    /// get vid certificates
     fn get_vid_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
 }
 
@@ -670,9 +697,11 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
 }
 
+/// configurability options for the web server
 #[derive(Args, Default)]
 pub struct Options {
     #[arg(long = "web-server-api-path", env = "WEB_SERVER_API_PATH")]
+    /// path to API
     pub api_path: Option<PathBuf>,
 }
 
@@ -839,21 +868,20 @@ where
                         Err(ServerError {
                             status: StatusCode::BadRequest,
                             message: format!(
-                                "Wrong secret value for proposal for view {:?}",
-                                view_number
+                                "Wrong secret value for proposal for view {view_number:?}"
                             ),
                         })
                     }
                 } else {
                     Err(ServerError {
                         status: StatusCode::BadRequest,
-                        message: format!("Proposal already submitted for view {:?}", view_number),
+                        message: format!("Proposal already submitted for view {view_number:?}"),
                     })
                 }
             } else {
                 Err(ServerError {
                     status: StatusCode::BadRequest,
-                    message: format!("No endpoint for view number {} yet", view_number),
+                    message: format!("No endpoint for view number {view_number:?} yet"),
                 })
             }
         }
@@ -862,16 +890,24 @@ where
     Ok(api)
 }
 
+/// run the web server
+/// # Errors
+/// TODO
+/// this looks like it will panic not error
+/// # Panics
+/// on error
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
     url: Url,
 ) -> io::Result<()> {
     let options = Options::default();
 
+    // TODO should this be unwrap?
     let api = define_api(&options).unwrap();
     let state = State::new(WebServerState::new().with_shutdown_signal(shutdown_listener));
     let mut app = App::<State<KEY>, Error>::with_state(state);
 
+    // TODO should this be unwrap?
     app.register_module("api", api).unwrap();
 
     let app_future = app.serve(url);

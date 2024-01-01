@@ -732,7 +732,7 @@ mod tests {
                     .register(height as usize, &paths[i], &keys[i], amounts[i])
                     .unwrap();
             }
-            for (i, (k, v, _)) in (*root).clone().into_iter().enumerate() {
+            for (i, (k, v, ())) in (*root).clone().into_iter().enumerate() {
                 assert_eq!((k, v), (keys[i], amounts[i]));
             }
         }

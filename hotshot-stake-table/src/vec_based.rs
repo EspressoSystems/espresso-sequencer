@@ -221,7 +221,7 @@ where
     }
 
     fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let owned = (0..table.bls_keys.len())
             .map(|i| {
                 (
@@ -294,7 +294,7 @@ where
     }
 
     /// Helper function to recompute the stake table commitment for head version
-    /// Commitment of a stake table is a triple (bls_keys_comm, schnorr_keys_comm, stake_amount_comm)
+    /// Commitment of a stake table is a triple `(bls_keys_comm, schnorr_keys_comm, stake_amount_comm)`
     /// TODO(Chengyu): The BLS verification keys doesn't implement Default. Thus we directly pad with `F::default()`.
     fn compute_head_comm(&mut self) -> (F, F, F) {
         let padding_len = self.capacity - self.head.bls_keys.len();
@@ -303,7 +303,7 @@ where
             .head
             .bls_keys
             .iter()
-            .flat_map(|key| key.to_fields())
+            .flat_map(ToFields::to_fields)
             .collect::<Vec<_>>();
         bls_comm_preimage.resize(self.capacity * <K1 as ToFields<F>>::SIZE, F::default());
         let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(bls_comm_preimage).unwrap()[0];
@@ -314,7 +314,7 @@ where
             .schnorr_keys
             .iter()
             .chain(ark_std::iter::repeat(&K2::default()).take(padding_len))
-            .flat_map(|key| key.to_fields())
+            .flat_map(ToFields::to_fields)
             .collect::<Vec<_>>();
         let schnorr_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(schnorr_comm_preimage).unwrap()[0];
@@ -341,6 +341,7 @@ where
         }
     }
 
+    /// returns the snapshot version
     fn get_version(
         &self,
         version: &SnapshotVersion,
