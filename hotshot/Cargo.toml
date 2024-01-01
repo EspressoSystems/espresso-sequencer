@@ -131,3 +131,6 @@ clap = { version = "4.4", features = ["derive", "env"] }
 serde_json = "1.0.108"
 toml = { workspace = true }
 hotshot-testing = { path = "../testing" }
+
+[lints]
+workspace = true

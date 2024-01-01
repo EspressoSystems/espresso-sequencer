@@ -1,6 +1,6 @@
 //! The election trait, used to decide which node is the leader and determine if a vote is valid.
 
-// Needed to avoid the non-biding `let` warning.
+// Needed to avoid the non-binding `let` warning.
 #![allow(clippy::let_underscore_untyped)]
 
 use super::node_implementation::NodeType;

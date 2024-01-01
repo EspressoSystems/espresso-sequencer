@@ -21,3 +21,6 @@ rand_chacha = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 typenum = { workspace = true }
+
+[lints]
+workspace = true

@@ -137,7 +137,7 @@ where
     }
 
     fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
-        Ok(self.get_version(version)?.bls_keys.len())
+        Ok(self.get_version(&version)?.bls_keys.len())
     }
 
     fn contains_key(&self, key: &Self::Key) -> bool {
@@ -149,7 +149,7 @@ where
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<Self::Amount, StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let pos = self.lookup_pos(key)?;
         if pos >= table.bls_keys.len() {
             Err(StakeTableError::KeyNotFound)
@@ -172,7 +172,7 @@ where
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<(Self::Amount, Self::Aux, Self::LookupProof), StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let pos = self.lookup_pos(key)?;
         if pos >= table.bls_keys.len() {
             Err(StakeTableError::KeyNotFound)
@@ -343,7 +343,7 @@ where
 
     fn get_version(
         &self,
-        version: SnapshotVersion,
+        version: &SnapshotVersion,
     ) -> Result<&StakeTableSnapshot<K1, K2>, StakeTableError> {
         match version {
             SnapshotVersion::Head => Ok(&self.head),

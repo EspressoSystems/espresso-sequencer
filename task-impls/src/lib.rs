@@ -1,16 +1,6 @@
 //! The consensus layer for hotshot. This currently implements sequencing
 //! consensus in an event driven way
 
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
-#![allow(clippy::module_name_repetitions)]
-
 /// the task which implements the main parts of consensus
 pub mod consensus;
 

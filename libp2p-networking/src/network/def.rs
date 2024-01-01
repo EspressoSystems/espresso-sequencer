@@ -22,6 +22,9 @@ use super::{
 
 use libp2p_swarm_derive::NetworkBehaviour;
 
+/// the number of nodes required to get an answer from
+/// in order to trust that the answer is correct when retrieving from the DHT
+/// TODO why are tehre two of these?
 pub(crate) const NUM_REPLICATED_TO_TRUST: usize = 2;
 
 /// Overarching network behaviour performing:

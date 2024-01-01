@@ -54,3 +54,6 @@ bincode = { workspace = true }    # GG any better options for serialization?
 tokio = { workspace = true }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
+
+[lints]
+workspace = true

@@ -75,3 +75,6 @@ netlink-sys = { git = "https://github.com/espressosystems/netlink.git", version 
 ], optional = true }
 netlink-packet-generic = { git = "https://github.com/espressosystems/netlink.git", version = "0.2.0", optional = true }
 
+
+[lints]
+workspace = true

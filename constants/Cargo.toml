@@ -3,3 +3,6 @@ name = "hotshot-constants"
 version.workspace = true
 
 [dependencies]
+
+[lints]
+workspace = true

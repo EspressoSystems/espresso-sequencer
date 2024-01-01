@@ -39,8 +39,6 @@ pub mod state_types;
 /// node types
 pub mod node_types;
 
-// TODO node changer (spin up and down)
-
 #[derive(Clone, Debug)]
 pub enum GlobalTestEvent {
     ShutDown,

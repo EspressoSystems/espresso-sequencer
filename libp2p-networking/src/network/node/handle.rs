@@ -37,21 +37,26 @@ use tracing::{debug, info, instrument};
 pub struct NetworkNodeHandle<S> {
     /// network configuration
     network_config: NetworkNodeConfig,
+
     /// the state of the replica
     state: Arc<SubscribableMutex<S>>,
+
     /// send an action to the networkbehaviour
     send_network: UnboundedSender<ClientRequest>,
 
     /// the local address we're listening on
     listen_addr: Multiaddr,
+
     /// the peer id of the networkbehaviour
     peer_id: PeerId,
+
     /// human readable id
     id: usize,
 
     /// A list of webui listeners that are listening for changes on this node
     webui_listeners: Arc<Mutex<Vec<Sender<()>>>>,
 
+    /// network node receiver
     receiver: NetworkNodeReceiver,
 }
 
@@ -75,6 +80,7 @@ pub struct NetworkNodeReceiver {
 }
 
 impl NetworkNodeReceiver {
+    /// recv a network event
     pub async fn recv(&self) -> Result<NetworkEvent, NetworkNodeHandleError> {
         if self.killed.load(Ordering::Relaxed) {
             return Err(NetworkNodeHandleError::Killed);

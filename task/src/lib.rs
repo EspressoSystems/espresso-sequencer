@@ -1,13 +1,5 @@
 //! Abstractions meant for usage with long running consensus tasks
 //! and testing harness
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
 
 use crate::task::PassType;
 use either::Either;

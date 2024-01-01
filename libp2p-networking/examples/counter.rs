@@ -14,6 +14,7 @@
 // #[async_main]
 // #[instrument]
 // async fn main() -> Result<()> {
+/// this is dead code
 fn main() -> Result<(), ()> {
     //     let args = CliOpt::parse();
     //
