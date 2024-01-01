@@ -16,10 +16,14 @@ use serde::{Deserialize, Serialize};
 
 pub mod config;
 
+/// a snapshot of the stake table
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StakeTableSnapshot<K1, K2> {
+    /// bls keys
     pub bls_keys: Vec<K1>,
+    /// schnorr
     pub schnorr_keys: Vec<K2>,
+    /// amount of stake
     pub stake_amount: Vec<U256>,
 }
 
@@ -55,7 +59,9 @@ where
 
     /// Total stakes for different versions
     head_total_stake: U256,
+    /// TODO document
     epoch_start_total_stake: U256,
+    /// TODO document
     last_epoch_start_total_stake: U256,
 
     /// We only support committing the finalized versions.
@@ -64,6 +70,8 @@ where
     ///  - Second item is the rescue hash of the Schnorr keys
     ///  - Third item is the rescue hash of all the stake amounts
     epoch_start_comm: (F, F, F),
+
+    /// TODO document
     last_epoch_start_comm: (F, F, F),
 
     /// The mapping from public keys to their location in the Merkle tree.
@@ -93,18 +101,15 @@ where
         amount: Self::Amount,
         aux: Self::Aux,
     ) -> Result<(), StakeTableError> {
-        match self.bls_mapping.get(&new_key) {
-            Some(_) => Err(StakeTableError::ExistingKey),
-            None => {
-                let pos = self.bls_mapping.len();
-                self.head.bls_keys.push(new_key.clone());
-                self.head.schnorr_keys.push(aux);
-                self.head.stake_amount.push(amount);
-                self.head_total_stake += amount;
-                self.bls_mapping.insert(new_key, pos);
-                Ok(())
-            }
-        }
+         if self.bls_mapping.get(&new_key).is_some() { Err(StakeTableError::ExistingKey) } else {
+             let pos = self.bls_mapping.len();
+             self.head.bls_keys.push(new_key.clone());
+             self.head.schnorr_keys.push(aux);
+             self.head.stake_amount.push(amount);
+             self.head_total_stake += amount;
+             self.bls_mapping.insert(new_key, pos);
+             Ok(())
+         }
     }
 
     fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), StakeTableError> {
@@ -242,6 +247,9 @@ where
     F: RescueParameter,
 {
     /// Initiating an empty stake table.
+    /// # Panics
+    /// If unable to evaluate a preimage
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let bls_comm_preimage = vec![F::default(); capacity * <K1 as ToFields<F>>::SIZE];
         let default_bls_comm =
@@ -280,6 +288,8 @@ where
 
     /// Set the stake withheld by `key` to be `value`.
     /// Return the previous stake if succeed.
+    /// # Errors
+    /// Errors if key is not in the stake table
     pub fn set_value(&mut self, key: &K1, value: U256) -> Result<U256, StakeTableError> {
         match self.bls_mapping.get(key) {
             Some(pos) => {

@@ -378,6 +378,7 @@ async fn run_gossip_rounds(
 /// increments its state by 1,
 /// then has all other peers request its state
 /// and update their state to the recv'ed state
+#[allow(clippy::similar_names)]
 async fn run_request_response_increment_all(
     handles: &[Arc<NetworkNodeHandle<CounterState>>],
     timeout: Duration,
