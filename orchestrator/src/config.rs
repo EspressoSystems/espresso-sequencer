@@ -126,8 +126,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     /// # Examples
     ///
     /// ```ignore
-    /// use hotshot_orchestrator::config::NetworkConfig;
-    /// use hotshot_orchestrator::client::OrchestratorClient;
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_orchestrator::client::OrchestratorClient;
     /// let client = OrchestratorClient::new();
     /// let identity = "my_identity".to_string();
     /// let file = Some("/path/to/my/config".to_string());
@@ -184,10 +184,10 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use hotshot_orchestrator::config::NetworkConfig;
-    /// use hotshot_signature_key::bn254::BLSPubKey;
-    /// use hotshot::traits::election::static_committee::StaticElectionConfig;
+    /// ```no_run
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_signature_key::bn254::BLSPubKey;
+    /// // # use hotshot::traits::election::static_committee::StaticElectionConfig;
     /// let file = "/path/to/my/config".to_string();
     /// // NOTE: broken due to staticelectionconfig not being importable
     /// // cannot import staticelectionconfig from hotshot without creating circular dependency
@@ -230,7 +230,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     /// # Examples
     ///
     /// ```ignore
-    /// use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_orchestrator::config::NetworkConfig;
     /// let file = "/path/to/my/config".to_string();
     /// let config = NetworkConfig::from_file(file);
     /// config.to_file(file).unwrap();

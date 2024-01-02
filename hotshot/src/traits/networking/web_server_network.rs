@@ -131,7 +131,7 @@ type TaskChannel<K> = UnboundedSender<ConsensusIntentEvent<K>>;
 /// # Examples
 ///
 /// ```ignore
-/// use crate::TaskMap;
+/// # use crate::TaskMap;
 /// let mut map: TaskMap<u64> = TaskMap::default();
 /// ```
 ///
@@ -161,7 +161,7 @@ impl<K: SignatureKey> TaskMap<K> {
     /// # Examples
     ///
     /// ```ignore
-    /// use crate::TaskMap;
+    /// # use crate::TaskMap;
     /// let mut map: TaskMap<u64> = TaskMap::default();
     /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal(5)).await;
     /// ```
