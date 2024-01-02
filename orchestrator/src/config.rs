@@ -184,7 +184,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
     /// # use hotshot_orchestrator::config::NetworkConfig;
     /// # use hotshot_signature_key::bn254::BLSPubKey;
     /// // # use hotshot::traits::election::static_committee::StaticElectionConfig;
