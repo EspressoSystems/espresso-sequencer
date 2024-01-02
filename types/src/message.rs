@@ -95,7 +95,7 @@ pub enum MessageKind<TYPES: NodeType> {
 impl<TYPES: NodeType> MessageKind<TYPES> {
     // Can't implement `From<I::ConsensusMessage>` directly due to potential conflict with
     // `From<DataMessage>`.
-    /// Construct a [`MessageKind`] from [`I::ConsensusMessage`].
+    /// Construct a [`MessageKind`] from [`SequencingMessage`].
     pub fn from_consensus_message(m: SequencingMessage<TYPES>) -> Self {
         Self::Consensus(m)
     }

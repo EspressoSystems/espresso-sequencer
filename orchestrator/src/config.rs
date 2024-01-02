@@ -125,11 +125,13 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_orchestrator::client::OrchestratorClient;
     /// let client = OrchestratorClient::new();
     /// let identity = "my_identity".to_string();
     /// let file = Some("/path/to/my/config".to_string());
-    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file).await;
+    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file);
     /// ```
     pub async fn from_file_or_orchestrator(
         client: &OrchestratorClient,
@@ -182,9 +184,16 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_signature_key::bn254::BLSPubKey;
+    /// // # use hotshot::traits::election::static_committee::StaticElectionConfig;
     /// let file = "/path/to/my/config".to_string();
-    /// let config = NetworkConfig::from_file(file).unwrap();
+    /// // NOTE: broken due to staticelectionconfig not being importable
+    /// // cannot import staticelectionconfig from hotshot without creating circular dependency
+    /// // making this work probably involves the `types` crate implementing a dummy
+    /// // electionconfigtype just ot make this example work
+    /// let config = NetworkConfig::<BLSPubKey, StaticElectionConfig>::from_file(file).unwrap();
     /// ```
     pub fn from_file(file: String) -> Result<Self, NetworkConfigError> {
         // read from file
@@ -220,7 +229,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
     /// let file = "/path/to/my/config".to_string();
     /// let config = NetworkConfig::from_file(file);
     /// config.to_file(file).unwrap();
