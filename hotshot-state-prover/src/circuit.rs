@@ -57,6 +57,7 @@ pub struct LightClientStateVar {
     vars: [Variable; 7],
 }
 
+/// public input
 #[derive(Clone, Debug)]
 pub struct PublicInput<F: PrimeField>(Vec<F>);
 
@@ -150,26 +151,31 @@ impl LightClientStateVar {
         })
     }
 
+    /// TODO doc
     #[must_use]
     pub fn view_number(&self) -> Variable {
         self.vars[0]
     }
 
+    /// TODO doc
     #[must_use]
     pub fn block_height(&self) -> Variable {
         self.vars[1]
     }
 
+    /// TODO doc
     #[must_use]
     pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
     }
 
+    /// TODO doc
     #[must_use]
     pub fn fee_ledger_comm(&self) -> Variable {
         self.vars[3]
     }
 
+    /// TODO doc
     #[must_use]
     pub fn stake_table_comm(&self) -> StakeTableCommVar {
         StakeTableCommVar {
