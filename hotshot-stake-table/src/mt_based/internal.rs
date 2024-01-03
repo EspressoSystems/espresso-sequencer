@@ -147,7 +147,7 @@ impl<K: Key> MerkleProof<K> {
                                 .map_err(|_| StakeTableError::RescueError)?[0];
                             Ok(comm)
                         }
-                        MerklePathEntry::Leaf{ .. } => Err(StakeTableError::MalformedProof),
+                        MerklePathEntry::Leaf { .. } => Err(StakeTableError::MalformedProof),
                     })
             }
             _ => Err(StakeTableError::MalformedProof),
@@ -208,8 +208,8 @@ impl<K: Key> PersistentMerkleNode<K> {
                 children: _,
                 num_keys: _,
                 total_stakes: _,
-            } |
-            PersistentMerkleNode::Leaf {
+            }
+            | PersistentMerkleNode::Leaf {
                 comm,
                 key: _,
                 value: _,

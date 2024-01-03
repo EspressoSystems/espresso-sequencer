@@ -144,7 +144,9 @@ where
             if libp2p_config_clone.bootstrap_nodes.len() < libp2p_config_clone.num_bootstrap_nodes {
                 let port_index = if libp2p_config_clone.index_ports {
                     node_index
-                } else {0};
+                } else {
+                    0
+                };
                 let socketaddr =
                     SocketAddr::new(identity, libp2p_config_clone.base_port + port_index);
                 let keypair = libp2p_generate_indexed_identity(self.config.seed, node_index.into());
@@ -272,7 +274,8 @@ where
     KEY: SignatureKey + 'static + serde::Serialize,
     ELECTION: ElectionConfig + 'static + serde::Serialize,
 {
-    let web_api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
+    let web_api =
+        define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));

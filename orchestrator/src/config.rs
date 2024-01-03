@@ -522,13 +522,13 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
     }
 }
 /// default number of rounds to run
-pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS : usize = 10;
+pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 10;
 /// default number of transactions per round
-pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND : usize = 10;
+pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND: usize = 10;
 /// default size of transactions
-pub const ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE : usize = 100;
+pub const ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE: usize = 100;
 /// default delay before beginning consensus
-pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS : u64 = 60;
+pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS: u64 = 60;
 
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {

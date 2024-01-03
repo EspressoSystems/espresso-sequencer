@@ -147,7 +147,10 @@ fn calculate_num_tx_per_round(
     transactions_per_round: usize,
 ) -> usize {
     transactions_per_round / total_num_nodes
-        + usize::from((total_num_nodes - 1 - node_index as usize) < (transactions_per_round % total_num_nodes))
+        + usize::from(
+            (total_num_nodes - 1 - node_index as usize)
+                < (transactions_per_round % total_num_nodes),
+        )
 }
 
 /// create a web server network from a config file + public key
@@ -202,7 +205,9 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
     let node_index = config.node_index;
     let port_index = if libp2p_config.index_ports {
         node_index
-    } else {0};
+    } else {
+        0
+    };
     let bound_addr: Multiaddr = format!(
         "/{}/{}/udp/{}/quic-v1",
         if libp2p_config.public_ip.is_ipv4() {

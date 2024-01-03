@@ -43,7 +43,8 @@ pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
     srs: &UniversalSrs,
 ) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
-    let (circuit, _) = circuit::build_for_preprocessing::<BaseField, EdwardsConfig, STAKE_TABLE_CAPACITY>()?;
+    let (circuit, _) =
+        circuit::build_for_preprocessing::<BaseField, EdwardsConfig, STAKE_TABLE_CAPACITY>()?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 

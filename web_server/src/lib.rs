@@ -139,7 +139,10 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
     /// Panics if already shut down
     #[allow(clippy::panic)]
     pub fn with_shutdown_signal(mut self, shutdown_listener: Option<OneShotReceiver<()>>) -> Self {
-        assert!(self.shutdown.is_none(), "A shutdown signal is already registered and can not be registered twice");
+        assert!(
+            self.shutdown.is_none(),
+            "A shutdown signal is already registered and can not be registered twice"
+        );
         self.shutdown = shutdown_listener;
         self
     }

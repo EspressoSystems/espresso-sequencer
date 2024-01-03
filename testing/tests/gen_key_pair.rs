@@ -30,7 +30,7 @@ mod tests {
             + "/../../config/ValidatorConfigOutput";
         match File::create(filename) {
             Err(why) => panic!("couldn't create file for output key pairs: {}", why),
-            Ok(mut file) => match write!(file, "{my_own_validator_config:?}", ) {
+            Ok(mut file) => match write!(file, "{my_own_validator_config:?}",) {
                 Err(why) => panic!("couldn't generate key pairs and write to the file: {}", why),
                 Ok(()) => println!("successfully wrote to file for output key pairs"),
             },

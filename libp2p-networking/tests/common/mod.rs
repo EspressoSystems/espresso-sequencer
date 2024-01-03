@@ -82,7 +82,7 @@ fn gen_peerid_map<S>(handles: &[Arc<NetworkNodeHandle<S>>]) -> HashMap<PeerId, u
 pub async fn print_connections<S>(handles: &[Arc<NetworkNodeHandle<S>>]) {
     let m = gen_peerid_map(handles);
     warn!("PRINTING CONNECTION STATES");
-    for handle in handles{
+    for handle in handles {
         warn!(
             "peer {}, connected to {:?}",
             handle.id(),
@@ -165,9 +165,12 @@ pub async fn spin_up_swarms<S: Debug + Default>(
             .build()
             .context(NodeConfigSnafu)
             .context(HandleSnafu)?;
-        let node = Box::pin(NetworkNodeHandle::new(regular_node_config.clone(), j + num_bootstrap))
-            .await
-            .context(HandleSnafu)?;
+        let node = Box::pin(NetworkNodeHandle::new(
+            regular_node_config.clone(),
+            j + num_bootstrap,
+        ))
+        .await
+        .context(HandleSnafu)?;
         let node = Arc::new(node);
         connecting_futs.push({
             let node = node.clone();

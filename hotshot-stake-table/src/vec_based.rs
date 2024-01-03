@@ -101,15 +101,17 @@ where
         amount: Self::Amount,
         aux: Self::Aux,
     ) -> Result<(), StakeTableError> {
-         if self.bls_mapping.get(&new_key).is_some() { Err(StakeTableError::ExistingKey) } else {
-             let pos = self.bls_mapping.len();
-             self.head.bls_keys.push(new_key.clone());
-             self.head.schnorr_keys.push(aux);
-             self.head.stake_amount.push(amount);
-             self.head_total_stake += amount;
-             self.bls_mapping.insert(new_key, pos);
-             Ok(())
-         }
+        if self.bls_mapping.get(&new_key).is_some() {
+            Err(StakeTableError::ExistingKey)
+        } else {
+            let pos = self.bls_mapping.len();
+            self.head.bls_keys.push(new_key.clone());
+            self.head.schnorr_keys.push(aux);
+            self.head.stake_amount.push(amount);
+            self.head_total_stake += amount;
+            self.bls_mapping.insert(new_key, pos);
+            Ok(())
+        }
     }
 
     fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), StakeTableError> {
@@ -396,7 +398,9 @@ mod tests {
                     BLSOverBN254CurveSignatureScheme::key_gen(&(), &mut pseudo_rng)
                         .unwrap()
                         .1,
-                    SchnorrSignatureScheme::key_gen(&(), &mut pseudo_rng).unwrap().1,
+                    SchnorrSignatureScheme::key_gen(&(), &mut pseudo_rng)
+                        .unwrap()
+                        .1,
                 )
             })
             .collect::<Vec<_>>();

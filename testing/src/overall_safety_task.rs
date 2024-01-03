@@ -48,7 +48,7 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     /// inconsistent txn nums
     InconsistentTxnsNum {
         /// node idx -> number transactions
-        map: HashMap<u64, usize>
+        map: HashMap<u64, usize>,
     },
     /// too many failed  views
     TooManyFailures {

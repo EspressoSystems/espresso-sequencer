@@ -185,7 +185,10 @@ where
                 }
             }
         }
-        assert!(error_list.is_empty(), "TEST FAILED! Results: {error_list:?}");
+        assert!(
+            error_list.is_empty(),
+            "TEST FAILED! Results: {error_list:?}"
+        );
     }
 
     /// add nodes

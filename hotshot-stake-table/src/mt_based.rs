@@ -44,18 +44,19 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         amount: Self::Amount,
         (): Self::Aux,
     ) -> Result<(), StakeTableError> {
-        if self.mapping.get(&new_key).is_some() { Err(StakeTableError::ExistingKey) } else {
+        if self.mapping.get(&new_key).is_some() {
+            Err(StakeTableError::ExistingKey)
+        } else {
             let pos = self.mapping.len();
             self.head = self.head.register(
                 self.height,
                 &to_merkle_path(pos, self.height),
                 &new_key,
                 amount,
-                )?;
+            )?;
             self.mapping.insert(new_key, pos);
             Ok(())
         }
-
     }
 
     fn deregister(&mut self, _existing_key: &Self::Key) -> Result<(), StakeTableError> {

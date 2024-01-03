@@ -247,7 +247,7 @@ async fn run_intersperse_many_rounds(
     handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
     timeout: Duration,
 ) {
-    for i in 0..u32::try_from(NUM_ROUNDS).unwrap(){
+    for i in 0..u32::try_from(NUM_ROUNDS).unwrap() {
         if i % 2 == 0 {
             run_request_response_increment_all(&handles, timeout).await;
         } else {
@@ -290,7 +290,7 @@ pub async fn run_request_response_one_round(
     timeout: Duration,
 ) {
     run_request_response_increment_all(&handles, timeout).await;
-    for h in handles{
+    for h in handles {
         assert_eq!(h.state().await, 1);
     }
 }

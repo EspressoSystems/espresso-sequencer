@@ -478,11 +478,8 @@ impl<TYPES: NodeType> Inner<TYPES> {
     }
 
     /// Fetches transactions from web server
-    async fn get_txs_from_web_server(
-        &self,
-        endpoint: String,
-    ) -> TxnResult<TYPES> {
-        let result : Result<Option<(_, Vec<Vec<u8>>)>, _>  = self.client.get(&endpoint).send().await;
+    async fn get_txs_from_web_server(&self, endpoint: String) -> TxnResult<TYPES> {
+        let result: Result<Option<(_, Vec<Vec<u8>>)>, _> = self.client.get(&endpoint).send().await;
         match result {
             Err(_error) => Err(NetworkError::WebServer {
                 source: WebServerNetworkError::ClientError,
