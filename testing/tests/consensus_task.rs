@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use commit::Committable;
 use hotshot::{
     tasks::add_consensus_task,

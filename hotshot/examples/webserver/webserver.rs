@@ -1,3 +1,4 @@
+//! web server example
 use hotshot_testing::state_types::TestTypes;
 use std::sync::Arc;
 use surf_disco::Url;
@@ -8,8 +9,10 @@ use async_compatibility_layer::{
 };
 use clap::Parser;
 
+/// web server arguments
 #[derive(Parser, Debug)]
 struct WebServerArgs {
+    /// url to run on
     url: Url,
 }
 
