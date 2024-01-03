@@ -32,19 +32,29 @@ impl<T> Key for T where
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(bound = "K: Key")]
 pub(crate) enum PersistentMerkleNode<K: Key> {
+    /// Empty
     Empty,
+    /// A branch
     Branch {
+        /// field type
         #[serde(with = "canonical")]
         comm: FieldType,
+        /// children
         children: [Arc<PersistentMerkleNode<K>>; TREE_BRANCH],
+        /// number of keys
         num_keys: usize,
+        /// total stake
         total_stakes: U256,
     },
+    /// A leaf
     Leaf {
+        /// field type
         #[serde(with = "canonical")]
         comm: FieldType,
+        /// the key
         #[serde(with = "canonical")]
         key: K,
+        /// the value
         value: U256,
     },
 }
@@ -52,13 +62,19 @@ pub(crate) enum PersistentMerkleNode<K: Key> {
 /// A compressed Merkle node for Merkle path
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MerklePathEntry<K> {
+    /// A branch
     Branch {
+        /// Position in tree
         pos: usize,
+        /// Siblings
         #[serde(with = "canonical")]
         siblings: [FieldType; TREE_BRANCH - 1],
     },
+    /// A leaf
     Leaf {
+        /// the key
         key: K,
+        /// the value
         value: U256,
     },
 }
@@ -75,14 +91,17 @@ pub struct MerkleProof<K> {
 }
 
 impl<K: Key> MerkleProof<K> {
+    /// Returns the height of the tree
     pub fn tree_height(&self) -> usize {
         self.path.len() - 1
     }
 
+    /// Returns the index of the given key
     pub fn index(&self) -> &usize {
         &self.index
     }
 
+    /// TODO document
     pub fn get_key(&self) -> Option<&K> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value: _ }) => Some(key),
@@ -90,6 +109,7 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
+    /// TODO document
     pub fn get_value(&self) -> Option<&U256> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key: _, value }) => Some(value),
@@ -97,6 +117,7 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
+    /// TODO document
     pub fn get_key_value(&self) -> Option<(&K, &U256)> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => Some((key, value)),
@@ -104,6 +125,7 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
+    /// TODO document
     pub fn compute_root(&self) -> Result<FieldType, StakeTableError> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => {
@@ -125,13 +147,14 @@ impl<K: Key> MerkleProof<K> {
                                 .map_err(|_| StakeTableError::RescueError)?[0];
                             Ok(comm)
                         }
-                        _ => Err(StakeTableError::MalformedProof),
+                        MerklePathEntry::Leaf{ .. } => Err(StakeTableError::MalformedProof),
                     })
             }
             _ => Err(StakeTableError::MalformedProof),
         }
     }
 
+    /// TODO document
     pub fn verify(&self, comm: &MerkleCommitment) -> Result<(), StakeTableError> {
         if self.tree_height() != comm.tree_height() || !self.compute_root()?.eq(comm.digest()) {
             Err(StakeTableError::VerificationError)
@@ -154,18 +177,22 @@ pub struct MerkleCommitment {
 }
 
 impl MerkleCommitment {
+    /// Creates a new merkle commitment
     pub fn new(comm: FieldType, height: usize, size: usize) -> Self {
         Self { comm, height, size }
     }
 
+    /// Returns the digest of the tree
     pub fn digest(&self) -> &FieldType {
         &self.comm
     }
 
+    /// Returns the height of the tree
     pub fn tree_height(&self) -> usize {
         self.height
     }
 
+    /// Returns the number of leaves
     pub fn size(&self) -> usize {
         self.size
     }
@@ -181,7 +208,7 @@ impl<K: Key> PersistentMerkleNode<K> {
                 children: _,
                 num_keys: _,
                 total_stakes: _,
-            } => *comm,
+            } |
             PersistentMerkleNode::Leaf {
                 comm,
                 key: _,
@@ -511,6 +538,7 @@ impl<K: Key> PersistentMerkleNode<K> {
 /// An owning iterator over the (key, value) entries of a `PersistentMerkleNode`
 /// Traverse using post-order: children from left to right, finally visit the current.
 pub struct IntoIter<K: Key> {
+    /// The unvisited key values
     unvisited: Vec<Arc<PersistentMerkleNode<K>>>,
 }
 

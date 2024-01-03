@@ -36,6 +36,7 @@ pub fn compute_stake_table_hash<F: RescueParameter, T: SerializableEmulatedStruc
 
 /// Traits for verification keys
 pub trait VerKeyVar<E>: Sized + Clone {
+    /// The type of key
     type KeyType: Default;
 
     /// Returns a list of variables associated with this key variable.

@@ -832,7 +832,7 @@ pub async fn main_entry_point<
     };
 
     let orchestrator_client: OrchestratorClient =
-        OrchestratorClient::new(args.clone(), public_ip.to_string()).await;
+        OrchestratorClient::new(args.clone(), public_ip.to_string());
 
     // conditionally save/load config from file or orchestrator
     let (mut run_config, source) =

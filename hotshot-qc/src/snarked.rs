@@ -1,4 +1,4 @@
-//! This is a SNARKed QC implemenation, see more in HotShot paper.
+//! This is a `SNARKed` QC implemenation, see more in the `HotShot` paper.
 
 mod circuit;
 

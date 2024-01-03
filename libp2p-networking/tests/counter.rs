@@ -123,6 +123,7 @@ pub async fn counter_handle_network_event(
 /// and then `requester_handle` updates its state to equal `requestee_handle`.
 /// # Panics
 /// on error
+#[allow(clippy::similar_names)]
 async fn run_request_response_increment<'a>(
     requester_handle: Arc<NetworkNodeHandle<CounterState>>,
     requestee_handle: Arc<NetworkNodeHandle<CounterState>>,

@@ -124,6 +124,7 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             view_sync_proposal_index: HashMap::new(),
         }
     }
+    /// Provide a shutdown signal to the server
     pub fn with_shutdown_signal(mut self, shutdown_listener: Option<OneShotReceiver<()>>) -> Self {
         if self.shutdown.is_some() {
             panic!("A shutdown signal is already registered and can not be registered twice");
@@ -158,47 +159,81 @@ pub trait WebServerDataSource<KEY> {
     ) -> Result<Option<Vec<Vec<u8>>>, Error>;
 
     #[allow(clippy::type_complexity)]
-    /// get transactions
+    /// Get transactions
+    /// # Errors
+    /// Error if unable to serve.
     fn get_transactions(&self, index: u64) -> Result<Option<(u64, Vec<Vec<u8>>)>, Error>;
-    /// get da certificate
+    /// Get da certificate
+    /// # Errors
+    /// Error if unable to serve.
     fn get_da_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// post vote
+    /// Post vote
+    /// # Errors
+    /// Error if unable to serve.
     fn post_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
-    /// post view sync vote
+    /// Post view sync vote
+    /// # Errors
+    /// Error if unable to serve.
     fn post_view_sync_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
 
-    /// post proposal
+    /// Post proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn post_proposal(&mut self, view_number: u64, proposal: Vec<u8>) -> Result<(), Error>;
-    /// post view sync proposal
+    /// Post view sync proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn post_view_sync_proposal(&mut self, view_number: u64, proposal: Vec<u8>)
         -> Result<(), Error>;
 
-    /// post data avaiability certificate
+    /// Post data avaiability certificate
+    /// # Errors
+    /// Error if unable to serve.
     fn post_da_certificate(&mut self, view_number: u64, cert: Vec<u8>) -> Result<(), Error>;
-    /// post transaction
+    /// Post transaction
+    /// # Errors
+    /// Error if unable to serve.
     fn post_transaction(&mut self, txn: Vec<u8>) -> Result<(), Error>;
-    /// post staketable
+    /// Post staketable
+    /// # Errors
+    /// Error if unable to serve.
     fn post_staketable(&mut self, key: Vec<u8>) -> Result<(), Error>;
-    /// post completed transaction
+    /// Post completed transaction
+    /// # Errors
+    /// Error if unable to serve.
     fn post_completed_transaction(&mut self, block: Vec<u8>) -> Result<(), Error>;
-    /// post secret proposal
+    /// Post secret proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn post_secret_proposal(&mut self, _view_number: u64, _proposal: Vec<u8>) -> Result<(), Error>;
-    /// post proposal
+    /// Post proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn proposal(&self, view_number: u64) -> Option<(String, Vec<u8>)>;
 
-    /// post vid disperal
+    /// Post vid disperal
+    /// # Errors
+    /// Error if unable to serve.
     fn post_vid_disperse(&mut self, view_number: u64, disperse: Vec<u8>) -> Result<(), Error>;
-    /// post vid vote
+    /// Post vid vote
+    /// # Errors
+    /// Error if unable to serve.
     fn post_vid_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
     /// post vid certificate
+    /// # Errors
+    /// Error if unable to serve.
     fn post_vid_certificate(&mut self, view_number: u64, certificate: Vec<u8>)
         -> Result<(), Error>;
 
-    /// get vid dispersal
+    /// Get vid dispersal
+    /// Error if unable to serve.
     fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get vid votes
+    /// Get vid votes
+    /// # Errors
+    /// Error if unable to serve.
     fn get_vid_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get vid certificates
+    /// Get vid certificates
+    /// Error if unable to serve.
     fn get_vid_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
 }
 
@@ -263,13 +298,13 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let mut ret_proposals = vec![];
         if let Some(cert) = proposals {
             for i in index..*self.view_sync_proposal_index.get(&view_number).unwrap() {
-                ret_proposals.push(cert[i as usize].1.clone());
+                ret_proposals.push(cert[usize::try_from(i).unwrap()].1.clone());
             }
         }
-        if !ret_proposals.is_empty() {
-            Ok(Some(ret_proposals))
-        } else {
+        if ret_proposals.is_empty() {
             Ok(None)
+        } else {
+            Ok(Some(ret_proposals))
         }
     }
 
@@ -279,13 +314,13 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
             for i in index..*self.vote_index.get(&view_number).unwrap() {
-                ret_votes.push(votes[i as usize].1.clone());
+                ret_votes.push(votes[usize::try_from(i).unwrap()].1.clone());
             }
         }
-        if !ret_votes.is_empty() {
-            Ok(Some(ret_votes))
-        } else {
+        if ret_votes.is_empty() {
             Ok(None)
+        } else {
+            Ok(Some(ret_votes))
         }
     }
 
@@ -295,13 +330,13 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let mut ret_votes = vec![];
         if let Some(vid_votes) = vid_votes {
             for i in index..*self.vid_vote_index.get(&view_number).unwrap() {
-                ret_votes.push(vid_votes[i as usize].1.clone());
+                ret_votes.push(vid_votes[usize::try_from(i).unwrap()].1.clone());
             }
         }
-        if !ret_votes.is_empty() {
-            Ok(Some(ret_votes))
-        } else {
+        if ret_votes.is_empty() {
             Ok(None)
+        } else {
+            Ok(Some(ret_votes))
         }
     }
 
@@ -314,13 +349,13 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
-                ret_votes.push(votes[i as usize].1.clone());
+                ret_votes.push(votes[usize::try_from(i).unwrap()].1.clone());
             }
         }
-        if !ret_votes.is_empty() {
-            Ok(Some(ret_votes))
-        } else {
+        if ret_votes.is_empty() {
             Ok(None)
+        } else {
+            Ok(Some(ret_votes))
         }
     }
 
@@ -333,34 +368,34 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let lowest_in_memory_txs = if self.num_txns < MAX_TXNS.try_into().unwrap() {
             0
         } else {
-            self.num_txns as usize - MAX_TXNS
+            usize::try_from(self.num_txns).unwrap() - MAX_TXNS
         };
 
-        let starting_index = if (index as usize) < lowest_in_memory_txs {
+        let starting_index = if (usize::try_from(index).unwrap()) < lowest_in_memory_txs {
             lowest_in_memory_txs
         } else {
-            index as usize
+            usize::try_from(index).unwrap()
         };
 
         for idx in starting_index..=self.num_txns.try_into().unwrap() {
             if let Some(txn) = self.transactions.get(&(idx as u64)) {
-                txns_to_return.push(txn.clone())
+                txns_to_return.push(txn.clone());
             }
-            if txns_to_return.len() >= TX_BATCH_SIZE as usize {
+            if txns_to_return.len() >= usize::try_from(TX_BATCH_SIZE).unwrap() {
                 break;
             }
         }
 
-        if !txns_to_return.is_empty() {
-            debug!("Returning this many txs {}", txns_to_return.len());
-            //starting_index is the oldest index of the returned txns
-            Ok(Some((starting_index as u64, txns_to_return)))
-        } else {
+        if txns_to_return.is_empty() {
             Err(ServerError {
                 // TODO ED: Why does NoContent status code cause errors?
                 status: StatusCode::NotImplemented,
                 message: format!("Transaction not found for index {index}"),
             })
+        } else {
+            debug!("Returning this many txs {}", txns_to_return.len());
+            //starting_index is the oldest index of the returned txns
+            Ok(Some((starting_index as u64, txns_to_return)))
         }
     }
 
@@ -706,6 +741,7 @@ pub struct Options {
 }
 
 /// Sets up all API routes
+#[allow(clippy::too_many_lines)]
 fn define_api<State, KEY>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
