@@ -171,6 +171,7 @@ fn webserver_network_from_config<TYPES: NodeType>(
 
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_lossless)]
+#[allow(clippy::too_many_lines)]
 /// Create a libp2p network from a config file and public key
 /// # Panics
 /// If unable to create bootstrap nodes multiaddres or the libp2p config is invalid
