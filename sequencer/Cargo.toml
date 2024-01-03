@@ -60,7 +60,7 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
-serde = { version = "1.0.192", features = ["derive"] }
+serde = { version = "1.0.194", features = ["derive"] }
 snafu = "0.7.4"
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
