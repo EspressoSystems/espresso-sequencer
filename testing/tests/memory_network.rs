@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
