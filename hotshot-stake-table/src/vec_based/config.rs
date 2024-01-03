@@ -27,6 +27,7 @@ impl ToFields<FieldType> for QCVerKey {
     const SIZE: usize = 2;
 
     fn to_fields(&self) -> Vec<FieldType> {
+        #[allow(clippy::ignored_unit_patterns)]
         match to_bytes!(&self.to_affine()) {
             Ok(bytes) => {
                 vec![

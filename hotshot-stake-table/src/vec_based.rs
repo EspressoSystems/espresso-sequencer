@@ -389,14 +389,14 @@ mod tests {
     #[test]
     fn crypto_test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::<QCVerKey, StateVerKey, F>::default();
-        let mut prng = jf_utils::test_rng();
+        let mut pseudo_rng = jf_utils::test_rng();
         let keys = (0..10)
             .map(|_| {
                 (
-                    BLSOverBN254CurveSignatureScheme::key_gen(&(), &mut prng)
+                    BLSOverBN254CurveSignatureScheme::key_gen(&(), &mut pseudo_rng)
                         .unwrap()
                         .1,
-                    SchnorrSignatureScheme::key_gen(&(), &mut prng).unwrap().1,
+                    SchnorrSignatureScheme::key_gen(&(), &mut pseudo_rng).unwrap().1,
                 )
             })
             .collect::<Vec<_>>();

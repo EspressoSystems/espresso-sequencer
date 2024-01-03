@@ -1,3 +1,4 @@
+//! This is dead code, do not use
 // pub mod common;
 //
 // use async_compatibility_layer::art::async_main;
@@ -14,8 +15,7 @@
 // #[async_main]
 // #[instrument]
 // async fn main() -> Result<()> {
-/// this is dead code
-fn main() -> Result<(), ()> {
+// fn main() -> Result<(), ()> {
     //     let args = CliOpt::parse();
     //
     //     #[cfg(all(feature = "lossy_network", target_os = "linux"))]
@@ -51,5 +51,8 @@ fn main() -> Result<(), ()> {
     //         network.undo_isolate().await?;
     //     }
     //
-    Ok(())
-}
+//     Ok(())
+// }
+//
+/// dead code
+fn main() {}

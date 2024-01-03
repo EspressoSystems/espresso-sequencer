@@ -45,6 +45,10 @@ use std::{
 };
 use surf_disco::error::ClientError;
 use tracing::{debug, error, info, warn};
+
+/// convenience alias alias for the result of getting transactions from the web server
+pub type TxnResult<TYPES> = Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError>;
+
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
 pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
@@ -477,9 +481,8 @@ impl<TYPES: NodeType> Inner<TYPES> {
     async fn get_txs_from_web_server(
         &self,
         endpoint: String,
-    ) -> Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError> {
-        let result: Result<Option<(u64, Vec<Vec<u8>>)>, ClientError> =
-            self.client.get(&endpoint).send().await;
+    ) -> TxnResult<TYPES> {
+        let result : Result<Option<(_, Vec<Vec<u8>>)>, _>  = self.client.get(&endpoint).send().await;
         match result {
             Err(_error) => Err(NetworkError::WebServer {
                 source: WebServerNetworkError::ClientError,
@@ -1285,7 +1288,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
             let mut network = WebServerNetwork::create(
                 url,
                 Duration::from_millis(100),
-                known_nodes[id as usize].clone(),
+                known_nodes[usize::try_from(id).unwrap()].clone(),
                 is_da,
             );
             network.server_shutdown_signal = Some(sender);

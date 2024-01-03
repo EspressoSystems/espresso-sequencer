@@ -1,4 +1,4 @@
-//! Web server for HotShot
+//! Web server for `HotShot`
 
 /// Configuration for the webserver
 pub mod config;
@@ -20,17 +20,22 @@ use tide_disco::{
 };
 use tracing::{debug, info};
 
+/// Convience alias for a lock over the state of the app
+/// TODO this is used in two places. It might be clearer to just inline
 type State<KEY> = RwLock<WebServerState<KEY>>;
+/// Convience alias for errors in this crate
 type Error = ServerError;
 
 /// State that tracks proposals and votes the server receives
 /// Data is stored as a `Vec<u8>` to not incur overhead from deserializing
+// TODO should the view numbers be generic over time?
 struct WebServerState<KEY> {
     /// view number -> (secret, proposal)
     proposals: HashMap<u64, (String, Vec<u8>)>,
-
+    /// for view sync: view number -> (secret, proposal)
+    /// TODO guessing here
     view_sync_proposals: HashMap<u64, Vec<(u64, Vec<u8>)>>,
-
+    /// view number -> index
     view_sync_proposal_index: HashMap<u64, u64>,
     /// view number -> (secret, da_certificates)
     da_certificates: HashMap<u64, (String, Vec<u8>)>,
@@ -40,39 +45,43 @@ struct WebServerState<KEY> {
     latest_quorum_proposal: u64,
     /// view for the most recent view sync proposal
     latest_view_sync_proposal: u64,
-
-    /// view for teh oldest DA certificate
+    /// view for the oldest DA certificate
     oldest_certificate: u64,
-
+    /// view for the oldest view sync certificate
     oldest_view_sync_proposal: u64,
     /// view number -> Vec(index, vote)
     votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
-
+    /// view sync: view number -> Vec(index, vote)
     view_sync_votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
     /// view number -> highest vote index for that view number
     vote_index: HashMap<u64, u64>,
-
+    /// view_sync: view number -> highest vote index for that view number
     view_sync_vote_index: HashMap<u64, u64>,
     /// view number of oldest votes in memory
     oldest_vote: u64,
-
+    /// view sync: view number of oldest votes in memory
     oldest_view_sync_vote: u64,
-
+    /// view number -> (secret, proposal)
+    /// TODO is this right?
     vid_disperses: HashMap<u64, (String, Vec<u8>)>,
+    /// view for the oldest vid disperal
     oldest_vid_disperse: u64,
+    /// view of most recent vid dispersal
     recent_vid_disperse: u64,
-
+    /// TODO document, not sure what this is
     vid_votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
+    /// oldest vid vote view number
     oldest_vid_vote: u64,
-    // recent_vid_vote: u64,
+    /// recent_vid_vote view number
     vid_certificates: HashMap<u64, (String, Vec<u8>)>,
+    /// oldest vid certificate view number
     oldest_vid_certificate: u64,
-    // recent_vid_certificate: u64,
+    /// recent_vid_certificate: u64,
     vid_vote_index: HashMap<u64, u64>,
-
     /// index -> transaction
     // TODO ED Make indexable by hash of tx
     transactions: HashMap<u64, Vec<u8>>,
+    /// TODO document
     txn_lookup: HashMap<Vec<u8>, u64>,
     /// highest transaction index
     num_txns: u64,
@@ -86,6 +95,7 @@ struct WebServerState<KEY> {
 }
 
 impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
+    /// Create new web server state
     fn new() -> Self {
         Self {
             proposals: HashMap::new(),
@@ -125,10 +135,11 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
         }
     }
     /// Provide a shutdown signal to the server
+    /// # Panics
+    /// Panics if already shut down
+    #[allow(clippy::panic)]
     pub fn with_shutdown_signal(mut self, shutdown_listener: Option<OneShotReceiver<()>>) -> Self {
-        if self.shutdown.is_some() {
-            panic!("A shutdown signal is already registered and can not be registered twice");
-        }
+        assert!(self.shutdown.is_none(), "A shutdown signal is already registered and can not be registered twice");
         self.shutdown = shutdown_listener;
         self
     }
@@ -136,22 +147,34 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
 
 /// Trait defining methods needed for the `WebServerState`
 pub trait WebServerDataSource<KEY> {
-    /// get proposal
+    /// Get proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn get_proposal(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get latest quanrum proposal
+    /// Get latest quanrum proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get latest view sync proposal
+    /// Get latest view sync proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get view sync proposal
+    /// Get view sync proposal
+    /// # Errors
+    /// Error if unable to serve.
     fn get_view_sync_proposal(
         &self,
         view_number: u64,
         index: u64,
     ) -> Result<Option<Vec<Vec<u8>>>, Error>;
 
-    /// get vote
+    /// Get vote
+    /// # Errors
+    /// Error if unable to serve.
     fn get_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    /// get view sync votes
+    /// Get view sync votes
+    /// # Errors
+    /// Error if unable to serve.
     fn get_view_sync_votes(
         &self,
         view_number: u64,
@@ -210,7 +233,6 @@ pub trait WebServerDataSource<KEY> {
     /// # Errors
     /// Error if unable to serve.
     fn proposal(&self, view_number: u64) -> Option<(String, Vec<u8>)>;
-
     /// Post vid disperal
     /// # Errors
     /// Error if unable to serve.
@@ -224,8 +246,8 @@ pub trait WebServerDataSource<KEY> {
     /// Error if unable to serve.
     fn post_vid_certificate(&mut self, view_number: u64, certificate: Vec<u8>)
         -> Result<(), Error>;
-
     /// Get vid dispersal
+    /// # Errors
     /// Error if unable to serve.
     fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
     /// Get vid votes
@@ -233,6 +255,7 @@ pub trait WebServerDataSource<KEY> {
     /// Error if unable to serve.
     fn get_vid_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
     /// Get vid certificates
+    /// # Errors
     /// Error if unable to serve.
     fn get_vid_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
 }
@@ -931,20 +954,18 @@ where
 /// TODO
 /// this looks like it will panic not error
 /// # Panics
-/// on error
+/// on errors creating or registering the tide disco api
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
     url: Url,
 ) -> io::Result<()> {
     let options = Options::default();
 
-    // TODO should this be unwrap?
-    let api = define_api(&options).unwrap();
+    let web_api = define_api(&options).unwrap();
     let state = State::new(WebServerState::new().with_shutdown_signal(shutdown_listener));
     let mut app = App::<State<KEY>, Error>::with_state(state);
 
-    // TODO should this be unwrap?
-    app.register_module("api", api).unwrap();
+    app.register_module("api", web_api).unwrap();
 
     let app_future = app.serve(url);
 

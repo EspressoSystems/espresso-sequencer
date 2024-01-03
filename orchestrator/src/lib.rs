@@ -272,13 +272,13 @@ where
     KEY: SignatureKey + 'static + serde::Serialize,
     ELECTION: ElectionConfig + 'static + serde::Serialize,
 {
-    let api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
+    let web_api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
     let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
-    app.register_module("api", api.unwrap())
+    app.register_module("api", web_api.unwrap())
         .expect("Error registering api");
     tracing::error!("listening on {:?}", url);
     app.serve(url).await
