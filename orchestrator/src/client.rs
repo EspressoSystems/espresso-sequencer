@@ -134,7 +134,7 @@ impl OrchestratorClient {
 
         let mut config = self.wait_for_fn_from_orchestrator(f).await;
 
-        config.node_index = u64::try_from(node_index).unwrap();
+        config.node_index = From::<u16>::from(node_index);
 
         config
     }
