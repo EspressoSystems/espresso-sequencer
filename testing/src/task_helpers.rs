@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use std::marker::PhantomData;
 
 use crate::{
@@ -30,6 +31,9 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
+/// create the [`SystemContextHandle`] from a node id
+/// # Panics
+/// if cannot create a [`HotShotInitializer`]
 pub async fn build_system_handle(
     node_id: u64,
 ) -> (
@@ -102,6 +106,8 @@ pub async fn build_system_handle(
     .expect("Could not init hotshot")
 }
 
+/// create a quorum proposal and signature
+/// used for unit tests
 async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
@@ -158,6 +164,7 @@ async fn build_quorum_proposal_and_signature(
     (proposal, signature)
 }
 
+/// create a quorum proposal
 pub async fn build_quorum_proposal(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
@@ -172,6 +179,8 @@ pub async fn build_quorum_proposal(
     }
 }
 
+/// get the keypair for a node id
+#[must_use]
 pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey, BLSPubKey) {
     let private_key =
         <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
@@ -179,8 +188,12 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
     (private_key, public_key)
 }
 
+/// initialize VID
+/// # Panics
+/// if unable to create a [`VidScheme`]
+#[must_use]
 pub fn vid_init<TYPES: NodeType>(
-    membership: TYPES::Membership,
+    membership: &TYPES::Membership,
     view_number: TYPES::Time,
 ) -> VidScheme {
     let num_committee = membership.get_committee(view_number).len();

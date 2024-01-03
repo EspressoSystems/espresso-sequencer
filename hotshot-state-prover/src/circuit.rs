@@ -33,7 +33,7 @@ pub struct StakeTableEntryVar {
 }
 
 /// Light client state Variable
-/// The stake table commitment is a triple (qc_keys_comm, state_keys_comm, stake_amount_comm).
+/// The stake table commitment is a triple `(qc_keys_comm, state_keys_comm, stake_amount_comm)`.
 /// Variable for a stake table commitment
 #[derive(Clone, Debug)]
 pub struct StakeTableCommVar {
@@ -74,52 +74,63 @@ impl<F: PrimeField> From<Vec<F>> for PublicInput<F> {
 
 impl<F: PrimeField> PublicInput<F> {
     /// Return the threshold
+    #[must_use]
     pub fn threshold(&self) -> F {
         self.0[0]
     }
 
     /// Return the view number of the light client state
+    #[must_use]
     pub fn view_number(&self) -> F {
         self.0[1]
     }
 
     /// Return the block height of the light client state
+    #[must_use]
     pub fn block_height(&self) -> F {
         self.0[2]
     }
 
     /// Return the block commitment root of the light client state
+    #[must_use]
     pub fn block_comm_root(&self) -> F {
         self.0[3]
     }
 
     /// Return the fee ledger commitment of the light client state
+    #[must_use]
     pub fn fee_ledger_comm(&self) -> F {
         self.0[4]
     }
 
     /// Return the stake table commitment of the light client state
+    #[must_use]
     pub fn stake_table_comm(&self) -> (F, F, F) {
         (self.0[5], self.0[6], self.0[7])
     }
 
     /// Return the qc key commitment of the light client state
+    #[must_use]
     pub fn qc_key_comm(&self) -> F {
         self.0[5]
     }
 
     /// Return the state key commitment of the light client state
+    #[must_use]
     pub fn state_key_comm(&self) -> F {
         self.0[6]
     }
 
     /// Return the stake amount commitment of the light client state
+    #[must_use]
     pub fn stake_amount_comm(&self) -> F {
         self.0[7]
     }
 }
 
 impl LightClientStateVar {
+    /// # Errors
+    /// if unable to create any of the public variables
     pub fn new<F: PrimeField>(
         circuit: &mut PlonkCircuit<F>,
         state: &LightClientState<F>,
@@ -139,22 +150,27 @@ impl LightClientStateVar {
         })
     }
 
+    #[must_use]
     pub fn view_number(&self) -> Variable {
         self.vars[0]
     }
 
+    #[must_use]
     pub fn block_height(&self) -> Variable {
         self.vars[1]
     }
 
+    #[must_use]
     pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
     }
 
+    #[must_use]
     pub fn fee_ledger_comm(&self) -> Variable {
         self.vars[3]
     }
 
+    #[must_use]
     pub fn stake_table_comm(&self) -> StakeTableCommVar {
         StakeTableCommVar {
             qc_keys_comm: self.vars[4],
@@ -185,7 +201,8 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
-/// - A PlonkError if any error happens when building the circuit
+/// - A `PlonkError` if any error happens when building the circuit
+#[allow(clippy::too_many_lines)]
 pub(crate) fn build<F, P, STIter, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
@@ -426,6 +443,7 @@ mod tests {
     const ST_CAPACITY: usize = 20;
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn crypto_test_circuit_building() {
         let num_validators = 10;
         let mut prng = test_rng();
@@ -584,6 +602,6 @@ mod tests {
             &lightclient_state,
             &U256::from(26u32),
         )
-        .is_err())
+        .is_err());
     }
 }

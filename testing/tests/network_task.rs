@@ -42,7 +42,7 @@ async fn test_network_task() {
             api.private_key(),
             &encoded_transactions_hash,
         );
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
+    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let vid_signature =

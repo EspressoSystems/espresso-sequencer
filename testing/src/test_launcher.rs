@@ -17,6 +17,7 @@ use super::{
     test_builder::TestMetadata, test_runner::TestRunner, txn_task::TxnTask, GlobalTestEvent,
 };
 
+/// convience type alias for the networks available
 pub type Networks<TYPES, I> = (
     <I as NodeImplementation<TYPES>>::QuorumNetwork,
     <I as NodeImplementation<TYPES>>::CommitteeNetwork,
@@ -28,6 +29,7 @@ pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
 /// Wrapper Type for committee function that takes a `ConnectedNetwork` and returns a `CommunicationChannel`
 pub type CommitteeNetworkGenerator<N, T> = Box<dyn Fn(Arc<N>) -> T + 'static>;
 
+/// Wrapper Type for view sync function that takes a `ConnectedNetwork` and returns a `CommunicationChannel`
 pub type ViewSyncNetworkGenerator<N, T> = Box<dyn Fn(Arc<N>) -> T + 'static>;
 
 /// Wrapper type for a task generator.
@@ -51,7 +53,7 @@ pub type Hook = Box<
 
 /// generators for resources used by each node
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
-    // generate channels
+    /// generate channels
     pub channel_generator: Generator<Networks<TYPES, I>>,
     /// generate a new storage for each node
     pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
@@ -72,13 +74,16 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// overall safety task generator
     pub overall_safety_task_generator: TaskGenerator<OverallSafetyTask<TYPES, I>>,
 
+    /// spinning task generator
     pub spinning_task_generator: TaskGenerator<SpinningTask<TYPES, I>>,
 
+    /// additional hooks to add in custom checks
     pub hooks: Vec<Hook>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, I> {
     /// launch the test
+    #[must_use]
     pub fn launch(self) -> TestRunner<TYPES, I> {
         TestRunner {
             launcher: self,
@@ -90,6 +95,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// override the safety task generator
+    #[must_use]
     pub fn with_overall_safety_task_generator(
         self,
         overall_safety_task_generator: TaskGenerator<OverallSafetyTask<TYPES, I>>,
@@ -101,6 +107,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// override the safety task generator
+    #[must_use]
     pub fn with_spinning_task_generator(
         self,
         spinning_task_generator: TaskGenerator<SpinningTask<TYPES, I>>,
@@ -112,6 +119,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// overridde the completion task generator
+    #[must_use]
     pub fn with_completion_task_generator(
         self,
         completion_task_generator: TaskGenerator<CompletionTask<TYPES, I>>,
@@ -123,6 +131,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// override the txn task generator
+    #[must_use]
     pub fn with_txn_task_generator(
         self,
         txn_task_generator: TaskGenerator<TxnTask<TYPES, I>>,
@@ -134,6 +143,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// override resource generators
+    #[must_use]
     pub fn with_resource_generator(self, resource_generator: ResourceGenerators<TYPES, I>) -> Self {
         Self {
             resource_generator,
@@ -142,17 +152,20 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     }
 
     /// add a hook
+    #[must_use]
     pub fn add_hook(mut self, hook: Hook) -> Self {
         self.hooks.push(hook);
         self
     }
 
     /// overwrite hooks with more hooks
+    #[must_use]
     pub fn with_hooks(self, hooks: Vec<Hook>) -> Self {
         Self { hooks, ..self }
     }
 
     /// Modifies the config used when generating nodes with `f`
+    #[must_use]
     pub fn modify_default_config(
         mut self,
         mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>),

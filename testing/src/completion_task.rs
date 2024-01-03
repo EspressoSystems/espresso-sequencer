@@ -25,7 +25,9 @@ pub struct CompletionTaskErr {}
 
 /// Data availability task state
 pub struct CompletionTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// the test level event stream
     pub(crate) test_event_stream: ChannelStream<GlobalTestEvent>,
+    /// handles to the nodes in the test
     pub(crate) handles: Vec<Node<TYPES, I>>,
 }
 
@@ -57,6 +59,7 @@ pub enum CompletionTaskDescription {
 
 impl CompletionTaskDescription {
     /// Build and launch a completion task.
+    #[must_use]
     pub fn build_and_launch<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<CompletionTask<TYPES, I>> {
@@ -68,6 +71,9 @@ impl CompletionTaskDescription {
 
 impl TimeBasedCompletionTaskDescription {
     /// create the task and launch it
+    /// # Panics
+    /// if cannot obtain task id after launching
+    #[must_use]
     pub fn build_and_launch<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<CompletionTask<TYPES, I>> {
@@ -88,7 +94,7 @@ impl TimeBasedCompletionTaskDescription {
                         .boxed()
                     }));
                 let message_handler =
-                    HandleMessage::<CompletionTaskTypes<TYPES, I>>(Arc::new(move |_, state| {
+                    HandleMessage::<CompletionTaskTypes<TYPES, I>>(Arc::new(move |(), state| {
                         async move {
                             state
                                 .test_event_stream
