@@ -69,7 +69,10 @@ impl ValidatorArgs {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// // NOTE this is a toy example,
+    /// // the user will need to construct a multivalidatorargs since `new` does not exist
+    /// # use hotshot_orchestrator::client::MultiValidatorArgs;
     /// let multi_args = MultiValidatorArgs::new();
     /// let node_index = 1;
     /// let instance = Self::from_multi_args(multi_args, node_index);

@@ -49,11 +49,11 @@ pub struct StakeTableCommVar {
 #[derive(Clone, Debug)]
 pub struct LightClientStateVar {
     /// Private list holding all variables
-    ///  vars[0]: view number
-    ///  vars[1]: block height
-    ///  vars[2]: block commitment root
-    ///  vars[3]: fee ledger commitment
-    ///  vars[4-6]: stake table commitment
+    ///  `vars[0]`: view number
+    ///  `vars[1]`: block height
+    ///  `vars[2]`: block commitment root
+    ///  `vars[3]`: fee ledger commitment
+    ///  `vars[4-6]`: stake table commitment
     vars: [Variable; 7],
 }
 
