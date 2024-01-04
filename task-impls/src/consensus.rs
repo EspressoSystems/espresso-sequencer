@@ -221,16 +221,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
-                let vote = QuorumVote::<TYPES>::create_signed_vote(
+                let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                     QuorumData {
                         leaf_commit: leaf.commit(),
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign QuorumData!");
+                    return false;
+                };
 
                 let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
@@ -305,7 +308,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
 
                 // Validate the DAC.
@@ -318,15 +321,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         error!("Block payload commitment does not equal da cert payload commitment. View = {}", *view);
                         return false;
                     }
-                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                    if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                         QuorumData {
                             leaf_commit: leaf.commit(),
                         },
                         view,
                         &self.public_key,
                         &self.private_key,
-                    );
-                    GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    ) {
+                        GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    } else {
+                        error!("Unable to sign quorum vote!");
+                        return false;
+                    }
                 } else {
                     error!(
                         "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
@@ -525,7 +532,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_payload: None,
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                        proposer_id: sender.to_bytes(),
+                        proposer_id: sender,
                     };
 
                     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
@@ -550,7 +557,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: sender.to_bytes(),
+                    proposer_id: sender,
                 };
                 let leaf_commitment = leaf.commit();
 
@@ -1024,12 +1031,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(*view))
                     .await;
 
-                let vote = TimeoutVote::create_signed_vote(
+                let Ok(vote) = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign TimeoutData!");
+                    return;
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::TimeoutVoteSend(vote))
@@ -1157,10 +1167,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                proposer_id: self.api.public_key().to_bytes(),
+                proposer_id: self.api.public_key().clone(),
             };
 
-            let signature = TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref());
+            let Ok(signature) =
+                TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref())
+            else {
+                error!("Failed to sign leaf.commit()!");
+                return false;
+            };
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
                 block_header: leaf.block_header.clone(),
