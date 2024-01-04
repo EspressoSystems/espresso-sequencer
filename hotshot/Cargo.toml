@@ -17,6 +17,7 @@ bin-orchestrator = ["clap"]
 docs = []
 doc-images = []
 hotshot-testing = []
+randomized-leader-election = []
 
 # libp2p
 [[example]]
