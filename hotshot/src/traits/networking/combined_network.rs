@@ -45,7 +45,7 @@ struct Cache {
     /// The maximum number of items to store in the cache
     capacity: usize,
     /// The cache itself
-    cache: HashSet<u64>,
+    inner: HashSet<u64>,
     /// The hashes of the messages in the cache, in order of insertion
     hashes: Vec<u64>,
 }
@@ -55,14 +55,14 @@ impl Cache {
     fn new(capacity: usize) -> Self {
         Self {
             capacity,
-            cache: HashSet::with_capacity(capacity),
+            inner: HashSet::with_capacity(capacity),
             hashes: Vec::with_capacity(capacity),
         }
     }
 
     /// Insert a hash into the cache
     fn insert(&mut self, hash: u64) {
-        if self.cache.contains(&hash) {
+        if self.inner.contains(&hash) {
             return;
         }
 
@@ -71,23 +71,23 @@ impl Cache {
         if over > 0 {
             for _ in 0..over {
                 let hash = self.hashes.remove(0);
-                self.cache.remove(&hash);
+                self.inner.remove(&hash);
             }
         }
 
-        self.cache.insert(hash);
+        self.inner.insert(hash);
         self.hashes.push(hash);
     }
 
     /// Check if the cache contains a hash
     fn contains(&self, hash: u64) -> bool {
-        self.cache.contains(&hash)
+        self.inner.contains(&hash)
     }
 
     /// Get the number of items in the cache
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.cache.len()
+        self.inner.len()
     }
 }
 
@@ -401,12 +401,12 @@ mod test {
         cache.insert(2);
         cache.insert(3);
         cache.insert(4);
-        assert_eq!(cache.cache.len(), 3);
+        assert_eq!(cache.inner.len(), 3);
         assert_eq!(cache.hashes.len(), 3);
-        assert!(!cache.cache.contains(&1));
-        assert!(cache.cache.contains(&2));
-        assert!(cache.cache.contains(&3));
-        assert!(cache.cache.contains(&4));
+        assert!(!cache.inner.contains(&1));
+        assert!(cache.inner.contains(&2));
+        assert!(cache.inner.contains(&3));
+        assert!(cache.inner.contains(&4));
         assert!(!cache.hashes.contains(&1));
         assert!(cache.hashes.contains(&2));
         assert!(cache.hashes.contains(&3));

@@ -29,7 +29,6 @@ use std::{
     hash::Hash,
     sync::{atomic::AtomicBool, Arc},
 };
-/// Alias for the [`ProcessedConsensusMessage`] type of a [`NodeImplementation`].
 
 /// struct containing messages for a view to send to a replica or DA committee member.
 #[derive(Clone)]

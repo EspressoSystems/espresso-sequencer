@@ -1,4 +1,4 @@
-//! Provides a number of tasks that run continuously on a [`HotShot`]
+//! Provides a number of tasks that run continuously
 
 use crate::{types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
@@ -12,7 +12,9 @@ use hotshot_task::{
     GeneratedStream, Merge,
 };
 use hotshot_task_impls::{
-    consensus::{consensus_event_filter, ConsensusTaskState, ConsensusTaskTypes},
+    consensus::{
+        consensus_event_filter, CommitmentAndMetadata, ConsensusTaskState, ConsensusTaskTypes,
+    },
     da::{DATaskState, DATaskTypes},
     events::HotShotEvent,
     network::{
@@ -222,7 +224,11 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((payload_commitment, metadata)),
+        payload_commitment_and_metadata: Some(CommitmentAndMetadata {
+            commitment: payload_commitment,
+            metadata,
+            is_genesis: true,
+        }),
         api: c_api.clone(),
         _pd: PhantomData,
         vote_collector: None.into(),
