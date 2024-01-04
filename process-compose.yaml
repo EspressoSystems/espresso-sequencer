@@ -15,9 +15,28 @@ processes:
   # it's using the docker compose service which is a bit easier.
   demo-l1-network:
     command: docker compose up demo-l1-network --force-recreate --renew-anon-volumes
+    readiness_probe:
+      exec:
+        command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 20
 
   orchestrator:
     command: orchestrator
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_ORCHESTRATOR_PORT
+        path: /healthcheck
+      initial_delay_seconds: 0
+      period_seconds: 1
+      timeout_seconds: 1
+      success_threshold: 1
+      failure_threshold: 100
 
   da-server:
     command: web-server
@@ -25,7 +44,13 @@ processes:
       - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_DA_SERVER_PORT
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_DA_SERVER_PORT
+        path: /healthcheck
 
   consensus-server:
     command: web-server
@@ -33,7 +58,13 @@ processes:
       - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_CONSENSUS_SERVER_PORT
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_CONSENSUS_SERVER_PORT
+        path: /healthcheck
 
   sequencer0:
     command: sequencer -- http -- query -- status -- submit
@@ -42,9 +73,16 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   sequencer1:
     command: sequencer -- http -- query -- status
@@ -53,9 +91,16 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER1_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   sequencer2:
     command: sequencer -- http -- status
@@ -64,9 +109,16 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER2_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   sequencer3:
     command: sequencer -- http -- status
@@ -75,9 +127,16 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER3_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   sequencer4:
     command: sequencer -- http -- status
@@ -86,14 +145,28 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
     depends_on:
       orchestrator:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER4_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   commitment-task:
     command: commitment-task --deploy
     depends_on:
       sequencer0:
-        condition: service_healthy
+        condition: process_healthy
       demo-l1-network:
-        condition: service_healthy
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_COMMITMENT_TASK_PORT
+        path: /healthcheck
+      failure_threshold: 100
