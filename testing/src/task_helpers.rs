@@ -25,7 +25,6 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::NodeType,
-        signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
         BlockPayload,
     },
@@ -33,7 +32,6 @@ use hotshot_types::{
 };
 
 use async_lock::RwLockUpgradableReadGuard;
-use bincode::Options;
 use bitvec::bitvec;
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::simple_vote::QuorumVote;
@@ -41,7 +39,6 @@ use hotshot_types::utils::View;
 use hotshot_types::utils::ViewInner;
 use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
-use hotshot_utils::bincode::bincode_opts;
 
 use serde::Serialize;
 use std::{fmt::Debug, hash::Hash};
@@ -134,7 +131,8 @@ pub fn build_cert<
         build_assembled_sig::<TYPES, VOTE, CERT, DATAType>(data.clone(), membership, view);
 
     let vote =
-        SimpleVote::<TYPES, DATAType>::create_signed_vote(data, view, public_key, private_key);
+        SimpleVote::<TYPES, DATAType>::create_signed_vote(data, view, public_key, private_key)
+            .expect("Failed to sign data!");
     let cert = CERT::create_signed_certificate(
         vote.get_data_commitment(),
         vote.get_data().clone(),
@@ -172,11 +170,10 @@ pub fn build_assembled_sig<
             view,
             &public_key_i,
             &private_key_i,
-        );
+        )
+        .expect("Failed to sign data!");
         let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
-            bincode_opts()
-                .deserialize(&vote.get_signature().0)
-                .expect("Deserialization on the signature shouldn't be able to fail.");
+            vote.get_signature();
         sig_lists.push(original_signature);
     }
 
@@ -194,11 +191,13 @@ async fn build_quorum_proposal_and_signature(
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     public_key: &BLSPubKey,
     view: u64,
-) -> (QuorumProposal<TestTypes>, EncodedSignature) {
+) -> (
+    QuorumProposal<TestTypes>,
+    <BLSPubKey as SignatureKey>::PureAssembledSignatureType,
+) {
     let temp_consensus = handle.get_consensus();
     let cur_consensus = temp_consensus.upgradable_read().await;
     let mut consensus = RwLockUpgradableReadGuard::upgrade(cur_consensus).await;
-
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
@@ -234,15 +233,17 @@ async fn build_quorum_proposal_and_signature(
         block_payload: None,
         rejected: vec![],
         timestamp: 0,
-        proposer_id: api.public_key().to_bytes(),
+        proposer_id: *api.public_key(),
     };
-    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
+
+    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
+        .expect("Failed to sign leaf commitment!");
     let mut proposal = QuorumProposal::<TestTypes> {
         block_header: block_header.clone(),
         view_number: ViewNumber::new(1),
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
-        proposer_id: leaf.proposer_id.clone(),
+        proposer_id: leaf.proposer_id,
     };
     for cur_view in 2..=view {
         consensus.state_map.insert(
@@ -279,10 +280,11 @@ async fn build_quorum_proposal_and_signature(
             block_payload: None,
             rejected: vec![],
             timestamp: 0,
-            proposer_id: api.public_key().to_bytes(),
+            proposer_id: *api.public_key(),
         };
         let signature_new_view =
-            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref());
+            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
+                .expect("Failed to sign leaf commitment!");
         let proposal_new_view = QuorumProposal::<TestTypes> {
             block_header: block_header.clone(),
             view_number: ViewNumber::new(cur_view),

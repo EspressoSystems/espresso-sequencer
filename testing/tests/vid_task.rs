@@ -43,7 +43,8 @@ async fn test_vid_task() {
     let payload_commitment = vid_disperse.commit;
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
+            .expect("Failed to sign block payload!");
     let proposal: DAProposal<TestTypes> = DAProposal {
         encoded_transactions: encoded_transactions.clone(),
         metadata: (),
@@ -99,7 +100,7 @@ async fn test_vid_task() {
     );
 
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
         1,
     );
     output.insert(

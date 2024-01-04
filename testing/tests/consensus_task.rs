@@ -1,9 +1,5 @@
 use commit::Committable;
-use hotshot::{
-    tasks::add_consensus_task,
-    types::{SignatureKey, SystemContextHandle},
-    HotShotConsensusApi,
-};
+use hotshot::{tasks::add_consensus_task, types::SystemContextHandle, HotShotConsensusApi};
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
@@ -66,7 +62,7 @@ async fn build_vote(
         block_payload: None,
         rejected: Vec::new(),
         timestamp: 0,
-        proposer_id: membership.get_leader(view).to_bytes(),
+        proposer_id: membership.get_leader(view),
     };
     let vote = QuorumVote::<TestTypes>::create_signed_vote(
         QuorumData {
@@ -75,7 +71,8 @@ async fn build_vote(
         view,
         api.public_key(),
         api.private_key(),
-    );
+    )
+    .expect("Failed to create quorum vote");
     GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }
 
@@ -198,6 +195,7 @@ async fn test_consensus_vote() {
 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
 #[ignore]
 async fn test_consensus_with_vid() {
+    use hotshot::types::SignatureKey;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestBlockPayload;
     use hotshot_testing::block_types::TestTransaction;
@@ -237,7 +235,8 @@ async fn test_consensus_with_vid() {
     let payload_commitment = vid_disperse.commit;
 
     let vid_signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
+            .expect("Failed to sign payload commitment");
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let vid_disperse_inner = VidDisperse::from_membership(
         ViewNumber::new(2),
