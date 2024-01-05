@@ -1,5 +1,10 @@
-use super::endpoints::TimeWindowQueryData;
-use crate::{network, Node, SeqTypes};
+use super::{
+    endpoints::TimeWindowQueryData,
+    fs,
+    options::{Options, Query},
+    sql,
+};
+use crate::{network, persistence, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -9,22 +14,44 @@ use hotshot_query_service::{
     QueryResult,
 };
 
+pub trait DataSourceOptions: persistence::PersistenceOptions {
+    type DataSource: SequencerDataSource<Options = Self>;
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options;
+}
+
+impl DataSourceOptions for persistence::sql::Options {
+    type DataSource = sql::DataSource;
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options {
+        opt.query_sql(query, self.clone())
+    }
+}
+
+impl DataSourceOptions for persistence::fs::Options {
+    type DataSource = fs::DataSource;
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options {
+        opt.query_fs(query, self.clone())
+    }
+}
+
 /// A data source with sequencer-specific functionality.
 ///
 /// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
 /// provided sequencer-specific endpoints.
 #[async_trait]
-pub(crate) trait SequencerDataSource:
+pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {
-    type Options;
+    type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
-    async fn create(opt: Self::Options) -> anyhow::Result<Self>;
+    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self>;
 
     /// Update sequencer-specific indices when a new block is added.
     ///
@@ -42,7 +69,7 @@ pub(crate) trait SequencerDataSource:
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type> {
+pub trait SubmitDataSource<N: network::Type> {
     fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 

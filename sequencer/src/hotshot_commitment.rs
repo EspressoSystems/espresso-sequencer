@@ -74,7 +74,7 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
 
     // Get the maximum number of blocks the contract will allow at a time.
     let max = match contract.max_blocks().call().await {
-        Ok(max) => max.as_u64(),
+        Ok(max) => max.as_usize(),
         Err(err) => {
             tracing::error!("unable to read max_blocks from contract: {}", err);
             panic!("hotshot commitment task will exit");
@@ -83,13 +83,29 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     sequence(max, hotshot, contract).await;
 }
 
-async fn sequence(max_blocks: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
+async fn sequence(hard_block_limit: usize, hotshot: HotShotClient, contract: HotShot<Signer>) {
+    // This is the number of blocks we attempt to sequence
+    // If we fail to submit soft_block_limit leaves, we assume we have hit
+    // A gas limit exception and decrease the limit
+    // If we succeed, we increase the limit towards the hard_block_limit
+    let mut soft_block_limit = hard_block_limit;
     loop {
-        if let Err(err) = sync_with_l1(max_blocks, &hotshot, &contract).await {
-            tracing::error!("error synchronizing with HotShot contract: {err}");
-
+        if let Err(sync_err) = sync_with_l1(soft_block_limit, &hotshot, &contract).await {
+            match sync_err {
+                SyncError::Other(err) => {
+                    tracing::error!("error synchronizing with HotShot contract: {err}");
+                }
+                SyncError::TransactionFailed { err, num_leaves } => {
+                    // Assume we have hit a gas limit exception, decrease the limit
+                    tracing::error!("error synchronizing with HotShot contract, leaf submission failed with {num_leaves}: {err}");
+                    soft_block_limit = std::cmp::max(num_leaves / 2, 1)
+                }
+            }
             // Wait a bit to avoid spam, then try again.
             sleep(RETRY_DELAY).await;
+        } else {
+            // If we succeed, increase the limit
+            soft_block_limit = std::cmp::min(soft_block_limit * 2, hard_block_limit)
         }
     }
 }
@@ -127,20 +143,40 @@ impl HotShotDataSource for HotShotClient {
     }
 }
 
+#[derive(Debug)]
+enum SyncError {
+    TransactionFailed {
+        err: anyhow::Error,
+        num_leaves: usize,
+    },
+    Other(anyhow::Error),
+}
+
 async fn sync_with_l1(
-    max_blocks: u64,
+    max_blocks: usize,
     hotshot: &impl HotShotDataSource,
     contract: &HotShot<Signer>,
-) -> Result<(), anyhow::Error> {
-    let contract_block_height = contract.block_height().call().await?.as_u64();
+) -> Result<(), SyncError> {
+    let contract_block_height = contract
+        .block_height()
+        .call()
+        .await
+        .map_err(|e| SyncError::Other(e.into()))?
+        .as_u64();
     let hotshot_block_height = loop {
-        let height = hotshot.block_height().await?;
+        let height = hotshot
+            .block_height()
+            .await
+            .map_err(|e| SyncError::Other(e.into()))?;
         if height <= contract_block_height {
             // If the contract is caught up with HotShot, wait for more blocks to be produced.
             tracing::debug!(
                 "HotShot at height {height}, waiting for it to pass height {contract_block_height}"
             );
-            hotshot.wait_for_block_height(contract_block_height).await?;
+            hotshot
+                .wait_for_block_height(contract_block_height)
+                .await
+                .map_err(|e| SyncError::Other(e.into()))?;
         } else {
             // HotShot is ahead of the contract, sequence the blocks which are currently ready.
             tracing::debug!("synchronizing blocks {contract_block_height}-{height}");
@@ -151,11 +187,13 @@ async fn sync_with_l1(
     // Download leaves between `contract_block_height` and `hotshot_block_height`.
     let leaves = try_join_all(
         (contract_block_height..hotshot_block_height)
-            .take(max_blocks as usize)
+            .take(max_blocks)
             .map(|height| hotshot.get_leaf(height)),
     )
-    .await?;
-    tracing::info!("sending {} leaves to the contract", leaves.len());
+    .await
+    .map_err(|e| SyncError::Other(e.into()))?;
+    let num_leaves = leaves.len();
+    tracing::info!("sending {} leaves to the contract", num_leaves);
 
     // Send the leaves to the contract.
     let txn = build_sequence_batches_txn(contract, leaves);
@@ -165,7 +203,7 @@ async fn sync_with_l1(
     // example, if there are multiple commitment tasks racing.
     contract_send(&txn)
         .await
-        .ok_or_else(|| anyhow::Error::msg("failed to send transaction"))?;
+        .map_err(|e| SyncError::TransactionFailed { err: e, num_leaves })?;
 
     Ok(())
 }
@@ -276,6 +314,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
 
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
@@ -293,10 +332,10 @@ mod test {
         );
 
         // Create a few test batches.
-        let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_u64();
+        let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
         for i in 0..num_batches {
-            data.leaves.push(mock_leaf(i));
+            data.leaves.push(mock_leaf(i as u64));
         }
         tracing::info!("sequencing batches: {:?}", data.leaves);
 
@@ -345,6 +384,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let mut from_block = l1.provider.get_block_number().await.unwrap();
         let adaptor_l1_signer = Arc::new(

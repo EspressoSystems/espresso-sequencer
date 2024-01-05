@@ -4,7 +4,7 @@ use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 
-mod data_source;
+pub mod data_source;
 pub mod endpoints;
 pub mod fs;
 pub mod options;

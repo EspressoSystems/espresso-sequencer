@@ -1,21 +1,19 @@
-use crate::{api, hotshot_commitment::CommitmentTaskOptions};
+use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
-// can be added, in any combination, to the service. These include, for example, the HotShot
-// commitment task and the API server. Each of these modules has its own options, which are all
-// required if the module is added but can be omitted otherwise. Clap doesn't have a good way to
-// handle "grouped" arguments like this (they have something called an argument group, but it's
-// different). Sub-commands do exactly this, but you can't have multiple sub-commands in a single
-// command.
+// can be added, in any combination, to the service. These include, for example, the API server.
+// Each of these modules has its own options, which are all required if the module is added but can
+// be omitted otherwise. Clap doesn't have a good way to handle "grouped" arguments like this (they
+// have something called an argument group, but it's different). Sub-commands do exactly this, but
+// you can't have multiple sub-commands in a single command.
 //
 // What we do, then, is take the optional modules as if they were sub-commands, but we use a Clap
 // `raw` argument to collect all the module commands and their options into a single string. This
@@ -62,12 +60,6 @@ pub struct Options {
     )]
     pub consensus_server_url: Url,
 
-    /// Path to save and load consensus configuration.
-    ///
-    /// Allows for rejoining the network on a complete state loss.
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CONFIG_PATH")]
-    pub config_path: Option<PathBuf>,
-
     /// The amount of time to wait between each request to the HotShot
     /// consensus or DA web servers during polling.
     #[clap(
@@ -103,11 +95,11 @@ impl Options {
 }
 
 #[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
+pub struct ParseDurationError {
     reason: String,
 }
 
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
     ClDuration::from_str(s)
         .map(Duration::from)
         .map_err(|err| ParseDurationError {
@@ -139,19 +131,19 @@ impl ModuleArgs {
                 once("sequencer --").chain(curr.iter().map(|s| s.as_str())),
             )?;
             match module {
+                SequencerModule::Storage(m) => {
+                    curr = m.add(&mut modules.storage_fs, &mut provided)?
+                }
+                SequencerModule::StorageFs(m) => {
+                    curr = m.add(&mut modules.storage_fs, &mut provided)?
+                }
+                SequencerModule::StorageSql(m) => {
+                    curr = m.add(&mut modules.storage_sql, &mut provided)?
+                }
                 SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
-                SequencerModule::Query(m) => curr = m.add(&mut modules.query_sql, &mut provided)?,
-                SequencerModule::QuerySql(m) => {
-                    curr = m.add(&mut modules.query_sql, &mut provided)?
-                }
-                SequencerModule::QueryFs(m) => {
-                    curr = m.add(&mut modules.query_fs, &mut provided)?
-                }
+                SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
-                SequencerModule::CommitmentTask(m) => {
-                    curr = m.add(&mut modules.commitment_task, &mut provided)?
-                }
             }
         }
 
@@ -176,12 +168,12 @@ macro_rules! module {
     };
 }
 
+module!("storage-fs", persistence::fs::Options);
+module!("storage-sql", persistence::sql::Options);
 module!("http", api::options::Http);
-module!("query-sql", api::options::Sql, requires: "http");
-module!("query-fs", api::options::Fs, requires: "http");
+module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
-module!("commitment-task", CommitmentTaskOptions);
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -229,16 +221,16 @@ enum SequencerModule {
     /// * query: add query service endpoints
     /// * submit: add transaction submission endpoints
     Http(Module<api::options::Http>),
-    /// Alias for query-sql.
-    Query(Module<api::options::Sql>),
-    /// Run the query service API module, backed by a Postgres database.
-    ///
-    /// This modules requires the http module to be started.
-    QuerySql(Module<api::options::Sql>),
-    /// Run the query service API module, backed by the file system.
+    /// Alias for storage-fs.
+    Storage(Module<persistence::fs::Options>),
+    /// Use the file system for persistent storage.
+    StorageFs(Module<persistence::fs::Options>),
+    /// Use a Postgres database for persistent storage.
+    StorageSql(Module<persistence::sql::Options>),
+    /// Run the query API module.
     ///
     /// This module requires the http module to be started.
-    QueryFs(Module<api::options::Fs>),
+    Query(Module<api::options::Query>),
     /// Run the transaction submission API module.
     ///
     /// This module requires the http module to be started.
@@ -247,15 +239,14 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     Status(Module<api::options::Status>),
-    CommitmentTask(Module<CommitmentTaskOptions>),
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Modules {
+    pub storage_fs: Option<persistence::fs::Options>,
+    pub storage_sql: Option<persistence::sql::Options>,
     pub http: Option<api::options::Http>,
-    pub query_sql: Option<api::options::Sql>,
-    pub query_fs: Option<api::options::Fs>,
+    pub query: Option<api::options::Query>,
     pub submit: Option<api::options::Submit>,
     pub status: Option<api::options::Status>,
-    pub commitment_task: Option<CommitmentTaskOptions>,
 }
