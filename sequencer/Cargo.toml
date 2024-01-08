@@ -26,7 +26,7 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
     "logging-utils",
 ] }
 async-std = "1.12.0"
-async-trait = "0.1.75"
+async-trait = "0.1.77"
 bincode = "1.3.3"
 bytesize = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
@@ -63,7 +63,7 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
-serde = { version = "1.0.192", features = ["derive"] }
+serde = { version = "1.0.194", features = ["derive"] }
 snafu = "0.7.4"
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
