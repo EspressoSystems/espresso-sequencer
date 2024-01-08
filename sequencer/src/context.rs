@@ -1,6 +1,7 @@
 use crate::state_signature::{
     LightClientState, StateKeyPair, StateSignature, StateSignatureScheme,
 };
+use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
 use jf_primitives::signatures::SignatureScheme;
 use std::sync::{Arc, RwLock};
@@ -15,6 +16,8 @@ use crate::{
 pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct SequencerContext<N: network::Type> {
     /// The consensus handle
     handle: Consensus<N>,
@@ -28,17 +31,6 @@ pub struct SequencerContext<N: network::Type> {
 
     /// The most recent light client state signatures
     state_signatures: Arc<RwLock<StateSignatureMemStorage>>,
-}
-
-impl<N: network::Type> Clone for SequencerContext<N> {
-    fn clone(&self) -> Self {
-        Self {
-            handle: self.handle.clone(),
-            node_index: self.node_index,
-            state_key_pair: self.state_key_pair.clone(),
-            state_signatures: self.state_signatures.clone(),
-        }
-    }
 }
 
 impl<N: network::Type> SequencerContext<N> {
