@@ -4,14 +4,16 @@ use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_types::light_client::StateSignature;
-use hotshot_types::{light_client::LightClientState, traits::state::ConsensusTime};
+use hotshot_types::traits::state::ConsensusTime;
 use std::collections::{HashMap, VecDeque};
 
 /// Types related to the underlying signature schemes.
 pub type StateSignatureScheme =
     jf_primitives::signatures::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;
-pub use hotshot_stake_table::vec_based::config::FieldType as BaseField;
+pub use hotshot_stake_table::vec_based::config::FieldType;
+pub use hotshot_types::light_client::StateKeyPair;
+pub use hotshot_types::light_client::StateSignature;
+pub type LightClientState = hotshot_types::light_client::LightClientState<FieldType>;
 
 /// Capacity for the in memory signature storage.
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
@@ -42,17 +44,17 @@ pub(super) async fn state_signature_loop<N>(
     tracing::warn!("And now his watch has ended.");
 }
 
-fn form_light_client_state(leaf: &Leaf) -> LightClientState<BaseField> {
+fn form_light_client_state(leaf: &Leaf) -> LightClientState {
     // TODO(Chengyu): fill these `default()` with actual value
-    LightClientState::<BaseField> {
+    LightClientState {
         view_number: leaf.get_view_number().get_u64() as usize,
         block_height: leaf.get_height() as usize,
-        block_comm_root: BaseField::default(),
-        fee_ledger_comm: BaseField::default(),
+        block_comm_root: FieldType::default(),
+        fee_ledger_comm: FieldType::default(),
         stake_table_comm: (
-            BaseField::default(),
-            BaseField::default(),
-            BaseField::default(),
+            FieldType::default(),
+            FieldType::default(),
+            FieldType::default(),
         ),
     }
 }

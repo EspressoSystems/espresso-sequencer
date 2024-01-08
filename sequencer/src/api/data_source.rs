@@ -4,7 +4,11 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{network, persistence, state_signature, Node, SeqTypes};
+use crate::{
+    network, persistence,
+    state_signature::{LightClientState, StateSignature},
+    Node, SeqTypes,
+};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -13,7 +17,6 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
-use hotshot_types::light_client::{LightClientState, StateSignature};
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -77,7 +80,7 @@ pub(crate) trait SubmitDataSource<N: network::Type> {
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
     fn get_state_signature(&self, height: u64) -> Option<StateSignature>;
 
-    fn sign_new_state(&self, state: &LightClientState<state_signature::BaseField>);
+    fn sign_new_state(&self, state: &LightClientState);
 }
 
 #[cfg(test)]

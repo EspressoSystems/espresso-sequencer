@@ -1,10 +1,14 @@
 use self::data_source::StateSignatureDataSource;
-use crate::{context::SequencerContext, network, state_signature, Node, SeqTypes};
+use crate::{
+    context::SequencerContext,
+    network,
+    state_signature::{self, LightClientState},
+    Node, SeqTypes,
+};
 use async_std::task::JoinHandle;
 use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::light_client::LightClientState;
 
 pub mod data_source;
 pub mod endpoints;
@@ -42,7 +46,7 @@ impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
         self.as_ref().get_state_signature(height)
     }
 
-    fn sign_new_state(&self, state: &LightClientState<state_signature::BaseField>) {
+    fn sign_new_state(&self, state: &LightClientState) {
         self.as_ref().sign_new_state(state)
     }
 }
@@ -55,7 +59,7 @@ impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
         self.get_state_signature(height)
     }
 
-    fn sign_new_state(&self, state: &LightClientState<state_signature::BaseField>) {
+    fn sign_new_state(&self, state: &LightClientState) {
         self.sign_new_state(state)
     }
 }

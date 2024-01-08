@@ -1,5 +1,7 @@
+use crate::state_signature::{
+    LightClientState, StateKeyPair, StateSignature, StateSignatureScheme,
+};
 use hotshot::types::SystemContextHandle;
-use hotshot_types::light_client::{LightClientState, StateKeyPair, StateSignature};
 use jf_primitives::signatures::SignatureScheme;
 use std::sync::{Arc, RwLock};
 
@@ -67,9 +69,9 @@ impl<N: network::Type> SequencerContext<N> {
     }
 
     /// Sign the light client state at given height and store it.
-    pub fn sign_new_state(&self, state: &LightClientState<state_signature::BaseField>) {
-        let state_msg: [state_signature::BaseField; 7] = state.into();
-        let state_signature = state_signature::StateSignatureScheme::sign(
+    pub fn sign_new_state(&self, state: &LightClientState) {
+        let state_msg: [state_signature::FieldType; 7] = state.into();
+        let state_signature = StateSignatureScheme::sign(
             &(),
             self.state_key_pair.sign_key_ref(),
             state_msg,
