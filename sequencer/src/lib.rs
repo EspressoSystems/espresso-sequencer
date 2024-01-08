@@ -268,7 +268,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
-) -> anyhow::Result<SequencerContext<SeqTypes, Node<network::Web>>> {
+) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,

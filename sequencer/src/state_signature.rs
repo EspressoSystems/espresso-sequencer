@@ -1,6 +1,7 @@
 //! Utilities for generating and storing the most recent light client state signatures.
 
-use crate::{api::Context, network, Leaf, SeqTypes};
+use crate::context::SequencerContext;
+use crate::{network, Leaf, SeqTypes};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_types::light_client::StateSignature;
@@ -16,7 +17,7 @@ pub use hotshot_stake_table::vec_based::config::FieldType as BaseField;
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 pub(super) async fn state_signature_loop<N>(
-    context: Context<N>,
+    context: SequencerContext<N>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: network::Type,

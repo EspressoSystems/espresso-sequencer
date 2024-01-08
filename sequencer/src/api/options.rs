@@ -1,10 +1,13 @@
 //! Sequencer-specific API options and initialization.
 
 use super::{
-    data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState, Context,
+    data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState,
     SequencerNode,
 };
-use crate::{api::state_signature::state_signature_loop, network, persistence, Event};
+use crate::{
+    api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
+    Event,
+};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -83,7 +86,7 @@ impl Options {
     pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerNode<N>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, Context<N>>,
+        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
@@ -155,11 +158,12 @@ impl Options {
 
             // Initialize submit API
             if self.submit.is_some() {
-                let submit_api = endpoints::submit::<N, RwLock<Context<N>>>()?;
+                let submit_api = endpoints::submit::<N, RwLock<SequencerContext<N>>>()?;
                 app.register_module("submit", submit_api)?;
             }
 
-            let state_signature_api = endpoints::state_signature::<N, RwLock<Context<N>>>()?;
+            let state_signature_api =
+                endpoints::state_signature::<N, RwLock<SequencerContext<N>>>()?;
             app.register_module("state-signature", state_signature_api)?;
 
             SequencerNode {
@@ -207,7 +211,7 @@ pub struct Query;
 async fn init_with_query_module<N, D>(
     opt: Options,
     mod_opt: D::Options,
-    init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, Context<N>>,
+    init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
 ) -> anyhow::Result<SequencerNode<N>>
 where
     N: network::Type,

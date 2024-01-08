@@ -1,18 +1,21 @@
-use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
-use hotshot_types::{
-    light_client::{LightClientState, StateKeyPair, StateSignature},
-    traits::node_implementation::NodeType,
-};
+use hotshot::types::SystemContextHandle;
+use hotshot_types::light_client::{LightClientState, StateKeyPair, StateSignature};
 use jf_primitives::signatures::SignatureScheme;
 use std::sync::{Arc, RwLock};
 
-use crate::state_signature::{self, StateSignatureMemStorage};
+use crate::{
+    network,
+    state_signature::{self, StateSignatureMemStorage},
+    Node, SeqTypes,
+};
+
+/// The consensus handle
+pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
-#[derive(Clone)]
-pub struct SequencerContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct SequencerContext<N: network::Type> {
     /// The consensus handle
-    handle: SystemContextHandle<TYPES, I>,
+    handle: Consensus<N>,
 
     /// Index of this sequencer node
     #[allow(dead_code)]
@@ -25,13 +28,20 @@ pub struct SequencerContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     state_signatures: Arc<RwLock<StateSignatureMemStorage>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencerContext<TYPES, I> {
+impl<N: network::Type> Clone for SequencerContext<N> {
+    fn clone(&self) -> Self {
+        Self {
+            handle: self.handle.clone(),
+            node_index: self.node_index,
+            state_key_pair: self.state_key_pair.clone(),
+            state_signatures: self.state_signatures.clone(),
+        }
+    }
+}
+
+impl<N: network::Type> SequencerContext<N> {
     /// Constructor
-    pub fn new(
-        handle: SystemContextHandle<TYPES, I>,
-        node_index: u64,
-        state_key_pair: StateKeyPair,
-    ) -> Self {
+    pub fn new(handle: Consensus<N>, node_index: u64, state_key_pair: StateKeyPair) -> Self {
         Self {
             handle,
             node_index,
@@ -41,12 +51,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencerContext<TYPES, I> {
     }
 
     /// Return a reference to the underlying consensus handle.
-    pub fn consensus(&self) -> &SystemContextHandle<TYPES, I> {
+    pub fn consensus(&self) -> &Consensus<N> {
         &self.handle
     }
 
     /// Return a mutable reference to the underlying consensus handle.
-    pub fn consensus_mut(&mut self) -> &mut SystemContextHandle<TYPES, I> {
+    pub fn consensus_mut(&mut self) -> &mut Consensus<N> {
         &mut self.handle
     }
 

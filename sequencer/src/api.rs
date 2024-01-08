@@ -15,14 +15,12 @@ mod update;
 
 pub use options::Options;
 
-pub type Context<N> = SequencerContext<SeqTypes, Node<N>>;
-
 pub struct SequencerNode<N: network::Type> {
-    pub context: Context<N>,
+    pub context: SequencerContext<N>,
     pub update_task: JoinHandle<anyhow::Result<()>>,
 }
 
-type AppState<N, D> = ExtensibleDataSource<D, Context<N>>;
+type AppState<N, D> = ExtensibleDataSource<D, SequencerContext<N>>;
 
 impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
@@ -30,7 +28,7 @@ impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for Context<N> {
+impl<N: network::Type> SubmitDataSource<N> for SequencerContext<N> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.consensus()
     }
@@ -49,7 +47,7 @@ impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
     }
 }
 
-impl<N: network::Type> StateSignatureDataSource<N> for Context<N> {
+impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
     fn get_state_signature(
         &self,
         height: u64,
@@ -161,7 +159,8 @@ mod test_helpers {
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut context, .. } = options
             .serve(|_| {
-                async move { Context::new(handles[0].clone(), 0, Default::default()) }.boxed()
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
             })
             .await
             .unwrap();
@@ -206,7 +205,8 @@ mod test_helpers {
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut context, .. } = options
             .serve(|_| {
-                async move { Context::new(handles[0].clone(), 0, Default::default()) }.boxed()
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
             })
             .await
             .unwrap();
@@ -289,7 +289,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { Context::new(handle, 0, Default::default()) }.boxed())
+            .serve(|_| async move { SequencerContext::new(handle, 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -491,7 +491,8 @@ mod test {
         let options = Options::from(options::Http { port });
         options
             .serve(|_| {
-                async move { Context::new(handles[0].clone(), 0, Default::default()) }.boxed()
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
             })
             .await
             .unwrap();

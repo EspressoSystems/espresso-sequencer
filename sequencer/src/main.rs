@@ -7,7 +7,7 @@ use sequencer::{
     context::SequencerContext,
     init_node, init_static, network,
     options::{Modules, Options},
-    persistence, NetworkParams, Node, SeqTypes,
+    persistence, NetworkParams,
 };
 
 #[async_std::main]
@@ -51,7 +51,7 @@ async fn init_with_storage<S>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-) -> anyhow::Result<SequencerContext<SeqTypes, Node<network::Web>>>
+) -> anyhow::Result<SequencerContext<network::Web>>
 where
     S: DataSourceOptions,
 {
