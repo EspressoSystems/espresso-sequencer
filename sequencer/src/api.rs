@@ -193,8 +193,6 @@ mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
-
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
@@ -207,39 +205,29 @@ mod test_helpers {
         }
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let SequencerNode { mut context, .. } = options
+        let SequencerNode { context, .. } = options
             .serve(|_| {
                 async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
                     .boxed()
             })
             .await
             .unwrap();
-        let mut events = context
-            .consensus_mut()
-            .get_event_stream(Default::default())
-            .await
-            .0;
 
-        client.connect(None).await;
-
-        client
-            .post::<()>("submit/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-
-        // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, &txn).await.unwrap();
-
-        let height = context.consensus().get_decided_leaf().await.get_height();
-        sleep(std::time::Duration::from_secs(1)).await;
-        let _signature = client
+        let mut height: u64;
+        // Wait for block >=2 appears
+        // It's waiting for an extra second to make sure that the signature is generated
+        loop {
+            height = context.consensus().get_decided_leaf().await.get_height();
+            sleep(std::time::Duration::from_secs(1)).await;
+            if height >= 2 {
+                break;
+            }
+        }
+        assert!(client
             .get::<StateSignature>(&format!("state-signature/block/{}", height))
             .send()
             .await
-            .unwrap();
+            .is_ok())
     }
 }
 
