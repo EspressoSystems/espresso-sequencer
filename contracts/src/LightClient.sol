@@ -72,7 +72,7 @@ contract LightClient {
     error InvalidProof();
 
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
-        // stake table commitments and threshold cannot be zero, othrewise it's impossible to
+        // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
         // feeLedgerComm can be zero, if we optionally support fee ledger yet.

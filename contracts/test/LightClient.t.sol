@@ -46,8 +46,8 @@ contract LightClientCommonTest is Test {
 
     /// @dev assertEq for `struct LightClientState`
     function assertEqState(LC.LightClientState memory a, LC.LightClientState memory b) public {
-        assert(a.viewNum == b.viewNum);
-        assert(a.blockHeight == b.blockHeight);
+        assertEq(a.viewNum, b.viewNum);
+        assertEq(a.blockHeight, b.blockHeight);
         assertEq(a.blockCommRoot, b.blockCommRoot);
         assertEq(a.feeLedgerComm, b.feeLedgerComm);
         assertEq(a.stakeTableBlsKeyComm, b.stakeTableBlsKeyComm);

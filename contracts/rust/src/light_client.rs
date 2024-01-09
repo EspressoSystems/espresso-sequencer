@@ -36,7 +36,7 @@ pub const STAKE_TABLE_CAPACITY: usize = 10;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
-    /// max capcity of stake table
+    /// max capacity of stake table
     st_cap: usize,
     /// number of blocks per epoch
     blk_per_epoch: u32,
@@ -52,8 +52,8 @@ impl MockSystemParam {
     }
 }
 
-/// Mock of hotshot ledger for testing LightClient.sol functionalities only
-/// its logic is completely divergent from a real light client or HotShot
+/// Mock of hotshot ledger for testing LightClient.sol functionalities only.
+/// Its logic is completely divergent from a real light client or HotShot
 pub struct MockLedger {
     pp: MockSystemParam,
     pub rng: StdRng,
@@ -174,7 +174,6 @@ impl MockLedger {
     }
 
     /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
-    /// Return the new light client state and a proof.
     pub fn elapse_epoch(&mut self, num_reg: usize, num_exit: usize) {
         assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
 

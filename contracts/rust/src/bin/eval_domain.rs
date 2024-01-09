@@ -1,4 +1,4 @@
-//! Binary to generate hardcoded parameters for EvaluationDomain supported in `PolynomicalEval.sol`
+//! Binary to generate hardcoded parameters for EvaluationDomain supported in `PolynomialEval.sol`
 
 use ark_bn254::Fr;
 use ark_ff::{Field, PrimeField};
