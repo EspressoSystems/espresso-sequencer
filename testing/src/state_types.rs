@@ -60,7 +60,12 @@ impl State for TestState {
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
+    fn validate_block(
+        &self,
+        _curr_block_header: &Self::BlockHeader,
+        _prev_block_header: &Self::BlockHeader,
+        view_number: &Self::Time,
+    ) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
         } else {
@@ -76,10 +81,11 @@ impl State for TestState {
 
     fn append(
         &self,
-        block_header: &Self::BlockHeader,
+        curr_block_header: &Self::BlockHeader,
+        prev_block_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if !self.validate_block(block_header, view_number) {
+        if !self.validate_block(curr_block_header, prev_block_header, view_number) {
             return Err(BlockError::InvalidBlockHeader);
         }
 

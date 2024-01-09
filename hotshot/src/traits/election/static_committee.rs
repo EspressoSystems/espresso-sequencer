@@ -11,7 +11,7 @@ use std::{marker::PhantomData, num::NonZeroU64};
 use tracing::debug;
 
 #[cfg(feature = "randomized-leader-election")]
-use rand::{Rng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng};
 
 /// Dummy implementation of [`Membership`]
 
