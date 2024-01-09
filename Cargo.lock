@@ -2215,7 +2215,7 @@ checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 [[package]]
 name = "diff-test-bn254"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/solidity-bn254.git?tag=v0.2.0#050a98a3b389862c50d0bbbea620d8dc278c275a"
+source = "git+https://github.com/EspressoSystems/solidity-bn254.git#050a98a3b389862c50d0bbbea620d8dc278c275a"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -3691,6 +3691,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-state-prover"
+version = "0.3.3"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.5#debf1c05cf211a136e73fca7b88f2334f8881b26"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "bincode",
+ "bitvec",
+ "digest 0.10.7",
+ "displaydoc",
+ "ethereum-types",
+ "generic-array",
+ "hotshot-stake-table",
+ "hotshot-types",
+ "jf-plonk",
+ "jf-primitives",
+ "jf-relation",
+ "jf-utils",
+ "serde",
+ "tagged-base64",
+ "typenum",
+]
+
+[[package]]
 name = "hotshot-task"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.5#debf1c05cf211a136e73fca7b88f2334f8881b26"
@@ -3874,14 +3902,19 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "async-std",
+ "async-trait",
  "clap",
  "contract-bindings",
  "crs",
  "diff-test-bn254",
  "digest 0.10.7",
+ "ethereum-types",
  "ethers",
  "ethers-providers",
  "hex",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
  "itertools 0.12.0",
  "jf-plonk",
  "jf-primitives",
@@ -6556,9 +6589,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.74"
+version = "1.0.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2de98502f212cfcea8d0bb305bd0f49d7ebdd75b64ba0a68f937d888f4e0d6db"
+checksum = "95fc56cda0b5c3325f5fbbd7ff9fda9e02bb00bb3dac51252d2f1bfa1cb8cc8c"
 dependencies = [
  "unicode-ident",
 ]
@@ -8356,7 +8389,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64"
 version = "0.3.4"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
@@ -8371,7 +8404,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64-macros"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "quote",
  "syn 1.0.109",

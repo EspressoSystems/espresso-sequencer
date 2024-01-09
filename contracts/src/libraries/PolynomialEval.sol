@@ -29,25 +29,9 @@ library PolynomialEval {
     }
 
     /// @dev Create a new Radix2EvalDomain with `domainSize` which should be power of 2.
-    /// @dev Will revert if domainSize is not among {2^14, 2^15, 2^16, 2^17}
+    /// @dev Will revert if domainSize is not among {2^5, 2^16, 2^17, 2^18, 2^19, 2^20}
     function newEvalDomain(uint256 domainSize) internal pure returns (EvalDomain memory) {
-        if (domainSize == 16384) {
-            return EvalDomain(
-                14,
-                domainSize,
-                0x30638CE1A7661B6337A964756AA75257C6BF4778D89789AB819CE60C19B04001,
-                0x2D965651CDD9E4811F4E51B80DDCA8A8B4A93EE17420AAE6ADAA01C2617C6E85,
-                0x281C036F06E7E9E911680D42558E6E8CF40976B0677771C0F8EEE934641C8410
-            );
-        } else if (domainSize == 32768) {
-            return EvalDomain(
-                15,
-                domainSize,
-                0x3063edaa444bddc677fcd515f614555a777997e0a9287d1e62bf6dd004d82001,
-                0x2d1ba66f5941dc91017171fa69ec2bd0022a2a2d4115a009a93458fd4e26ecfb,
-                0x05d33766e4590b3722701b6f2fa43d0dc3f028424d384e68c92a742fb2dbc0b4
-            );
-        } else if (domainSize == 65536) {
+        if (domainSize == 65536) {
             return EvalDomain(
                 16,
                 domainSize,
@@ -63,7 +47,32 @@ library PolynomialEval {
                 0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5,
                 0x244cf010c43ca87237d8b00bf9dd50c4c01c7f086bd4e8c920e75251d96f0d22
             );
-        } else if (domainSize == 32) {
+        } else if (domainSize == 262144) {
+            return EvalDomain(
+                18,
+                domainSize,
+                0x30644259cd94e7dd5045d7a27013b7fcd21c9e3b7fa75222e7bda49b729b0401,
+                0x19ddbcaf3a8d46c15c0176fbb5b95e4dc57088ff13f4d1bd84c6bfa57dcdc0e0,
+                0x36853f083780e87f8d7c71d111119c57dbe118c22d5ad707a82317466c5174c
+            );
+        } else if (domainSize == 524288) {
+            return EvalDomain(
+                19,
+                domainSize,
+                0x3064486657634403844b0eac78ca882cfd284341fcb0615a15cfcd17b14d8201,
+                0x2260e724844bca5251829353968e4915305258418357473a5c1d597f613f6cbd,
+                0x6e402c0a314fb67a15cf806664ae1b722dbc0efe66e6c81d98f9924ca535321
+            );
+        } else if (domainSize == 1048576) {
+            return EvalDomain(
+                20,
+                domainSize,
+                0x30644b6c9c4a72169e4daa317d25f04512ae15c53b34e8f5acd8e155d0a6c101,
+                0x26125da10a0ed06327508aba06d1e303ac616632dbed349f53422da953337857,
+                0x100c332d2100895fab6473bc2c51bfca521f45cb3baca6260852a8fde26c91f3
+            );
+        }
+        if (domainSize == 32) {
             // useful for small-size test, in practice unlikely to be used.
             return EvalDomain(
                 5,

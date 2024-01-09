@@ -12,10 +12,10 @@ import { BN254 } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
 
 contract PolynomialEval_newEvalDomain_Test is Test {
-    /// @dev diff-test with Rust when `domainSize` is in {2^14, 2^15, 2^16, 2^17, 2^5}
+    /// @dev diff-test with Rust when `domainSize` is in {2^16 ~ 2^20, 2^5}
     function test_supportedDomainSize_matches() external {
-        uint256[5] memory logSizes = [uint256(5), 14, 15, 16, 17];
-        for (uint256 i = 0; i < 5; i++) {
+        uint256[6] memory logSizes = [uint256(5), 16, 17, 18, 19, 20];
+        for (uint256 i = 0; i < 6; i++) {
             string[] memory cmds = new string[](3);
             cmds[0] = "diff-test";
             cmds[1] = "new-poly-eval-domain";
@@ -32,11 +32,11 @@ contract PolynomialEval_newEvalDomain_Test is Test {
         }
     }
 
-    /// @dev Test revert if domainSize is not among {2^14, 2^15, 2^16, 2^17, 2^5}
+    /// @dev Test revert if domainSize is not among {2^16 ~ 2^20, 2^5}
     function testFuzz_unsupportedDomainSize_reverts(uint256 domainSize) external {
         vm.assume(
-            domainSize != 2 ** 14 && domainSize != 2 ** 15 && domainSize != 2 ** 16
-                && domainSize != 2 ** 17 && domainSize != 2 ** 5
+            domainSize != 2 ** 16 && domainSize != 2 ** 17 && domainSize != 2 ** 18
+                && domainSize != 2 ** 19 && domainSize != 2 ** 20 && domainSize != 2 ** 5
         );
 
         vm.expectRevert(Poly.UnsupportedDegree.selector);
@@ -47,7 +47,7 @@ contract PolynomialEval_newEvalDomain_Test is Test {
 contract PolynomialEval_domainElements_Test is Test {
     /// @dev Test if the domain elements are generated correctly
     function testFuzz_domainElements_matches(uint256 logSize, uint256 length) external {
-        logSize = bound(logSize, 14, 17);
+        logSize = bound(logSize, 16, 20);
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
 
         if (length > domain.size) {
@@ -76,7 +76,7 @@ contract PolynomialEval_evalDataGen_Test is Test {
         uint256 zeta,
         uint256[] memory publicInput
     ) external {
-        logSize = bound(logSize, 14, 17);
+        logSize = bound(logSize, 16, 20);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
         // Since these user-provided `publicInputs` were checked outside before passing in via
