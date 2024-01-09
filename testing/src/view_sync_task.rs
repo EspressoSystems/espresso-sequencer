@@ -10,10 +10,7 @@ use hotshot_task::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
 use snafu::Snafu;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 
@@ -58,9 +55,6 @@ pub enum ShouldHitViewSync {
 pub enum ViewSyncTaskDescription {
     /// (min, max) number nodes that may hit view sync, inclusive
     Threshold(usize, usize),
-    /// node idx -> whether or not the node should hit view sync
-    /// if node not in map, assumed to be `ShouldHItViewSync::DontCare`
-    Precise(HashMap<usize, ShouldHitViewSync>),
 }
 
 impl ViewSyncTaskDescription {
@@ -89,42 +83,6 @@ impl ViewSyncTaskDescription {
                                                 state,
                                             )
                                         }
-                                    }
-                                    ViewSyncTaskDescription::Precise(map) => {
-                                        for (id, should_hit) in map {
-                                            match should_hit {
-                                                ShouldHitViewSync::Yes => {
-                                                    if !state.hit_view_sync.contains(&id) {
-                                                        return (
-                                                            Some(HotShotTaskCompleted::Error(
-                                                                Box::new(ViewSyncTaskErr {
-                                                                    hit_view_sync: state
-                                                                        .hit_view_sync
-                                                                        .clone(),
-                                                                }),
-                                                            )),
-                                                            state,
-                                                        );
-                                                    }
-                                                }
-                                                ShouldHitViewSync::No => {
-                                                    if state.hit_view_sync.contains(&id) {
-                                                        return (
-                                                            Some(HotShotTaskCompleted::Error(
-                                                                Box::new(ViewSyncTaskErr {
-                                                                    hit_view_sync: state
-                                                                        .hit_view_sync
-                                                                        .clone(),
-                                                                }),
-                                                            )),
-                                                            state,
-                                                        );
-                                                    }
-                                                }
-                                                ShouldHitViewSync::Ignore => {}
-                                            }
-                                        }
-                                        (Some(HotShotTaskCompleted::ShutDown), state)
                                     }
                                 },
                             }
@@ -189,14 +147,5 @@ impl ViewSyncTaskDescription {
             }
             .boxed()
         })
-
-        // match self {
-        //     ViewSyncTaskDescription::Threshold(threshold) => {
-        //
-        //     },
-        //     ViewSyncTaskDescription::Precise(map) => {
-        //
-        //     }
-        // }
     }
 }
