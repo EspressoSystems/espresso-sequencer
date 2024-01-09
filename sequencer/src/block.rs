@@ -147,6 +147,8 @@ pub struct Header {
 
     pub payload_commitment: VidCommitment,
     pub transactions_root: NMTRoot,
+    /// Root Commitment of Block Merkle Tree
+    pub block_merkle_tree_root: <SHA3MerkleTree as MerkleTreeScheme>::Commitment,
     /// Frontier of Block Merkle Tree
     pub block_merkle_tree: SHA3MerkleTree,
 }
@@ -192,6 +194,7 @@ impl Header {
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
+        block_merkle_tree_root: <SHA3MerkleTree as MerkleTreeScheme>::Commitment,
         block_merkle_tree: SHA3MerkleTree,
     ) -> Self {
         // Increment height.
@@ -244,6 +247,7 @@ impl Header {
             l1_finalized: l1.finalized,
             payload_commitment,
             transactions_root,
+            block_merkle_tree_root,
             block_merkle_tree,
         }
     }
@@ -254,6 +258,7 @@ impl BlockHeader for Header {
     fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
         let mut block_merkle_tree = parent.block_merkle_tree.clone();
         block_merkle_tree.push(parent.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
 
         // The HotShot APIs should be redesigned so that
         // * they are async
@@ -278,6 +283,7 @@ impl BlockHeader for Header {
             parent,
             l1,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
+            block_merkle_tree_root,
             block_merkle_tree,
         )
     }
@@ -291,6 +297,7 @@ impl BlockHeader for Header {
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let block_merkle_tree =
             SHA3MerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
         let header = Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.
@@ -300,6 +307,7 @@ impl BlockHeader for Header {
             l1_finalized: None,
             payload_commitment,
             transactions_root,
+            block_merkle_tree_root,
             block_merkle_tree,
         };
         (header, payload, transactions_root)
@@ -621,6 +629,7 @@ mod test_headers {
             parent.l1_finalized = self.parent_l1_finalized;
             let block_merkle_tree =
                 SHA3MerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+            let block_merkle_tree_root = block_merkle_tree.commitment();
 
             let header = Header::from_info(
                 genesis.payload_commitment,
@@ -631,6 +640,7 @@ mod test_headers {
                     finalized: self.l1_finalized,
                 },
                 self.timestamp,
+                block_merkle_tree_root,
                 block_merkle_tree,
             );
             assert_eq!(header.height, parent.height + 1);
