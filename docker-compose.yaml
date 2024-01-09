@@ -186,6 +186,8 @@ services:
 
   sequencer-db:
     image: postgres
+    ports:
+      - "$ESPRESSO_SEQUENCER_DB_PORT:5432"
     environment:
       - POSTGRES_PASSWORD=password
     healthcheck:
