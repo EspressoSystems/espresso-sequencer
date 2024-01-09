@@ -1,5 +1,4 @@
-use super::{BLSPrivKey, EncodedPublicKey, SignatureKey};
-use bincode::Options;
+use super::{BLSPrivKey, SignatureKey};
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
 use ethereum_types::U256;
@@ -7,7 +6,6 @@ use hotshot_qc::bit_vector_old::{
     BitVectorQC, QCParams as JFQCParams, StakeTableEntry as JFStakeTableEntry,
 };
 use hotshot_types::traits::qc::QuorumCertificate;
-use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::errors::PrimitivesError;
 use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey},
@@ -15,7 +13,7 @@ use jf_primitives::signatures::{
 };
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, fmt::Debug};
-use tracing::{debug, instrument, warn};
+use tracing::{instrument, warn};
 use typenum::U32;
 
 /// Public key type for an bn254 [`SignatureKey`] pair
@@ -81,23 +79,16 @@ impl SignatureKey for BLSPubKey {
         Self { pub_key }
     }
 
-    fn to_bytes(&self) -> EncodedPublicKey {
-        let pub_key_bytes = bincode_opts()
-            .serialize(&self.pub_key)
-            .expect("This serialization shouldn't be able to fail");
-        EncodedPublicKey(pub_key_bytes)
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = vec![];
+        ark_serialize::CanonicalSerialize::serialize_compressed(&self.pub_key, &mut buf)
+            .expect("Serialization should not fail.");
+        buf
     }
 
-    #[instrument]
-    fn from_bytes(bytes: &EncodedPublicKey) -> Option<Self> {
-        let x: Result<VerKey, _> = bincode_opts().deserialize(&bytes.0);
-        match x {
-            Ok(pub_key) => Some(BLSPubKey { pub_key }),
-            Err(e) => {
-                debug!(?e, "Failed to deserialize public key");
-                None
-            }
-        }
+    fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError> {
+        let pub_key: VerKey = ark_serialize::CanonicalDeserialize::deserialize_compressed(bytes)?;
+        Ok(Self { pub_key })
     }
 
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey) {

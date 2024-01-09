@@ -1,26 +1,9 @@
 //! Minimal compatibility over public key signatures
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bitvec::prelude::*;
-use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;
+use jf_primitives::errors::PrimitivesError;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, hash::Hash};
-use tagged_base64::tagged;
-
-/// Type saftey wrapper for byte encoded keys
-#[tagged(tag::ENCODED_PUB_KEY)]
-#[derive(
-    Clone,
-    custom_debug::Debug,
-    Hash,
-    CanonicalSerialize,
-    CanonicalDeserialize,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-)]
-pub struct EncodedPublicKey(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType {
@@ -107,9 +90,12 @@ pub trait SignatureKey:
     /// Produce a public key from a private key
     fn from_private(private_key: &Self::PrivateKey) -> Self;
     /// Serialize a public key to bytes
-    fn to_bytes(&self) -> EncodedPublicKey;
+    fn to_bytes(&self) -> Vec<u8>;
     /// Deserialize a public key from bytes
-    fn from_bytes(bytes: &EncodedPublicKey) -> Option<Self>;
+    /// # Errors
+    ///
+    /// Will return `Err` if deserialization fails
+    fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError>;
 
     /// Generate a new key pair
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey);

@@ -6,7 +6,7 @@ use async_lock::RwLock;
 use clap::Args;
 use futures::FutureExt;
 
-use hotshot_types::traits::signature_key::{EncodedPublicKey, SignatureKey};
+use hotshot_types::traits::signature_key::SignatureKey;
 use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use std::{collections::HashMap, io, path::PathBuf};
 use tide_disco::{
@@ -605,24 +605,20 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
 
     fn post_staketable(&mut self, key: Vec<u8>) -> Result<(), Error> {
         // KALEY TODO: need security checks here
-        let new_key = KEY::from_bytes(&(EncodedPublicKey(key)));
-        if let Some(new_key) = new_key {
-            let node_index = self.stake_table.len() as u64;
-            //generate secret for leader's first submission endpoint when key is added
-            let secret = thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(30)
-                .map(char::from)
-                .collect();
-            self.proposals.insert(node_index, (secret, Vec::new()));
-            self.stake_table.push(new_key);
-            Ok(())
-        } else {
-            Err(ServerError {
-                status: StatusCode::BadRequest,
-                message: "Only signature keys can be added to stake table".to_string(),
-            })
-        }
+        let new_key = KEY::from_bytes(&key).map_err(|_| ServerError {
+            status: StatusCode::BadRequest,
+            message: "Only signature keys can be added to stake table".to_string(),
+        })?;
+        let node_index = self.stake_table.len() as u64;
+        //generate secret for leader's first submission endpoint when key is added
+        let secret = thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(30)
+            .map(char::from)
+            .collect();
+        self.proposals.insert(node_index, (secret, Vec::new()));
+        self.stake_table.push(new_key);
+        Ok(())
     }
 
     fn post_completed_transaction(&mut self, txn: Vec<u8>) -> Result<(), Error> {
