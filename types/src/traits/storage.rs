@@ -132,9 +132,6 @@ pub struct StoredView<TYPES: NodeType> {
     pub block_payload: Option<TYPES::BlockPayload>,
     /// transactions rejected in this view
     pub rejected: Vec<TYPES::Transaction>,
-    /// the timestamp this view was recv-ed in nanonseconds
-    #[derivative(PartialEq = "ignore")]
-    pub timestamp: i128,
     /// the proposer id
     #[derivative(PartialEq = "ignore")]
     pub proposer_id: TYPES::SignatureKey,
@@ -163,7 +160,6 @@ where
             block_header,
             block_payload,
             rejected,
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id,
         }
     }

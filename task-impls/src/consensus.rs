@@ -220,7 +220,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
                 let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
@@ -307,7 +306,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
 
@@ -538,7 +536,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_header: proposal.data.block_header,
                         block_payload: None,
                         rejected: Vec::new(),
-                        timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender,
                     };
 
@@ -563,7 +560,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.data.block_header,
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender,
                 };
                 let leaf_commitment = leaf.commit();
@@ -1173,7 +1169,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 ),
                 block_payload: None,
                 rejected: vec![],
-                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().clone(),
             };
 
