@@ -3666,6 +3666,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-stake-table"
+version = "0.3.3"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.5#debf1c05cf211a136e73fca7b88f2334f8881b26"
+dependencies = [
+ "ark-bn254",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "bincode",
+ "bitvec",
+ "digest 0.10.7",
+ "displaydoc",
+ "ethereum-types",
+ "generic-array",
+ "hotshot-types",
+ "jf-primitives",
+ "jf-relation",
+ "jf-utils",
+ "serde",
+ "tagged-base64",
+ "typenum",
+]
+
+[[package]]
 name = "hotshot-task"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.5#debf1c05cf211a136e73fca7b88f2334f8881b26"
@@ -7487,6 +7512,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
+ "ark-ed-on-bn254",
  "ark-serialize 0.4.2",
  "async-compatibility-layer",
  "async-std",
@@ -7507,6 +7533,8 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-signature-key",
+ "hotshot-stake-table",
+ "hotshot-task",
  "hotshot-testing",
  "hotshot-types",
  "hotshot-web-server",
