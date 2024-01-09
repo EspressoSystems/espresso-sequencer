@@ -183,12 +183,12 @@ contract StakeTableInvariant_Tests is Test {
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
             blockHeight: 0,
-            blockCommRoot: BN254.ScalarField.wrap(0),
-            feeLedgerComm: BN254.ScalarField.wrap(0),
-            stakeTableBlsKeyComm: BN254.ScalarField.wrap(0),
-            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(0),
-            stakeTableAmountComm: BN254.ScalarField.wrap(0),
-            threshold: 0
+            blockCommRoot: BN254.ScalarField.wrap(1),
+            feeLedgerComm: BN254.ScalarField.wrap(1),
+            stakeTableBlsKeyComm: BN254.ScalarField.wrap(1),
+            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(1),
+            stakeTableAmountComm: BN254.ScalarField.wrap(1),
+            threshold: 10
         });
         lightClientContract = new LightClientTest(genesis, 10);
         stakeTable = new S(address(token), address(lightClientContract), 10);

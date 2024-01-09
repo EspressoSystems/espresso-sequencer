@@ -59,6 +59,39 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("computeStakeTableComm"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("computeStakeTableComm",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("state"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct LightClient.LightClientState",
+                                ),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::Pure,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("currentEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("currentEpoch"),
@@ -151,6 +184,22 @@ pub mod light_client {
                             kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("frozenThreshold"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("frozenThreshold"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -341,6 +390,22 @@ pub mod light_client {
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
                 ),
+                (
+                    ::std::borrow::ToOwned::to_owned("votingThreshold"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("votingThreshold"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
             ]),
             events: ::core::convert::From::from([
                 (
@@ -385,6 +450,13 @@ pub mod light_client {
                     ::std::borrow::ToOwned::to_owned("InvalidArgs"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("InvalidArgs"),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("InvalidProof"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("InvalidProof"),
                         inputs: ::std::vec![],
                     },],
                 ),
@@ -459,6 +531,15 @@ pub mod light_client {
                 .method_hash([31, 58, 220, 15], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `computeStakeTableComm` (0xaa922732) function
+        pub fn compute_stake_table_comm(
+            &self,
+            state: LightClientState,
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash([170, 146, 39, 50], (state,))
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `currentEpoch` (0x76671808) function
         pub fn current_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
@@ -491,6 +572,14 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
                 .method_hash([56, 43, 33, 90], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `frozenThreshold` (0xca6fe855) function
+        pub fn frozen_threshold(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([202, 111, 232, 85], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `genesisState` (0xd24d933d) function
@@ -529,6 +618,14 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
                 .method_hash([118, 182, 183, 203], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `votingThreshold` (0x62827733) function
+        pub fn voting_threshold(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([98, 130, 119, 51], ())
                 .expect("method not found (this should never happen)")
         }
         ///Gets the contract's `EpochChanged` event
@@ -573,6 +670,21 @@ pub mod light_client {
     )]
     #[etherror(name = "InvalidArgs", abi = "InvalidArgs()")]
     pub struct InvalidArgs;
+    ///Custom Error type `InvalidProof` with signature `InvalidProof()` and selector `0x09bde339`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(name = "InvalidProof", abi = "InvalidProof()")]
+    pub struct InvalidProof;
     ///Custom Error type `MissingLastBlockForCurrentEpoch` with signature `MissingLastBlockForCurrentEpoch(uint64)` and selector `0x1b2335f8`
     #[derive(
         Clone,
@@ -621,6 +733,7 @@ pub mod light_client {
     )]
     pub enum LightClientErrors {
         InvalidArgs(InvalidArgs),
+        InvalidProof(InvalidProof),
         MissingLastBlockForCurrentEpoch(MissingLastBlockForCurrentEpoch),
         OutdatedState(OutdatedState),
         /// The standard solidity revert string, with selector
@@ -640,6 +753,9 @@ pub mod light_client {
             if let Ok(decoded) = <InvalidArgs as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::InvalidArgs(decoded));
             }
+            if let Ok(decoded) = <InvalidProof as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::InvalidProof(decoded));
+            }
             if let Ok(decoded) =
                 <MissingLastBlockForCurrentEpoch as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -655,6 +771,7 @@ pub mod light_client {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
                 Self::InvalidArgs(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::InvalidProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::MissingLastBlockForCurrentEpoch(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -669,6 +786,8 @@ pub mod light_client {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
                 _ if selector
                     == <InvalidArgs as ::ethers::contract::EthError>::selector() => true,
+                _ if selector
+                    == <InvalidProof as ::ethers::contract::EthError>::selector() => true,
                 _ if selector
                     == <MissingLastBlockForCurrentEpoch as ::ethers::contract::EthError>::selector() => {
                     true
@@ -685,6 +804,7 @@ pub mod light_client {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::InvalidArgs(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
                 Self::MissingLastBlockForCurrentEpoch(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -701,6 +821,11 @@ pub mod light_client {
     impl ::core::convert::From<InvalidArgs> for LightClientErrors {
         fn from(value: InvalidArgs) -> Self {
             Self::InvalidArgs(value)
+        }
+    }
+    impl ::core::convert::From<InvalidProof> for LightClientErrors {
+        fn from(value: InvalidProof) -> Self {
+            Self::InvalidProof(value)
         }
     }
     impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientErrors {
@@ -808,6 +933,26 @@ pub mod light_client {
     )]
     #[ethcall(name = "BLOCKS_PER_EPOCH", abi = "BLOCKS_PER_EPOCH()")]
     pub struct BlocksPerEpochCall;
+    ///Container type for all input parameters for the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "computeStakeTableComm",
+        abi = "computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))"
+    )]
+    pub struct ComputeStakeTableCommCall {
+        pub state: LightClientState,
+    }
     ///Container type for all input parameters for the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
     #[derive(
         Clone,
@@ -856,6 +1001,21 @@ pub mod light_client {
         abi = "frozenStakeTableCommitment()"
     )]
     pub struct FrozenStakeTableCommitmentCall;
+    ///Container type for all input parameters for the `frozenThreshold` function with signature `frozenThreshold()` and selector `0xca6fe855`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "frozenThreshold", abi = "frozenThreshold()")]
+    pub struct FrozenThresholdCall;
     ///Container type for all input parameters for the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -905,16 +1065,34 @@ pub mod light_client {
         abi = "votingStakeTableCommitment()"
     )]
     pub struct VotingStakeTableCommitmentCall;
+    ///Container type for all input parameters for the `votingThreshold` function with signature `votingThreshold()` and selector `0x62827733`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "votingThreshold", abi = "votingThreshold()")]
+    pub struct VotingThresholdCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientCalls {
         BlocksPerEpoch(BlocksPerEpochCall),
+        ComputeStakeTableComm(ComputeStakeTableCommCall),
         CurrentEpoch(CurrentEpochCall),
         FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
+        FrozenThreshold(FrozenThresholdCall),
         GenesisState(GenesisStateCall),
         NewFinalizedState(NewFinalizedStateCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
+        VotingThreshold(VotingThresholdCall),
     }
     impl ::ethers::core::abi::AbiDecode for LightClientCalls {
         fn decode(
@@ -925,6 +1103,11 @@ pub mod light_client {
                 <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::BlocksPerEpoch(decoded));
+            }
+            if let Ok(decoded) =
+                <ComputeStakeTableCommCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ComputeStakeTableComm(decoded));
             }
             if let Ok(decoded) = <CurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -940,6 +1123,11 @@ pub mod light_client {
             {
                 return Ok(Self::FrozenStakeTableCommitment(decoded));
             }
+            if let Ok(decoded) =
+                <FrozenThresholdCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::FrozenThreshold(decoded));
+            }
             if let Ok(decoded) = <GenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::GenesisState(decoded));
@@ -954,6 +1142,11 @@ pub mod light_client {
             {
                 return Ok(Self::VotingStakeTableCommitment(decoded));
             }
+            if let Ok(decoded) =
+                <VotingThresholdCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::VotingThreshold(decoded));
+            }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
@@ -961,16 +1154,21 @@ pub mod light_client {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ComputeStakeTableComm(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FrozenStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::FrozenThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VotingStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::VotingThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
     }
@@ -978,18 +1176,26 @@ pub mod light_client {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
+                Self::FrozenThreshold(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
+                Self::VotingThreshold(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
     impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
         fn from(value: BlocksPerEpochCall) -> Self {
             Self::BlocksPerEpoch(value)
+        }
+    }
+    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientCalls {
+        fn from(value: ComputeStakeTableCommCall) -> Self {
+            Self::ComputeStakeTableComm(value)
         }
     }
     impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
@@ -1007,6 +1213,11 @@ pub mod light_client {
             Self::FrozenStakeTableCommitment(value)
         }
     }
+    impl ::core::convert::From<FrozenThresholdCall> for LightClientCalls {
+        fn from(value: FrozenThresholdCall) -> Self {
+            Self::FrozenThreshold(value)
+        }
+    }
     impl ::core::convert::From<GenesisStateCall> for LightClientCalls {
         fn from(value: GenesisStateCall) -> Self {
             Self::GenesisState(value)
@@ -1020,6 +1231,11 @@ pub mod light_client {
     impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientCalls {
         fn from(value: VotingStakeTableCommitmentCall) -> Self {
             Self::VotingStakeTableCommitment(value)
+        }
+    }
+    impl ::core::convert::From<VotingThresholdCall> for LightClientCalls {
+        fn from(value: VotingThresholdCall) -> Self {
+            Self::VotingThreshold(value)
         }
     }
     ///Container type for all return fields from the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
@@ -1036,6 +1252,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct BlocksPerEpochReturn(pub u32);
+    ///Container type for all return fields from the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ComputeStakeTableCommReturn(pub [u8; 32]);
     ///Container type for all return fields from the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
     #[derive(
         Clone,
@@ -1087,6 +1317,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct FrozenStakeTableCommitmentReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `frozenThreshold` function with signature `frozenThreshold()` and selector `0xca6fe855`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct FrozenThresholdReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -1124,6 +1368,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct VotingStakeTableCommitmentReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `votingThreshold` function with signature `votingThreshold()` and selector `0x62827733`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct VotingThresholdReturn(pub ::ethers::core::types::U256);
     ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
     #[derive(
         Clone,
