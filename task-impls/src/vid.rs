@@ -2,8 +2,6 @@ use crate::events::HotShotEvent;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::spawn_blocking;
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::spawn_blocking;
 use hotshot_task::{
     event_stream::ChannelStream,
     global_registry::GlobalRegistry,
@@ -26,6 +24,8 @@ use hotshot_types::{
     data::{test_srs, VidScheme, VidSchemeTrait},
     traits::network::ConsensusIntentEvent,
 };
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::spawn_blocking;
 
 use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
@@ -96,11 +96,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // calculate vid shares
                 let vid_disperse = spawn_blocking(move || {
                     let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
-                     vid.disperse(encoded_transactions.clone()).unwrap()
+                    vid.disperse(encoded_transactions.clone()).unwrap()
                 })
                 .await;
 
-
+                #[cfg(async_executor_impl = "tokio")]
+                let vid_disperse = vid_disperse.unwrap();
                 // send the commitment and metadata to consensus for block building
                 self.event_stream
                     .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
