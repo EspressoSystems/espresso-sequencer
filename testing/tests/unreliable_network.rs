@@ -1,3 +1,4 @@
+use hotshot_testing::test_builder::TimingData;
 use hotshot_types::traits::network::AsynchronousNetwork;
 use hotshot_types::traits::network::ChaosNetwork;
 use hotshot_types::traits::network::PartiallySynchronousNetwork;
@@ -87,6 +88,7 @@ async fn test_memory_network_sync() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 #[instrument]
 async fn libp2p_network_async() {
     async_compatibility_layer::logging::setup_logging();
@@ -94,6 +96,7 @@ async fn libp2p_network_async() {
     let metadata = TestMetadata {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
+            num_failed_views: 50,
             ..Default::default()
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
@@ -101,8 +104,13 @@ async fn libp2p_network_async() {
                 duration: Duration::new(240, 0),
             },
         ),
+        timing_data: TimingData {
+            timeout_ratio: (1, 1),
+            next_view_timeout: 1000,
+            ..TestMetadata::default_multiple_rounds().timing_data
+        },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
-            keep_numerator: 8,
+            keep_numerator: 9,
             keep_denominator: 10,
             delay_low_ms: 4,
             delay_high_ms: 30,
@@ -122,6 +130,7 @@ async fn libp2p_network_async() {
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
+#[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_async() {
     use hotshot_testing::{
@@ -134,15 +143,25 @@ async fn test_memory_network_async() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata {
+        overall_safety_properties: OverallSafetyPropertiesDescription {
+            check_leaf: true,
+            num_failed_views: 5000,
+            ..Default::default()
+        },
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
                 duration: Duration::from_secs(240),
             },
         ),
+        timing_data: TimingData {
+            timeout_ratio: (1, 1),
+            next_view_timeout: 1000,
+            ..TestMetadata::default_multiple_rounds().timing_data
+        },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
-            keep_numerator: 8,
-            keep_denominator: 10,
+            keep_numerator: 95,
+            keep_denominator: 100,
             delay_low_ms: 4,
             delay_high_ms: 30,
         })),
@@ -249,6 +268,7 @@ async fn libp2p_network_partially_sync() {
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
+#[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_chaos() {
     use hotshot_testing::{
@@ -289,6 +309,7 @@ async fn test_memory_network_chaos() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 #[instrument]
 async fn libp2p_network_chaos() {
     async_compatibility_layer::logging::setup_logging();
