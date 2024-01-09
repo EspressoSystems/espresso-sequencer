@@ -44,18 +44,6 @@ contract LightClientCommonTest is Test {
         assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
     }
 
-    /// @dev assertEq for `struct LightClientState`
-    function assertEqState(LC.LightClientState memory a, LC.LightClientState memory b) public {
-        assertEq(a.viewNum, b.viewNum);
-        assertEq(a.blockHeight, b.blockHeight);
-        assertEq(a.blockCommRoot, b.blockCommRoot);
-        assertEq(a.feeLedgerComm, b.feeLedgerComm);
-        assertEq(a.stakeTableBlsKeyComm, b.stakeTableBlsKeyComm);
-        assertEq(a.stakeTableSchnorrKeyComm, b.stakeTableSchnorrKeyComm);
-        assertEq(a.stakeTableAmountComm, b.stakeTableAmountComm);
-        assertEq(a.threshold, b.threshold);
-    }
-
     /// @dev helper getter since solidity doesn't return struct but tuples only
     function getGenesisState() public view returns (LC.LightClientState memory) {
         (
@@ -116,8 +104,8 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     /// block.
     function test_CorrectInitialization() external {
         assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);
-        assertEqState(getGenesisState(), genesis);
-        assertEqState(getFinalizedState(), genesis);
+        assertEq(abi.encode(getGenesisState()), abi.encode(genesis));
+        assertEq(abi.encode(getFinalizedState()), abi.encode(genesis));
         assert(lc.currentEpoch() == 0);
 
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
@@ -222,7 +210,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
 
             // check if LightClient.sol states are updated correctly
-            assertEqState(getFinalizedState(), states[i]);
+            assertEq(abi.encode(getFinalizedState()), abi.encode(states[i]));
             // check against hardcoded epoch advancement expectation
             if (i == BLOCKS_PER_EPOCH_TEST) {
                 // first block of a new epoch (from epoch 2) should update the following

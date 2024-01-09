@@ -101,12 +101,6 @@ contract PlonkVerifierCommonTest is Test {
 
         return (vk, proof, chal, evalData);
     }
-
-    /// Thin wrapper to ensure two G1 points are the same
-    function assertEqG1Point(BN254.G1Point memory a, BN254.G1Point memory b) public {
-        assertEq(BN254.BaseField.unwrap(a.x), BN254.BaseField.unwrap(b.x));
-        assertEq(BN254.BaseField.unwrap(a.y), BN254.BaseField.unwrap(b.y));
-    }
 }
 
 contract PlonkVerifier_constants_Test is Test {
@@ -542,9 +536,12 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         for (uint256 i = 0; i < l; i++) {
             infoCommScalars[i] = BN254.ScalarField.wrap(info.commScalars[i]);
         }
-        assertEqG1Point(BN254.multiScalarMul(info.commBases, infoCommScalars), scalarsAndBasesProd);
-        assertEqG1Point(info.openingProof, openingProof);
-        assertEqG1Point(info.shiftedOpeningProof, shiftedOpeningProof);
+        assertEq(
+            abi.encode(BN254.multiScalarMul(info.commBases, infoCommScalars)),
+            abi.encode(scalarsAndBasesProd)
+        );
+        assertEq(abi.encode(info.openingProof), abi.encode(openingProof));
+        assertEq(abi.encode(info.shiftedOpeningProof), abi.encode(shiftedOpeningProof));
     }
 }
 
