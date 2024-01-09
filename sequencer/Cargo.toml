@@ -20,6 +20,7 @@ tempfile = "3.9.0"
 [dependencies]
 anyhow = "1.0"
 ark-bls12-381 = "0.4"
+ark-ed-on-bn254 = "0.4"
 ark-serialize = { version = "0.4", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
@@ -51,6 +52,8 @@ tokio-postgres = { version = "0.7", default-features = false, features = [ # dis
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-signature-key = { workspace = true }
+hotshot-stake-table = { workspace = true }
+hotshot-task = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
 
@@ -60,7 +63,7 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
-serde = { version = "1.0.194", features = ["derive"] }
+serde = { version = "1.0.195", features = ["derive"] }
 snafu = "0.7.4"
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
