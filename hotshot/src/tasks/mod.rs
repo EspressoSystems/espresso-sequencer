@@ -1,4 +1,4 @@
-//! Provides a number of tasks that run continuously on a [`HotShot`]
+//! Provides a number of tasks that run continuously
 
 use crate::{types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
@@ -12,7 +12,9 @@ use hotshot_task::{
     GeneratedStream, Merge,
 };
 use hotshot_task_impls::{
-    consensus::{consensus_event_filter, ConsensusTaskState, ConsensusTaskTypes},
+    consensus::{
+        consensus_event_filter, CommitmentAndMetadata, ConsensusTaskState, ConsensusTaskTypes,
+    },
     da::{DATaskState, DATaskTypes},
     events::HotShotEvent,
     network::{
@@ -222,12 +224,17 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((payload_commitment, metadata)),
+        payload_commitment_and_metadata: Some(CommitmentAndMetadata {
+            commitment: payload_commitment,
+            metadata,
+            is_genesis: true,
+        }),
         api: c_api.clone(),
         _pd: PhantomData,
-        vote_collector: None,
-        timeout_vote_collector: None,
+        vote_collector: None.into(),
+        timeout_vote_collector: None.into(),
         timeout_task: None,
+        timeout_cert: None,
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
         vid_shares: HashMap::new(),
@@ -359,7 +366,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         da_network: c_api.inner.networks.da_network.clone().into(),
         quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
         cur_view: TYPES::Time::new(0),
-        vote_collector: None,
+        vote_collector: None.into(),
         event_stream: event_stream.clone(),
         public_key: c_api.public_key().clone(),
         private_key: c_api.private_key().clone(),
@@ -474,8 +481,10 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         private_key: api.private_key().clone(),
         api,
         num_timeouts_tracked: 0,
-        replica_task_map: HashMap::default(),
-        relay_task_map: HashMap::default(),
+        replica_task_map: HashMap::default().into(),
+        pre_commit_relay_map: HashMap::default().into(),
+        commit_relay_map: HashMap::default().into(),
+        finalize_relay_map: HashMap::default().into(),
         view_sync_timeout: Duration::new(10, 0),
         id: handle.hotshot.inner.id,
         last_garbage_collected_view: TYPES::Time::new(0),

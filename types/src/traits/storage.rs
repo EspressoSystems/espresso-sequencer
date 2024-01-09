@@ -1,6 +1,6 @@
 //! Abstraction over on-disk storage of node state
 
-use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use super::node_implementation::NodeType;
 use crate::{
     data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote::HasViewNumber,
 };
@@ -132,12 +132,9 @@ pub struct StoredView<TYPES: NodeType> {
     pub block_payload: Option<TYPES::BlockPayload>,
     /// transactions rejected in this view
     pub rejected: Vec<TYPES::Transaction>,
-    /// the timestamp this view was recv-ed in nanonseconds
-    #[derivative(PartialEq = "ignore")]
-    pub timestamp: i128,
     /// the proposer id
     #[derivative(PartialEq = "ignore")]
-    pub proposer_id: EncodedPublicKey,
+    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES> StoredView<TYPES>
@@ -154,7 +151,7 @@ where
         block_payload: Option<TYPES::BlockPayload>,
         parent_commitment: Commitment<Leaf<TYPES>>,
         rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
-        proposer_id: EncodedPublicKey,
+        proposer_id: TYPES::SignatureKey,
     ) -> Self {
         Self {
             view_number: qc.get_view_number(),
@@ -163,7 +160,6 @@ where
             block_header,
             block_payload,
             rejected,
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id,
         }
     }

@@ -1,16 +1,14 @@
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use crate::events::HotShotEvent;
-use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use bitvec::prelude::*;
 use either::Either::{self, Left, Right};
-use futures::FutureExt;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
-    task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEvent, TaskBuilder},
+    task::{HotShotTaskCompleted, TS},
+    task_impls::HSTWithEvent,
 };
 use hotshot_types::{
     simple_certificate::{
@@ -175,12 +173,11 @@ pub struct AccumulatorInfo<TYPES: NodeType> {
 /// Generic function for spawnnig a vote task.  Returns the event stream id of the spawned task if created
 /// # Panics
 /// Calls unwrap but should never panic.
-pub async fn spawn_vote_accumulator<TYPES, VOTE, CERT>(
+pub async fn create_vote_accumulator<TYPES, VOTE, CERT>(
     info: &AccumulatorInfo<TYPES>,
     vote: VOTE,
     event: HotShotEvent<TYPES>,
-    name: String,
-) -> Option<(TYPES::Time, usize, usize)>
+) -> Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>
 where
     TYPES: NodeType,
     VOTE: Vote<TYPES>
@@ -227,30 +224,7 @@ where
     }
 
     state = result.1;
-
-    let relay_handle_event = HandleEvent(Arc::new(
-        move |event, state: VoteCollectionTaskState<TYPES, VOTE, CERT>| {
-            async move { state.handle_event(event).await }.boxed()
-        },
-    ));
-
-    let filter = FilterEvent(Arc::new(
-        <VoteCollectionTaskState<TYPES, VOTE, CERT> as HandleVoteEvent<TYPES, VOTE, CERT>>::filter,
-    ));
-    let builder = TaskBuilder::<VoteTaskStateTypes<TYPES, VOTE, CERT>>::new(name)
-        .register_event_stream(state.event_stream.clone(), filter)
-        .await
-        .register_registry(&mut info.registry.clone())
-        .await
-        .register_state(state)
-        .register_event_handler(relay_handle_event);
-
-    let event_stream_id = builder.get_stream_id().unwrap();
-    let id = builder.get_task_id().unwrap();
-
-    let _task = async_spawn(async move { VoteTaskStateTypes::build(builder).launch().await });
-
-    Some((vote.get_view_number(), id, event_stream_id))
+    Some(state)
 }
 
 /// Alias for Quorum vote accumulator
