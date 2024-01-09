@@ -107,3 +107,5 @@ spin_sleep = "1.1"
 surf = "2.3"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tempdir = "0.3"
+# Adding since it was showing some warnings in the `testing/mocks.rs`
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.5"}
