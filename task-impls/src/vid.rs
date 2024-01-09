@@ -1,5 +1,9 @@
 use crate::events::HotShotEvent;
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::spawn_blocking;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::spawn_blocking;
 use hotshot_task::{
     event_stream::ChannelStream,
     global_registry::GlobalRegistry,
@@ -90,8 +94,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let chunk_size = 1 << num_quorum_committee.ilog2();
 
                 // calculate vid shares
-                let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
-                let vid_disperse = vid.disperse(encoded_transactions.clone()).unwrap();
+                let vid_disperse = spawn_blocking(move || {
+                    let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
+                     vid.disperse(encoded_transactions.clone()).unwrap()
+                })
+                .await;
+
 
                 // send the commitment and metadata to consensus for block building
                 self.event_stream
