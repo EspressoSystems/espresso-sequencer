@@ -23,11 +23,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-import { CommonBase } from "forge-std/Base.sol";
-import { StdCheats } from "forge-std/StdCheats.sol";
-import { StdUtils } from "forge-std/StdUtils.sol";
-
-contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
+contract StakeTableHandler is Test {
     StakeTable_Test private testStakeTableContract;
     S public stakeTable;
     address public tokenCreator;

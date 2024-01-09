@@ -56,11 +56,103 @@ pub mod stake_table_handler {
             }),
             functions: ::core::convert::From::from([
                 (
+                    ::std::borrow::ToOwned::to_owned("IS_TEST"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("IS_TEST"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bool"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("advanceEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("advanceEpoch"),
                         inputs: ::std::vec![],
                         outputs: ::std::vec![],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("excludeArtifacts"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("excludeArtifacts"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("excludedArtifacts_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::String,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("string[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("excludeContracts"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("excludeContracts"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("excludedContracts_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Address,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("excludeSenders"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("excludeSenders"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("excludedSenders_"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Address,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("failed"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("failed"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bool"),
+                            ),
+                        },],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                     },],
@@ -317,6 +409,128 @@ pub mod stake_table_handler {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("targetArtifactSelectors"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("targetArtifactSelectors",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("targetedArtifactSelectors_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                        ::ethers::core::abi::ethabi::ParamType::Address,
+                                        ::ethers::core::abi::ethabi::ParamType::Array(
+                                            ::std::boxed::Box::new(
+                                                ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                                    4usize
+                                                ),
+                                            ),
+                                        ),
+                                    ],),
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct StdInvariant.FuzzSelector[]",
+                                ),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("targetArtifacts"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("targetArtifacts"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("targetedArtifacts_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::String,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("string[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("targetContracts"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("targetContracts"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("targetedContracts_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Address,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("targetSelectors"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("targetSelectors"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("targetedSelectors_",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                        ::ethers::core::abi::ethabi::ParamType::Address,
+                                        ::ethers::core::abi::ethabi::ParamType::Array(
+                                            ::std::boxed::Box::new(
+                                                ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                                    4usize
+                                                ),
+                                            ),
+                                        ),
+                                    ],),
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct StdInvariant.FuzzSelector[]",
+                                ),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("targetSenders"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("targetSenders"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("targetedSenders_"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                ::std::boxed::Box::new(
+                                    ::ethers::core::abi::ethabi::ParamType::Address,
+                                ),
+                            ),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address[]"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("token"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("token"),
@@ -477,7 +691,375 @@ pub mod stake_table_handler {
                     },],
                 ),
             ]),
-            events: ::std::collections::BTreeMap::new(),
+            events: ::core::convert::From::from([
+                (
+                    ::std::borrow::ToOwned::to_owned("log"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::String,
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_address"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_address"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_array"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_array"),
+                            inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                    ::std::boxed::Box::new(
+                                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ),
+                                ),
+                                indexed: false,
+                            },],
+                            anonymous: false,
+                        },
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_array"),
+                            inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                    ::std::boxed::Box::new(
+                                        ::ethers::core::abi::ethabi::ParamType::Int(256usize),
+                                    ),
+                                ),
+                                indexed: false,
+                            },],
+                            anonymous: false,
+                        },
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_array"),
+                            inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                    ::std::boxed::Box::new(
+                                        ::ethers::core::abi::ethabi::ParamType::Address,
+                                    ),
+                                ),
+                                indexed: false,
+                            },],
+                            anonymous: false,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_bytes"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_bytes"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_bytes32"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_bytes32"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_int"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_int"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Int(256usize),
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_address"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_address"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_array"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_named_array"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("key"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("val"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                        ::std::boxed::Box::new(
+                                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                        ),
+                                    ),
+                                    indexed: false,
+                                },
+                            ],
+                            anonymous: false,
+                        },
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_named_array"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("key"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("val"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                        ::std::boxed::Box::new(
+                                            ::ethers::core::abi::ethabi::ParamType::Int(256usize),
+                                        ),
+                                    ),
+                                    indexed: false,
+                                },
+                            ],
+                            anonymous: false,
+                        },
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("log_named_array"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("key"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("val"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                        ::std::boxed::Box::new(
+                                            ::ethers::core::abi::ethabi::ParamType::Address,
+                                        ),
+                                    ),
+                                    indexed: false,
+                                },
+                            ],
+                            anonymous: false,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_bytes"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_bytes"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_bytes32"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_bytes32"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_decimal_int"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_decimal_int",),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Int(256usize),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("decimals"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_decimal_uint"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_decimal_uint",),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("decimals"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_int"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_int"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Int(256usize),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_string"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_string"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_named_uint"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_named_uint"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("key"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("val"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_string"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_string"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::String,
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("log_uint"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("log_uint"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("logs"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("logs"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+            ]),
             errors: ::std::collections::BTreeMap::new(),
             receive: false,
             fallback: false,
@@ -487,12 +1069,12 @@ pub mod stake_table_handler {
     pub static STAKETABLEHANDLER_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
     #[rustfmt::skip]
-    const __BYTECODE: &[u8] = b"`\x80`@R4\x80\x15b\0\0\x11W`\0\x80\xFD[P`@Qb\0\x19\xAD8\x03\x80b\0\x19\xAD\x839\x81\x01`@\x81\x90Rb\0\x004\x91b\0\x01hV[`\x10\x80T`\x01`\x01`\xA0\x1B\x03\x80\x88\x16`\x01`\x01`\xA0\x1B\x03\x19\x92\x83\x16\x17\x90\x92U`\x12\x80T\x86\x84\x16\x90\x83\x16\x17\x90U`\x11\x80T\x87\x84\x16\x90\x83\x16\x17\x90U`\x15\x80T\x92\x85\x16\x92\x90\x91\x16\x91\x90\x91\x17\x90U\x80Qb\0\0\x93\x90`\x16\x90` \x84\x01\x90b\0\0\xA6V[PP`\x16T`\x17UPb\0\x02\x94\x92PPPV[\x82\x80T\x82\x82U\x90`\0R` `\0 \x90\x81\x01\x92\x82\x15b\0\0\xFEW\x91` \x02\x82\x01[\x82\x81\x11\x15b\0\0\xFEW\x82Q\x82T`\x01`\x01`\xA0\x1B\x03\x19\x16`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x17\x82U` \x90\x92\x01\x91`\x01\x90\x91\x01\x90b\0\0\xC7V[Pb\0\x01\x0C\x92\x91Pb\0\x01\x10V[P\x90V[[\x80\x82\x11\x15b\0\x01\x0CW`\0\x81U`\x01\x01b\0\x01\x11V[`\x01`\x01`\xA0\x1B\x03\x81\x16\x81\x14b\0\x01=W`\0\x80\xFD[PV[\x80Qb\0\x01M\x81b\0\x01'V[\x91\x90PV[cNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0\x80`\0\x80`\0`\xA0\x86\x88\x03\x12\x15b\0\x01\x81W`\0\x80\xFD[\x85Qb\0\x01\x8E\x81b\0\x01'V[\x80\x95PP` \x80\x87\x01Qb\0\x01\xA3\x81b\0\x01'V[`@\x88\x01Q\x90\x95Pb\0\x01\xB6\x81b\0\x01'V[``\x88\x01Q\x90\x94Pb\0\x01\xC9\x81b\0\x01'V[`\x80\x88\x01Q\x90\x93P`\x01`\x01`@\x1B\x03\x80\x82\x11\x15b\0\x01\xE7W`\0\x80\xFD[\x81\x89\x01\x91P\x89`\x1F\x83\x01\x12b\0\x01\xFCW`\0\x80\xFD[\x81Q\x81\x81\x11\x15b\0\x02\x11Wb\0\x02\x11b\0\x01RV[\x80`\x05\x1B`@Q`\x1F\x19`?\x83\x01\x16\x81\x01\x81\x81\x10\x85\x82\x11\x17\x15b\0\x029Wb\0\x029b\0\x01RV[`@R\x91\x82R\x84\x82\x01\x92P\x83\x81\x01\x85\x01\x91\x8C\x83\x11\x15b\0\x02XW`\0\x80\xFD[\x93\x85\x01\x93[\x82\x85\x10\x15b\0\x02\x81Wb\0\x02q\x85b\0\x01@V[\x84R\x93\x85\x01\x93\x92\x85\x01\x92b\0\x02]V[\x80\x96PPPPPPP\x92\x95P\x92\x95\x90\x93PV[a\x17\t\x80b\0\x02\xA4`\09`\0\xF3\xFE`\x80`@R4\x80\x15a\0\x10W`\0\x80\xFD[P`\x046\x10a\x01BW`\x005`\xE0\x1C\x80c\x92H\xDDD\x11a\0\xB8W\x80c\xC2;\xBA\xC5\x11a\0|W\x80c\xC2;\xBA\xC5\x14a\x02\xD9W\x80c\xDB\x84%,\x14a\x02\xF3W\x80c\xE3Y%R\x14a\x03\x06W\x80c\xF5\xA0n\x9D\x14a\x03[W\x80c\xFA\x18/\xA1\x14a\x03hW\x80c\xFC\x0CTj\x14a\x03{W`\0\x80\xFD[\x80c\x92H\xDDD\x14a\x02hW\x80c\x9601h\x14a\x02\x82W\x80c\xB5p\x0Eh\x14a\x02\x9CW\x80c\xBBG\x10\xC5\x14a\x02\xAFW\x80c\xBC\xC4\xF0\xDD\x14a\x02\xC6W`\0\x80\xFD[\x80c<\xF8\x0El\x11a\x01\nW\x80c<\xF8\x0El\x14a\x01\xFCW\x80cRu/\xCE\x14a\x02\x04W\x80c\\\x05\x03G\x14a\x02\x1CW\x80cr\x1Ce\x13\x14a\x02/W\x80c\x7F\xAE\xB4\xEF\x14a\x02BW\x80c\x88M\xA7}\x14a\x02UW`\0\x80\xFD[\x80c\x01v\xA3\xE4\x14a\x01GW\x80c\x15]\xD5\xEE\x14a\x01~W\x80c%\xA2\xC5\x9B\x14a\x01\x93W\x80c*\x1B\xF7d\x14a\x01\xADW\x80c6[\x98\xB2\x14a\x01\xD1W[`\0\x80\xFD[`\x18Ta\x01a\x90`\x01`\x80\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`@Q`\x01`\x01`@\x1B\x03\x90\x91\x16\x81R` \x01[`@Q\x80\x91\x03\x90\xF3[a\x01\x91a\x01\x8C6`\x04a\x13\x16V[a\x03\x8EV[\0[`\x19Ta\x01a\x90`\x01`\x88\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1ATa\x01\xC1\x90`\x01`@\x1B\x90\x04`\xFF\x16\x81V[`@Q\x90\x15\x15\x81R` \x01a\x01uV[a\x01\xE4a\x01\xDF6`\x04a\x13\x16V[a\x05\xD8V[`@Q`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x81R` \x01a\x01uV[a\x01\x91a\x06\x02V[`\x19Ta\x01a\x90a\x01\0\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x10Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x01\x91a\x02=6`\x04a\x13\x16V[a\x06\xEAV[a\x01\x91a\x02P6`\x04a\x13GV[a\n0V[`\x1ATa\x01a\x90`\x01`\x01`@\x1B\x03\x16\x81V[`\x19Ta\x01a\x90`\x01`H\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x18Ta\x01a\x90`\x01`\xC0\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x15Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02\xB8`\x17T\x81V[`@Q\x90\x81R` \x01a\x01uV[`\x18Ta\x01a\x90`\x01`\x01`@\x1B\x03\x16\x81V[`\x18Ta\x01a\x90`\x01`@\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x11Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x03;a\x03\x146`\x04a\x13\x16V[`\x13` R`\0\x90\x81R`@\x90 \x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x92\x90\x91\x84V[`@\x80Q\x94\x85R` \x85\x01\x93\x90\x93R\x91\x83\x01R``\x82\x01R`\x80\x01a\x01uV[`\x19Ta\x01\xC1\x90`\xFF\x16\x81V[a\x03;a\x03v6`\x04a\x13\x16V[a\x0CLV[`\x12Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[`\0a\x03\xAA\x82`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[a\x0C\x86V[`\0\x81\x81R`\x13` \x90\x81R`@\x80\x83 \x81Q`\x80\x81\x01\x83R\x81T\x81R`\x01\x82\x01T\x81\x85\x01R`\x02\x82\x01T\x81\x84\x01R`\x03\x90\x91\x01T``\x82\x01R`\x15T\x82Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x92Q\x95\x96P\x90\x94`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92cvg\x18\x08\x92`\x04\x80\x82\x01\x93\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x04,W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x04P\x91\x90a\x13\xB5V[\x90P`d`\0a\x04`\x82\x84a\x13\xD2V[`\x15T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x04\xAFW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x04\xC3W=`\0\x80>=`\0\xFD[PP`\x16\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x93Pc\xCAf\x9F\xA7\x92P\x88\x90\x81\x10a\x04\xF7Wa\x04\xF7a\x13\xF9V[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x05DW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x05XW=`\0\x80>=`\0\xFD[PP`\x10T`@Qc\x01\x84\x95\xE3`\xE3\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92Pc\x0C$\xAF\x18\x91Pa\x05\x8C\x90\x87\x90`\x04\x01a\x14\x0FV[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x05\xABW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x05\xCF\x91\x90a\x13\xB5V[PPPPPPPV[`\x16\x81\x81T\x81\x10a\x05\xE8W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 \x01T`\x01`\x01`\xA0\x1B\x03\x16\x90P\x81V[`\x15T`@\x80Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x90Q`\0\x92`\x01`\x01`\xA0\x1B\x03\x16\x91cvg\x18\x08\x91`\x04\x80\x83\x01\x92` \x92\x91\x90\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x06LW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x06p\x91\x90a\x13\xB5V[\x90P`\0a\x06\x7F\x82`\x01a\x13\xD2V[`\x15T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x06\xCEW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x06\xE2W=`\0\x80>=`\0\xFD[PPPPPPV[`\0a\x07\x01\x82`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[`\x10T`@\x80Qc;\t\xC2g`\xE0\x1B\x81R\x81Q\x93\x94P`\x01`\x01`\xA0\x1B\x03\x90\x92\x16\x92c;\t\xC2g\x92`\x04\x80\x82\x01\x93\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x07JW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x07n\x91\x90a\x14:V[`\x19\x80Tp\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16`\x01`H\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16\x17a\x01\0\x93\x90\x92\x16\x92\x90\x92\x02\x17\x90U`\x16\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x91c\xCAf\x9F\xA7\x91\x84\x90\x81\x10a\x07\xE2Wa\x07\xE2a\x13\xF9V[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x08/W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x08CW=`\0\x80>=`\0\xFD[PP`\x10T`\0\x84\x81R`\x13` R`@\x80\x82 \x90QcJ\xA7\xC2\x7F`\xE0\x1B\x81R\x81T`\x04\x82\x01R`\x01\x82\x01T`$\x82\x01R`\x02\x82\x01T`D\x82\x01R`\x03\x90\x91\x01T`d\x82\x01R\x90\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91PcJ\xA7\xC2\x7F\x90`\x84\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x08\xC1W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x08\xE5\x91\x90a\x14iV[\x90P`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xE43=\xB5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\t:W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\t^\x91\x90a\x13\xB5V[`\x19`\x11a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xD6{l\xA5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\t\xD7W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\t\xFB\x91\x90a\x13\xB5V[`\x1A\x80T\x92\x15\x15`\x01`@\x1B\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x90\x93\x16`\x01`\x01`@\x1B\x03\x92\x90\x92\x16\x91\x90\x91\x17\x91\x90\x91\x17\x90UPPV[`\x10T`@\x80Qc\x0B\x14\xC1a`\xE2\x1B\x81R\x81Q`\x01`\x01`\xA0\x1B\x03\x90\x93\x16\x92c,S\x05\x84\x92`\x04\x80\x84\x01\x93\x91\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\nwW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\n\x9B\x91\x90a\x14:V[`\x18\x80To\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16`\x01`@\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16\x17\x92\x82\x16\x92\x90\x92\x17\x90\x91U`\x11T`\0\x91a\n\xF9\x91`\x01`\x01`\xA0\x1B\x03\x16\x90`\xFF\x86\x16\x90\x85\x16a\x0C\xCAV[\x90P`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xA6\xE2\xE3\xDC`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0BNW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0Br\x91\x90a\x13\xB5V[`\x18`\x10a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\x16\xFE\xFE\xD7`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0B\xEBW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C\x0F\x91\x90a\x13\xB5V[`\x18\x80T`\x01`\x01`\xC0\x1B\x03\x16`\x01`\xC0\x1B`\x01`\x01`@\x1B\x03\x93\x90\x93\x16\x92\x90\x92\x02\x91\x90\x91\x17\x90U`\x19\x80T`\xFF\x19\x16\x91\x15\x15\x91\x90\x91\x17\x90UPPV[`\x14\x81\x81T\x81\x10a\x0C\\W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 `\x04\x90\x91\x02\x01\x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x93P\x91\x90\x84V[`\0a\x0C\x93\x84\x84\x84a\x10\xB4V[\x90Pa\x0C\xC3`@Q\x80`@\x01`@R\x80`\x0C\x81R` \x01k\x10\x9B\xDD[\x99\x08\x14\x99\\\xDD[\x1D`\xA2\x1B\x81RP\x82a\x12|V[\x93\x92PPPV[`\0a\x0C\xE1\x83`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[\x92P`\0\x83\x90P`\0`\x16\x85\x81T\x81\x10a\x0C\xFDWa\x0C\xFDa\x13\xF9V[`\0\x91\x82R` \x82 \x01T`\x0FT`@Qc5\xD6\x9C\x89`\xE1\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8A\x81\x16`\x04\x83\x01R`\xFF\x87\x16`$\x83\x01R\x92\x83\x16\x94P\x83\x92\x83\x92\x16\x90ck\xAD9\x12\x90`D\x01a\x01\0`@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\reW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r\x89\x91\x90a\x15!V[\x92P\x92P\x92P`\0a\r\x9E\x88`\0`da\x0C\x86V[`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x87\x16`\x04\x82\x01R\x90\x91Pa\x03\xE8\x90sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\r\xFAW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0E\x0EW=`\0\x80>=`\0\xFD[PP`\x12T`@Qc\xA9\x05\x9C\xBB`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8F\x81\x16`\x04\x83\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x83\x01R\x90\x91\x16\x92Pc\xA9\x05\x9C\xBB\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0EmW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0E\x91\x91\x90a\x14iV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0E\xE7W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0E\xFBW=`\0\x80>=`\0\xFD[PP`\x12T`\x10T`@Qc\t^\xA7\xB3`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x91\x82\x16`\x04\x82\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x82\x01R\x91\x16\x92Pc\t^\xA7\xB3\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0F\\W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0F\x80\x91\x90a\x14iV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0F\xD6W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0F\xEAW=`\0\x80>=`\0\xFD[PP`\x10T`@Qc\xC7,\xC7\x17`\xE0\x1B\x81R`\0\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91Pc\xC7,\xC7\x17\x90a\x10+\x90\x89\x90\x89\x90\x88\x90\x87\x90\x8B\x90\x8A\x90`\x04\x01a\x15\xB8V[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x10JW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x10n\x91\x90a\x14iV[`\0\x9B\x8CR`\x13` \x90\x81R`@\x9C\x8D\x90 \x88Q\x81U\x90\x88\x01Q`\x01\x82\x01U\x9B\x87\x01Q`\x02\x8D\x01U``\x90\x96\x01Q`\x03\x90\x9B\x01\x9A\x90\x9AUP\x92\x99\x98PPPPPPPPPV[`\0\x81\x83\x11\x15a\x110W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`>`$\x82\x01R\x7FStdUtils bound(uint256,uint256,u`D\x82\x01R\x7Fint256): Max is less than min.\0\0`d\x82\x01R`\x84\x01`@Q\x80\x91\x03\x90\xFD[\x82\x84\x10\x15\x80\x15a\x11@WP\x81\x84\x11\x15[\x15a\x11LWP\x82a\x0C\xC3V[`\0a\x11X\x84\x84a\x13\x9CV[a\x11c\x90`\x01a\x16LV[\x90P`\x03\x85\x11\x15\x80\x15a\x11uWP\x84\x81\x11[\x15a\x11\x8CWa\x11\x84\x85\x85a\x16LV[\x91PPa\x0C\xC3V[a\x11\x99`\x03`\0\x19a\x13\x9CV[\x85\x10\x15\x80\x15a\x11\xB2WPa\x11\xAF\x85`\0\x19a\x13\x9CV[\x81\x11[\x15a\x11\xCDWa\x11\xC3\x85`\0\x19a\x13\x9CV[a\x11\x84\x90\x84a\x13\x9CV[\x82\x85\x11\x15a\x12#W`\0a\x11\xE1\x84\x87a\x13\x9CV[\x90P`\0a\x11\xEF\x83\x83a\x16_V[\x90P\x80`\0\x03a\x12\x04W\x84\x93PPPPa\x0C\xC3V[`\x01a\x12\x10\x82\x88a\x16LV[a\x12\x1A\x91\x90a\x13\x9CV[\x93PPPa\x12tV[\x83\x85\x10\x15a\x12tW`\0a\x127\x86\x86a\x13\x9CV[\x90P`\0a\x12E\x83\x83a\x16_V[\x90P\x80`\0\x03a\x12ZW\x85\x93PPPPa\x0C\xC3V[a\x12d\x81\x86a\x13\x9CV[a\x12o\x90`\x01a\x16LV[\x93PPP[P\x93\x92PPPV[`\0jconsole.log`\x01`\x01`\xA0\x1B\x03\x16\x83\x83`@Q`$\x01a\x12\xA6\x92\x91\x90a\x16\xA5V[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x91\x81R` \x82\x01\x80Q`\x01`\x01`\xE0\x1B\x03\x16c-\x83\x9C\xB3`\xE2\x1B\x17\x90RQa\x12\xDB\x91\x90a\x16\xE0V[`\0`@Q\x80\x83\x03\x81\x85Z\xFA\x91PP=\x80`\0\x81\x14a\x06\xE2W`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x06\xE2V[`\0` \x82\x84\x03\x12\x15a\x13(W`\0\x80\xFD[P5\x91\x90PV[`\x01`\x01`@\x1B\x03\x81\x16\x81\x14a\x13DW`\0\x80\xFD[PV[`\0\x80`@\x83\x85\x03\x12\x15a\x13ZW`\0\x80\xFD[\x825`\xFF\x81\x16\x81\x14a\x13kW`\0\x80\xFD[\x91P` \x83\x015a\x13{\x81a\x13/V[\x80\x91PP\x92P\x92\x90PV[cNH{q`\xE0\x1B`\0R`\x11`\x04R`$`\0\xFD[\x81\x81\x03\x81\x81\x11\x15a\x13\xAFWa\x13\xAFa\x13\x86V[\x92\x91PPV[`\0` \x82\x84\x03\x12\x15a\x13\xC7W`\0\x80\xFD[\x81Qa\x0C\xC3\x81a\x13/V[`\x01`\x01`@\x1B\x03\x81\x81\x16\x83\x82\x16\x01\x90\x80\x82\x11\x15a\x13\xF2Wa\x13\xF2a\x13\x86V[P\x92\x91PPV[cNH{q`\xE0\x1B`\0R`2`\x04R`$`\0\xFD[\x81Q\x81R` \x80\x83\x01Q\x90\x82\x01R`@\x80\x83\x01Q\x90\x82\x01R``\x80\x83\x01Q\x90\x82\x01R`\x80\x81\x01a\x13\xAFV[`\0\x80`@\x83\x85\x03\x12\x15a\x14MW`\0\x80\xFD[\x82Qa\x14X\x81a\x13/V[` \x84\x01Q\x90\x92Pa\x13{\x81a\x13/V[`\0` \x82\x84\x03\x12\x15a\x14{W`\0\x80\xFD[\x81Q\x80\x15\x15\x81\x14a\x0C\xC3W`\0\x80\xFD[`@\x80Q\x90\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x14\xBBWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`@R\x90V[`@Q`\x80\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x14\xBBWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0`@\x82\x84\x03\x12\x15a\x15\x03W`\0\x80\xFD[a\x15\x0Ba\x14\x8BV[\x90P\x81Q\x81R` \x82\x01Q` \x82\x01R\x92\x91PPV[`\0\x80`\0\x83\x85\x03a\x01\0\x81\x12\x15a\x158W`\0\x80\xFD[`\x80\x81\x12\x15a\x15FW`\0\x80\xFD[a\x15Na\x14\xC1V[\x85Q\x81R` \x86\x01Q` \x82\x01R`@\x86\x01Q`@\x82\x01R``\x86\x01Q``\x82\x01R\x80\x94PP`@`\x7F\x19\x82\x01\x12\x15a\x15\x86W`\0\x80\xFD[Pa\x15\x8Fa\x14\x8BV[`\x80\x85\x01Q\x81R`\xA0\x85\x01Q` \x82\x01R\x91Pa\x15\xAF\x85`\xC0\x86\x01a\x14\xF1V[\x90P\x92P\x92P\x92V[\x86Q\x81R` \x80\x88\x01Q\x90\x82\x01R`@\x80\x88\x01Q\x90\x82\x01R``\x80\x88\x01Q\x90\x82\x01Ra\x01`\x81\x01\x86Q`\x80\x83\x01R` \x87\x01Q`\xA0\x83\x01R`\x01`\x01`@\x1B\x03\x80\x87\x16`\xC0\x84\x01R`\x02\x86\x10a\x16\x1EWcNH{q`\xE0\x1B`\0R`!`\x04R`$`\0\xFD[\x85`\xE0\x84\x01R\x84Qa\x01\0\x84\x01R` \x85\x01Qa\x01 \x84\x01R\x80\x84\x16a\x01@\x84\x01RP\x97\x96PPPPPPPV[\x80\x82\x01\x80\x82\x11\x15a\x13\xAFWa\x13\xAFa\x13\x86V[`\0\x82a\x16|WcNH{q`\xE0\x1B`\0R`\x12`\x04R`$`\0\xFD[P\x06\x90V[`\0[\x83\x81\x10\x15a\x16\x9CW\x81\x81\x01Q\x83\x82\x01R` \x01a\x16\x84V[PP`\0\x91\x01RV[`@\x81R`\0\x83Q\x80`@\x84\x01Ra\x16\xC4\x81``\x85\x01` \x88\x01a\x16\x81V[` \x83\x01\x93\x90\x93RP`\x1F\x91\x90\x91\x01`\x1F\x19\x16\x01``\x01\x91\x90PV[`\0\x82Qa\x16\xF2\x81\x84` \x87\x01a\x16\x81V[\x91\x90\x91\x01\x92\x91PPV\xFE\xA1dsolcC\0\x08\x17\0\n";
+    const __BYTECODE: &[u8] = b"`\x80`@R`\0\x80T`\x01`\xFF\x19\x91\x82\x16\x81\x17\x90\x92U`\x04\x80T\x90\x91\x16\x90\x91\x17\x90U4\x80\x15b\0\0.W`\0\x80\xFD[P`@Qb\0\"\xFA8\x03\x80b\0\"\xFA\x839\x81\x01`@\x81\x90Rb\0\0Q\x91b\0\x01\x85V[`\x1C\x80T`\x01`\x01`\xA0\x1B\x03\x80\x88\x16`\x01`\x01`\xA0\x1B\x03\x19\x92\x83\x16\x17\x90\x92U`\x1E\x80T\x86\x84\x16\x90\x83\x16\x17\x90U`\x1D\x80T\x87\x84\x16\x90\x83\x16\x17\x90U`!\x80T\x92\x85\x16\x92\x90\x91\x16\x91\x90\x91\x17\x90U\x80Qb\0\0\xB0\x90`\"\x90` \x84\x01\x90b\0\0\xC3V[PP`\"T`#UPb\0\x02\xB1\x92PPPV[\x82\x80T\x82\x82U\x90`\0R` `\0 \x90\x81\x01\x92\x82\x15b\0\x01\x1BW\x91` \x02\x82\x01[\x82\x81\x11\x15b\0\x01\x1BW\x82Q\x82T`\x01`\x01`\xA0\x1B\x03\x19\x16`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x17\x82U` \x90\x92\x01\x91`\x01\x90\x91\x01\x90b\0\0\xE4V[Pb\0\x01)\x92\x91Pb\0\x01-V[P\x90V[[\x80\x82\x11\x15b\0\x01)W`\0\x81U`\x01\x01b\0\x01.V[`\x01`\x01`\xA0\x1B\x03\x81\x16\x81\x14b\0\x01ZW`\0\x80\xFD[PV[\x80Qb\0\x01j\x81b\0\x01DV[\x91\x90PV[cNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0\x80`\0\x80`\0`\xA0\x86\x88\x03\x12\x15b\0\x01\x9EW`\0\x80\xFD[\x85Qb\0\x01\xAB\x81b\0\x01DV[\x80\x95PP` \x80\x87\x01Qb\0\x01\xC0\x81b\0\x01DV[`@\x88\x01Q\x90\x95Pb\0\x01\xD3\x81b\0\x01DV[``\x88\x01Q\x90\x94Pb\0\x01\xE6\x81b\0\x01DV[`\x80\x88\x01Q\x90\x93P`\x01`\x01`@\x1B\x03\x80\x82\x11\x15b\0\x02\x04W`\0\x80\xFD[\x81\x89\x01\x91P\x89`\x1F\x83\x01\x12b\0\x02\x19W`\0\x80\xFD[\x81Q\x81\x81\x11\x15b\0\x02.Wb\0\x02.b\0\x01oV[\x80`\x05\x1B`@Q`\x1F\x19`?\x83\x01\x16\x81\x01\x81\x81\x10\x85\x82\x11\x17\x15b\0\x02VWb\0\x02Vb\0\x01oV[`@R\x91\x82R\x84\x82\x01\x92P\x83\x81\x01\x85\x01\x91\x8C\x83\x11\x15b\0\x02uW`\0\x80\xFD[\x93\x85\x01\x93[\x82\x85\x10\x15b\0\x02\x9EWb\0\x02\x8E\x85b\0\x01]V[\x84R\x93\x85\x01\x93\x92\x85\x01\x92b\0\x02zV[\x80\x96PPPPPPP\x92\x95P\x92\x95\x90\x93PV[a 9\x80b\0\x02\xC1`\09`\0\xF3\xFE`\x80`@R4\x80\x15a\0\x10W`\0\x80\xFD[P`\x046\x10a\x01\xF0W`\x005`\xE0\x1C\x80c\x91j\x17\xC6\x11a\x01\x0FW\x80c\xC2;\xBA\xC5\x11a\0\xA2W\x80c\xF5\xA0n\x9D\x11a\0qW\x80c\xF5\xA0n\x9D\x14a\x04xW\x80c\xFA\x18/\xA1\x14a\x04\x85W\x80c\xFAv&\xD4\x14a\x04\x98W\x80c\xFC\x0CTj\x14a\x04\xA5W`\0\x80\xFD[\x80c\xC2;\xBA\xC5\x14a\x03\xEEW\x80c\xDB\x84%,\x14a\x04\x08W\x80c\xE2\x0C\x9Fq\x14a\x04\x1BW\x80c\xE3Y%R\x14a\x04#W`\0\x80\xFD[\x80c\xB5p\x0Eh\x11a\0\xDEW\x80c\xB5p\x0Eh\x14a\x03\xA9W\x80c\xBAAO\xA6\x14a\x03\xBCW\x80c\xBBG\x10\xC5\x14a\x03\xC4W\x80c\xBC\xC4\xF0\xDD\x14a\x03\xDBW`\0\x80\xFD[\x80c\x91j\x17\xC6\x14a\x03eW\x80c\x92H\xDDD\x14a\x03mW\x80c\x9601h\x14a\x03\x87W\x80c\xB5P\x8A\xA9\x14a\x03\xA1W`\0\x80\xFD[\x80c?r\x86\xF4\x11a\x01\x87W\x80cr\x1Ce\x13\x11a\x01VW\x80cr\x1Ce\x13\x14a\x03\x17W\x80c\x7F\xAE\xB4\xEF\x14a\x03*W\x80c\x85\"l\x81\x14a\x03=W\x80c\x88M\xA7}\x14a\x03RW`\0\x80\xFD[\x80c?r\x86\xF4\x14a\x02\xCFW\x80cRu/\xCE\x14a\x02\xD7W\x80c\\\x05\x03G\x14a\x02\xEFW\x80cf\xD9\xA9\xA0\x14a\x03\x02W`\0\x80\xFD[\x80c*\x1B\xF7d\x11a\x01\xC3W\x80c*\x1B\xF7d\x14a\x02pW\x80c6[\x98\xB2\x14a\x02\x94W\x80c<\xF8\x0El\x14a\x02\xBFW\x80c>^<#\x14a\x02\xC7W`\0\x80\xFD[\x80c\x01v\xA3\xE4\x14a\x01\xF5W\x80c\x15]\xD5\xEE\x14a\x02,W\x80c\x1E\xD7\x83\x1C\x14a\x02AW\x80c%\xA2\xC5\x9B\x14a\x02VW[`\0\x80\xFD[`$Ta\x02\x0F\x90`\x01`\x80\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`@Q`\x01`\x01`@\x1B\x03\x90\x91\x16\x81R` \x01[`@Q\x80\x91\x03\x90\xF3[a\x02?a\x02:6`\x04a\x1AbV[a\x04\xB8V[\0[a\x02Ia\x07\x02V[`@Qa\x02#\x91\x90a\x1A{V[`%Ta\x02\x0F\x90`\x01`\x88\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`&Ta\x02\x84\x90`\x01`@\x1B\x90\x04`\xFF\x16\x81V[`@Q\x90\x15\x15\x81R` \x01a\x02#V[a\x02\xA7a\x02\xA26`\x04a\x1AbV[a\x07dV[`@Q`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x81R` \x01a\x02#V[a\x02?a\x07\x8EV[a\x02Ia\x08vV[a\x02Ia\x08\xD6V[`%Ta\x02\x0F\x90a\x01\0\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1CTa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x03\na\t6V[`@Qa\x02#\x91\x90a\x1A\xC8V[a\x02?a\x03%6`\x04a\x1AbV[a\n%V[a\x02?a\x0386`\x04a\x1B\x95V[a\rkV[a\x03Ea\x0F\x87V[`@Qa\x02#\x91\x90a\x1C$V[`&Ta\x02\x0F\x90`\x01`\x01`@\x1B\x03\x16\x81V[a\x03\na\x10WV[`%Ta\x02\x0F\x90`\x01`H\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`$Ta\x02\x0F\x90`\x01`\xC0\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[a\x03Ea\x11=V[`!Ta\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02\x84a\x12\rV[a\x03\xCD`#T\x81V[`@Q\x90\x81R` \x01a\x02#V[`$Ta\x02\x0F\x90`\x01`\x01`@\x1B\x03\x16\x81V[`$Ta\x02\x0F\x90`\x01`@\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1DTa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02Ia\x138V[a\x04Xa\x0416`\x04a\x1AbV[`\x1F` R`\0\x90\x81R`@\x90 \x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x92\x90\x91\x84V[`@\x80Q\x94\x85R` \x85\x01\x93\x90\x93R\x91\x83\x01R``\x82\x01R`\x80\x01a\x02#V[`%Ta\x02\x84\x90`\xFF\x16\x81V[a\x04Xa\x04\x936`\x04a\x1AbV[a\x13\x98V[`\0Ta\x02\x84\x90`\xFF\x16\x81V[`\x1ETa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[`\0a\x04\xD4\x82`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[a\x13\xD2V[`\0\x81\x81R`\x1F` \x90\x81R`@\x80\x83 \x81Q`\x80\x81\x01\x83R\x81T\x81R`\x01\x82\x01T\x81\x85\x01R`\x02\x82\x01T\x81\x84\x01R`\x03\x90\x91\x01T``\x82\x01R`!T\x82Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x92Q\x95\x96P\x90\x94`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92cvg\x18\x08\x92`\x04\x80\x82\x01\x93\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x05VW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x05z\x91\x90a\x1C\xB7V[\x90P`d`\0a\x05\x8A\x82\x84a\x1C\xD4V[`!T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x05\xD9W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x05\xEDW=`\0\x80>=`\0\xFD[PP`\"\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x93Pc\xCAf\x9F\xA7\x92P\x88\x90\x81\x10a\x06!Wa\x06!a\x1C\xFBV[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x06nW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x06\x82W=`\0\x80>=`\0\xFD[PP`\x1CT`@Qc\x01\x84\x95\xE3`\xE3\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92Pc\x0C$\xAF\x18\x91Pa\x06\xB6\x90\x87\x90`\x04\x01a\x1D\x11V[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x06\xD5W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x06\xF9\x91\x90a\x1C\xB7V[PPPPPPPV[```\r\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90[\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<W[PPPPP\x90P\x90V[`\"\x81\x81T\x81\x10a\x07tW`\0\x80\xFD[`\0\x91\x82R` \x90\x91 \x01T`\x01`\x01`\xA0\x1B\x03\x16\x90P\x81V[`!T`@\x80Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x90Q`\0\x92`\x01`\x01`\xA0\x1B\x03\x16\x91cvg\x18\x08\x91`\x04\x80\x83\x01\x92` \x92\x91\x90\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x07\xD8W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x07\xFC\x91\x90a\x1C\xB7V[\x90P`\0a\x08\x0B\x82`\x01a\x1C\xD4V[`!T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x08ZW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x08nW=`\0\x80>=`\0\xFD[PPPPPPV[```\x0F\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[```\x0E\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[```\x12\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW`\0\x84\x81R` \x90\x81\x90 `@\x80Q\x80\x82\x01\x82R`\x02\x86\x02\x90\x92\x01\x80T`\x01`\x01`\xA0\x1B\x03\x16\x83R`\x01\x81\x01\x80T\x83Q\x81\x87\x02\x81\x01\x87\x01\x90\x94R\x80\x84R\x93\x94\x91\x93\x85\x83\x01\x93\x92\x83\x01\x82\x82\x80\x15a\n\x04W` \x02\x82\x01\x91\x90`\0R` `\0 \x90`\0\x90[\x82\x82\x90T\x90a\x01\0\n\x90\x04`\xE0\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R` \x01\x90`\x04\x01\x90` \x82`\x03\x01\x04\x92\x83\x01\x92`\x01\x03\x82\x02\x91P\x80\x84\x11a\t\xC6W\x90P[PPPPP\x81RPP\x81R` \x01\x90`\x01\x01\x90a\tZV[PPPP\x90P\x90V[`\0a\n<\x82`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[`\x1CT`@\x80Qc;\t\xC2g`\xE0\x1B\x81R\x81Q\x93\x94P`\x01`\x01`\xA0\x1B\x03\x90\x92\x16\x92c;\t\xC2g\x92`\x04\x80\x82\x01\x93\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\n\x85W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\n\xA9\x91\x90a\x1D<V[`%\x80Tp\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16`\x01`H\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16\x17a\x01\0\x93\x90\x92\x16\x92\x90\x92\x02\x17\x90U`\"\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x91c\xCAf\x9F\xA7\x91\x84\x90\x81\x10a\x0B\x1DWa\x0B\x1Da\x1C\xFBV[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0BjW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0B~W=`\0\x80>=`\0\xFD[PP`\x1CT`\0\x84\x81R`\x1F` R`@\x80\x82 \x90QcJ\xA7\xC2\x7F`\xE0\x1B\x81R\x81T`\x04\x82\x01R`\x01\x82\x01T`$\x82\x01R`\x02\x82\x01T`D\x82\x01R`\x03\x90\x91\x01T`d\x82\x01R\x90\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91PcJ\xA7\xC2\x7F\x90`\x84\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0B\xFCW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C \x91\x90a\x1DkV[\x90P`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xE43=\xB5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0CuW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C\x99\x91\x90a\x1C\xB7V[`%`\x11a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xD6{l\xA5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\r\x12W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r6\x91\x90a\x1C\xB7V[`&\x80T\x92\x15\x15`\x01`@\x1B\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x90\x93\x16`\x01`\x01`@\x1B\x03\x92\x90\x92\x16\x91\x90\x91\x17\x91\x90\x91\x17\x90UPPV[`\x1CT`@\x80Qc\x0B\x14\xC1a`\xE2\x1B\x81R\x81Q`\x01`\x01`\xA0\x1B\x03\x90\x93\x16\x92c,S\x05\x84\x92`\x04\x80\x84\x01\x93\x91\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\r\xB2W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r\xD6\x91\x90a\x1D<V[`$\x80To\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16`\x01`@\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16\x17\x92\x82\x16\x92\x90\x92\x17\x90\x91U`\x1DT`\0\x91a\x0E4\x91`\x01`\x01`\xA0\x1B\x03\x16\x90`\xFF\x86\x16\x90\x85\x16a\x14\x16V[\x90P`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xA6\xE2\xE3\xDC`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0E\x89W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0E\xAD\x91\x90a\x1C\xB7V[`$`\x10a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\x16\xFE\xFE\xD7`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0F&W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0FJ\x91\x90a\x1C\xB7V[`$\x80T`\x01`\x01`\xC0\x1B\x03\x16`\x01`\xC0\x1B`\x01`\x01`@\x1B\x03\x93\x90\x93\x16\x92\x90\x92\x02\x91\x90\x91\x17\x90U`%\x80T`\xFF\x19\x16\x91\x15\x15\x91\x90\x91\x17\x90UPPV[```\x11\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW\x83\x82\x90`\0R` `\0 \x01\x80Ta\x0F\xCA\x90a\x1D\x8DV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x0F\xF6\x90a\x1D\x8DV[\x80\x15a\x10CW\x80`\x1F\x10a\x10\x18Wa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x10CV[\x82\x01\x91\x90`\0R` `\0 \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x10&W\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x81R` \x01\x90`\x01\x01\x90a\x0F\xABV[```\x13\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW`\0\x84\x81R` \x90\x81\x90 `@\x80Q\x80\x82\x01\x82R`\x02\x86\x02\x90\x92\x01\x80T`\x01`\x01`\xA0\x1B\x03\x16\x83R`\x01\x81\x01\x80T\x83Q\x81\x87\x02\x81\x01\x87\x01\x90\x94R\x80\x84R\x93\x94\x91\x93\x85\x83\x01\x93\x92\x83\x01\x82\x82\x80\x15a\x11%W` \x02\x82\x01\x91\x90`\0R` `\0 \x90`\0\x90[\x82\x82\x90T\x90a\x01\0\n\x90\x04`\xE0\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R` \x01\x90`\x04\x01\x90` \x82`\x03\x01\x04\x92\x83\x01\x92`\x01\x03\x82\x02\x91P\x80\x84\x11a\x10\xE7W\x90P[PPPPP\x81RPP\x81R` \x01\x90`\x01\x01\x90a\x10{V[```\x10\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW\x83\x82\x90`\0R` `\0 \x01\x80Ta\x11\x80\x90a\x1D\x8DV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x11\xAC\x90a\x1D\x8DV[\x80\x15a\x11\xF9W\x80`\x1F\x10a\x11\xCEWa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x11\xF9V[\x82\x01\x91\x90`\0R` `\0 \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x11\xDCW\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x81R` \x01\x90`\x01\x01\x90a\x11aV[`\0\x80Ta\x01\0\x90\x04`\xFF\x16\x15a\x12-WP`\0Ta\x01\0\x90\x04`\xFF\x16\x90V[`\0sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-;\x15a\x133W`@\x80Qsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-` \x82\x01\x81\x90Re\x19\x98Z[\x19Y`\xD2\x1B\x82\x84\x01R\x82Q\x80\x83\x03\x84\x01\x81R``\x83\x01\x90\x93R`\0\x92\x90\x91a\x12\xBB\x91\x7Ff\x7F\x9Dp\xCAA\x1Dp\xEA\xD5\r\x8D\\\"\x07\r\xAF\xC3j\xD7_=\xCF^r7\xB2*\xDE\x9A\xEC\xC4\x91`\x80\x01a\x1D\xC7V[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x90\x82\x90Ra\x12\xD5\x91a\x1D\xF8V[`\0`@Q\x80\x83\x03\x81`\0\x86Z\xF1\x91PP=\x80`\0\x81\x14a\x13\x12W`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x13\x17V[``\x91P[P\x91PP\x80\x80` \x01\x90Q\x81\x01\x90a\x13/\x91\x90a\x1DkV[\x91PP[\x91\x90PV[```\x0C\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[` \x81\x81T\x81\x10a\x13\xA8W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 `\x04\x90\x91\x02\x01\x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x93P\x91\x90\x84V[`\0a\x13\xDF\x84\x84\x84a\x18\0V[\x90Pa\x14\x0F`@Q\x80`@\x01`@R\x80`\x0C\x81R` \x01k\x10\x9B\xDD[\x99\x08\x14\x99\\\xDD[\x1D`\xA2\x1B\x81RP\x82a\x19\xC8V[\x93\x92PPPV[`\0a\x14-\x83`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[\x92P`\0\x83\x90P`\0`\"\x85\x81T\x81\x10a\x14IWa\x14Ia\x1C\xFBV[`\0\x91\x82R` \x82 \x01T`\x1BT`@Qc5\xD6\x9C\x89`\xE1\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8A\x81\x16`\x04\x83\x01R`\xFF\x87\x16`$\x83\x01R\x92\x83\x16\x94P\x83\x92\x83\x92\x16\x90ck\xAD9\x12\x90`D\x01a\x01\0`@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x14\xB1W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x14\xD5\x91\x90a\x1E\xAAV[\x92P\x92P\x92P`\0a\x14\xEA\x88`\0`da\x13\xD2V[`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x87\x16`\x04\x82\x01R\x90\x91Pa\x03\xE8\x90sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x15FW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x15ZW=`\0\x80>=`\0\xFD[PP`\x1ET`@Qc\xA9\x05\x9C\xBB`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8F\x81\x16`\x04\x83\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x83\x01R\x90\x91\x16\x92Pc\xA9\x05\x9C\xBB\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x15\xB9W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x15\xDD\x91\x90a\x1DkV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x163W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x16GW=`\0\x80>=`\0\xFD[PP`\x1ET`\x1CT`@Qc\t^\xA7\xB3`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x91\x82\x16`\x04\x82\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x82\x01R\x91\x16\x92Pc\t^\xA7\xB3\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x16\xA8W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x16\xCC\x91\x90a\x1DkV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x17\"W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x176W=`\0\x80>=`\0\xFD[PP`\x1CT`@Qc\xC7,\xC7\x17`\xE0\x1B\x81R`\0\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91Pc\xC7,\xC7\x17\x90a\x17w\x90\x89\x90\x89\x90\x88\x90\x87\x90\x8B\x90\x8A\x90`\x04\x01a\x1FAV[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x17\x96W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x17\xBA\x91\x90a\x1DkV[`\0\x9B\x8CR`\x1F` \x90\x81R`@\x9C\x8D\x90 \x88Q\x81U\x90\x88\x01Q`\x01\x82\x01U\x9B\x87\x01Q`\x02\x8D\x01U``\x90\x96\x01Q`\x03\x90\x9B\x01\x9A\x90\x9AUP\x92\x99\x98PPPPPPPPPV[`\0\x81\x83\x11\x15a\x18|W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`>`$\x82\x01R\x7FStdUtils bound(uint256,uint256,u`D\x82\x01R\x7Fint256): Max is less than min.\0\0`d\x82\x01R`\x84\x01`@Q\x80\x91\x03\x90\xFD[\x82\x84\x10\x15\x80\x15a\x18\x8CWP\x81\x84\x11\x15[\x15a\x18\x98WP\x82a\x14\x0FV[`\0a\x18\xA4\x84\x84a\x1C\x9EV[a\x18\xAF\x90`\x01a\x1F\xD5V[\x90P`\x03\x85\x11\x15\x80\x15a\x18\xC1WP\x84\x81\x11[\x15a\x18\xD8Wa\x18\xD0\x85\x85a\x1F\xD5V[\x91PPa\x14\x0FV[a\x18\xE5`\x03`\0\x19a\x1C\x9EV[\x85\x10\x15\x80\x15a\x18\xFEWPa\x18\xFB\x85`\0\x19a\x1C\x9EV[\x81\x11[\x15a\x19\x19Wa\x19\x0F\x85`\0\x19a\x1C\x9EV[a\x18\xD0\x90\x84a\x1C\x9EV[\x82\x85\x11\x15a\x19oW`\0a\x19-\x84\x87a\x1C\x9EV[\x90P`\0a\x19;\x83\x83a\x1F\xE8V[\x90P\x80`\0\x03a\x19PW\x84\x93PPPPa\x14\x0FV[`\x01a\x19\\\x82\x88a\x1F\xD5V[a\x19f\x91\x90a\x1C\x9EV[\x93PPPa\x19\xC0V[\x83\x85\x10\x15a\x19\xC0W`\0a\x19\x83\x86\x86a\x1C\x9EV[\x90P`\0a\x19\x91\x83\x83a\x1F\xE8V[\x90P\x80`\0\x03a\x19\xA6W\x85\x93PPPPa\x14\x0FV[a\x19\xB0\x81\x86a\x1C\x9EV[a\x19\xBB\x90`\x01a\x1F\xD5V[\x93PPP[P\x93\x92PPPV[`\0jconsole.log`\x01`\x01`\xA0\x1B\x03\x16\x83\x83`@Q`$\x01a\x19\xF2\x92\x91\x90a \nV[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x91\x81R` \x82\x01\x80Q`\x01`\x01`\xE0\x1B\x03\x16c-\x83\x9C\xB3`\xE2\x1B\x17\x90RQa\x1A'\x91\x90a\x1D\xF8V[`\0`@Q\x80\x83\x03\x81\x85Z\xFA\x91PP=\x80`\0\x81\x14a\x08nW`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x08nV[`\0` \x82\x84\x03\x12\x15a\x1AtW`\0\x80\xFD[P5\x91\x90PV[` \x80\x82R\x82Q\x82\x82\x01\x81\x90R`\0\x91\x90\x84\x82\x01\x90`@\x85\x01\x90\x84[\x81\x81\x10\x15a\x1A\xBCW\x83Q`\x01`\x01`\xA0\x1B\x03\x16\x83R\x92\x84\x01\x92\x91\x84\x01\x91`\x01\x01a\x1A\x97V[P\x90\x96\x95PPPPPPV[`\0` \x80\x83\x01\x81\x84R\x80\x85Q\x80\x83R`@\x92P`@\x86\x01\x91P`@\x81`\x05\x1B\x87\x01\x01\x84\x88\x01`\0\x80[\x84\x81\x10\x15a\x1BnW\x89\x84\x03`?\x19\x01\x86R\x82Q\x80Q`\x01`\x01`\xA0\x1B\x03\x16\x85R\x88\x01Q\x88\x85\x01\x88\x90R\x80Q\x88\x86\x01\x81\x90R\x90\x89\x01\x90\x83\x90``\x87\x01\x90[\x80\x83\x10\x15a\x1BYW\x83Q`\x01`\x01`\xE0\x1B\x03\x19\x16\x82R\x92\x8B\x01\x92`\x01\x92\x90\x92\x01\x91\x90\x8B\x01\x90a\x1B/V[P\x97\x8A\x01\x97\x95PPP\x91\x87\x01\x91`\x01\x01a\x1A\xF2V[P\x91\x99\x98PPPPPPPPPV[`\x01`\x01`@\x1B\x03\x81\x16\x81\x14a\x1B\x92W`\0\x80\xFD[PV[`\0\x80`@\x83\x85\x03\x12\x15a\x1B\xA8W`\0\x80\xFD[\x825`\xFF\x81\x16\x81\x14a\x1B\xB9W`\0\x80\xFD[\x91P` \x83\x015a\x1B\xC9\x81a\x1B}V[\x80\x91PP\x92P\x92\x90PV[`\0[\x83\x81\x10\x15a\x1B\xEFW\x81\x81\x01Q\x83\x82\x01R` \x01a\x1B\xD7V[PP`\0\x91\x01RV[`\0\x81Q\x80\x84Ra\x1C\x10\x81` \x86\x01` \x86\x01a\x1B\xD4V[`\x1F\x01`\x1F\x19\x16\x92\x90\x92\x01` \x01\x92\x91PPV[`\0` \x80\x83\x01` \x84R\x80\x85Q\x80\x83R`@\x86\x01\x91P`@\x81`\x05\x1B\x87\x01\x01\x92P` \x87\x01`\0[\x82\x81\x10\x15a\x1C{W`?\x19\x88\x86\x03\x01\x84Ra\x1Ci\x85\x83Qa\x1B\xF8V[\x94P\x92\x85\x01\x92\x90\x85\x01\x90`\x01\x01a\x1CMV[P\x92\x97\x96PPPPPPPV[cNH{q`\xE0\x1B`\0R`\x11`\x04R`$`\0\xFD[\x81\x81\x03\x81\x81\x11\x15a\x1C\xB1Wa\x1C\xB1a\x1C\x88V[\x92\x91PPV[`\0` \x82\x84\x03\x12\x15a\x1C\xC9W`\0\x80\xFD[\x81Qa\x14\x0F\x81a\x1B}V[`\x01`\x01`@\x1B\x03\x81\x81\x16\x83\x82\x16\x01\x90\x80\x82\x11\x15a\x1C\xF4Wa\x1C\xF4a\x1C\x88V[P\x92\x91PPV[cNH{q`\xE0\x1B`\0R`2`\x04R`$`\0\xFD[\x81Q\x81R` \x80\x83\x01Q\x90\x82\x01R`@\x80\x83\x01Q\x90\x82\x01R``\x80\x83\x01Q\x90\x82\x01R`\x80\x81\x01a\x1C\xB1V[`\0\x80`@\x83\x85\x03\x12\x15a\x1DOW`\0\x80\xFD[\x82Qa\x1DZ\x81a\x1B}V[` \x84\x01Q\x90\x92Pa\x1B\xC9\x81a\x1B}V[`\0` \x82\x84\x03\x12\x15a\x1D}W`\0\x80\xFD[\x81Q\x80\x15\x15\x81\x14a\x14\x0FW`\0\x80\xFD[`\x01\x81\x81\x1C\x90\x82\x16\x80a\x1D\xA1W`\x7F\x82\x16\x91P[` \x82\x10\x81\x03a\x1D\xC1WcNH{q`\xE0\x1B`\0R`\"`\x04R`$`\0\xFD[P\x91\x90PV[`\x01`\x01`\xE0\x1B\x03\x19\x83\x16\x81R\x81Q`\0\x90a\x1D\xEA\x81`\x04\x85\x01` \x87\x01a\x1B\xD4V[\x91\x90\x91\x01`\x04\x01\x93\x92PPPV[`\0\x82Qa\x1E\n\x81\x84` \x87\x01a\x1B\xD4V[\x91\x90\x91\x01\x92\x91PPV[`@\x80Q\x90\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x1EDWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`@R\x90V[`@Q`\x80\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x1EDWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0`@\x82\x84\x03\x12\x15a\x1E\x8CW`\0\x80\xFD[a\x1E\x94a\x1E\x14V[\x90P\x81Q\x81R` \x82\x01Q` \x82\x01R\x92\x91PPV[`\0\x80`\0\x83\x85\x03a\x01\0\x81\x12\x15a\x1E\xC1W`\0\x80\xFD[`\x80\x81\x12\x15a\x1E\xCFW`\0\x80\xFD[a\x1E\xD7a\x1EJV[\x85Q\x81R` \x86\x01Q` \x82\x01R`@\x86\x01Q`@\x82\x01R``\x86\x01Q``\x82\x01R\x80\x94PP`@`\x7F\x19\x82\x01\x12\x15a\x1F\x0FW`\0\x80\xFD[Pa\x1F\x18a\x1E\x14V[`\x80\x85\x01Q\x81R`\xA0\x85\x01Q` \x82\x01R\x91Pa\x1F8\x85`\xC0\x86\x01a\x1EzV[\x90P\x92P\x92P\x92V[\x86Q\x81R` \x80\x88\x01Q\x90\x82\x01R`@\x80\x88\x01Q\x90\x82\x01R``\x80\x88\x01Q\x90\x82\x01Ra\x01`\x81\x01\x86Q`\x80\x83\x01R` \x87\x01Q`\xA0\x83\x01R`\x01`\x01`@\x1B\x03\x80\x87\x16`\xC0\x84\x01R`\x02\x86\x10a\x1F\xA7WcNH{q`\xE0\x1B`\0R`!`\x04R`$`\0\xFD[\x85`\xE0\x84\x01R\x84Qa\x01\0\x84\x01R` \x85\x01Qa\x01 \x84\x01R\x80\x84\x16a\x01@\x84\x01RP\x97\x96PPPPPPPV[\x80\x82\x01\x80\x82\x11\x15a\x1C\xB1Wa\x1C\xB1a\x1C\x88V[`\0\x82a \x05WcNH{q`\xE0\x1B`\0R`\x12`\x04R`$`\0\xFD[P\x06\x90V[`@\x81R`\0a \x1D`@\x83\x01\x85a\x1B\xF8V[\x90P\x82` \x83\x01R\x93\x92PPPV\xFE\xA1dsolcC\0\x08\x17\0\n";
     /// The bytecode of the contract.
     pub static STAKETABLEHANDLER_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
-    const __DEPLOYED_BYTECODE: &[u8] = b"`\x80`@R4\x80\x15a\0\x10W`\0\x80\xFD[P`\x046\x10a\x01BW`\x005`\xE0\x1C\x80c\x92H\xDDD\x11a\0\xB8W\x80c\xC2;\xBA\xC5\x11a\0|W\x80c\xC2;\xBA\xC5\x14a\x02\xD9W\x80c\xDB\x84%,\x14a\x02\xF3W\x80c\xE3Y%R\x14a\x03\x06W\x80c\xF5\xA0n\x9D\x14a\x03[W\x80c\xFA\x18/\xA1\x14a\x03hW\x80c\xFC\x0CTj\x14a\x03{W`\0\x80\xFD[\x80c\x92H\xDDD\x14a\x02hW\x80c\x9601h\x14a\x02\x82W\x80c\xB5p\x0Eh\x14a\x02\x9CW\x80c\xBBG\x10\xC5\x14a\x02\xAFW\x80c\xBC\xC4\xF0\xDD\x14a\x02\xC6W`\0\x80\xFD[\x80c<\xF8\x0El\x11a\x01\nW\x80c<\xF8\x0El\x14a\x01\xFCW\x80cRu/\xCE\x14a\x02\x04W\x80c\\\x05\x03G\x14a\x02\x1CW\x80cr\x1Ce\x13\x14a\x02/W\x80c\x7F\xAE\xB4\xEF\x14a\x02BW\x80c\x88M\xA7}\x14a\x02UW`\0\x80\xFD[\x80c\x01v\xA3\xE4\x14a\x01GW\x80c\x15]\xD5\xEE\x14a\x01~W\x80c%\xA2\xC5\x9B\x14a\x01\x93W\x80c*\x1B\xF7d\x14a\x01\xADW\x80c6[\x98\xB2\x14a\x01\xD1W[`\0\x80\xFD[`\x18Ta\x01a\x90`\x01`\x80\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`@Q`\x01`\x01`@\x1B\x03\x90\x91\x16\x81R` \x01[`@Q\x80\x91\x03\x90\xF3[a\x01\x91a\x01\x8C6`\x04a\x13\x16V[a\x03\x8EV[\0[`\x19Ta\x01a\x90`\x01`\x88\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1ATa\x01\xC1\x90`\x01`@\x1B\x90\x04`\xFF\x16\x81V[`@Q\x90\x15\x15\x81R` \x01a\x01uV[a\x01\xE4a\x01\xDF6`\x04a\x13\x16V[a\x05\xD8V[`@Q`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x81R` \x01a\x01uV[a\x01\x91a\x06\x02V[`\x19Ta\x01a\x90a\x01\0\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x10Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x01\x91a\x02=6`\x04a\x13\x16V[a\x06\xEAV[a\x01\x91a\x02P6`\x04a\x13GV[a\n0V[`\x1ATa\x01a\x90`\x01`\x01`@\x1B\x03\x16\x81V[`\x19Ta\x01a\x90`\x01`H\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x18Ta\x01a\x90`\x01`\xC0\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x15Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02\xB8`\x17T\x81V[`@Q\x90\x81R` \x01a\x01uV[`\x18Ta\x01a\x90`\x01`\x01`@\x1B\x03\x16\x81V[`\x18Ta\x01a\x90`\x01`@\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x11Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x03;a\x03\x146`\x04a\x13\x16V[`\x13` R`\0\x90\x81R`@\x90 \x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x92\x90\x91\x84V[`@\x80Q\x94\x85R` \x85\x01\x93\x90\x93R\x91\x83\x01R``\x82\x01R`\x80\x01a\x01uV[`\x19Ta\x01\xC1\x90`\xFF\x16\x81V[a\x03;a\x03v6`\x04a\x13\x16V[a\x0CLV[`\x12Ta\x01\xE4\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[`\0a\x03\xAA\x82`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[a\x0C\x86V[`\0\x81\x81R`\x13` \x90\x81R`@\x80\x83 \x81Q`\x80\x81\x01\x83R\x81T\x81R`\x01\x82\x01T\x81\x85\x01R`\x02\x82\x01T\x81\x84\x01R`\x03\x90\x91\x01T``\x82\x01R`\x15T\x82Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x92Q\x95\x96P\x90\x94`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92cvg\x18\x08\x92`\x04\x80\x82\x01\x93\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x04,W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x04P\x91\x90a\x13\xB5V[\x90P`d`\0a\x04`\x82\x84a\x13\xD2V[`\x15T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x04\xAFW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x04\xC3W=`\0\x80>=`\0\xFD[PP`\x16\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x93Pc\xCAf\x9F\xA7\x92P\x88\x90\x81\x10a\x04\xF7Wa\x04\xF7a\x13\xF9V[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x05DW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x05XW=`\0\x80>=`\0\xFD[PP`\x10T`@Qc\x01\x84\x95\xE3`\xE3\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92Pc\x0C$\xAF\x18\x91Pa\x05\x8C\x90\x87\x90`\x04\x01a\x14\x0FV[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x05\xABW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x05\xCF\x91\x90a\x13\xB5V[PPPPPPPV[`\x16\x81\x81T\x81\x10a\x05\xE8W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 \x01T`\x01`\x01`\xA0\x1B\x03\x16\x90P\x81V[`\x15T`@\x80Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x90Q`\0\x92`\x01`\x01`\xA0\x1B\x03\x16\x91cvg\x18\x08\x91`\x04\x80\x83\x01\x92` \x92\x91\x90\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x06LW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x06p\x91\x90a\x13\xB5V[\x90P`\0a\x06\x7F\x82`\x01a\x13\xD2V[`\x15T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x06\xCEW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x06\xE2W=`\0\x80>=`\0\xFD[PPPPPPV[`\0a\x07\x01\x82`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[`\x10T`@\x80Qc;\t\xC2g`\xE0\x1B\x81R\x81Q\x93\x94P`\x01`\x01`\xA0\x1B\x03\x90\x92\x16\x92c;\t\xC2g\x92`\x04\x80\x82\x01\x93\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x07JW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x07n\x91\x90a\x14:V[`\x19\x80Tp\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16`\x01`H\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16\x17a\x01\0\x93\x90\x92\x16\x92\x90\x92\x02\x17\x90U`\x16\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x91c\xCAf\x9F\xA7\x91\x84\x90\x81\x10a\x07\xE2Wa\x07\xE2a\x13\xF9V[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x08/W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x08CW=`\0\x80>=`\0\xFD[PP`\x10T`\0\x84\x81R`\x13` R`@\x80\x82 \x90QcJ\xA7\xC2\x7F`\xE0\x1B\x81R\x81T`\x04\x82\x01R`\x01\x82\x01T`$\x82\x01R`\x02\x82\x01T`D\x82\x01R`\x03\x90\x91\x01T`d\x82\x01R\x90\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91PcJ\xA7\xC2\x7F\x90`\x84\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x08\xC1W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x08\xE5\x91\x90a\x14iV[\x90P`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xE43=\xB5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\t:W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\t^\x91\x90a\x13\xB5V[`\x19`\x11a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xD6{l\xA5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\t\xD7W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\t\xFB\x91\x90a\x13\xB5V[`\x1A\x80T\x92\x15\x15`\x01`@\x1B\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x90\x93\x16`\x01`\x01`@\x1B\x03\x92\x90\x92\x16\x91\x90\x91\x17\x91\x90\x91\x17\x90UPPV[`\x10T`@\x80Qc\x0B\x14\xC1a`\xE2\x1B\x81R\x81Q`\x01`\x01`\xA0\x1B\x03\x90\x93\x16\x92c,S\x05\x84\x92`\x04\x80\x84\x01\x93\x91\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\nwW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\n\x9B\x91\x90a\x14:V[`\x18\x80To\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16`\x01`@\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16\x17\x92\x82\x16\x92\x90\x92\x17\x90\x91U`\x11T`\0\x91a\n\xF9\x91`\x01`\x01`\xA0\x1B\x03\x16\x90`\xFF\x86\x16\x90\x85\x16a\x0C\xCAV[\x90P`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xA6\xE2\xE3\xDC`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0BNW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0Br\x91\x90a\x13\xB5V[`\x18`\x10a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x10`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\x16\xFE\xFE\xD7`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0B\xEBW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C\x0F\x91\x90a\x13\xB5V[`\x18\x80T`\x01`\x01`\xC0\x1B\x03\x16`\x01`\xC0\x1B`\x01`\x01`@\x1B\x03\x93\x90\x93\x16\x92\x90\x92\x02\x91\x90\x91\x17\x90U`\x19\x80T`\xFF\x19\x16\x91\x15\x15\x91\x90\x91\x17\x90UPPV[`\x14\x81\x81T\x81\x10a\x0C\\W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 `\x04\x90\x91\x02\x01\x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x93P\x91\x90\x84V[`\0a\x0C\x93\x84\x84\x84a\x10\xB4V[\x90Pa\x0C\xC3`@Q\x80`@\x01`@R\x80`\x0C\x81R` \x01k\x10\x9B\xDD[\x99\x08\x14\x99\\\xDD[\x1D`\xA2\x1B\x81RP\x82a\x12|V[\x93\x92PPPV[`\0a\x0C\xE1\x83`\0`\x01`\x17Ta\x03\xA5\x91\x90a\x13\x9CV[\x92P`\0\x83\x90P`\0`\x16\x85\x81T\x81\x10a\x0C\xFDWa\x0C\xFDa\x13\xF9V[`\0\x91\x82R` \x82 \x01T`\x0FT`@Qc5\xD6\x9C\x89`\xE1\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8A\x81\x16`\x04\x83\x01R`\xFF\x87\x16`$\x83\x01R\x92\x83\x16\x94P\x83\x92\x83\x92\x16\x90ck\xAD9\x12\x90`D\x01a\x01\0`@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\reW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r\x89\x91\x90a\x15!V[\x92P\x92P\x92P`\0a\r\x9E\x88`\0`da\x0C\x86V[`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x87\x16`\x04\x82\x01R\x90\x91Pa\x03\xE8\x90sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\r\xFAW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0E\x0EW=`\0\x80>=`\0\xFD[PP`\x12T`@Qc\xA9\x05\x9C\xBB`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8F\x81\x16`\x04\x83\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x83\x01R\x90\x91\x16\x92Pc\xA9\x05\x9C\xBB\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0EmW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0E\x91\x91\x90a\x14iV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0E\xE7W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0E\xFBW=`\0\x80>=`\0\xFD[PP`\x12T`\x10T`@Qc\t^\xA7\xB3`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x91\x82\x16`\x04\x82\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x82\x01R\x91\x16\x92Pc\t^\xA7\xB3\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0F\\W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0F\x80\x91\x90a\x14iV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0F\xD6W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0F\xEAW=`\0\x80>=`\0\xFD[PP`\x10T`@Qc\xC7,\xC7\x17`\xE0\x1B\x81R`\0\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91Pc\xC7,\xC7\x17\x90a\x10+\x90\x89\x90\x89\x90\x88\x90\x87\x90\x8B\x90\x8A\x90`\x04\x01a\x15\xB8V[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x10JW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x10n\x91\x90a\x14iV[`\0\x9B\x8CR`\x13` \x90\x81R`@\x9C\x8D\x90 \x88Q\x81U\x90\x88\x01Q`\x01\x82\x01U\x9B\x87\x01Q`\x02\x8D\x01U``\x90\x96\x01Q`\x03\x90\x9B\x01\x9A\x90\x9AUP\x92\x99\x98PPPPPPPPPV[`\0\x81\x83\x11\x15a\x110W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`>`$\x82\x01R\x7FStdUtils bound(uint256,uint256,u`D\x82\x01R\x7Fint256): Max is less than min.\0\0`d\x82\x01R`\x84\x01`@Q\x80\x91\x03\x90\xFD[\x82\x84\x10\x15\x80\x15a\x11@WP\x81\x84\x11\x15[\x15a\x11LWP\x82a\x0C\xC3V[`\0a\x11X\x84\x84a\x13\x9CV[a\x11c\x90`\x01a\x16LV[\x90P`\x03\x85\x11\x15\x80\x15a\x11uWP\x84\x81\x11[\x15a\x11\x8CWa\x11\x84\x85\x85a\x16LV[\x91PPa\x0C\xC3V[a\x11\x99`\x03`\0\x19a\x13\x9CV[\x85\x10\x15\x80\x15a\x11\xB2WPa\x11\xAF\x85`\0\x19a\x13\x9CV[\x81\x11[\x15a\x11\xCDWa\x11\xC3\x85`\0\x19a\x13\x9CV[a\x11\x84\x90\x84a\x13\x9CV[\x82\x85\x11\x15a\x12#W`\0a\x11\xE1\x84\x87a\x13\x9CV[\x90P`\0a\x11\xEF\x83\x83a\x16_V[\x90P\x80`\0\x03a\x12\x04W\x84\x93PPPPa\x0C\xC3V[`\x01a\x12\x10\x82\x88a\x16LV[a\x12\x1A\x91\x90a\x13\x9CV[\x93PPPa\x12tV[\x83\x85\x10\x15a\x12tW`\0a\x127\x86\x86a\x13\x9CV[\x90P`\0a\x12E\x83\x83a\x16_V[\x90P\x80`\0\x03a\x12ZW\x85\x93PPPPa\x0C\xC3V[a\x12d\x81\x86a\x13\x9CV[a\x12o\x90`\x01a\x16LV[\x93PPP[P\x93\x92PPPV[`\0jconsole.log`\x01`\x01`\xA0\x1B\x03\x16\x83\x83`@Q`$\x01a\x12\xA6\x92\x91\x90a\x16\xA5V[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x91\x81R` \x82\x01\x80Q`\x01`\x01`\xE0\x1B\x03\x16c-\x83\x9C\xB3`\xE2\x1B\x17\x90RQa\x12\xDB\x91\x90a\x16\xE0V[`\0`@Q\x80\x83\x03\x81\x85Z\xFA\x91PP=\x80`\0\x81\x14a\x06\xE2W`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x06\xE2V[`\0` \x82\x84\x03\x12\x15a\x13(W`\0\x80\xFD[P5\x91\x90PV[`\x01`\x01`@\x1B\x03\x81\x16\x81\x14a\x13DW`\0\x80\xFD[PV[`\0\x80`@\x83\x85\x03\x12\x15a\x13ZW`\0\x80\xFD[\x825`\xFF\x81\x16\x81\x14a\x13kW`\0\x80\xFD[\x91P` \x83\x015a\x13{\x81a\x13/V[\x80\x91PP\x92P\x92\x90PV[cNH{q`\xE0\x1B`\0R`\x11`\x04R`$`\0\xFD[\x81\x81\x03\x81\x81\x11\x15a\x13\xAFWa\x13\xAFa\x13\x86V[\x92\x91PPV[`\0` \x82\x84\x03\x12\x15a\x13\xC7W`\0\x80\xFD[\x81Qa\x0C\xC3\x81a\x13/V[`\x01`\x01`@\x1B\x03\x81\x81\x16\x83\x82\x16\x01\x90\x80\x82\x11\x15a\x13\xF2Wa\x13\xF2a\x13\x86V[P\x92\x91PPV[cNH{q`\xE0\x1B`\0R`2`\x04R`$`\0\xFD[\x81Q\x81R` \x80\x83\x01Q\x90\x82\x01R`@\x80\x83\x01Q\x90\x82\x01R``\x80\x83\x01Q\x90\x82\x01R`\x80\x81\x01a\x13\xAFV[`\0\x80`@\x83\x85\x03\x12\x15a\x14MW`\0\x80\xFD[\x82Qa\x14X\x81a\x13/V[` \x84\x01Q\x90\x92Pa\x13{\x81a\x13/V[`\0` \x82\x84\x03\x12\x15a\x14{W`\0\x80\xFD[\x81Q\x80\x15\x15\x81\x14a\x0C\xC3W`\0\x80\xFD[`@\x80Q\x90\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x14\xBBWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`@R\x90V[`@Q`\x80\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x14\xBBWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0`@\x82\x84\x03\x12\x15a\x15\x03W`\0\x80\xFD[a\x15\x0Ba\x14\x8BV[\x90P\x81Q\x81R` \x82\x01Q` \x82\x01R\x92\x91PPV[`\0\x80`\0\x83\x85\x03a\x01\0\x81\x12\x15a\x158W`\0\x80\xFD[`\x80\x81\x12\x15a\x15FW`\0\x80\xFD[a\x15Na\x14\xC1V[\x85Q\x81R` \x86\x01Q` \x82\x01R`@\x86\x01Q`@\x82\x01R``\x86\x01Q``\x82\x01R\x80\x94PP`@`\x7F\x19\x82\x01\x12\x15a\x15\x86W`\0\x80\xFD[Pa\x15\x8Fa\x14\x8BV[`\x80\x85\x01Q\x81R`\xA0\x85\x01Q` \x82\x01R\x91Pa\x15\xAF\x85`\xC0\x86\x01a\x14\xF1V[\x90P\x92P\x92P\x92V[\x86Q\x81R` \x80\x88\x01Q\x90\x82\x01R`@\x80\x88\x01Q\x90\x82\x01R``\x80\x88\x01Q\x90\x82\x01Ra\x01`\x81\x01\x86Q`\x80\x83\x01R` \x87\x01Q`\xA0\x83\x01R`\x01`\x01`@\x1B\x03\x80\x87\x16`\xC0\x84\x01R`\x02\x86\x10a\x16\x1EWcNH{q`\xE0\x1B`\0R`!`\x04R`$`\0\xFD[\x85`\xE0\x84\x01R\x84Qa\x01\0\x84\x01R` \x85\x01Qa\x01 \x84\x01R\x80\x84\x16a\x01@\x84\x01RP\x97\x96PPPPPPPV[\x80\x82\x01\x80\x82\x11\x15a\x13\xAFWa\x13\xAFa\x13\x86V[`\0\x82a\x16|WcNH{q`\xE0\x1B`\0R`\x12`\x04R`$`\0\xFD[P\x06\x90V[`\0[\x83\x81\x10\x15a\x16\x9CW\x81\x81\x01Q\x83\x82\x01R` \x01a\x16\x84V[PP`\0\x91\x01RV[`@\x81R`\0\x83Q\x80`@\x84\x01Ra\x16\xC4\x81``\x85\x01` \x88\x01a\x16\x81V[` \x83\x01\x93\x90\x93RP`\x1F\x91\x90\x91\x01`\x1F\x19\x16\x01``\x01\x91\x90PV[`\0\x82Qa\x16\xF2\x81\x84` \x87\x01a\x16\x81V[\x91\x90\x91\x01\x92\x91PPV\xFE\xA1dsolcC\0\x08\x17\0\n";
+    const __DEPLOYED_BYTECODE: &[u8] = b"`\x80`@R4\x80\x15a\0\x10W`\0\x80\xFD[P`\x046\x10a\x01\xF0W`\x005`\xE0\x1C\x80c\x91j\x17\xC6\x11a\x01\x0FW\x80c\xC2;\xBA\xC5\x11a\0\xA2W\x80c\xF5\xA0n\x9D\x11a\0qW\x80c\xF5\xA0n\x9D\x14a\x04xW\x80c\xFA\x18/\xA1\x14a\x04\x85W\x80c\xFAv&\xD4\x14a\x04\x98W\x80c\xFC\x0CTj\x14a\x04\xA5W`\0\x80\xFD[\x80c\xC2;\xBA\xC5\x14a\x03\xEEW\x80c\xDB\x84%,\x14a\x04\x08W\x80c\xE2\x0C\x9Fq\x14a\x04\x1BW\x80c\xE3Y%R\x14a\x04#W`\0\x80\xFD[\x80c\xB5p\x0Eh\x11a\0\xDEW\x80c\xB5p\x0Eh\x14a\x03\xA9W\x80c\xBAAO\xA6\x14a\x03\xBCW\x80c\xBBG\x10\xC5\x14a\x03\xC4W\x80c\xBC\xC4\xF0\xDD\x14a\x03\xDBW`\0\x80\xFD[\x80c\x91j\x17\xC6\x14a\x03eW\x80c\x92H\xDDD\x14a\x03mW\x80c\x9601h\x14a\x03\x87W\x80c\xB5P\x8A\xA9\x14a\x03\xA1W`\0\x80\xFD[\x80c?r\x86\xF4\x11a\x01\x87W\x80cr\x1Ce\x13\x11a\x01VW\x80cr\x1Ce\x13\x14a\x03\x17W\x80c\x7F\xAE\xB4\xEF\x14a\x03*W\x80c\x85\"l\x81\x14a\x03=W\x80c\x88M\xA7}\x14a\x03RW`\0\x80\xFD[\x80c?r\x86\xF4\x14a\x02\xCFW\x80cRu/\xCE\x14a\x02\xD7W\x80c\\\x05\x03G\x14a\x02\xEFW\x80cf\xD9\xA9\xA0\x14a\x03\x02W`\0\x80\xFD[\x80c*\x1B\xF7d\x11a\x01\xC3W\x80c*\x1B\xF7d\x14a\x02pW\x80c6[\x98\xB2\x14a\x02\x94W\x80c<\xF8\x0El\x14a\x02\xBFW\x80c>^<#\x14a\x02\xC7W`\0\x80\xFD[\x80c\x01v\xA3\xE4\x14a\x01\xF5W\x80c\x15]\xD5\xEE\x14a\x02,W\x80c\x1E\xD7\x83\x1C\x14a\x02AW\x80c%\xA2\xC5\x9B\x14a\x02VW[`\0\x80\xFD[`$Ta\x02\x0F\x90`\x01`\x80\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`@Q`\x01`\x01`@\x1B\x03\x90\x91\x16\x81R` \x01[`@Q\x80\x91\x03\x90\xF3[a\x02?a\x02:6`\x04a\x1AbV[a\x04\xB8V[\0[a\x02Ia\x07\x02V[`@Qa\x02#\x91\x90a\x1A{V[`%Ta\x02\x0F\x90`\x01`\x88\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`&Ta\x02\x84\x90`\x01`@\x1B\x90\x04`\xFF\x16\x81V[`@Q\x90\x15\x15\x81R` \x01a\x02#V[a\x02\xA7a\x02\xA26`\x04a\x1AbV[a\x07dV[`@Q`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x81R` \x01a\x02#V[a\x02?a\x07\x8EV[a\x02Ia\x08vV[a\x02Ia\x08\xD6V[`%Ta\x02\x0F\x90a\x01\0\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1CTa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x03\na\t6V[`@Qa\x02#\x91\x90a\x1A\xC8V[a\x02?a\x03%6`\x04a\x1AbV[a\n%V[a\x02?a\x0386`\x04a\x1B\x95V[a\rkV[a\x03Ea\x0F\x87V[`@Qa\x02#\x91\x90a\x1C$V[`&Ta\x02\x0F\x90`\x01`\x01`@\x1B\x03\x16\x81V[a\x03\na\x10WV[`%Ta\x02\x0F\x90`\x01`H\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`$Ta\x02\x0F\x90`\x01`\xC0\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[a\x03Ea\x11=V[`!Ta\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02\x84a\x12\rV[a\x03\xCD`#T\x81V[`@Q\x90\x81R` \x01a\x02#V[`$Ta\x02\x0F\x90`\x01`\x01`@\x1B\x03\x16\x81V[`$Ta\x02\x0F\x90`\x01`@\x1B\x90\x04`\x01`\x01`@\x1B\x03\x16\x81V[`\x1DTa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[a\x02Ia\x138V[a\x04Xa\x0416`\x04a\x1AbV[`\x1F` R`\0\x90\x81R`@\x90 \x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x92\x90\x91\x84V[`@\x80Q\x94\x85R` \x85\x01\x93\x90\x93R\x91\x83\x01R``\x82\x01R`\x80\x01a\x02#V[`%Ta\x02\x84\x90`\xFF\x16\x81V[a\x04Xa\x04\x936`\x04a\x1AbV[a\x13\x98V[`\0Ta\x02\x84\x90`\xFF\x16\x81V[`\x1ETa\x02\xA7\x90`\x01`\x01`\xA0\x1B\x03\x16\x81V[`\0a\x04\xD4\x82`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[a\x13\xD2V[`\0\x81\x81R`\x1F` \x90\x81R`@\x80\x83 \x81Q`\x80\x81\x01\x83R\x81T\x81R`\x01\x82\x01T\x81\x85\x01R`\x02\x82\x01T\x81\x84\x01R`\x03\x90\x91\x01T``\x82\x01R`!T\x82Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x92Q\x95\x96P\x90\x94`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92cvg\x18\x08\x92`\x04\x80\x82\x01\x93\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x05VW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x05z\x91\x90a\x1C\xB7V[\x90P`d`\0a\x05\x8A\x82\x84a\x1C\xD4V[`!T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x05\xD9W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x05\xEDW=`\0\x80>=`\0\xFD[PP`\"\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x93Pc\xCAf\x9F\xA7\x92P\x88\x90\x81\x10a\x06!Wa\x06!a\x1C\xFBV[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x06nW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x06\x82W=`\0\x80>=`\0\xFD[PP`\x1CT`@Qc\x01\x84\x95\xE3`\xE3\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x92Pc\x0C$\xAF\x18\x91Pa\x06\xB6\x90\x87\x90`\x04\x01a\x1D\x11V[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x06\xD5W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x06\xF9\x91\x90a\x1C\xB7V[PPPPPPPV[```\r\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90[\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<W[PPPPP\x90P\x90V[`\"\x81\x81T\x81\x10a\x07tW`\0\x80\xFD[`\0\x91\x82R` \x90\x91 \x01T`\x01`\x01`\xA0\x1B\x03\x16\x90P\x81V[`!T`@\x80Qc\x0E\xCC\xE3\x01`\xE3\x1B\x81R\x90Q`\0\x92`\x01`\x01`\xA0\x1B\x03\x16\x91cvg\x18\x08\x91`\x04\x80\x83\x01\x92` \x92\x91\x90\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\x07\xD8W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x07\xFC\x91\x90a\x1C\xB7V[\x90P`\0a\x08\x0B\x82`\x01a\x1C\xD4V[`!T`@Qc9I\xD1\xE9`\xE0\x1B\x81R`\x01`\x01`@\x1B\x03\x83\x16`\x04\x82\x01R\x91\x92P`\x01`\x01`\xA0\x1B\x03\x16\x90c9I\xD1\xE9\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x08ZW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x08nW=`\0\x80>=`\0\xFD[PPPPPPV[```\x0F\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[```\x0E\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[```\x12\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW`\0\x84\x81R` \x90\x81\x90 `@\x80Q\x80\x82\x01\x82R`\x02\x86\x02\x90\x92\x01\x80T`\x01`\x01`\xA0\x1B\x03\x16\x83R`\x01\x81\x01\x80T\x83Q\x81\x87\x02\x81\x01\x87\x01\x90\x94R\x80\x84R\x93\x94\x91\x93\x85\x83\x01\x93\x92\x83\x01\x82\x82\x80\x15a\n\x04W` \x02\x82\x01\x91\x90`\0R` `\0 \x90`\0\x90[\x82\x82\x90T\x90a\x01\0\n\x90\x04`\xE0\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R` \x01\x90`\x04\x01\x90` \x82`\x03\x01\x04\x92\x83\x01\x92`\x01\x03\x82\x02\x91P\x80\x84\x11a\t\xC6W\x90P[PPPPP\x81RPP\x81R` \x01\x90`\x01\x01\x90a\tZV[PPPP\x90P\x90V[`\0a\n<\x82`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[`\x1CT`@\x80Qc;\t\xC2g`\xE0\x1B\x81R\x81Q\x93\x94P`\x01`\x01`\xA0\x1B\x03\x90\x92\x16\x92c;\t\xC2g\x92`\x04\x80\x82\x01\x93\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\n\x85W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\n\xA9\x91\x90a\x1D<V[`%\x80Tp\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16`\x01`H\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\0\x19\x16\x17a\x01\0\x93\x90\x92\x16\x92\x90\x92\x02\x17\x90U`\"\x80Tsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x91c\xCAf\x9F\xA7\x91\x84\x90\x81\x10a\x0B\x1DWa\x0B\x1Da\x1C\xFBV[`\0\x91\x82R` \x90\x91 \x01T`@Q`\xE0\x83\x90\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R`\x01`\x01`\xA0\x1B\x03\x90\x91\x16`\x04\x82\x01R`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x0BjW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x0B~W=`\0\x80>=`\0\xFD[PP`\x1CT`\0\x84\x81R`\x1F` R`@\x80\x82 \x90QcJ\xA7\xC2\x7F`\xE0\x1B\x81R\x81T`\x04\x82\x01R`\x01\x82\x01T`$\x82\x01R`\x02\x82\x01T`D\x82\x01R`\x03\x90\x91\x01T`d\x82\x01R\x90\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91PcJ\xA7\xC2\x7F\x90`\x84\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x0B\xFCW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C \x91\x90a\x1DkV[\x90P`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xE43=\xB5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0CuW=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0C\x99\x91\x90a\x1C\xB7V[`%`\x11a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xD6{l\xA5`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\r\x12W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r6\x91\x90a\x1C\xB7V[`&\x80T\x92\x15\x15`\x01`@\x1B\x02h\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x90\x93\x16`\x01`\x01`@\x1B\x03\x92\x90\x92\x16\x91\x90\x91\x17\x91\x90\x91\x17\x90UPPV[`\x1CT`@\x80Qc\x0B\x14\xC1a`\xE2\x1B\x81R\x81Q`\x01`\x01`\xA0\x1B\x03\x90\x93\x16\x92c,S\x05\x84\x92`\x04\x80\x84\x01\x93\x91\x92\x91\x82\x90\x03\x01\x81\x86Z\xFA\x15\x80\x15a\r\xB2W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\r\xD6\x91\x90a\x1D<V[`$\x80To\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16`\x01`@\x1B`\x01`\x01`@\x1B\x03\x93\x84\x16\x02g\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x19\x16\x17\x92\x82\x16\x92\x90\x92\x17\x90\x91U`\x1DT`\0\x91a\x0E4\x91`\x01`\x01`\xA0\x1B\x03\x16\x90`\xFF\x86\x16\x90\x85\x16a\x14\x16V[\x90P`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\xA6\xE2\xE3\xDC`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0E\x89W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0E\xAD\x91\x90a\x1C\xB7V[`$`\x10a\x01\0\n\x81T\x81`\x01`\x01`@\x1B\x03\x02\x19\x16\x90\x83`\x01`\x01`@\x1B\x03\x16\x02\x17\x90UP`\x1C`\0\x90T\x90a\x01\0\n\x90\x04`\x01`\x01`\xA0\x1B\x03\x16`\x01`\x01`\xA0\x1B\x03\x16c\x16\xFE\xFE\xD7`@Q\x81c\xFF\xFF\xFF\xFF\x16`\xE0\x1B\x81R`\x04\x01` `@Q\x80\x83\x03\x81\x86Z\xFA\x15\x80\x15a\x0F&W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x0FJ\x91\x90a\x1C\xB7V[`$\x80T`\x01`\x01`\xC0\x1B\x03\x16`\x01`\xC0\x1B`\x01`\x01`@\x1B\x03\x93\x90\x93\x16\x92\x90\x92\x02\x91\x90\x91\x17\x90U`%\x80T`\xFF\x19\x16\x91\x15\x15\x91\x90\x91\x17\x90UPPV[```\x11\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW\x83\x82\x90`\0R` `\0 \x01\x80Ta\x0F\xCA\x90a\x1D\x8DV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x0F\xF6\x90a\x1D\x8DV[\x80\x15a\x10CW\x80`\x1F\x10a\x10\x18Wa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x10CV[\x82\x01\x91\x90`\0R` `\0 \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x10&W\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x81R` \x01\x90`\x01\x01\x90a\x0F\xABV[```\x13\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW`\0\x84\x81R` \x90\x81\x90 `@\x80Q\x80\x82\x01\x82R`\x02\x86\x02\x90\x92\x01\x80T`\x01`\x01`\xA0\x1B\x03\x16\x83R`\x01\x81\x01\x80T\x83Q\x81\x87\x02\x81\x01\x87\x01\x90\x94R\x80\x84R\x93\x94\x91\x93\x85\x83\x01\x93\x92\x83\x01\x82\x82\x80\x15a\x11%W` \x02\x82\x01\x91\x90`\0R` `\0 \x90`\0\x90[\x82\x82\x90T\x90a\x01\0\n\x90\x04`\xE0\x1B`\x01`\x01`\xE0\x1B\x03\x19\x16\x81R` \x01\x90`\x04\x01\x90` \x82`\x03\x01\x04\x92\x83\x01\x92`\x01\x03\x82\x02\x91P\x80\x84\x11a\x10\xE7W\x90P[PPPPP\x81RPP\x81R` \x01\x90`\x01\x01\x90a\x10{V[```\x10\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01`\0\x90[\x82\x82\x10\x15a\n\x1CW\x83\x82\x90`\0R` `\0 \x01\x80Ta\x11\x80\x90a\x1D\x8DV[\x80`\x1F\x01` \x80\x91\x04\x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80Ta\x11\xAC\x90a\x1D\x8DV[\x80\x15a\x11\xF9W\x80`\x1F\x10a\x11\xCEWa\x01\0\x80\x83T\x04\x02\x83R\x91` \x01\x91a\x11\xF9V[\x82\x01\x91\x90`\0R` `\0 \x90[\x81T\x81R\x90`\x01\x01\x90` \x01\x80\x83\x11a\x11\xDCW\x82\x90\x03`\x1F\x16\x82\x01\x91[PPPPP\x81R` \x01\x90`\x01\x01\x90a\x11aV[`\0\x80Ta\x01\0\x90\x04`\xFF\x16\x15a\x12-WP`\0Ta\x01\0\x90\x04`\xFF\x16\x90V[`\0sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-;\x15a\x133W`@\x80Qsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-` \x82\x01\x81\x90Re\x19\x98Z[\x19Y`\xD2\x1B\x82\x84\x01R\x82Q\x80\x83\x03\x84\x01\x81R``\x83\x01\x90\x93R`\0\x92\x90\x91a\x12\xBB\x91\x7Ff\x7F\x9Dp\xCAA\x1Dp\xEA\xD5\r\x8D\\\"\x07\r\xAF\xC3j\xD7_=\xCF^r7\xB2*\xDE\x9A\xEC\xC4\x91`\x80\x01a\x1D\xC7V[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x90\x82\x90Ra\x12\xD5\x91a\x1D\xF8V[`\0`@Q\x80\x83\x03\x81`\0\x86Z\xF1\x91PP=\x80`\0\x81\x14a\x13\x12W`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x13\x17V[``\x91P[P\x91PP\x80\x80` \x01\x90Q\x81\x01\x90a\x13/\x91\x90a\x1DkV[\x91PP[\x91\x90PV[```\x0C\x80T\x80` \x02` \x01`@Q\x90\x81\x01`@R\x80\x92\x91\x90\x81\x81R` \x01\x82\x80T\x80\x15a\x07ZW` \x02\x82\x01\x91\x90`\0R` `\0 \x90\x81T`\x01`\x01`\xA0\x1B\x03\x16\x81R`\x01\x90\x91\x01\x90` \x01\x80\x83\x11a\x07<WPPPPP\x90P\x90V[` \x81\x81T\x81\x10a\x13\xA8W`\0\x80\xFD[`\0\x91\x82R` \x90\x91 `\x04\x90\x91\x02\x01\x80T`\x01\x82\x01T`\x02\x83\x01T`\x03\x90\x93\x01T\x91\x93P\x91\x90\x84V[`\0a\x13\xDF\x84\x84\x84a\x18\0V[\x90Pa\x14\x0F`@Q\x80`@\x01`@R\x80`\x0C\x81R` \x01k\x10\x9B\xDD[\x99\x08\x14\x99\\\xDD[\x1D`\xA2\x1B\x81RP\x82a\x19\xC8V[\x93\x92PPPV[`\0a\x14-\x83`\0`\x01`#Ta\x04\xCF\x91\x90a\x1C\x9EV[\x92P`\0\x83\x90P`\0`\"\x85\x81T\x81\x10a\x14IWa\x14Ia\x1C\xFBV[`\0\x91\x82R` \x82 \x01T`\x1BT`@Qc5\xD6\x9C\x89`\xE1\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8A\x81\x16`\x04\x83\x01R`\xFF\x87\x16`$\x83\x01R\x92\x83\x16\x94P\x83\x92\x83\x92\x16\x90ck\xAD9\x12\x90`D\x01a\x01\0`@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x14\xB1W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x14\xD5\x91\x90a\x1E\xAAV[\x92P\x92P\x92P`\0a\x14\xEA\x88`\0`da\x13\xD2V[`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x87\x16`\x04\x82\x01R\x90\x91Pa\x03\xE8\x90sq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x15FW`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x15ZW=`\0\x80>=`\0\xFD[PP`\x1ET`@Qc\xA9\x05\x9C\xBB`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8F\x81\x16`\x04\x83\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x83\x01R\x90\x91\x16\x92Pc\xA9\x05\x9C\xBB\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x15\xB9W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x15\xDD\x91\x90a\x1DkV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x163W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x16GW=`\0\x80>=`\0\xFD[PP`\x1ET`\x1CT`@Qc\t^\xA7\xB3`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x91\x82\x16`\x04\x82\x01R`\x01`\x01`@\x1B\x03\x87\x16`$\x82\x01R\x91\x16\x92Pc\t^\xA7\xB3\x91P`D\x01` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x16\xA8W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x16\xCC\x91\x90a\x1DkV[P`@Qc\xCAf\x9F\xA7`\xE0\x1B\x81R`\x01`\x01`\xA0\x1B\x03\x8C\x16`\x04\x82\x01Rsq\tp\x9E\xCF\xA9\x1A\x80bo\xF3\x98\x9Dh\xF6\x7F[\x1D\xD1-\x90c\xCAf\x9F\xA7\x90`$\x01`\0`@Q\x80\x83\x03\x81`\0\x87\x80;\x15\x80\x15a\x17\"W`\0\x80\xFD[PZ\xF1\x15\x80\x15a\x176W=`\0\x80>=`\0\xFD[PP`\x1CT`@Qc\xC7,\xC7\x17`\xE0\x1B\x81R`\0\x93P`\x01`\x01`\xA0\x1B\x03\x90\x91\x16\x91Pc\xC7,\xC7\x17\x90a\x17w\x90\x89\x90\x89\x90\x88\x90\x87\x90\x8B\x90\x8A\x90`\x04\x01a\x1FAV[` `@Q\x80\x83\x03\x81`\0\x87Z\xF1\x15\x80\x15a\x17\x96W=`\0\x80>=`\0\xFD[PPPP`@Q=`\x1F\x19`\x1F\x82\x01\x16\x82\x01\x80`@RP\x81\x01\x90a\x17\xBA\x91\x90a\x1DkV[`\0\x9B\x8CR`\x1F` \x90\x81R`@\x9C\x8D\x90 \x88Q\x81U\x90\x88\x01Q`\x01\x82\x01U\x9B\x87\x01Q`\x02\x8D\x01U``\x90\x96\x01Q`\x03\x90\x9B\x01\x9A\x90\x9AUP\x92\x99\x98PPPPPPPPPV[`\0\x81\x83\x11\x15a\x18|W`@QbF\x1B\xCD`\xE5\x1B\x81R` `\x04\x82\x01R`>`$\x82\x01R\x7FStdUtils bound(uint256,uint256,u`D\x82\x01R\x7Fint256): Max is less than min.\0\0`d\x82\x01R`\x84\x01`@Q\x80\x91\x03\x90\xFD[\x82\x84\x10\x15\x80\x15a\x18\x8CWP\x81\x84\x11\x15[\x15a\x18\x98WP\x82a\x14\x0FV[`\0a\x18\xA4\x84\x84a\x1C\x9EV[a\x18\xAF\x90`\x01a\x1F\xD5V[\x90P`\x03\x85\x11\x15\x80\x15a\x18\xC1WP\x84\x81\x11[\x15a\x18\xD8Wa\x18\xD0\x85\x85a\x1F\xD5V[\x91PPa\x14\x0FV[a\x18\xE5`\x03`\0\x19a\x1C\x9EV[\x85\x10\x15\x80\x15a\x18\xFEWPa\x18\xFB\x85`\0\x19a\x1C\x9EV[\x81\x11[\x15a\x19\x19Wa\x19\x0F\x85`\0\x19a\x1C\x9EV[a\x18\xD0\x90\x84a\x1C\x9EV[\x82\x85\x11\x15a\x19oW`\0a\x19-\x84\x87a\x1C\x9EV[\x90P`\0a\x19;\x83\x83a\x1F\xE8V[\x90P\x80`\0\x03a\x19PW\x84\x93PPPPa\x14\x0FV[`\x01a\x19\\\x82\x88a\x1F\xD5V[a\x19f\x91\x90a\x1C\x9EV[\x93PPPa\x19\xC0V[\x83\x85\x10\x15a\x19\xC0W`\0a\x19\x83\x86\x86a\x1C\x9EV[\x90P`\0a\x19\x91\x83\x83a\x1F\xE8V[\x90P\x80`\0\x03a\x19\xA6W\x85\x93PPPPa\x14\x0FV[a\x19\xB0\x81\x86a\x1C\x9EV[a\x19\xBB\x90`\x01a\x1F\xD5V[\x93PPP[P\x93\x92PPPV[`\0jconsole.log`\x01`\x01`\xA0\x1B\x03\x16\x83\x83`@Q`$\x01a\x19\xF2\x92\x91\x90a \nV[`@\x80Q`\x1F\x19\x81\x84\x03\x01\x81R\x91\x81R` \x82\x01\x80Q`\x01`\x01`\xE0\x1B\x03\x16c-\x83\x9C\xB3`\xE2\x1B\x17\x90RQa\x1A'\x91\x90a\x1D\xF8V[`\0`@Q\x80\x83\x03\x81\x85Z\xFA\x91PP=\x80`\0\x81\x14a\x08nW`@Q\x91P`\x1F\x19`?=\x01\x16\x82\x01`@R=\x82R=`\0` \x84\x01>a\x08nV[`\0` \x82\x84\x03\x12\x15a\x1AtW`\0\x80\xFD[P5\x91\x90PV[` \x80\x82R\x82Q\x82\x82\x01\x81\x90R`\0\x91\x90\x84\x82\x01\x90`@\x85\x01\x90\x84[\x81\x81\x10\x15a\x1A\xBCW\x83Q`\x01`\x01`\xA0\x1B\x03\x16\x83R\x92\x84\x01\x92\x91\x84\x01\x91`\x01\x01a\x1A\x97V[P\x90\x96\x95PPPPPPV[`\0` \x80\x83\x01\x81\x84R\x80\x85Q\x80\x83R`@\x92P`@\x86\x01\x91P`@\x81`\x05\x1B\x87\x01\x01\x84\x88\x01`\0\x80[\x84\x81\x10\x15a\x1BnW\x89\x84\x03`?\x19\x01\x86R\x82Q\x80Q`\x01`\x01`\xA0\x1B\x03\x16\x85R\x88\x01Q\x88\x85\x01\x88\x90R\x80Q\x88\x86\x01\x81\x90R\x90\x89\x01\x90\x83\x90``\x87\x01\x90[\x80\x83\x10\x15a\x1BYW\x83Q`\x01`\x01`\xE0\x1B\x03\x19\x16\x82R\x92\x8B\x01\x92`\x01\x92\x90\x92\x01\x91\x90\x8B\x01\x90a\x1B/V[P\x97\x8A\x01\x97\x95PPP\x91\x87\x01\x91`\x01\x01a\x1A\xF2V[P\x91\x99\x98PPPPPPPPPV[`\x01`\x01`@\x1B\x03\x81\x16\x81\x14a\x1B\x92W`\0\x80\xFD[PV[`\0\x80`@\x83\x85\x03\x12\x15a\x1B\xA8W`\0\x80\xFD[\x825`\xFF\x81\x16\x81\x14a\x1B\xB9W`\0\x80\xFD[\x91P` \x83\x015a\x1B\xC9\x81a\x1B}V[\x80\x91PP\x92P\x92\x90PV[`\0[\x83\x81\x10\x15a\x1B\xEFW\x81\x81\x01Q\x83\x82\x01R` \x01a\x1B\xD7V[PP`\0\x91\x01RV[`\0\x81Q\x80\x84Ra\x1C\x10\x81` \x86\x01` \x86\x01a\x1B\xD4V[`\x1F\x01`\x1F\x19\x16\x92\x90\x92\x01` \x01\x92\x91PPV[`\0` \x80\x83\x01` \x84R\x80\x85Q\x80\x83R`@\x86\x01\x91P`@\x81`\x05\x1B\x87\x01\x01\x92P` \x87\x01`\0[\x82\x81\x10\x15a\x1C{W`?\x19\x88\x86\x03\x01\x84Ra\x1Ci\x85\x83Qa\x1B\xF8V[\x94P\x92\x85\x01\x92\x90\x85\x01\x90`\x01\x01a\x1CMV[P\x92\x97\x96PPPPPPPV[cNH{q`\xE0\x1B`\0R`\x11`\x04R`$`\0\xFD[\x81\x81\x03\x81\x81\x11\x15a\x1C\xB1Wa\x1C\xB1a\x1C\x88V[\x92\x91PPV[`\0` \x82\x84\x03\x12\x15a\x1C\xC9W`\0\x80\xFD[\x81Qa\x14\x0F\x81a\x1B}V[`\x01`\x01`@\x1B\x03\x81\x81\x16\x83\x82\x16\x01\x90\x80\x82\x11\x15a\x1C\xF4Wa\x1C\xF4a\x1C\x88V[P\x92\x91PPV[cNH{q`\xE0\x1B`\0R`2`\x04R`$`\0\xFD[\x81Q\x81R` \x80\x83\x01Q\x90\x82\x01R`@\x80\x83\x01Q\x90\x82\x01R``\x80\x83\x01Q\x90\x82\x01R`\x80\x81\x01a\x1C\xB1V[`\0\x80`@\x83\x85\x03\x12\x15a\x1DOW`\0\x80\xFD[\x82Qa\x1DZ\x81a\x1B}V[` \x84\x01Q\x90\x92Pa\x1B\xC9\x81a\x1B}V[`\0` \x82\x84\x03\x12\x15a\x1D}W`\0\x80\xFD[\x81Q\x80\x15\x15\x81\x14a\x14\x0FW`\0\x80\xFD[`\x01\x81\x81\x1C\x90\x82\x16\x80a\x1D\xA1W`\x7F\x82\x16\x91P[` \x82\x10\x81\x03a\x1D\xC1WcNH{q`\xE0\x1B`\0R`\"`\x04R`$`\0\xFD[P\x91\x90PV[`\x01`\x01`\xE0\x1B\x03\x19\x83\x16\x81R\x81Q`\0\x90a\x1D\xEA\x81`\x04\x85\x01` \x87\x01a\x1B\xD4V[\x91\x90\x91\x01`\x04\x01\x93\x92PPPV[`\0\x82Qa\x1E\n\x81\x84` \x87\x01a\x1B\xD4V[\x91\x90\x91\x01\x92\x91PPV[`@\x80Q\x90\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x1EDWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`@R\x90V[`@Q`\x80\x81\x01`\x01`\x01`@\x1B\x03\x81\x11\x82\x82\x10\x17\x15a\x1EDWcNH{q`\xE0\x1B`\0R`A`\x04R`$`\0\xFD[`\0`@\x82\x84\x03\x12\x15a\x1E\x8CW`\0\x80\xFD[a\x1E\x94a\x1E\x14V[\x90P\x81Q\x81R` \x82\x01Q` \x82\x01R\x92\x91PPV[`\0\x80`\0\x83\x85\x03a\x01\0\x81\x12\x15a\x1E\xC1W`\0\x80\xFD[`\x80\x81\x12\x15a\x1E\xCFW`\0\x80\xFD[a\x1E\xD7a\x1EJV[\x85Q\x81R` \x86\x01Q` \x82\x01R`@\x86\x01Q`@\x82\x01R``\x86\x01Q``\x82\x01R\x80\x94PP`@`\x7F\x19\x82\x01\x12\x15a\x1F\x0FW`\0\x80\xFD[Pa\x1F\x18a\x1E\x14V[`\x80\x85\x01Q\x81R`\xA0\x85\x01Q` \x82\x01R\x91Pa\x1F8\x85`\xC0\x86\x01a\x1EzV[\x90P\x92P\x92P\x92V[\x86Q\x81R` \x80\x88\x01Q\x90\x82\x01R`@\x80\x88\x01Q\x90\x82\x01R``\x80\x88\x01Q\x90\x82\x01Ra\x01`\x81\x01\x86Q`\x80\x83\x01R` \x87\x01Q`\xA0\x83\x01R`\x01`\x01`@\x1B\x03\x80\x87\x16`\xC0\x84\x01R`\x02\x86\x10a\x1F\xA7WcNH{q`\xE0\x1B`\0R`!`\x04R`$`\0\xFD[\x85`\xE0\x84\x01R\x84Qa\x01\0\x84\x01R` \x85\x01Qa\x01 \x84\x01R\x80\x84\x16a\x01@\x84\x01RP\x97\x96PPPPPPPV[\x80\x82\x01\x80\x82\x11\x15a\x1C\xB1Wa\x1C\xB1a\x1C\x88V[`\0\x82a \x05WcNH{q`\xE0\x1B`\0R`\x12`\x04R`$`\0\xFD[P\x06\x90V[`@\x81R`\0a \x1D`@\x83\x01\x85a\x1B\xF8V[\x90P\x82` \x83\x01R\x93\x92PPPV\xFE\xA1dsolcC\0\x08\x17\0\n";
     /// The deployed bytecode of the contract.
     pub static STAKETABLEHANDLER_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
@@ -572,10 +1154,53 @@ pub mod stake_table_handler {
             let deployer = ::ethers::contract::ContractDeployer::new(deployer);
             Ok(deployer)
         }
+        ///Calls the contract's `IS_TEST` (0xfa7626d4) function
+        pub fn is_test(&self) -> ::ethers::contract::builders::ContractCall<M, bool> {
+            self.0
+                .method_hash([250, 118, 38, 212], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `advanceEpoch` (0x3cf80e6c) function
         pub fn advance_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([60, 248, 14, 108], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `excludeArtifacts` (0xb5508aa9) function
+        pub fn exclude_artifacts(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::std::vec::Vec<::std::string::String>>
+        {
+            self.0
+                .method_hash([181, 80, 138, 169], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `excludeContracts` (0xe20c9f71) function
+        pub fn exclude_contracts(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::std::vec::Vec<::ethers::core::types::Address>,
+        > {
+            self.0
+                .method_hash([226, 12, 159, 113], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `excludeSenders` (0x1ed7831c) function
+        pub fn exclude_senders(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::std::vec::Vec<::ethers::core::types::Address>,
+        > {
+            self.0
+                .method_hash([30, 215, 131, 28], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `failed` (0xba414fa6) function
+        pub fn failed(&self) -> ::ethers::contract::builders::ContractCall<M, bool> {
+            self.0
+                .method_hash([186, 65, 79, 166], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `lightClient` (0xb5700e68) function
@@ -697,6 +1322,53 @@ pub mod stake_table_handler {
                 .method_hash([150, 48, 49, 104], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `targetArtifactSelectors` (0x66d9a9a0) function
+        pub fn target_artifact_selectors(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::std::vec::Vec<FuzzSelector>> {
+            self.0
+                .method_hash([102, 217, 169, 160], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `targetArtifacts` (0x85226c81) function
+        pub fn target_artifacts(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::std::vec::Vec<::std::string::String>>
+        {
+            self.0
+                .method_hash([133, 34, 108, 129], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `targetContracts` (0x3f7286f4) function
+        pub fn target_contracts(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::std::vec::Vec<::ethers::core::types::Address>,
+        > {
+            self.0
+                .method_hash([63, 114, 134, 244], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `targetSelectors` (0x916a17c6) function
+        pub fn target_selectors(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::std::vec::Vec<FuzzSelector>> {
+            self.0
+                .method_hash([145, 106, 23, 198], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `targetSenders` (0x3e5e3c23) function
+        pub fn target_senders(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::std::vec::Vec<::ethers::core::types::Address>,
+        > {
+            self.0
+                .method_hash([62, 94, 60, 35], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `token` (0xfc0c546a) function
         pub fn token(
             &self,
@@ -765,6 +1437,157 @@ pub mod stake_table_handler {
                 .method_hash([21, 93, 213, 238], rand)
                 .expect("method not found (this should never happen)")
         }
+        ///Gets the contract's `log` event
+        pub fn log_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_address` event
+        pub fn log_address_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogAddressFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_array` event
+        pub fn log_array_1_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogArray1Filter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_array` event
+        pub fn log_array_2_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogArray2Filter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_array` event
+        pub fn log_array_3_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogArray3Filter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_bytes` event
+        pub fn log_bytes_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogBytesFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_bytes32` event
+        pub fn log_bytes_32_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogBytes32Filter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_int` event
+        pub fn log_int_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogIntFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_address` event
+        pub fn log_named_address_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedAddressFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_array` event
+        pub fn log_named_array_1_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedArray1Filter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_array` event
+        pub fn log_named_array_2_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedArray2Filter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_array` event
+        pub fn log_named_array_3_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedArray3Filter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_bytes` event
+        pub fn log_named_bytes_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedBytesFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_bytes32` event
+        pub fn log_named_bytes_32_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedBytes32Filter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_decimal_int` event
+        pub fn log_named_decimal_int_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedDecimalIntFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_decimal_uint` event
+        pub fn log_named_decimal_uint_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedDecimalUintFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_int` event
+        pub fn log_named_int_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedIntFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_string` event
+        pub fn log_named_string_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedStringFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_named_uint` event
+        pub fn log_named_uint_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogNamedUintFilter>
+        {
+            self.0.event()
+        }
+        ///Gets the contract's `log_string` event
+        pub fn log_string_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogStringFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `log_uint` event
+        pub fn log_uint_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogUintFilter> {
+            self.0.event()
+        }
+        ///Gets the contract's `logs` event
+        pub fn logs_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LogsFilter> {
+            self.0.event()
+        }
+        /// Returns an `Event` builder for all the events of this contract.
+        pub fn events(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, StakeTableHandlerEvents>
+        {
+            self.0
+                .event_with_filter(::core::default::Default::default())
+        }
     }
     impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
         for StakeTableHandler<M>
@@ -773,6 +1596,622 @@ pub mod stake_table_handler {
             Self::new(contract.address(), contract.client())
         }
     }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log", abi = "log(string)")]
+    pub struct LogFilter(pub ::std::string::String);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_address", abi = "log_address(address)")]
+    pub struct LogAddressFilter(pub ::ethers::core::types::Address);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_array", abi = "log_array(uint256[])")]
+    pub struct LogArray1Filter {
+        pub val: ::std::vec::Vec<::ethers::core::types::U256>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_array", abi = "log_array(int256[])")]
+    pub struct LogArray2Filter {
+        pub val: ::std::vec::Vec<::ethers::core::types::I256>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_array", abi = "log_array(address[])")]
+    pub struct LogArray3Filter {
+        pub val: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_bytes", abi = "log_bytes(bytes)")]
+    pub struct LogBytesFilter(pub ::ethers::core::types::Bytes);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_bytes32", abi = "log_bytes32(bytes32)")]
+    pub struct LogBytes32Filter(pub [u8; 32]);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_int", abi = "log_int(int256)")]
+    pub struct LogIntFilter(pub ::ethers::core::types::I256);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_address", abi = "log_named_address(string,address)")]
+    pub struct LogNamedAddressFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::Address,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_array", abi = "log_named_array(string,uint256[])")]
+    pub struct LogNamedArray1Filter {
+        pub key: ::std::string::String,
+        pub val: ::std::vec::Vec<::ethers::core::types::U256>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_array", abi = "log_named_array(string,int256[])")]
+    pub struct LogNamedArray2Filter {
+        pub key: ::std::string::String,
+        pub val: ::std::vec::Vec<::ethers::core::types::I256>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_array", abi = "log_named_array(string,address[])")]
+    pub struct LogNamedArray3Filter {
+        pub key: ::std::string::String,
+        pub val: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_bytes", abi = "log_named_bytes(string,bytes)")]
+    pub struct LogNamedBytesFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::Bytes,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_bytes32", abi = "log_named_bytes32(string,bytes32)")]
+    pub struct LogNamedBytes32Filter {
+        pub key: ::std::string::String,
+        pub val: [u8; 32],
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(
+        name = "log_named_decimal_int",
+        abi = "log_named_decimal_int(string,int256,uint256)"
+    )]
+    pub struct LogNamedDecimalIntFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::I256,
+        pub decimals: ::ethers::core::types::U256,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(
+        name = "log_named_decimal_uint",
+        abi = "log_named_decimal_uint(string,uint256,uint256)"
+    )]
+    pub struct LogNamedDecimalUintFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::U256,
+        pub decimals: ::ethers::core::types::U256,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_int", abi = "log_named_int(string,int256)")]
+    pub struct LogNamedIntFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::I256,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_string", abi = "log_named_string(string,string)")]
+    pub struct LogNamedStringFilter {
+        pub key: ::std::string::String,
+        pub val: ::std::string::String,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_named_uint", abi = "log_named_uint(string,uint256)")]
+    pub struct LogNamedUintFilter {
+        pub key: ::std::string::String,
+        pub val: ::ethers::core::types::U256,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_string", abi = "log_string(string)")]
+    pub struct LogStringFilter(pub ::std::string::String);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "log_uint", abi = "log_uint(uint256)")]
+    pub struct LogUintFilter(pub ::ethers::core::types::U256);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "logs", abi = "logs(bytes)")]
+    pub struct LogsFilter(pub ::ethers::core::types::Bytes);
+    ///Container type for all of the contract's events
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        serde::Serialize,
+        serde::Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub enum StakeTableHandlerEvents {
+        LogFilter(LogFilter),
+        LogAddressFilter(LogAddressFilter),
+        LogArray1Filter(LogArray1Filter),
+        LogArray2Filter(LogArray2Filter),
+        LogArray3Filter(LogArray3Filter),
+        LogBytesFilter(LogBytesFilter),
+        LogBytes32Filter(LogBytes32Filter),
+        LogIntFilter(LogIntFilter),
+        LogNamedAddressFilter(LogNamedAddressFilter),
+        LogNamedArray1Filter(LogNamedArray1Filter),
+        LogNamedArray2Filter(LogNamedArray2Filter),
+        LogNamedArray3Filter(LogNamedArray3Filter),
+        LogNamedBytesFilter(LogNamedBytesFilter),
+        LogNamedBytes32Filter(LogNamedBytes32Filter),
+        LogNamedDecimalIntFilter(LogNamedDecimalIntFilter),
+        LogNamedDecimalUintFilter(LogNamedDecimalUintFilter),
+        LogNamedIntFilter(LogNamedIntFilter),
+        LogNamedStringFilter(LogNamedStringFilter),
+        LogNamedUintFilter(LogNamedUintFilter),
+        LogStringFilter(LogStringFilter),
+        LogUintFilter(LogUintFilter),
+        LogsFilter(LogsFilter),
+    }
+    impl ::ethers::contract::EthLogDecode for StakeTableHandlerEvents {
+        fn decode_log(
+            log: &::ethers::core::abi::RawLog,
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
+            if let Ok(decoded) = LogFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogFilter(decoded));
+            }
+            if let Ok(decoded) = LogAddressFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogAddressFilter(decoded));
+            }
+            if let Ok(decoded) = LogArray1Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogArray1Filter(decoded));
+            }
+            if let Ok(decoded) = LogArray2Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogArray2Filter(decoded));
+            }
+            if let Ok(decoded) = LogArray3Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogArray3Filter(decoded));
+            }
+            if let Ok(decoded) = LogBytesFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogBytesFilter(decoded));
+            }
+            if let Ok(decoded) = LogBytes32Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogBytes32Filter(decoded));
+            }
+            if let Ok(decoded) = LogIntFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogIntFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedAddressFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedAddressFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedArray1Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedArray1Filter(decoded));
+            }
+            if let Ok(decoded) = LogNamedArray2Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedArray2Filter(decoded));
+            }
+            if let Ok(decoded) = LogNamedArray3Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedArray3Filter(decoded));
+            }
+            if let Ok(decoded) = LogNamedBytesFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedBytesFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedBytes32Filter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedBytes32Filter(decoded));
+            }
+            if let Ok(decoded) = LogNamedDecimalIntFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedDecimalIntFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedDecimalUintFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedDecimalUintFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedIntFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedIntFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedStringFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedStringFilter(decoded));
+            }
+            if let Ok(decoded) = LogNamedUintFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogNamedUintFilter(decoded));
+            }
+            if let Ok(decoded) = LogStringFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogStringFilter(decoded));
+            }
+            if let Ok(decoded) = LogUintFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogUintFilter(decoded));
+            }
+            if let Ok(decoded) = LogsFilter::decode_log(log) {
+                return Ok(StakeTableHandlerEvents::LogsFilter(decoded));
+            }
+            Err(::ethers::core::abi::Error::InvalidData)
+        }
+    }
+    impl ::core::fmt::Display for StakeTableHandlerEvents {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            match self {
+                Self::LogFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogAddressFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogArray1Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogArray2Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogArray3Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogBytesFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogBytes32Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogIntFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedAddressFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedArray1Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedArray2Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedArray3Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedBytesFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedBytes32Filter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedDecimalIntFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedDecimalUintFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedIntFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedStringFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogNamedUintFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogStringFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogUintFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LogsFilter(element) => ::core::fmt::Display::fmt(element, f),
+            }
+        }
+    }
+    impl ::core::convert::From<LogFilter> for StakeTableHandlerEvents {
+        fn from(value: LogFilter) -> Self {
+            Self::LogFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogAddressFilter> for StakeTableHandlerEvents {
+        fn from(value: LogAddressFilter) -> Self {
+            Self::LogAddressFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogArray1Filter> for StakeTableHandlerEvents {
+        fn from(value: LogArray1Filter) -> Self {
+            Self::LogArray1Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogArray2Filter> for StakeTableHandlerEvents {
+        fn from(value: LogArray2Filter) -> Self {
+            Self::LogArray2Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogArray3Filter> for StakeTableHandlerEvents {
+        fn from(value: LogArray3Filter) -> Self {
+            Self::LogArray3Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogBytesFilter> for StakeTableHandlerEvents {
+        fn from(value: LogBytesFilter) -> Self {
+            Self::LogBytesFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogBytes32Filter> for StakeTableHandlerEvents {
+        fn from(value: LogBytes32Filter) -> Self {
+            Self::LogBytes32Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogIntFilter> for StakeTableHandlerEvents {
+        fn from(value: LogIntFilter) -> Self {
+            Self::LogIntFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedAddressFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedAddressFilter) -> Self {
+            Self::LogNamedAddressFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedArray1Filter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedArray1Filter) -> Self {
+            Self::LogNamedArray1Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedArray2Filter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedArray2Filter) -> Self {
+            Self::LogNamedArray2Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedArray3Filter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedArray3Filter) -> Self {
+            Self::LogNamedArray3Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedBytesFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedBytesFilter) -> Self {
+            Self::LogNamedBytesFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedBytes32Filter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedBytes32Filter) -> Self {
+            Self::LogNamedBytes32Filter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedDecimalIntFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedDecimalIntFilter) -> Self {
+            Self::LogNamedDecimalIntFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedDecimalUintFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedDecimalUintFilter) -> Self {
+            Self::LogNamedDecimalUintFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedIntFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedIntFilter) -> Self {
+            Self::LogNamedIntFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedStringFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedStringFilter) -> Self {
+            Self::LogNamedStringFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogNamedUintFilter> for StakeTableHandlerEvents {
+        fn from(value: LogNamedUintFilter) -> Self {
+            Self::LogNamedUintFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogStringFilter> for StakeTableHandlerEvents {
+        fn from(value: LogStringFilter) -> Self {
+            Self::LogStringFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogUintFilter> for StakeTableHandlerEvents {
+        fn from(value: LogUintFilter) -> Self {
+            Self::LogUintFilter(value)
+        }
+    }
+    impl ::core::convert::From<LogsFilter> for StakeTableHandlerEvents {
+        fn from(value: LogsFilter) -> Self {
+            Self::LogsFilter(value)
+        }
+    }
+    ///Container type for all input parameters for the `IS_TEST` function with signature `IS_TEST()` and selector `0xfa7626d4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "IS_TEST", abi = "IS_TEST()")]
+    pub struct IsTestCall;
     ///Container type for all input parameters for the `advanceEpoch` function with signature `advanceEpoch()` and selector `0x3cf80e6c`
     #[derive(
         Clone,
@@ -788,6 +2227,66 @@ pub mod stake_table_handler {
     )]
     #[ethcall(name = "advanceEpoch", abi = "advanceEpoch()")]
     pub struct AdvanceEpochCall;
+    ///Container type for all input parameters for the `excludeArtifacts` function with signature `excludeArtifacts()` and selector `0xb5508aa9`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "excludeArtifacts", abi = "excludeArtifacts()")]
+    pub struct ExcludeArtifactsCall;
+    ///Container type for all input parameters for the `excludeContracts` function with signature `excludeContracts()` and selector `0xe20c9f71`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "excludeContracts", abi = "excludeContracts()")]
+    pub struct ExcludeContractsCall;
+    ///Container type for all input parameters for the `excludeSenders` function with signature `excludeSenders()` and selector `0x1ed7831c`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "excludeSenders", abi = "excludeSenders()")]
+    pub struct ExcludeSendersCall;
+    ///Container type for all input parameters for the `failed` function with signature `failed()` and selector `0xba414fa6`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "failed", abi = "failed()")]
+    pub struct FailedCall;
     ///Container type for all input parameters for the `lightClient` function with signature `lightClient()` and selector `0xb5700e68`
     #[derive(
         Clone,
@@ -1036,6 +2535,81 @@ pub mod stake_table_handler {
         abi = "stakeTableNumPendingRegistrations()"
     )]
     pub struct StakeTableNumPendingRegistrationsCall;
+    ///Container type for all input parameters for the `targetArtifactSelectors` function with signature `targetArtifactSelectors()` and selector `0x66d9a9a0`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "targetArtifactSelectors", abi = "targetArtifactSelectors()")]
+    pub struct TargetArtifactSelectorsCall;
+    ///Container type for all input parameters for the `targetArtifacts` function with signature `targetArtifacts()` and selector `0x85226c81`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "targetArtifacts", abi = "targetArtifacts()")]
+    pub struct TargetArtifactsCall;
+    ///Container type for all input parameters for the `targetContracts` function with signature `targetContracts()` and selector `0x3f7286f4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "targetContracts", abi = "targetContracts()")]
+    pub struct TargetContractsCall;
+    ///Container type for all input parameters for the `targetSelectors` function with signature `targetSelectors()` and selector `0x916a17c6`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "targetSelectors", abi = "targetSelectors()")]
+    pub struct TargetSelectorsCall;
+    ///Container type for all input parameters for the `targetSenders` function with signature `targetSenders()` and selector `0x3e5e3c23`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "targetSenders", abi = "targetSenders()")]
+    pub struct TargetSendersCall;
     ///Container type for all input parameters for the `token` function with signature `token()` and selector `0xfc0c546a`
     #[derive(
         Clone,
@@ -1142,7 +2716,12 @@ pub mod stake_table_handler {
         Hash,
     )]
     pub enum StakeTableHandlerCalls {
+        IsTest(IsTestCall),
         AdvanceEpoch(AdvanceEpochCall),
+        ExcludeArtifacts(ExcludeArtifactsCall),
+        ExcludeContracts(ExcludeContractsCall),
+        ExcludeSenders(ExcludeSendersCall),
+        Failed(FailedCall),
         LightClient(LightClientCall),
         NextExitEpochBefore(NextExitEpochBeforeCall),
         NextRegistrationEpochBefore(NextRegistrationEpochBeforeCall),
@@ -1158,6 +2737,11 @@ pub mod stake_table_handler {
         StakeTableFirstAvailableRegistrationEpoch(StakeTableFirstAvailableRegistrationEpochCall),
         StakeTableNumPendingExits(StakeTableNumPendingExitsCall),
         StakeTableNumPendingRegistrations(StakeTableNumPendingRegistrationsCall),
+        TargetArtifactSelectors(TargetArtifactSelectorsCall),
+        TargetArtifacts(TargetArtifactsCall),
+        TargetContracts(TargetContractsCall),
+        TargetSelectors(TargetSelectorsCall),
+        TargetSenders(TargetSendersCall),
         Token(TokenCall),
         TokenCreator(TokenCreatorCall),
         Users(UsersCall),
@@ -1170,9 +2754,30 @@ pub mod stake_table_handler {
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
+            if let Ok(decoded) = <IsTestCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::IsTest(decoded));
+            }
             if let Ok(decoded) = <AdvanceEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::AdvanceEpoch(decoded));
+            }
+            if let Ok(decoded) =
+                <ExcludeArtifactsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ExcludeArtifacts(decoded));
+            }
+            if let Ok(decoded) =
+                <ExcludeContractsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ExcludeContracts(decoded));
+            }
+            if let Ok(decoded) =
+                <ExcludeSendersCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ExcludeSenders(decoded));
+            }
+            if let Ok(decoded) = <FailedCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::Failed(decoded));
             }
             if let Ok(decoded) = <LightClientCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::LightClient(decoded));
@@ -1243,6 +2848,30 @@ pub mod stake_table_handler {
             {
                 return Ok(Self::StakeTableNumPendingRegistrations(decoded));
             }
+            if let Ok(decoded) =
+                <TargetArtifactSelectorsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TargetArtifactSelectors(decoded));
+            }
+            if let Ok(decoded) =
+                <TargetArtifactsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TargetArtifacts(decoded));
+            }
+            if let Ok(decoded) =
+                <TargetContractsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TargetContracts(decoded));
+            }
+            if let Ok(decoded) =
+                <TargetSelectorsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TargetSelectors(decoded));
+            }
+            if let Ok(decoded) = <TargetSendersCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TargetSenders(decoded));
+            }
             if let Ok(decoded) = <TokenCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Token(decoded));
             }
@@ -1269,7 +2898,12 @@ pub mod stake_table_handler {
     impl ::ethers::core::abi::AbiEncode for StakeTableHandlerCalls {
         fn encode(self) -> Vec<u8> {
             match self {
+                Self::IsTest(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::AdvanceEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ExcludeArtifacts(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ExcludeContracts(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ExcludeSenders(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::Failed(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::LightClient(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NextExitEpochBefore(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -1305,6 +2939,13 @@ pub mod stake_table_handler {
                 Self::StakeTableNumPendingRegistrations(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::TargetArtifactSelectors(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::TargetArtifacts(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TargetContracts(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TargetSelectors(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TargetSenders(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Token(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TokenCreator(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Users(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -1317,7 +2958,12 @@ pub mod stake_table_handler {
     impl ::core::fmt::Display for StakeTableHandlerCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
+                Self::IsTest(element) => ::core::fmt::Display::fmt(element, f),
                 Self::AdvanceEpoch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ExcludeArtifacts(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ExcludeContracts(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ExcludeSenders(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Failed(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LightClient(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NextExitEpochBefore(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NextRegistrationEpochBefore(element) => ::core::fmt::Display::fmt(element, f),
@@ -1339,6 +2985,11 @@ pub mod stake_table_handler {
                 Self::StakeTableNumPendingRegistrations(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::TargetArtifactSelectors(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TargetArtifacts(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TargetContracts(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TargetSelectors(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TargetSenders(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Token(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TokenCreator(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Users(element) => ::core::fmt::Display::fmt(element, f),
@@ -1348,9 +2999,34 @@ pub mod stake_table_handler {
             }
         }
     }
+    impl ::core::convert::From<IsTestCall> for StakeTableHandlerCalls {
+        fn from(value: IsTestCall) -> Self {
+            Self::IsTest(value)
+        }
+    }
     impl ::core::convert::From<AdvanceEpochCall> for StakeTableHandlerCalls {
         fn from(value: AdvanceEpochCall) -> Self {
             Self::AdvanceEpoch(value)
+        }
+    }
+    impl ::core::convert::From<ExcludeArtifactsCall> for StakeTableHandlerCalls {
+        fn from(value: ExcludeArtifactsCall) -> Self {
+            Self::ExcludeArtifacts(value)
+        }
+    }
+    impl ::core::convert::From<ExcludeContractsCall> for StakeTableHandlerCalls {
+        fn from(value: ExcludeContractsCall) -> Self {
+            Self::ExcludeContracts(value)
+        }
+    }
+    impl ::core::convert::From<ExcludeSendersCall> for StakeTableHandlerCalls {
+        fn from(value: ExcludeSendersCall) -> Self {
+            Self::ExcludeSenders(value)
+        }
+    }
+    impl ::core::convert::From<FailedCall> for StakeTableHandlerCalls {
+        fn from(value: FailedCall) -> Self {
+            Self::Failed(value)
         }
     }
     impl ::core::convert::From<LightClientCall> for StakeTableHandlerCalls {
@@ -1430,6 +3106,31 @@ pub mod stake_table_handler {
             Self::StakeTableNumPendingRegistrations(value)
         }
     }
+    impl ::core::convert::From<TargetArtifactSelectorsCall> for StakeTableHandlerCalls {
+        fn from(value: TargetArtifactSelectorsCall) -> Self {
+            Self::TargetArtifactSelectors(value)
+        }
+    }
+    impl ::core::convert::From<TargetArtifactsCall> for StakeTableHandlerCalls {
+        fn from(value: TargetArtifactsCall) -> Self {
+            Self::TargetArtifacts(value)
+        }
+    }
+    impl ::core::convert::From<TargetContractsCall> for StakeTableHandlerCalls {
+        fn from(value: TargetContractsCall) -> Self {
+            Self::TargetContracts(value)
+        }
+    }
+    impl ::core::convert::From<TargetSelectorsCall> for StakeTableHandlerCalls {
+        fn from(value: TargetSelectorsCall) -> Self {
+            Self::TargetSelectors(value)
+        }
+    }
+    impl ::core::convert::From<TargetSendersCall> for StakeTableHandlerCalls {
+        fn from(value: TargetSendersCall) -> Self {
+            Self::TargetSenders(value)
+        }
+    }
     impl ::core::convert::From<TokenCall> for StakeTableHandlerCalls {
         fn from(value: TokenCall) -> Self {
             Self::Token(value)
@@ -1460,6 +3161,82 @@ pub mod stake_table_handler {
             Self::WithdrawFunds(value)
         }
     }
+    ///Container type for all return fields from the `IS_TEST` function with signature `IS_TEST()` and selector `0xfa7626d4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct IsTestReturn(pub bool);
+    ///Container type for all return fields from the `excludeArtifacts` function with signature `excludeArtifacts()` and selector `0xb5508aa9`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ExcludeArtifactsReturn {
+        pub excluded_artifacts: ::std::vec::Vec<::std::string::String>,
+    }
+    ///Container type for all return fields from the `excludeContracts` function with signature `excludeContracts()` and selector `0xe20c9f71`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ExcludeContractsReturn {
+        pub excluded_contracts: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
+    ///Container type for all return fields from the `excludeSenders` function with signature `excludeSenders()` and selector `0x1ed7831c`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ExcludeSendersReturn {
+        pub excluded_senders: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
+    ///Container type for all return fields from the `failed` function with signature `failed()` and selector `0xba414fa6`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct FailedReturn(pub bool);
     ///Container type for all return fields from the `lightClient` function with signature `lightClient()` and selector `0xb5700e68`
     #[derive(
         Clone,
@@ -1642,6 +3419,86 @@ pub mod stake_table_handler {
         Hash,
     )]
     pub struct StakeTableNumPendingRegistrationsReturn(pub u64);
+    ///Container type for all return fields from the `targetArtifactSelectors` function with signature `targetArtifactSelectors()` and selector `0x66d9a9a0`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct TargetArtifactSelectorsReturn {
+        pub targeted_artifact_selectors: ::std::vec::Vec<FuzzSelector>,
+    }
+    ///Container type for all return fields from the `targetArtifacts` function with signature `targetArtifacts()` and selector `0x85226c81`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct TargetArtifactsReturn {
+        pub targeted_artifacts: ::std::vec::Vec<::std::string::String>,
+    }
+    ///Container type for all return fields from the `targetContracts` function with signature `targetContracts()` and selector `0x3f7286f4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct TargetContractsReturn {
+        pub targeted_contracts: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
+    ///Container type for all return fields from the `targetSelectors` function with signature `targetSelectors()` and selector `0x916a17c6`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct TargetSelectorsReturn {
+        pub targeted_selectors: ::std::vec::Vec<FuzzSelector>,
+    }
+    ///Container type for all return fields from the `targetSenders` function with signature `targetSenders()` and selector `0x3e5e3c23`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct TargetSendersReturn {
+        pub targeted_senders: ::std::vec::Vec<::ethers::core::types::Address>,
+    }
     ///Container type for all return fields from the `token` function with signature `token()` and selector `0xfc0c546a`
     #[derive(
         Clone,
@@ -1721,5 +3578,22 @@ pub mod stake_table_handler {
         pub x_1: ::ethers::core::types::U256,
         pub y_0: ::ethers::core::types::U256,
         pub y_1: ::ethers::core::types::U256,
+    }
+    ///`FuzzSelector(address,bytes4[])`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct FuzzSelector {
+        pub addr: ::ethers::core::types::Address,
+        pub selectors: ::std::vec::Vec<[u8; 4]>,
     }
 }
