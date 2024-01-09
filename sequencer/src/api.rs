@@ -1,4 +1,10 @@
-use crate::{network, Node, SeqTypes};
+use self::data_source::StateSignatureDataSource;
+use crate::{
+    context::SequencerContext,
+    network,
+    state_signature::{self, LightClientState},
+    Node, SeqTypes,
+};
 use async_std::task::JoinHandle;
 use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
@@ -13,27 +19,48 @@ mod update;
 
 pub use options::Options;
 
-type NodeIndex = u64;
-
-pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
-
 pub struct SequencerNode<N: network::Type> {
-    pub handle: Consensus<N>,
+    pub context: SequencerContext<N>,
     pub update_task: JoinHandle<anyhow::Result<()>>,
-    pub node_index: NodeIndex,
 }
 
-type AppState<N, D> = ExtensibleDataSource<D, Consensus<N>>;
+type AppState<N, D> = ExtensibleDataSource<D, SequencerContext<N>>;
 
 impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
-    fn handle(&self) -> &Consensus<N> {
-        self.as_ref()
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
-    fn handle(&self) -> &Consensus<N> {
-        self
+impl<N: network::Type> SubmitDataSource<N> for SequencerContext<N> {
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self.consensus()
+    }
+}
+
+impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
+    fn get_state_signature(
+        &self,
+        height: u64,
+    ) -> Option<hotshot_types::light_client::StateSignature> {
+        self.as_ref().get_state_signature(height)
+    }
+
+    fn sign_new_state(&self, state: &LightClientState) {
+        self.as_ref().sign_new_state(state)
+    }
+}
+
+impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
+    fn get_state_signature(
+        &self,
+        height: u64,
+    ) -> Option<hotshot_types::light_client::StateSignature> {
+        self.get_state_signature(height)
+    }
+
+    fn sign_new_state(&self, state: &LightClientState) {
+        self.sign_new_state(state)
     }
 }
 
@@ -49,6 +76,7 @@ mod test_helpers {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use futures::FutureExt;
+    use hotshot_types::light_client::StateSignature;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -75,7 +103,7 @@ mod test_helpers {
                 for handle in &handles {
                     handle.hotshot.start_consensus().await;
                 }
-                (handles[0].clone(), 0)
+                SequencerContext::new(handles[0].clone(), 0, Default::default())
             }
             .boxed()
         };
@@ -133,11 +161,18 @@ mod test_helpers {
         }
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+        let SequencerNode { mut context, .. } = options
+            .serve(|_| {
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
+            })
             .await
             .unwrap();
-        let mut events = handle.get_event_stream(Default::default()).await.0;
+        let mut events = context
+            .consensus_mut()
+            .get_event_stream(Default::default())
+            .await
+            .0;
 
         client.connect(None).await;
 
@@ -152,12 +187,54 @@ mod test_helpers {
         // Wait for a Decide event containing transaction matching the one we sent
         wait_for_decide_on_handle(&mut events, &txn).await.unwrap()
     }
+
+    /// Test the state signature API.
+    pub async fn state_signature_test_helper(opt: impl FnOnce(Options) -> Options) {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        // Get list of HotShot handles, take the first one, and submit a transaction to it
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
+        let SequencerNode { context, .. } = options
+            .serve(|_| {
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
+            })
+            .await
+            .unwrap();
+
+        let mut height: u64;
+        // Wait for block >=2 appears
+        // It's waiting for an extra second to make sure that the signature is generated
+        loop {
+            height = context.consensus().get_decided_leaf().await.get_height();
+            sleep(std::time::Duration::from_secs(1)).await;
+            if height >= 2 {
+                break;
+            }
+        }
+        assert!(client
+            .get::<StateSignature>(&format!("state-signature/block/{}", height))
+            .send()
+            .await
+            .is_ok())
+    }
 }
 
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod generic_tests {
-    use super::*;
+    use super::{test_helpers::state_signature_test_helper, *};
     use crate::{testing::init_hotshot_handles, Header};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -185,6 +262,12 @@ mod generic_tests {
     }
 
     #[async_std::test]
+    pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        state_signature_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
     pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
         setup_logging();
         setup_backtrace();
@@ -198,7 +281,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { (handle, 0) }.boxed())
+            .serve(|_| async move { SequencerContext::new(handle, 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -374,7 +457,7 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{test_helpers::state_signature_test_helper, *};
     use crate::testing::init_hotshot_handles;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::FutureExt;
@@ -399,7 +482,10 @@ mod test {
 
         let options = Options::from(options::Http { port });
         options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| {
+                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
+                    .boxed()
+            })
             .await
             .unwrap();
 
@@ -416,5 +502,10 @@ mod test {
     #[async_std::test]
     async fn submit_test_without_query_module() {
         submit_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn state_signature_test_without_query_module() {
+        state_signature_test_helper(|opt| opt).await
     }
 }

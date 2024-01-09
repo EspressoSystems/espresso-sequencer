@@ -2,8 +2,11 @@ pub mod api;
 mod block;
 mod block2;
 mod chain_variables;
+pub mod context;
 pub mod hotshot_commitment;
 pub mod options;
+pub mod state_signature;
+use context::SequencerContext;
 use url::Url;
 mod l1_client;
 pub mod persistence;
@@ -265,7 +268,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
-) -> anyhow::Result<(SystemContextHandle<SeqTypes, Node<network::Web>>, u64)> {
+) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -308,6 +311,7 @@ pub async fn init_node(
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
+    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
@@ -332,7 +336,7 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    Ok((
+    Ok(SequencerContext::new(
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
@@ -344,6 +348,7 @@ pub async fn init_node(
         )
         .await,
         node_index,
+        state_key_pair,
     ))
 }
 
