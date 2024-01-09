@@ -170,7 +170,9 @@ contract StakeTableInvariant_Tests is Test {
 
         // Distribute tokens to users
         for (uint256 i = 0; i < NUM_USERS; i++) {
-            userAddress = makeAddr(string(abi.encode(i)));
+            string memory userLabel = string.concat("user", vm.toString(i));
+            userAddress = makeAddr(userLabel);
+            vm.label(userAddress, userLabel);
             users.push(userAddress);
             vm.prank(exampleTokenCreator);
             SafeTransferLib.safeTransfer(token, userAddress, 1000);
