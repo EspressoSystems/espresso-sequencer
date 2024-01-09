@@ -148,9 +148,6 @@ contract StakeTableHandler is Test {
 }
 
 contract StakeTableInvariant_Tests is Test {
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 20
-
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
