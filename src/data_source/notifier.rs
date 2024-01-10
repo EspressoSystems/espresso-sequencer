@@ -81,6 +81,11 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+/// A predicate on a type `<T>`.
+///
+/// [`Predicate`] is an alias for any type implementing `Fn(&T) -> bool` (with a few extra bounds
+/// to support concurrency). It is used by [`Notifier`] to represent the preferences of subscribers
+/// when filtering messages of type `T`.
 pub trait Predicate<T>: 'static + Send + Sync + Fn(&T) -> bool {}
 impl<F, T> Predicate<T> for F where F: 'static + Send + Sync + Fn(&T) -> bool {}
 
@@ -96,11 +101,11 @@ struct Subscriber<T> {
 
 impl<T> Subscriber<T> {
     fn is_closed(&self) -> bool {
-        // A subscriber can be closed because it was explicitly closed by its receiver (e.g. the
-        // receiver was dropped)
-        self.closed.load(Ordering::Relaxed) ||
-        // Or because it has already been notified, which `take`s the oneshot sender.
-        self.sender.is_none()
+        // A subscriber can be closed because it has already been notified, which `take`s the
+        // oneshot sender.
+        self.sender.is_none() ||
+        // Or because it was explicitly closed by its receiver (e.g. the receiver was dropped)
+        self.closed.load(Ordering::Relaxed)
     }
 }
 

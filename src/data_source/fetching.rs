@@ -29,7 +29,7 @@ use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::{
-    future::{self, join_all, BoxFuture, FutureExt},
+    future::{join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
@@ -497,10 +497,17 @@ where
                         // since the semantics of `Fetch` are to never fail. This is analogous to
                         // fetching an object which doesn't actually exist: the `Fetch` will never
                         // return.
-                        tracing::warn!(
-                            "notifier dropped without satisfying request {req:?}, fetch will block"
-                        );
-                        future::pending().await
+                        //
+                        // However, for ease of debugging, and since this is never expected to
+                        // happen in normal usage, we panic instead. This should only happen in two
+                        // cases:
+                        // * The server was shut down (dropping the notifier) without cleaning up
+                        //   some background tasks. This will not affect runtime behavior, but
+                        //   should be fixed if it happens.
+                        // * There is a very unexpected runtime bug resulting in the notifier being
+                        //   dropped. If this happens, things are very broken in any case, and it is
+                        //   better to panic loudly than simply block forever.
+                        panic!("notifier dropped without satisfying request {req:?}");
                     }
                 }
             });
