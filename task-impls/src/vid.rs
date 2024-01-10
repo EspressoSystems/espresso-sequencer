@@ -101,6 +101,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .await;
 
                 #[cfg(async_executor_impl = "tokio")]
+                // Unwrap here will just propogate any panic from the spawned task, it's not a new place we can panic.
                 let vid_disperse = vid_disperse.unwrap();
                 // send the commitment and metadata to consensus for block building
                 self.event_stream
