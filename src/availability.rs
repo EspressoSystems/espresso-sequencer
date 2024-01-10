@@ -323,6 +323,8 @@ fn proposer_param<Types: NodeType>(
     // The HotShot signature key trait temporarily lacks the trait bounds required to convert
     // directly from TaggedBase64. As a workaround, we parse the TaggedBase64 as an
     // EncodedPublicKey and then decode to the actual signature key type.
+    //
+    // This can be simplified after https://github.com/EspressoSystems/HotShot/issues/2374.
     let encoded: EncodedPublicKey = req.blob_param(param)?;
     SignatureKey::<Types>::from_bytes(&encoded).context(InvalidSignatureKeySnafu)
 }
