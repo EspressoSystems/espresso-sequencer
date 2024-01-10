@@ -376,8 +376,10 @@ use tide_disco::{App, StatusCode};
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
+pub type Metadata<Types> = <Payload<Types> as BlockPayload>::Metadata;
 /// Item within a [`Payload`].
 pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
+pub type SignatureKey<Types> = <Types as NodeType>::SignatureKey;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -480,9 +482,8 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
-    use hotshot::types::SignatureKey;
+    use hotshot::types::SignatureKey as _;
     use hotshot_signature_key::bn254::BLSPubKey;
-    use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -549,12 +550,12 @@ mod test {
         }
         async fn get_proposals(
             &self,
-            proposer: &EncodedPublicKey,
+            proposer: &SignatureKey<MockTypes>,
             limit: Option<usize>,
         ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
             self.hotshot_qs.get_proposals(proposer, limit).await
         }
-        async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
             self.hotshot_qs.count_proposals(proposer).await
         }
         async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {

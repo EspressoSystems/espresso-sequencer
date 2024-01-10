@@ -13,13 +13,13 @@
 use super::query_data::{
     BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
 };
-use crate::{Header, Leaf, Payload, QueryResult};
+use crate::{Header, Leaf, Payload, QueryResult, SignatureKey};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::Stream;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Debug;
@@ -99,10 +99,10 @@ where
 
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>>;
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
 
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream>;
     async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream>;

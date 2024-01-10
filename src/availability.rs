@@ -10,16 +10,17 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{api::load_api, Payload, QueryError, QueryResult};
+use crate::{api::load_api, Payload, QueryError, QueryResult, SignatureKey};
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use hotshot::types::SignatureKey as _;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::fmt::Display;
 use std::path::PathBuf;
-use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, RequestParams, StatusCode};
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -101,6 +102,9 @@ pub enum Error {
         height: usize,
         reason: String,
     },
+    #[snafu(display("malformed signature key"))]
+    #[from(ignore)]
+    InvalidSignatureKey,
     Custom {
         message: String,
         status: StatusCode,
@@ -117,7 +121,7 @@ impl Error {
 
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
+            Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
             Self::QueryLeaf { source, .. }
             | Self::StreamLeaf { source, .. }
             | Self::QueryBlock { source, .. }
@@ -268,14 +272,12 @@ where
                             resource: id.to_string(),
                         })?;
                         let i = req.integer_param("index")?;
-                        let index =
-                            block
-                                .payload()
-                                .nth(i)
-                                .context(InvalidTransactionIndexSnafu {
-                                    height: height as u64,
-                                    index: i as u64,
-                                })?;
+                        let index = block.payload().nth(block.metadata(), i).context(
+                            InvalidTransactionIndexSnafu {
+                                height: height as u64,
+                                index: i as u64,
+                            },
+                        )?;
                         (block, index)
                     }
                 };
@@ -288,26 +290,41 @@ where
         })?
         .get("countproposals", |req, state| {
             async move {
-                let proposer = req.blob_param("proposer_id")?;
+                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
                 state
                     .count_proposals(&proposer)
                     .await
-                    .context(QueryProposalsSnafu { proposer })
+                    .context(QueryProposalsSnafu {
+                        proposer: proposer.to_bytes(),
+                    })
             }
             .boxed()
         })?
         .get("getproposals", |req, state| {
             async move {
-                let proposer = req.blob_param("proposer_id")?;
+                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
                 let limit = req.opt_integer_param("count")?;
                 state
                     .get_proposals(&proposer, limit)
                     .await
-                    .context(QueryProposalsSnafu { proposer })
+                    .context(QueryProposalsSnafu {
+                        proposer: proposer.to_bytes(),
+                    })
             }
             .boxed()
         })?;
     Ok(api)
+}
+
+fn proposer_param<Types: NodeType>(
+    req: &RequestParams,
+    param: &str,
+) -> Result<SignatureKey<Types>, Error> {
+    // The HotShot signature key trait temporarily lacks the trait bounds required to convert
+    // directly from TaggedBase64. As a workaround, we parse the TaggedBase64 as an
+    // EncodedPublicKey and then decode to the actual signature key type.
+    let encoded: EncodedPublicKey = req.blob_param(param)?;
+    SignatureKey::<Types>::from_bytes(&encoded).context(InvalidSignatureKeySnafu)
 }
 
 fn handle_stream_errors<T, S, F>(
@@ -435,7 +452,7 @@ mod test {
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
             let proposals: Vec<LeafQueryData<MockTypes>> = client
-                .get(&format!("proposals/{}", leaf.proposer()))
+                .get(&format!("proposals/{}", leaf.proposer().to_bytes()))
                 .send()
                 .await
                 .unwrap();
@@ -443,7 +460,7 @@ mod test {
             // Check the `proposals/limit` and `proposals/count` features.
             assert!(
                 client
-                    .get::<u64>(&format!("proposals/{}/count", leaf.proposer()))
+                    .get::<u64>(&format!("proposals/{}/count", leaf.proposer().to_bytes()))
                     .send()
                     .await
                     .unwrap()
@@ -456,7 +473,7 @@ mod test {
                 client
                     .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/1",
-                        leaf.proposer()
+                        leaf.proposer().to_bytes()
                     ))
                     .send()
                     .await
@@ -468,7 +485,7 @@ mod test {
                 client
                     .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/0",
-                        leaf.proposer()
+                        leaf.proposer().to_bytes()
                     ))
                     .send()
                     .await
@@ -479,7 +496,7 @@ mod test {
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
-            for (j, txn_from_block) in block.payload().enumerate() {
+            for (j, txn_from_block) in block.enumerate() {
                 let txn: TransactionQueryData<MockTypes> = client
                     .get(&format!("transaction/{}/{}", i, j))
                     .send()

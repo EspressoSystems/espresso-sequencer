@@ -18,10 +18,10 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Payload, QueryResult,
+    Payload, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -174,12 +174,12 @@ where
     }
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         self.data_source.get_proposals(proposer, limit).await
     }
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         self.data_source.count_proposals(proposer).await
     }
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {

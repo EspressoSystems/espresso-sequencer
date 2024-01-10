@@ -48,7 +48,7 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 #[espresso_macros::generic_tests]
 pub mod availability_tests {
     use crate::{
-        availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
+        availability::{payload_size, BlockQueryData, LeafQueryData},
         testing::{
             consensus::MockNetwork,
             mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
@@ -115,7 +115,7 @@ pub mod availability_tests {
             assert_eq!(block, ds.get_block(i).await.unwrap());
             assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), i as u64);
 
-            for (j, txn) in block.payload().enumerate() {
+            for (j, txn) in block.enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
                 // For duplicate transactions, this function returns the index of the first
                 // duplicate.
