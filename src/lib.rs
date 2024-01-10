@@ -251,8 +251,7 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use hotshot_types::traits::signature_key::EncodedPublicKey;
-//! # use hotshot_query_service::QueryResult;
+//! # use hotshot_query_service::{QueryResult, SignatureKey};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, TransactionHash,
 //! #   TransactionIndex,
@@ -304,8 +303,8 @@
 //! #   async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes>>> { todo!() }
-//! #   async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> { todo!() }
+//! #   async fn get_proposals(&self, id: &SignatureKey<AppTypes>, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes>>> { todo!() }
+//! #   async fn count_proposals(&self, id: &SignatureKey<AppTypes>) -> QueryResult<usize> { todo!() }
 //! #   async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> { todo!() }
 //! #   async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> { todo!() }
 //! }
