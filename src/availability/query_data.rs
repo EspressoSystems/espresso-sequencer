@@ -269,8 +269,8 @@ impl<Types: NodeType> BlockQueryData<Types> {
     /// expensive, and may be omitted in optimized builds. The responsibility of ensuring
     /// consistency between `leaf` and `payload` ultimately falls on the caller.
     pub fn new(
-        leaf: Leaf<Types>,
-        qc: QuorumCertificate<Types>,
+        leaf: &Leaf<Types>,
+        qc: &QuorumCertificate<Types>,
         payload: Payload<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
@@ -282,7 +282,7 @@ impl<Types: NodeType> BlockQueryData<Types> {
         );
         Ok(Self {
             hash: leaf.block_header.commit(),
-            header: leaf.block_header,
+            header: leaf.block_header.clone(),
             size: payload_size::<Types>(&payload),
             payload,
         })
@@ -338,6 +338,13 @@ where
             height: self.height(),
             hash: transaction.commit(),
         })
+    }
+
+    pub fn transaction_by_hash(
+        &self,
+        hash: Commitment<Transaction<Types>>,
+    ) -> Option<TransactionIndex<Types>> {
+        self.payload().by_hash(self.metadata(), hash)
     }
 
     pub fn len(&self) -> usize {

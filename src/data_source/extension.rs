@@ -13,10 +13,11 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
+    node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
     Payload, QueryResult, SignatureKey,
 };
@@ -130,63 +131,42 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type LeafStream = D::LeafStream;
-    type BlockStream = D::BlockStream;
-
-    type LeafRange<'a, R> = D::LeafRange<'a, R>
+    type LeafRange<R> = D::LeafRange<R>
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
-    type BlockRange<'a, R> = D::BlockRange<'a, R>
+    type BlockRange<R> = D::BlockRange<R>
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
+    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.data_source.get_leaf(id).await
     }
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_block(id).await
     }
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
-        R: RangeBounds<usize> + Send,
+        R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_leaf_range(range).await
     }
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
     where
-        R: RangeBounds<usize> + Send,
+        R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
     }
     async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
         self.data_source.get_block_with_transaction(hash).await
-    }
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        self.data_source.get_proposals(proposer, limit).await
-    }
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
-        self.data_source.count_proposals(proposer).await
-    }
-    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
-        self.data_source.subscribe_leaves(height).await
-    }
-    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
-        self.data_source.subscribe_blocks(height).await
     }
 }
 
@@ -205,6 +185,42 @@ where
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.data_source.insert_block(block).await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types> NodeDataSource<Types> for ExtensibleDataSource<D, U>
+where
+    D: NodeDataSource<Types> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        self.data_source.block_height().await
+    }
+    async fn get_proposals(
+        &self,
+        proposer: &SignatureKey<Types>,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
+        self.data_source.get_proposals(proposer, limit).await
+    }
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
+        self.data_source.count_proposals(proposer).await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types> UpdateNodeData<Types> for ExtensibleDataSource<D, U>
+where
+    D: UpdateNodeData<Types> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+{
+    type Error = D::Error;
+
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+        self.data_source.insert_leaf(leaf).await
     }
 }
 

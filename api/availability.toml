@@ -11,11 +11,26 @@
 # see <https://www.gnu.org/licenses/>.
 
 [meta]
-NAME = "hotshot-availability"
-DESCRIPTION = "Historical HotShot ledger state"
 FORMAT_VERSION = "0.1.0"
+NAME = "hotshot-availability"
+DESCRIPTION = """
+HotShot chain state
 
-[route.getleaf]
+The availability API provides an objective view of the HotShot blockchain. It provides access only
+to normative data: that is, data which is agreed upon by all honest consensus nodes and which is
+immutable. This means access to core consensus data structures including leaves, blocks, and
+headers, where each query is pure and idempotent. This also means that it is possible for a client
+to verify all of the information provided by this API, by running a HotShot light client and
+downloading the appropriate evidence with each query.
+
+This API does not provide any queries which represent only the _current_ state of the chain or may
+change over time, and it does not provide information for which there is not (yet) agreement of a
+supermajority of consensus nodes. For information about the current dynamic state of consensus and
+uncommitted state, try the `status` API. For information about the chain which is tabulated by this
+specific node and not subject to full consensus agreement, try the `node` API.
+"""
+
+[route.get_leaf]
 PATH = ["leaf/:height", "leaf/hash/:hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
@@ -29,8 +44,7 @@ Returns
         "view_number": integer,
         "justify_qc": QC,
         "parent_commitment": TaggedBase64,
-        "block_hash": TaggedBase64,
-        "timestamp": integer,
+        "block_header": app-specific header type,
         "proposer_id": TaggedBase64,
     },
     "qc": QC,
@@ -51,7 +65,7 @@ the quorum certificate signing this leaf. Both QCs have the schema
 ```
 """
 
-[route.streamleaves]
+[route.stream_leaves]
 PATH = ["stream/leaves/:height"]
 METHOD = "SOCKET"
 ":height" = "Integer"
@@ -61,7 +75,7 @@ Subscribe to a stream of leaves in the order they are sequenced, starting at `:h
 Opens a WebSockets connection and sends a stream of the same data type returned by `leaf/:height`.
 """
 
-[route.getheader]
+[route.get_header]
 PATH = ["header/:height", "header/hash/:hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
@@ -71,7 +85,7 @@ Get a header by its position in the ledger (0 is the genesis block) or its hash.
 Returns an application-specific header type.
 """
 
-[route.streamheaders]
+[route.stream_headers]
 PATH = ["stream/headers/:height"]
 METHOD = "SOCKET"
 ":height" = "Integer"
@@ -82,7 +96,7 @@ Useful for applications like rollups that do not need to fetch the entire block.
 Opens a WebSocket connection and sends a stream of application-specific headers.
 """
 
-[route.getblock]
+[route.get_block]
 PATH = ["block/:height", "block/hash/:hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
@@ -90,23 +104,23 @@ DOC = """
 Get a block by its position in the ledger (0 is the genesis block) or its hash.
 
 Note that block data in HotShot disseminates asynchronously. That means that the full data for a
-block may not be available immediately after that block is committed. In this situation, `block/i`
-may succeed but `block/i` may fail. However, once `block/i` succeeds, it is guaranteed that
+block may not be available immediately after that block is committed. In this situation, `leaf/i`
+may succeed but `block/i` may fail. However, once `leaf/i` succeeds, it is guaranteed that
 `block/i` will _eventually_ succeed, and return a block whose `hash` is the same as the
 `block_hash` from the corresponding leaf.
 
 Returns
 ```
 {
-    "block": application-specific block type,
+    "header": application-specific header type,
+    "payload": application-specific payload type,
     "hash": TaggedBase64,
-    "height": integer,
     "size": integer,
 }
 ```
 """
 
-[route.streamblocks]
+[route.stream_blocks]
 PATH = ["stream/blocks/:height"]
 METHOD = "SOCKET"
 ":height" = "Integer"
@@ -116,7 +130,7 @@ Subscribe to a stream of blocks in the order they are sequenced, starting at `:h
 Opens a WebSockets connection and sends a stream of the same data type returned by `block/:height`.
 """
 
-[route.gettransaction]
+[route.get_transaction]
 PATH = ["transaction/:height/:index", "transaction/hash/:hash"]
 ":height" = "Integer"
 ":index" = "Integer"
@@ -152,35 +166,8 @@ Returns
 ```
 """
 
-[route.countproposals]
-PATH = ["proposals/:proposer_id/count"]
-":proposer_id" = "TaggedBase64"
-DOC = """
-Get the number of committed blocks proposed by `proposer_id`
-
-Returns
-```
-{
-    "count": Integer,
-}
-```
-
-"""
-
-[route.getproposals]
-PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
-":proposer_id" = "TaggedBase64"
-":count" = "Integer"
-DOC = """
-Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
-the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
-return all the leaves from the proposer.
-
-Returns a list of the objects returned by `/leaf`.
-"""
-
-[route.getstaketable]
-PATH = ["getstaketable/:height", "getstaketable/view/:view_number"]
+[route.get_stake_table]
+PATH = ["stake-table/:height", "stake-table/view/:view_number"]
 ":height" = "Integer"
 ":view_number" = "Integer"
 DOC = """

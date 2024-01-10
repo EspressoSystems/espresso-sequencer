@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{availability, status};
+use crate::{availability, node, status};
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -21,6 +21,8 @@ use tide_disco::StatusCode;
 pub enum Error {
     #[snafu(display("{source}"))]
     Availability { source: availability::Error },
+    #[snafu(display("{source}"))]
+    Node { source: node::Error },
     #[snafu(display("{source}"))]
     Status { source: status::Error },
     #[snafu(display("error {status}: {message}"))]
@@ -44,6 +46,7 @@ impl tide_disco::Error for Error {
     fn status(&self) -> StatusCode {
         match self {
             Self::Availability { source } => source.status(),
+            Self::Node { source } => source.status(),
             Self::Status { source } => source.status(),
             Self::Custom { status, .. } => *status,
         }

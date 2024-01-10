@@ -1,0 +1,67 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+FORMAT_VERSION = "0.1.0"
+NAME = "hotshot-node"
+DESCRIPTION = """
+A node's view of a HotShot chain
+
+The node API provides a subjective view of the HotShot blockchain, from the perspective of one
+particular node. It provides access to information that the availability API does not, because this
+information depends on the perspective of the node observing it, and may be subject to eventual
+consistency. For example, `/node/block-height` and `/node/proposals/:proposer_id/count` may both
+return smaller counts than expected, if the node being queried is not fully synced with the entire
+history of the chain. However, the node will _eventually_ sync and return the expected counts.
+"""
+
+[route.block_height]
+PATH = ["block-height"]
+DOC = """
+The current height of the chain, as observed by this node.
+
+Returns an integer.
+"""
+
+[route.count_proposals]
+PATH = ["proposals/:proposer_id/count"]
+":proposer_id" = "TaggedBase64"
+DOC = """
+Get the number of committed blocks proposed by `proposer_id`, known to this node.
+
+Returns an integer.
+"""
+
+[route.get_proposals]
+PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
+":proposer_id" = "TaggedBase64"
+":count" = "Integer"
+DOC = """
+Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
+the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
+return all the leaves from the proposer.
+
+Returns a list of
+
+```
+{
+    "leaf": {
+        "view_number": integer,
+        "justify_qc": QC,
+        "parent_commitment": TaggedBase64,
+        "block_header": app-specific header type,
+        "proposer_id": TaggedBase64,
+    },
+    "qc": QC,
+}
+```
+"""

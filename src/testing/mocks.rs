@@ -13,6 +13,7 @@
 use crate::{
     availability::{AvailabilityDataSource, QueryablePayload},
     data_source::{UpdateDataSource, VersionedDataSource},
+    node::NodeDataSource,
     status::StatusDataSource,
 };
 use async_trait::async_trait;
@@ -123,6 +124,7 @@ pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
 pub trait TestableDataSource:
     DataSourceLifeCycle
     + AvailabilityDataSource<MockTypes>
+    + NodeDataSource<MockTypes>
     + StatusDataSource
     + UpdateDataSource<MockTypes>
     + VersionedDataSource
@@ -132,6 +134,7 @@ pub trait TestableDataSource:
 impl<T> TestableDataSource for T where
     T: DataSourceLifeCycle
         + AvailabilityDataSource<MockTypes>
+        + NodeDataSource<MockTypes>
         + StatusDataSource
         + UpdateDataSource<MockTypes>
         + VersionedDataSource

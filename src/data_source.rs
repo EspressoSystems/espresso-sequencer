@@ -12,12 +12,12 @@
 
 //! Persistent storage and sources of data consumed by APIs.
 //!
-//! Naturally, an archival query service such as this is heavily dependent on a persistent storage
-//! implementation. The APIs provided by this query service are generic over the specific type of
-//! the persistence layer, which we call a _data source_. This module provides the following
-//! concrete persistence implementations:
+//! The APIs provided by this query service are generic over the implementation which actually
+//! retrieves data in answer to queries. We call this implementation a _data source_. This module
+//! defines a data source and provides several pre-built implementations:
 //! * [`FileSystemDataSource`]
 //! * [`SqlDataSource`]
+//! * [`FetchingDataSource`], a generalization of the above
 //! * [`MetricsDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
@@ -26,15 +26,17 @@
 //! * [`ExtensibleDataSource`]
 //!
 
-mod buffered_channel;
 mod extension;
+mod fetching;
 mod fs;
-mod ledger_log;
 mod metrics;
+mod notifier;
 pub mod sql;
+pub mod storage;
 mod update;
 
 pub use extension::ExtensibleDataSource;
+pub use fetching::FetchingDataSource;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
 #[cfg(feature = "metrics-data-source")]
@@ -48,36 +50,75 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 #[espresso_macros::generic_tests]
 pub mod availability_tests {
     use crate::{
-        availability::{payload_size, BlockQueryData, LeafQueryData},
+        availability::{
+            payload_size, BlockQueryData, Fetch, LeafQueryData, UpdateAvailabilityData,
+        },
+        node::NodeDataSource,
         testing::{
             consensus::MockNetwork,
             mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
             setup_test,
         },
-        Leaf, QueryError,
+        Leaf,
     };
     use async_std::sync::RwLock;
     use commit::Committable;
-    use futures::{StreamExt, TryStreamExt};
+    use futures::{
+        future,
+        stream::{BoxStream, StreamExt},
+    };
     use hotshot_types::simple_certificate::QuorumCertificate;
     use std::collections::{HashMap, HashSet};
+    use std::fmt::Debug;
     use std::ops::{Bound, RangeBounds};
+
+    /// Apply an upper bound to a range based on the currently available block height.
+    async fn bound_range<R, D>(ds: &D, range: R) -> impl RangeBounds<usize>
+    where
+        D: TestableDataSource,
+        R: RangeBounds<usize>,
+    {
+        let start = range.start_bound().cloned();
+        let mut end = range.end_bound().cloned();
+        if end == Bound::Unbounded {
+            end = Bound::Excluded(NodeDataSource::block_height(ds).await.unwrap());
+        }
+        (start, end)
+    }
+
+    /// Get a stream of blocks, implicitly terminating at the current block height.
+    async fn block_range<R, D>(ds: &D, range: R) -> BoxStream<'static, BlockQueryData<MockTypes>>
+    where
+        D: TestableDataSource,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        ds.get_block_range(bound_range(ds, range).await)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
+
+    /// Get a stream of leaves, implicitly terminating at the current block height.
+    async fn leaf_range<R, D>(ds: &D, range: R) -> BoxStream<'static, LeafQueryData<MockTypes>>
+    where
+        D: TestableDataSource,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        ds.get_leaf_range(bound_range(ds, range).await)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
 
     async fn get_non_empty_blocks(
         ds: &RwLock<impl TestableDataSource>,
     ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
         let ds = ds.read().await;
         // Ignore the genesis block (start from height 1).
-        ds.get_leaf_range(1..)
+        leaf_range(&*ds, 1..)
             .await
-            .unwrap()
-            .zip(ds.get_block_range(..).await.unwrap())
-            .filter_map(|entry| async move {
-                match entry {
-                    (Ok(leaf), Ok(block)) if !block.is_empty() => Some((leaf, block)),
-                    _ => None,
-                }
-            })
+            .zip(block_range(&*ds, 1..).await)
+            .filter(|(_, block)| future::ready(!block.is_empty()))
             .collect()
             .await
     }
@@ -88,22 +129,21 @@ pub mod availability_tests {
         // Check the consistency of every block/leaf pair. Keep track of transactions we've seen so
         // we can detect duplicates.
         let mut seen_transactions = HashMap::new();
-        let mut leaves = ds.get_leaf_range(..).await.unwrap().enumerate();
+        let mut leaves = leaf_range(&*ds, ..).await.enumerate();
         while let Some((i, leaf)) = leaves.next().await {
-            let leaf = leaf.unwrap();
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
 
             // Check indices.
-            assert_eq!(leaf, ds.get_leaf(i).await.unwrap());
-            assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.unwrap());
+            assert_eq!(leaf, ds.get_leaf(i).await.await);
+            assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.await);
             assert!(ds
                 .get_proposals(&leaf.proposer(), None)
                 .await
                 .unwrap()
                 .contains(&leaf));
 
-            let Ok(block) = ds.get_block(i).await else {
+            let Ok(block) = ds.get_block(i).await.try_resolve() else {
                 continue;
             };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -112,8 +152,8 @@ pub mod availability_tests {
             assert_eq!(block.size(), payload_size::<MockTypes>(block.payload()));
 
             // Check indices.
-            assert_eq!(block, ds.get_block(i).await.unwrap());
-            assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), i as u64);
+            assert_eq!(block, ds.get_block(i).await.await);
+            assert_eq!(ds.get_block(block.hash()).await.await.height(), i as u64);
 
             for (j, txn) in block.enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -122,17 +162,15 @@ pub mod availability_tests {
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                let (block, pos) = ds.get_block_with_transaction(txn.commit()).await.unwrap();
+                let (block, pos) = ds.get_block_with_transaction(txn.commit()).await.await;
                 assert_eq!((block.height(), pos), *ix);
             }
         }
 
         // Validate the list of proposals for every distinct proposer ID in the chain.
-        for proposer in ds
-            .get_leaf_range(..)
+        for proposer in leaf_range(&*ds, ..)
             .await
-            .unwrap()
-            .filter_map(|res| async move { res.ok().map(|leaf| leaf.proposer()) })
+            .map(|leaf| leaf.proposer())
             .collect::<HashSet<_>>()
             .await
         {
@@ -174,15 +212,7 @@ pub mod availability_tests {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
-        let mut blocks = {
-            ds.read()
-                .await
-                .subscribe_blocks(0)
-                .await
-                .unwrap()
-                .map(Result::unwrap)
-                .enumerate()
-        };
+        let mut blocks = { ds.read().await.subscribe_blocks(0).await.enumerate() };
         for nonce in 0..3 {
             let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
@@ -197,7 +227,7 @@ pub mod availability_tests {
                 tracing::info!("block {i} is empty");
             };
 
-            assert_eq!(ds.read().await.get_block(i).await.unwrap(), block);
+            assert_eq!(ds.read().await.get_block(i).await.await, block);
             validate(&ds).await;
         }
 
@@ -209,38 +239,14 @@ pub mod availability_tests {
             let ds = ds.read().await;
             let storage = D::connect(network.storage()).await;
             assert_eq!(
-                ds.get_block_range(..)
-                    .await
-                    .unwrap()
-                    .try_collect::<Vec<_>>()
-                    .await
-                    .unwrap(),
-                storage
-                    .get_block_range(..)
-                    .await
-                    .unwrap()
-                    .try_collect::<Vec<_>>()
-                    .await
-                    .unwrap()
+                block_range(&*ds, ..).await.collect::<Vec<_>>().await,
+                block_range(&storage, ..).await.collect::<Vec<_>>().await
             );
             assert_eq!(
-                ds.get_leaf_range(..)
-                    .await
-                    .unwrap()
-                    .try_collect::<Vec<_>>()
-                    .await
-                    .unwrap(),
-                storage
-                    .get_leaf_range(..)
-                    .await
-                    .unwrap()
-                    .try_collect::<Vec<_>>()
-                    .await
-                    .unwrap()
+                leaf_range(&*ds, ..).await.collect::<Vec<_>>().await,
+                leaf_range(&storage, ..).await.collect::<Vec<_>>().await
             );
         }
-
-        network.shut_down().await;
     }
 
     #[async_std::test]
@@ -255,7 +261,9 @@ pub mod availability_tests {
         // change during the test.
         let (ds, block_height) = loop {
             let ds = ds.read().await;
-            let block_height = ds.block_height().await.unwrap();
+            let block_height = NodeDataSource::<MockTypes>::block_height(&*ds)
+                .await
+                .unwrap();
             if block_height >= 3 {
                 break (ds, block_height as u64);
             }
@@ -277,17 +285,32 @@ pub mod availability_tests {
     async fn do_range_test<D, R, I>(ds: &D, range: R, expected_indices: I)
     where
         D: TestableDataSource,
-        R: RangeBounds<usize> + Clone + Send,
+        R: RangeBounds<usize> + Clone + Debug + Send + 'static,
         I: IntoIterator<Item = u64>,
     {
-        let mut leaves = ds.get_leaf_range(range.clone()).await.unwrap();
-        let mut blocks = ds.get_block_range(range).await.unwrap();
+        tracing::info!("testing range {range:?}");
+
+        let mut leaves = ds.get_leaf_range(range.clone()).await;
+        let mut blocks = ds.get_block_range(range.clone()).await;
 
         for i in expected_indices {
-            let leaf = leaves.next().await.unwrap().unwrap();
-            let block = blocks.next().await.unwrap().unwrap();
+            let leaf = leaves.next().await.unwrap().await;
+            let block = blocks.next().await.unwrap().await;
             assert_eq!(leaf.height(), i);
             assert_eq!(block.height(), i);
+        }
+
+        if range.end_bound() == Bound::Unbounded {
+            // If the range is unbounded, the stream should continue, yielding pending futures for
+            // the objects which are not currently available.
+            let fetch_leaf = leaves.next().await.unwrap();
+            let fetch_block = blocks.next().await.unwrap();
+            fetch_leaf.try_resolve().unwrap_err();
+            fetch_block.try_resolve().unwrap_err();
+        } else {
+            // If the range is bounded, it should end where expected.
+            assert!(leaves.next().await.is_none());
+            assert!(blocks.next().await.is_none());
         }
     }
 
@@ -324,28 +347,34 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
+        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
+            .await
+            .unwrap();
         ds.insert_block(block.clone()).await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 2);
-        assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
-        assert_eq!(block, ds.get_block(1).await.unwrap());
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(leaf, ds.get_leaf(1).await.await);
+        assert_eq!(block, ds.get_block(1).await.await);
 
         // Revert the changes.
         ds.revert().await;
-        assert_eq!(ds.block_height().await.unwrap(), 1);
-        assert!(matches!(
-            ds.get_leaf(1).await.unwrap_err(),
-            QueryError::NotFound
-        ));
-        assert!(matches!(
-            ds.get_block(1).await.unwrap_err(),
-            QueryError::NotFound
-        ));
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            1
+        );
+        ds.get_leaf(1).await.try_resolve().unwrap_err();
+        ds.get_block(1).await.try_resolve().unwrap_err();
     }
 
     #[async_std::test]
@@ -363,31 +392,37 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
+        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
+            .await
+            .unwrap();
         ds.insert_block(block.clone()).await.unwrap();
         ds.commit().await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 2);
-        assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
-        assert_eq!(block, ds.get_block(1).await.unwrap());
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(leaf, ds.get_leaf(1).await.await);
+        assert_eq!(block, ds.get_block(1).await.await);
 
         drop(ds);
 
         // Reset and check that the changes are gone.
         let ds = D::reset(&storage).await;
-        assert_eq!(ds.block_height().await.unwrap(), 1);
-        assert!(matches!(
-            ds.get_leaf(1).await.unwrap_err(),
-            QueryError::NotFound
-        ));
-        assert!(matches!(
-            ds.get_block(1).await.unwrap_err(),
-            QueryError::NotFound
-        ));
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            1
+        );
+        ds.get_leaf(1).await.try_resolve().unwrap_err();
+        ds.get_block(1).await.try_resolve().unwrap_err();
     }
 }
 

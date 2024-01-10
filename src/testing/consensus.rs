@@ -14,7 +14,7 @@ use super::mocks::{
     DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
     MockTransaction, MockTypes,
 };
-use crate::{data_source::FileSystemDataSource, status::UpdateStatusData};
+use crate::{data_source::FileSystemDataSource, status::UpdateStatusData, SignatureKey};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -29,7 +29,7 @@ use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
-    traits::{election::Membership, signature_key::SignatureKey},
+    traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
@@ -43,6 +43,7 @@ struct MockNode<D: DataSourceLifeCycle> {
 
 pub struct MockNetwork<D: DataSourceLifeCycle> {
     nodes: Vec<MockNode<D>>,
+    pub_keys: Vec<BLSPubKey>,
 }
 
 // MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
@@ -63,8 +64,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
         let stake = 1u64;
-        let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = (0
-            ..total_nodes.into())
+        let known_nodes_with_stake: Vec<
+            <BLSPubKey as hotshot::types::SignatureKey>::StakeTableEntry,
+        > = (0..total_nodes.into())
             .map(|id| pub_keys[id].get_stake_table_entry(stake))
             .collect();
         let nodes = join_all(
@@ -157,7 +159,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         )
         .await;
 
-        Self { nodes }
+        Self { nodes, pub_keys }
     }
 }
 
@@ -168,6 +170,14 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
     pub async fn submit_transaction(&self, tx: MockTransaction) {
         self.handle().submit_transaction(tx).await.unwrap();
+    }
+
+    pub fn num_nodes(&self) -> usize {
+        self.pub_keys.len()
+    }
+
+    pub fn proposer(&self, i: usize) -> SignatureKey<MockTypes> {
+        self.pub_keys[i]
     }
 
     pub fn data_source(&self) -> Arc<RwLock<D>> {

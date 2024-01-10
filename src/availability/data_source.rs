@@ -10,20 +10,20 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::query_data::{
-    BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+use super::{
+    fetch::Fetch,
+    query_data::{
+        BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+    },
 };
-use crate::{Header, Leaf, Payload, QueryResult, SignatureKey};
+use crate::{Header, Leaf, Payload};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use derive_more::{Display, From};
-use futures::stream::Stream;
+use futures::stream::{BoxStream, Stream, StreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt::Debug;
-use std::ops::RangeBounds;
+use std::{cmp::Ordering, error::Error, fmt::Debug, ops::RangeBounds};
 
 #[derive(Derivative, From, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
@@ -57,55 +57,81 @@ impl<T: Committable> PartialOrd for ResourceId<T> {
 pub type BlockId<Types> = ResourceId<Header<Types>>;
 pub type LeafId<Types> = ResourceId<Leaf<Types>>;
 
+/// An interface for querying a HotShot blockchain.
+///
+/// This interface provides expressive queries over all the data which is made available by HotShot
+/// consensus. The data exposed by this interface consists entirely of _normative_ data: data which
+/// every correct HotShot node or light client will agree on, and which is guaranteed by consensus
+/// to be immutable. This immutability has an interesting consequence: all of the methods exposed by
+/// this trait are _pure_: given equivalent inputs, the same method will always return equivalent
+/// outputs[^1].
+///
+/// This purity property has a further consequence: none of the methods defined here can fail! Even
+/// if you query for a block at a position past the end of the current chain -- a block which does
+/// not exist yet -- the query will not fail. It will return an in-progress [`Fetch`] which, when it
+/// finally does resolve, resolves to the unique block at that position in the chain. All subsequent
+/// queries for the same position will eventually resolve to the same block.
+///
+/// In other words, the abstraction is that of an infinitely long chain which exists statically, in
+/// its entirety, at all times. In reality, of course, this chain is being produced incrementally
+/// and has a finite length at any given time. But all this means is that some queries may take a
+/// long time to resolve while others may resolve immediately.
+///
+/// [^1]: The data returned by these methods are wrapped in [`Fetch`], which does not implement
+///       [`PartialEq]`. So to speak of equivalent outputs, we need to define an equivalence
+///       relation on [`Fetch<T>`]. The relation we will use is defined when `T: PartialEq`, and
+///       defines two fetches `f1` and `f2` as equivalent when `f1.await == f2.await`. That is,
+///       depending on when you call a certain method, you may or may not get a response
+///       immediately. But whenever you do get the data you requested, it is unique for that
+///       combination of inputs.
 #[async_trait]
 pub trait AvailabilityDataSource<Types: NodeType>
 where
     Payload<Types>: QueryablePayload,
 {
-    type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types>>> + Unpin + Send;
-    type BlockStream: Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin + Send;
-
-    type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types>>> + Unpin
+    type LeafRange<R>: Stream<Item = Fetch<LeafQueryData<Types>>> + Unpin + Send + 'static
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
-    type BlockRange<'a, R>: 'a + Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin
+    type BlockRange<R>: Stream<Item = Fetch<BlockQueryData<Types>>> + Unpin + Send + 'static
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
+    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync;
 
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
-        R: RangeBounds<usize> + Send;
+        R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
     where
-        R: RangeBounds<usize> + Send;
+        R: RangeBounds<usize> + Send + 'static;
 
     /// Returns the block containing a transaction with the given `hash` and the transaction's
     /// position in the block.
     async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
+    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)>;
 
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>>;
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
+    async fn subscribe_blocks(&self, from: usize) -> BoxStream<'static, BlockQueryData<Types>> {
+        self.get_block_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
 
-    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream>;
-    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream>;
+    async fn subscribe_leaves(&self, from: usize) -> BoxStream<'static, LeafQueryData<Types>> {
+        self.get_leaf_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
 }
 
 #[async_trait]

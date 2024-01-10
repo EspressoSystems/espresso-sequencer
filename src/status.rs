@@ -10,6 +10,20 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Queries for node-specific state and uncommitted data.
+//!
+//! Unlike the [availability](crate::availability) and [node](crate::node) APIs, which deal only
+//! with committed data (albeit with different consistency properties), the status API offers a
+//! glimpse into internal consensus state and uncommitted data. Here you can find low-level
+//! information about a particular node, such as consensus and networking metrics. You can also find
+//! information about pending blocks and transactions in the mempool.
+//!
+//! The status API is intended to be a lightweight way to inspect the activities and health of a
+//! consensus node. It is the only API that can be run without any persistent storage, and its
+//! memory overhead is also very low. As a consequence, it only serves two types of data:
+//! * snapshots of the state right now, with no way to query historical snapshots
+//! * summary statistics
+
 use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
@@ -75,7 +89,7 @@ where
         options.extensions.clone(),
     )?;
     api.with_version("0.0.1".parse().unwrap())
-        .get("latest_block_height", |_, state| {
+        .get("block_height", |_, state| {
             async { state.block_height().await.map_err(internal) }.boxed()
         })?
         .get("mempool_info", |_, state| {
@@ -140,7 +154,7 @@ mod test {
         network.submit_transaction(txn.clone()).await;
         loop {
             let mempool = client
-                .get::<MempoolQueryData>("mempool_info")
+                .get::<MempoolQueryData>("mempool-info")
                 .send()
                 .await
                 .unwrap();
@@ -158,14 +172,7 @@ mod test {
             sleep(Duration::from_secs(1)).await;
         }
         // The block height is initially 1 (for the genesis block).
-        assert_eq!(
-            client
-                .get::<u64>("latest_block_height")
-                .send()
-                .await
-                .unwrap(),
-            1
-        );
+        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 1);
 
         // Test Prometheus export.
         let mut res = surf::get(&format!("{url}/metrics")).send().await.unwrap();
@@ -192,7 +199,7 @@ mod test {
         // Start the validators and wait for the block to be finalized.
         network.start().await;
         while client
-            .get::<MempoolQueryData>("mempool_info")
+            .get::<MempoolQueryData>("mempool-info")
             .send()
             .await
             .unwrap()
@@ -206,17 +213,11 @@ mod test {
         // Check updated block height. There can be a brief delay between the mempool statistics
         // being updated and the decide event being published. Retry this a few times until it
         // succeeds.
-        while client
-            .get::<u64>("latest_block_height")
-            .send()
-            .await
-            .unwrap()
-            == 1
-        {
+        while client.get::<u64>("block-height").send().await.unwrap() == 1 {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
         }
-        let success_rate = client.get::<f64>("success_rate").send().await.unwrap();
+        let success_rate = client.get::<f64>("success-rate").send().await.unwrap();
         // If metrics are populating correctly, we should get a finite number. If not, we might get
         // NaN or infinity due to division by 0.
         assert!(success_rate.is_finite(), "{success_rate}");
@@ -284,13 +285,6 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        assert_eq!(
-            client
-                .get::<u64>("latest_block_height")
-                .send()
-                .await
-                .unwrap(),
-            1
-        );
+        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 1);
     }
 }
