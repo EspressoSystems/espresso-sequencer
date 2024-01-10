@@ -78,7 +78,9 @@ impl Valid for Sha3Node {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Sha3Digest();
 
-impl<E: Element + CanonicalSerialize, I: Index> DigestAlgorithm<E, I, Sha3Node> for Sha3Digest {
+impl<E: Element + CanonicalSerialize + AsRef<[u8]>, I: Index> DigestAlgorithm<E, I, Sha3Node>
+    for Sha3Digest
+{
     fn digest(data: &[Sha3Node]) -> Result<Sha3Node, PrimitivesError> {
         let mut hasher = Sha3_256::new();
         for value in data {
@@ -89,7 +91,7 @@ impl<E: Element + CanonicalSerialize, I: Index> DigestAlgorithm<E, I, Sha3Node> 
 
     fn digest_leaf(_pos: &I, elem: &E) -> Result<Sha3Node, PrimitivesError> {
         let mut writer = Vec::new();
-        elem.serialize_compressed(&mut writer).unwrap();
+        writer.write_all(elem.as_ref()).unwrap();
         let mut hasher = Sha3_256::new();
         hasher.update(writer);
         Ok(Sha3Node(hasher.finalize().into()))
