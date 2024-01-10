@@ -10,5 +10,13 @@
     "payload_commitment": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     "transactions_root": {
         "root": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-    }
+    },
+      "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
+  "block_merkle_tree": {
+    "root": "Empty",
+    "height": 32,
+    "num_leaves": 0,
+    "_phantom_h": null,
+    "_phantom_ta": null
+  }
 }
