@@ -43,7 +43,6 @@ lazy_static = "1.4"
 rand_chacha = "0.3"
 serde_json = "1.0"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
-sha3 = "0.10.8"
 time = "0.3"
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
 	"with-serde_json-1",

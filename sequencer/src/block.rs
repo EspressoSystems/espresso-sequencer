@@ -2,10 +2,7 @@ use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH,
 };
-use ark_serialize::{
-    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
-    Write,
-};
+use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::availability::QueryablePayload;
@@ -13,92 +10,17 @@ use hotshot_types::{
     data::VidCommitment,
     traits::block_contents::{vid_commitment, BlockHeader, BlockPayload},
 };
-use jf_primitives::{
-    errors::PrimitivesError,
-    merkle_tree::{
-        light_weight::LightWeightMerkleTree, namespaced_merkle_tree::NamespacedMerkleTreeScheme,
-        AppendableMerkleTreeScheme, DigestAlgorithm, Element, Index, LookupResult,
-        MerkleCommitment, MerkleTreeScheme,
-    },
-};
+use jf_primitives::merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, prelude::*};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha3::{Digest, Sha3_256};
 use std::{
     env,
     fmt::{Debug, Display},
     time::Duration,
 };
 use time::OffsetDateTime;
-use typenum::U3;
 
-/// Update the array length here
-#[derive(Default, Eq, PartialEq, Clone, Copy, Debug, Ord, PartialOrd, Hash)]
-pub struct Sha3Node(pub(crate) [u8; 32]);
-
-impl AsRef<[u8]> for Sha3Node {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl CanonicalSerialize for Sha3Node {
-    fn serialize_with_mode<W: Write>(
-        &self,
-        mut writer: W,
-        _compress: Compress,
-    ) -> Result<(), SerializationError> {
-        writer.write_all(&self.0)?;
-        Ok(())
-    }
-
-    fn serialized_size(&self, _compress: Compress) -> usize {
-        32
-    }
-}
-impl CanonicalDeserialize for Sha3Node {
-    fn deserialize_with_mode<R: Read>(
-        mut reader: R,
-        _compress: Compress,
-        _validate: Validate,
-    ) -> Result<Self, SerializationError> {
-        let mut ret = [0u8; 32];
-        reader.read_exact(&mut ret)?;
-        Ok(Sha3Node(ret))
-    }
-}
-
-impl Valid for Sha3Node {
-    fn check(&self) -> Result<(), SerializationError> {
-        Ok(())
-    }
-}
-
-/// Wrapper for SHA3_512 hash function
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub struct Sha3Digest();
-
-impl<E: Element + CanonicalSerialize + AsRef<[u8]>, I: Index> DigestAlgorithm<E, I, Sha3Node>
-    for Sha3Digest
-{
-    fn digest(data: &[Sha3Node]) -> Result<Sha3Node, PrimitivesError> {
-        let mut hasher = Sha3_256::new();
-        for value in data {
-            hasher.update(value);
-        }
-        Ok(Sha3Node(hasher.finalize().into()))
-    }
-
-    fn digest_leaf(_pos: &I, elem: &E) -> Result<Sha3Node, PrimitivesError> {
-        let mut writer = Vec::new();
-        writer.write_all(elem.as_ref()).unwrap();
-        let mut hasher = Sha3_256::new();
-        hasher.update(writer);
-        Ok(Sha3Node(hasher.finalize().into()))
-    }
-}
-
-pub type SHA3MerkleTree = LightWeightMerkleTree<Commitment<Header>, Sha3Digest, u64, U3, Sha3Node>;
+pub type SHA3MerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
