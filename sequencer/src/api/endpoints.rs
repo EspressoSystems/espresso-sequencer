@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
 use async_std::sync::{Arc, RwLock};
+use commit::Committable;
 use futures::FutureExt;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, QueryBlockSnafu},
@@ -110,14 +111,16 @@ where
 
     api.post("submit", |req, state| {
         async move {
+            let tx = req
+                .body_auto::<Transaction>()
+                .map_err(Error::from_request_error)?;
+            let hash = tx.commit();
             state
                 .consensus()
-                .submit_transaction(
-                    req.body_auto::<Transaction>()
-                        .map_err(Error::from_request_error)?,
-                )
+                .submit_transaction(tx)
                 .await
-                .map_err(|err| Error::internal(err.to_string()))
+                .map_err(|err| Error::internal(err.to_string()))?;
+            Ok(hash)
         }
         .boxed()
     })?;
