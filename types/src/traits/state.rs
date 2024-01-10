@@ -47,11 +47,11 @@ pub trait State:
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
-    /// Returns true if and only if the current block header is valid and can extend this state.
+    /// Returns true if and only if the proposed block header is valid and can extend this state.
     fn validate_block(
         &self,
-        curr_block_header: &Self::BlockHeader,
-        prev_block_header: &Self::BlockHeader,
+        proposed_header: &Self::BlockHeader,
+        parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> bool;
 
@@ -65,8 +65,8 @@ pub trait State:
     /// Should produce and error if appending this block header would lead to an invalid state
     fn append(
         &self,
-        curr_block_header: &Self::BlockHeader,
-        prev_block_header: &Self::BlockHeader,
+        proposed_header: &Self::BlockHeader,
+        parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
 

@@ -62,8 +62,8 @@ impl State for TestState {
 
     fn validate_block(
         &self,
-        _curr_block_header: &Self::BlockHeader,
-        _prev_block_header: &Self::BlockHeader,
+        _proposed_header: &Self::BlockHeader,
+        _parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> bool {
         if view_number == &ViewNumber::genesis() {
@@ -81,11 +81,11 @@ impl State for TestState {
 
     fn append(
         &self,
-        curr_block_header: &Self::BlockHeader,
-        prev_block_header: &Self::BlockHeader,
+        proposed_header: &Self::BlockHeader,
+        parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if !self.validate_block(curr_block_header, prev_block_header, view_number) {
+        if !self.validate_block(proposed_header, parent_header, view_number) {
             return Err(BlockError::InvalidBlockHeader);
         }
 
