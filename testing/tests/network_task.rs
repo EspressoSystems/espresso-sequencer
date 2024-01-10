@@ -42,7 +42,8 @@ async fn test_network_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             &encoded_transactions_hash,
-        );
+        )
+        .expect("Failed to sign block payload");
     let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
@@ -50,7 +51,8 @@ async fn test_network_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             payload_commitment.as_ref(),
-        );
+        )
+        .expect("Failed to sign block commitment");
 
     let da_proposal = Proposal {
         data: DAProposal {

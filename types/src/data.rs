@@ -10,7 +10,7 @@ use crate::{
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, SignatureKey},
+        signature_key::SignatureKey,
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
         BlockPayload, State,
@@ -22,7 +22,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
-use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::{
     pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
@@ -104,12 +103,6 @@ impl std::ops::Sub<u64> for ViewNumber {
     fn sub(self, rhs: u64) -> Self::Output {
         Self(self.0 - rhs)
     }
-}
-
-/// Generate the genesis block proposer ID from the defined constant
-#[must_use]
-pub fn genesis_proposer_id() -> EncodedPublicKey {
-    EncodedPublicKey(GENESIS_PROPOSER_ID.to_vec())
 }
 
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
@@ -209,7 +202,7 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
 
     /// the propser id
-    pub proposer_id: EncodedPublicKey,
+    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
@@ -316,12 +309,8 @@ pub struct Leaf<TYPES: NodeType> {
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
-    // TODO (Keyao) Remove.
-    /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
-    pub timestamp: i128,
-
     /// the proposer id of the leaf
-    pub proposer_id: EncodedPublicKey,
+    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
@@ -368,8 +357,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_header,
             block_payload: Some(block_payload),
             rejected: Vec::new(),
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: genesis_proposer_id(),
+            proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }
 
@@ -442,12 +430,8 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
-    /// Real-world time when this leaf was created.
-    pub fn get_timestamp(&self) -> i128 {
-        self.timestamp
-    }
     /// Identity of the network participant who proposed this leaf.
-    pub fn get_proposer_id(&self) -> EncodedPublicKey {
+    pub fn get_proposer_id(&self) -> TYPES::SignatureKey {
         self.proposer_id.clone()
     }
     /// Create a leaf from information stored about a view.
@@ -459,7 +443,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_header: stored_view.block_header,
             block_payload: stored_view.block_payload,
             rejected: stored_view.rejected,
-            timestamp: stored_view.timestamp,
             proposer_id: stored_view.proposer_id,
         }
     }
@@ -561,7 +544,6 @@ where
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
             rejected: leaf.get_rejected(),
-            timestamp: leaf.get_timestamp(),
             proposer_id: leaf.get_proposer_id(),
         }
     }

@@ -121,14 +121,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             HotShotEvent::BlockReady(vid_disperse, view_number) => {
+                let Ok(signature) =
+                    TYPES::SignatureKey::sign(&self.private_key, &vid_disperse.payload_commitment)
+                else {
+                    error!("VID: failed to sign dispersal payload");
+                    return None;
+                };
                 debug!("publishing VID disperse for view {}", *view_number);
                 self.event_stream
                     .publish(HotShotEvent::VidDisperseSend(
                         Proposal {
-                            signature: TYPES::SignatureKey::sign(
-                                &self.private_key,
-                                &vid_disperse.payload_commitment,
-                            ),
+                            signature,
                             data: vid_disperse,
                             _pd: PhantomData,
                         },

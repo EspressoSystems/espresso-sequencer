@@ -11,6 +11,7 @@ use crate::simple_certificate::{
 use crate::simple_vote::{
     DAVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
 };
+use crate::traits::signature_key::SignatureKey;
 use crate::vote::HasViewNumber;
 use crate::{
     data::{DAProposal, VidDisperse},
@@ -18,7 +19,6 @@ use crate::{
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::NodeType,
-        signature_key::EncodedSignature,
     },
 };
 
@@ -435,7 +435,7 @@ pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + Deserializ
     /// The data being proposed.
     pub data: PROPOSAL,
     /// The proposal must be signed by the view leader
-    pub signature: EncodedSignature,
+    pub signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     /// Phantom for TYPES
     pub _pd: PhantomData<TYPES>,
 }

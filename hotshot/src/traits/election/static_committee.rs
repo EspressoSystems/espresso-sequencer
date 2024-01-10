@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, num::NonZeroU64};
 use tracing::debug;
 
+#[cfg(feature = "randomized-leader-election")]
+use rand::{rngs::StdRng, Rng};
+
 /// Dummy implementation of [`Membership`]
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -56,9 +59,20 @@ where
         self.committee_nodes_with_stake.clone()
     }
 
+    #[cfg(not(feature = "randomized-leader-election"))]
     /// Index the vector of public keys with the current view number
     fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
         let index = (*view_number % self.nodes_with_stake.len() as u64) as usize;
+        let res = self.nodes_with_stake[index].clone();
+        TYPES::SignatureKey::get_public_key(&res)
+    }
+
+    #[cfg(feature = "randomized-leader-election")]
+    /// Index the vector of public keys with a random number generated using the current view number as a seed
+    fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
+        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number as u64);
+        let randomized_view_number: u64 = rng.gen();
+        let index = (randomized_view_number % self.nodes_with_stake.len() as u64) as usize;
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
