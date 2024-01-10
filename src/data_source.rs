@@ -51,8 +51,7 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 pub mod availability_tests {
     use crate::{
         availability::{
-            payload_size, BlockQueryData, Fetch, LeafQueryData, QueryablePayload,
-            UpdateAvailabilityData,
+            payload_size, BlockQueryData, Fetch, LeafQueryData, UpdateAvailabilityData,
         },
         node::NodeDataSource,
         testing::{
@@ -156,7 +155,7 @@ pub mod availability_tests {
             assert_eq!(block, ds.get_block(i).await.await);
             assert_eq!(ds.get_block(block.hash()).await.await.height(), i as u64);
 
-            for (j, txn) in block.payload().enumerate() {
+            for (j, txn) in block.enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
                 // For duplicate transactions, this function returns the index of the first
                 // duplicate.

@@ -26,13 +26,13 @@ use crate::{
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, UpdateNodeData},
-    MissingSnafu, NotFoundSnafu, Payload, QueryResult,
+    MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
@@ -52,7 +52,7 @@ where
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
-    index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
+    index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
     leaf_storage: LedgerLog<LeafQueryData<Types>>,
@@ -141,7 +141,7 @@ where
         let mut index_by_txn_hash = HashMap::new();
         for block in block_storage.iter().flatten() {
             let height = block.height();
-            for (txn_ix, txn) in block.payload().enumerate() {
+            for (txn_ix, txn) in block.enumerate() {
                 update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
             }
         }
@@ -316,7 +316,7 @@ where
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
-        for (txn_ix, txn) in block.payload().enumerate() {
+        for (txn_ix, txn) in block.enumerate() {
             update_index_by_hash(
                 &mut self.index_by_txn_hash,
                 txn.commit(),
@@ -356,7 +356,7 @@ where
 
     async fn get_proposals(
         &self,
-        id: &EncodedPublicKey,
+        id: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let all_ids = self
@@ -375,7 +375,7 @@ where
             .await
     }
 
-    async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+    async fn count_proposals(&self, id: &SignatureKey<Types>) -> QueryResult<usize> {
         Ok(match self.index_by_proposer_id.get(id) {
             Some(ids) => ids.len(),
             None => 0,

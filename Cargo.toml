@@ -21,7 +21,15 @@ license = "GPL-3.0-or-later"
 default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
 file-system-data-source = ["atomic_store"]
 metrics-data-source = []
-sql-data-source = ["include_dir", "refinery", "serde_json", "tokio", "tokio-postgres"]
+sql-data-source = [
+	"include_dir",
+	"native-tls",
+	"postgres-native-tls",
+	"refinery",
+	"serde_json",
+	"tokio",
+	"tokio-postgres",
+]
 testing = ["espresso-macros", "hotshot-testing", "portpicker", "rand", "spin_sleep", "tempdir"]
 
 [[example]]
@@ -43,15 +51,15 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.8"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
 itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.3" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.6" }
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
@@ -61,6 +69,8 @@ atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag
 
 # Dependencies enabled by feature "sql-data-source".
 include_dir = { version = "0.7", optional = true }
+native-tls = { version = "0.2", optional = true }
+postgres-native-tls = { version = "0.5", optional = true }
 refinery = { version = "0.8", features = ["tokio-postgres"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tokio = { version = "1.35", optional = true }
@@ -71,7 +81,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab", optional = true }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.1", optional = true }
@@ -93,5 +103,6 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.1"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.3" }
+surf = "2.3"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tempdir = "0.3"

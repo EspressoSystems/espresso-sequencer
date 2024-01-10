@@ -20,7 +20,7 @@ use crate::{
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, UpdateNodeData},
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_std::{net::ToSocketAddrs, sync::Arc, task::spawn};
 use async_trait::async_trait;
@@ -37,17 +37,20 @@ use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::NodeType,
-        signature_key::EncodedPublicKey,
     },
 };
 use itertools::Itertools;
+use postgres_native_tls::TlsConnector;
 use snafu::OptionExt;
 use std::{
     borrow::Cow,
     ops::{Bound, RangeBounds},
     pin::Pin,
+    str::FromStr,
 };
 use tokio_postgres::{
+    config::Host,
+    tls::TlsConnect,
     types::{BorrowToSql, ToSql},
     Client, NoTls, Row, ToStatement,
 };
@@ -181,30 +184,54 @@ fn add_custom_migrations(
 /// Postgres client config.
 #[derive(Clone, Debug)]
 pub struct Config {
+    pgcfg: postgres::Config,
     host: String,
     port: u16,
-    user: Option<String>,
-    password: Option<String>,
-    database: Option<String>,
     schema: String,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
+    tls: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            pgcfg: Default::default(),
             host: "localhost".into(),
             port: 5432,
-            user: None,
-            password: None,
-            database: None,
             schema: "hotshot".into(),
             reset: false,
             migrations: vec![],
             no_migrations: false,
+            tls: false,
         }
+    }
+}
+
+impl From<postgres::Config> for Config {
+    fn from(pgcfg: postgres::Config) -> Self {
+        // We connect via TCP manually, without using the host and port from pgcfg. So we need to
+        // pull those out of pgcfg if they have been specified, to override the defaults.
+        let host = match pgcfg.get_hosts().first() {
+            Some(Host::Tcp(host)) => host.to_string(),
+            _ => "localhost".into(),
+        };
+        let port = *pgcfg.get_ports().first().unwrap_or(&5432);
+        Self {
+            pgcfg,
+            host,
+            port,
+            ..Default::default()
+        }
+    }
+}
+
+impl FromStr for Config {
+    type Err = <postgres::Config as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(postgres::Config::from_str(s)?.into())
     }
 }
 
@@ -226,20 +253,20 @@ impl Config {
     }
 
     /// Set the DB user to connect as.
-    pub fn user(mut self, user: impl Into<String>) -> Self {
-        self.user = Some(user.into());
+    pub fn user(mut self, user: &str) -> Self {
+        self.pgcfg.user(user);
         self
     }
 
     /// Set a password for connecting to the database.
-    pub fn password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
+    pub fn password(mut self, password: &str) -> Self {
+        self.pgcfg.password(password);
         self
     }
 
     /// Set the name of the database to connect to.
-    pub fn database(mut self, database: impl Into<String>) -> Self {
-        self.database = Some(database.into());
+    pub fn database(mut self, database: &str) -> Self {
+        self.pgcfg.dbname(database);
         self
     }
 
@@ -277,6 +304,12 @@ impl Config {
         self.no_migrations = true;
         self
     }
+
+    /// Use TLS for an encrypted connection to the database.
+    pub fn tls(mut self) -> Self {
+        self.tls = true;
+        self
+    }
 }
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
@@ -294,32 +327,12 @@ impl SqlStorage {
         let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
 
         // Convert the TCP connection into a postgres connection.
-        let mut pgcfg = postgres::Config::default();
-        if let Some(user) = &config.user {
-            pgcfg.user(user);
-        }
-        if let Some(password) = &config.password {
-            pgcfg.password(password);
-        }
-        if let Some(database) = &config.database {
-            pgcfg.dbname(database);
-        }
-        let (mut client, connection) = pgcfg.connect_raw(tcp, NoTls).await?;
-
-        // Spawn a task to drive the connection, with a channel to kill it when this data source is
-        // dropped.
-        let (kill, killed) = oneshot::channel();
-        spawn(select(killed, connection).inspect(|res| {
-            if let Either::Right((res, _)) = res {
-                // If we were killed, do nothing. That is the normal shutdown path. But if the
-                // `select` returned because the `connection` terminated, we should log something,
-                // as that is unusual.
-                match res {
-                    Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
-                    Err(err) => tracing::error!("postgres connection closed with error: {err}"),
-                }
-            }
-        }));
+        let (mut client, kill) = if config.tls {
+            let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
+            connect(config.pgcfg, tcp, tls).await?
+        } else {
+            connect(config.pgcfg, tcp, NoTls).await?
+        };
 
         // Create or connect to the schema for this query service.
         if config.reset {
@@ -572,6 +585,10 @@ where
         let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
             message: format!("failed to serialize QC: {err}"),
         })?;
+        let proposer_json =
+            serde_json::to_value(&leaf.proposer()).map_err(|err| QueryError::Error {
+                message: format!("failed to serialize proposer ID: {err}"),
+            })?;
         stmts.push((
             "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
              VALUES ($1, $2, $3, $4, $5, $6)"
@@ -579,7 +596,7 @@ where
             vec![
                 Box::new(leaf.height() as i64),
                 Box::new(leaf.hash().to_string()),
-                Box::new(leaf.proposer().to_string()),
+                Box::new(proposer_json),
                 Box::new(leaf.block_hash().to_string()),
                 Box::new(leaf_json),
                 Box::new(qc_json),
@@ -617,7 +634,7 @@ where
         // Index the transactions in the block.
         let mut values = vec![];
         let mut params: Vec<Box<dyn ToSql + Send + Sync>> = vec![];
-        for (txn_ix, txn) in block.payload().enumerate() {
+        for (txn_ix, txn) in block.enumerate() {
             let txn_ix = serde_json::to_value(&txn_ix).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize transaction index: {err}"),
             })?;
@@ -672,7 +689,7 @@ where
 
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
@@ -681,7 +698,10 @@ where
             // recent leaves, so order by descending height.
             query = format!("{query} ORDER BY height DESC limit {limit}");
         }
-        let rows = self.query(&query, &[&proposer.to_string()]).await?;
+        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize proposer ID: {err}"),
+        })?;
+        let rows = self.query(&query, &[&proposer_json]).await?;
         let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
 
         if limit.is_some() {
@@ -693,9 +713,12 @@ where
         Ok(leaves)
     }
 
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self.query_one(query, &[&proposer.to_string()]).await?;
+        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize proposer ID: {err}"),
+        })?;
+        let row = self.query_one(query, &[&proposer_json]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
     }
@@ -997,6 +1020,39 @@ where
     (where_clause, params)
 }
 
+/// Connect to a Postgres database with a TLS implementation.
+///
+/// Spawns a background task to run the connection. Returns a client and a channel to kill the
+/// connection task.
+async fn connect<T>(
+    pgcfg: postgres::Config,
+    tcp: TcpStream,
+    tls: T,
+) -> anyhow::Result<(Client, oneshot::Sender<()>)>
+where
+    T: TlsConnect<TcpStream>,
+    T::Stream: Send + 'static,
+{
+    let (client, connection) = pgcfg.connect_raw(tcp, tls).await?;
+
+    // Spawn a task to drive the connection, with a channel to kill it when this data source is
+    // dropped.
+    let (kill, killed) = oneshot::channel();
+    spawn(select(killed, connection).inspect(|res| {
+        if let Either::Right((res, _)) = res {
+            // If we were killed, do nothing. That is the normal shutdown path. But if the `select`
+            // returned because the `connection` terminated, we should log something, as that is
+            // unusual.
+            match res {
+                Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
+                Err(err) => tracing::error!("postgres connection closed with error: {err}"),
+            }
+        }
+    }));
+
+    Ok((client, kill))
+}
+
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
 // traits do not require any specifics of the tokio runtime. Thus we can implement them using the
 // async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
@@ -1215,5 +1271,25 @@ mod test {
 
         // Connecting with the customized schema should work even without running migrations.
         connect(true, migrations).await.unwrap();
+    }
+
+    #[test]
+    fn test_config_from_str() {
+        let cfg = Config::from_str("postgresql://user:password@host:8080").unwrap();
+        assert_eq!(cfg.pgcfg.get_user(), Some("user"));
+        assert_eq!(cfg.pgcfg.get_password(), Some("password".as_bytes()));
+        assert_eq!(cfg.host, "host");
+        assert_eq!(cfg.port, 8080);
+    }
+
+    #[test]
+    fn test_config_from_pgcfg() {
+        let mut pgcfg = postgres::Config::default();
+        pgcfg.dbname("db");
+        let cfg = Config::from(pgcfg.clone());
+        assert_eq!(cfg.pgcfg, pgcfg);
+        // Default values.
+        assert_eq!(cfg.host, "localhost");
+        assert_eq!(cfg.port, 5432);
     }
 }

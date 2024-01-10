@@ -51,16 +51,17 @@ impl QueryablePayload for MockPayload {
     type Iter<'a> = Range<usize>;
     type InclusionProof = ();
 
-    fn len(&self) -> usize {
+    fn len(&self, _meta: &Self::Metadata) -> usize {
         self.transactions.len()
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
-        0..self.len()
+    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
+        0..self.len(meta)
     }
 
     fn transaction_with_proof(
         &self,
+        _meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         self.transactions.get(*index).cloned().map(|tx| (tx, ()))

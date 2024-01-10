@@ -11,9 +11,9 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::LeafQueryData;
-use crate::QueryResult;
+use crate::{QueryResult, SignatureKey};
 use async_trait::async_trait;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::error::Error;
 use std::fmt::Debug;
 
@@ -22,10 +22,10 @@ pub trait NodeDataSource<Types: NodeType> {
     async fn block_height(&self) -> QueryResult<usize>;
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>>;
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
 }
 
 #[async_trait]

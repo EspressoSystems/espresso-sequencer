@@ -19,7 +19,7 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
-    Payload, QueryResult,
+    Payload, QueryResult, SignatureKey,
 };
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -32,7 +32,7 @@ use futures::{
     future::{self, join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::{
     cmp::{min, Ordering},
     fmt::{Debug, Display},
@@ -275,13 +275,13 @@ where
 
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         self.storage().await.get_proposals(proposer, limit).await
     }
 
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         self.storage().await.count_proposals(proposer).await
     }
 }
@@ -728,7 +728,7 @@ where
         match req {
             BlockRequest::Id(ResourceId::Number(n)) => self.height() == n as u64,
             BlockRequest::Id(ResourceId::Hash(h)) => self.hash() == h,
-            BlockRequest::WithTransaction(h) => self.payload().by_hash(h).is_some(),
+            BlockRequest::WithTransaction(h) => self.transaction_by_hash(h).is_some(),
         }
     }
 
@@ -792,7 +792,7 @@ where
     type Request = TransactionHash<Types>;
 
     fn satisfies(&self, req: Self::Request) -> bool {
-        self.0.payload().by_hash(req).is_some()
+        self.0.transaction_by_hash(req).is_some()
     }
 
     async fn passive_fetch<S>(
@@ -812,7 +812,7 @@ where
 
             // This `unwrap` is safe, `wait_for` only returns blocks which satisfy the request, and
             // in this case that means the block must contain the requested transaction.
-            let ix = block.payload().by_hash(req).unwrap();
+            let ix = block.transaction_by_hash(req).unwrap();
 
             Some((block, ix))
         }

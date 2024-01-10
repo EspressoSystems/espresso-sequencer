@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Header, Payload, Transaction};
+use crate::{Header, Metadata, Payload, SignatureKey, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
@@ -19,7 +19,6 @@ use hotshot_types::{
         self,
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::NodeType,
-        signature_key::EncodedPublicKey,
     },
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -79,24 +78,25 @@ pub trait QueryablePayload: traits::BlockPayload {
     type InclusionProof: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned;
 
     /// The number of transactions in the block.
-    fn len(&self) -> usize;
+    fn len(&self, meta: &Self::Metadata) -> usize;
 
     /// Whether this block is empty of transactions.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+    fn is_empty(&self, meta: &Self::Metadata) -> bool {
+        self.len(meta) == 0
     }
 
     /// List the transaction indices in the block.
-    fn iter(&self) -> Self::Iter<'_>;
+    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_>;
 
     /// Enumerate the transactions in the block with their indices.
-    fn enumerate(
-        &self,
-    ) -> Box<dyn '_ + Iterator<Item = (Self::TransactionIndex, Self::Transaction)>> {
-        Box::new(self.iter().map(|ix| {
+    fn enumerate<'a>(
+        &'a self,
+        meta: &'a Self::Metadata,
+    ) -> Box<dyn 'a + Iterator<Item = (Self::TransactionIndex, Self::Transaction)>> {
+        Box::new(self.iter(meta).map(|ix| {
             // `self.transaction` should always return `Some` if we are using an index which was
             // yielded by `self.iter`.
-            let tx = self.transaction(&ix).unwrap();
+            let tx = self.transaction(meta, &ix).unwrap();
             (ix, tx)
         }))
     }
@@ -104,41 +104,55 @@ pub trait QueryablePayload: traits::BlockPayload {
     /// Get a transaction by its block-specific index, along with an inclusion proof.
     fn transaction_with_proof(
         &self,
+        meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)>;
 
     /// Get a transaction by its block-specific index.
-    fn transaction(&self, index: &Self::TransactionIndex) -> Option<Self::Transaction> {
-        Some(self.transaction_with_proof(index)?.0)
+    fn transaction(
+        &self,
+        meta: &Self::Metadata,
+        index: &Self::TransactionIndex,
+    ) -> Option<Self::Transaction> {
+        Some(self.transaction_with_proof(meta, index)?.0)
     }
 
     /// Get an inclusion proof for a transaction with a given index.
-    fn proof(&self, index: &Self::TransactionIndex) -> Option<Self::InclusionProof> {
-        Some(self.transaction_with_proof(index)?.1)
+    fn proof(
+        &self,
+        meta: &Self::Metadata,
+        index: &Self::TransactionIndex,
+    ) -> Option<Self::InclusionProof> {
+        Some(self.transaction_with_proof(meta, index)?.1)
     }
 
     /// Get the index of the `nth` transaction.
-    fn nth(&self, n: usize) -> Option<Self::TransactionIndex> {
-        self.iter().nth(n)
+    fn nth(&self, meta: &Self::Metadata, n: usize) -> Option<Self::TransactionIndex> {
+        self.iter(meta).nth(n)
     }
 
     /// Get the `nth` transaction.
-    fn nth_transaction(&self, n: usize) -> Option<Self::Transaction> {
-        self.transaction(&self.nth(n)?)
+    fn nth_transaction(&self, meta: &Self::Metadata, n: usize) -> Option<Self::Transaction> {
+        self.transaction(meta, &self.nth(meta, n)?)
     }
 
     /// Get the `nth` transaction, along with an inclusion proof.
     fn nth_transaction_with_proof(
         &self,
+        meta: &Self::Metadata,
         n: usize,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        self.transaction_with_proof(&self.nth(n)?)
+        self.transaction_with_proof(meta, &self.nth(meta, n)?)
     }
 
     /// Get the index of the transaction with a given hash, if it is in the block.
-    fn by_hash(&self, hash: Commitment<Self::Transaction>) -> Option<Self::TransactionIndex> {
-        self.iter().find(|i| {
-            if let Some(tx) = self.transaction(i) {
+    fn by_hash(
+        &self,
+        meta: &Self::Metadata,
+        hash: Commitment<Self::Transaction>,
+    ) -> Option<Self::TransactionIndex> {
+        self.iter(meta).find(|i| {
+            if let Some(tx) = self.transaction(meta, i) {
                 tx.commit() == hash
             } else {
                 false
@@ -149,17 +163,19 @@ pub trait QueryablePayload: traits::BlockPayload {
     /// Get the transaction with a given hash, if it is in the block.
     fn transaction_by_hash(
         &self,
+        meta: &Self::Metadata,
         hash: Commitment<Self::Transaction>,
     ) -> Option<Self::Transaction> {
-        self.transaction(&self.by_hash(hash)?)
+        self.transaction(meta, &self.by_hash(meta, hash)?)
     }
 
     /// Get the transaction with a given hash, if it is in the block, along with an inclusion proof.
     fn transaction_by_hash_with_proof(
         &self,
+        meta: &Self::Metadata,
         hash: Commitment<Self::Transaction>,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        self.transaction_with_proof(&self.by_hash(hash)?)
+        self.transaction_with_proof(meta, &self.by_hash(meta, hash)?)
     }
 }
 
@@ -226,7 +242,7 @@ impl<Types: NodeType> LeafQueryData<Types> {
         self.leaf.block_header.commit()
     }
 
-    pub fn proposer(&self) -> EncodedPublicKey {
+    pub fn proposer(&self) -> SignatureKey<Types> {
         self.leaf.get_proposer_id()
     }
 }
@@ -288,6 +304,10 @@ impl<Types: NodeType> BlockQueryData<Types> {
         &self.header
     }
 
+    pub fn metadata(&self) -> &Metadata<Types> {
+        self.header.metadata()
+    }
+
     pub fn payload(&self) -> &Payload<Types> {
         &self.payload
     }
@@ -303,26 +323,14 @@ impl<Types: NodeType> BlockQueryData<Types> {
     pub fn size(&self) -> u64 {
         self.size
     }
+}
 
-    pub fn len(&self) -> usize
-    where
-        Payload<Types>: QueryablePayload,
-    {
-        self.payload.len()
-    }
-
-    pub fn is_empty(&self) -> bool
-    where
-        Payload<Types>: QueryablePayload,
-    {
-        self.len() == 0
-    }
-
-    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>>
-    where
-        Payload<Types>: QueryablePayload,
-    {
-        let (transaction, proof) = self.payload.transaction_with_proof(i)?;
+impl<Types: NodeType> BlockQueryData<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>> {
+        let (transaction, proof) = self.payload.transaction_with_proof(self.metadata(), i)?;
         Some(TransactionQueryData {
             transaction: transaction.clone(),
             block_hash: self.hash(),
@@ -330,6 +338,27 @@ impl<Types: NodeType> BlockQueryData<Types> {
             height: self.height(),
             hash: transaction.commit(),
         })
+    }
+
+    pub fn transaction_by_hash(
+        &self,
+        hash: Commitment<Transaction<Types>>,
+    ) -> Option<TransactionIndex<Types>> {
+        self.payload().by_hash(self.metadata(), hash)
+    }
+
+    pub fn len(&self) -> usize {
+        self.payload.len(self.metadata())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn enumerate(
+        &self,
+    ) -> impl '_ + Iterator<Item = (TransactionIndex<Types>, Transaction<Types>)> {
+        self.payload.enumerate(self.metadata())
     }
 }
 

@@ -224,14 +224,12 @@ where
                             resource: id.to_string(),
                         })?;
                         let i = req.integer_param("index")?;
-                        let index =
-                            block
-                                .payload()
-                                .nth(i)
-                                .context(InvalidTransactionIndexSnafu {
-                                    height: height as u64,
-                                    index: i as u64,
-                                })?;
+                        let index = block.payload().nth(block.metadata(), i).context(
+                            InvalidTransactionIndexSnafu {
+                                height: height as u64,
+                                index: i as u64,
+                            },
+                        )?;
                         (block, index)
                     }
                 };
@@ -349,7 +347,7 @@ mod test {
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
-            for (j, txn_from_block) in block.payload().enumerate() {
+            for (j, txn_from_block) in block.enumerate() {
                 let txn: TransactionQueryData<MockTypes> = client
                     .get(&format!("transaction/{}/{}", i, j))
                     .send()

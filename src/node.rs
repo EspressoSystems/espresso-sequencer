@@ -20,16 +20,17 @@
 //! than expected, if the node being queried is not fully synced with the entire history of the
 //! chain. However, the node will _eventually_ sync and return the expected counts.
 
-use crate::{api::load_api, QueryError};
+use crate::{api::load_api, QueryError, SignatureKey};
 use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
+use hotshot::types::SignatureKey as _;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::{OptionExt, ResultExt, Snafu};
 use std::fmt::Display;
 use std::path::PathBuf;
-use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, RequestParams, StatusCode};
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -70,6 +71,9 @@ pub enum Error {
         source: QueryError,
         proposer: EncodedPublicKey,
     },
+    #[snafu(display("malformed signature key"))]
+    #[from(ignore)]
+    InvalidSignatureKey,
     Custom {
         message: String,
         status: StatusCode,
@@ -86,7 +90,7 @@ impl Error {
 
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
+            Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
             Self::Query { source, .. } | Self::QueryProposals { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
@@ -109,26 +113,43 @@ where
         })?
         .get("count_proposals", |req, state| {
             async move {
-                let proposer = req.blob_param("proposer_id")?;
+                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
                 state
                     .count_proposals(&proposer)
                     .await
-                    .context(QueryProposalsSnafu { proposer })
+                    .context(QueryProposalsSnafu {
+                        proposer: proposer.to_bytes(),
+                    })
             }
             .boxed()
         })?
         .get("get_proposals", |req, state| {
             async move {
-                let proposer = req.blob_param("proposer_id")?;
+                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
                 let limit = req.opt_integer_param("count")?;
                 state
                     .get_proposals(&proposer, limit)
                     .await
-                    .context(QueryProposalsSnafu { proposer })
+                    .context(QueryProposalsSnafu {
+                        proposer: proposer.to_bytes(),
+                    })
             }
             .boxed()
         })?;
     Ok(api)
+}
+
+fn proposer_param<Types: NodeType>(
+    req: &RequestParams,
+    param: &str,
+) -> Result<SignatureKey<Types>, Error> {
+    // The HotShot signature key trait temporarily lacks the trait bounds required to convert
+    // directly from TaggedBase64. As a workaround, we parse the TaggedBase64 as an
+    // EncodedPublicKey and then decode to the actual signature key type.
+    //
+    // This can be simplified after https://github.com/EspressoSystems/HotShot/issues/2374.
+    let encoded: EncodedPublicKey = req.blob_param(param)?;
+    SignatureKey::<Types>::from_bytes(&encoded).context(InvalidSignatureKeySnafu)
 }
 
 #[cfg(test)]
@@ -184,7 +205,7 @@ mod test {
 
         // Check proposals for node 0.
         let proposals: Vec<LeafQueryData<MockTypes>> = client
-            .get(&format!("proposals/{}", network.proposer(0)))
+            .get(&format!("proposals/{}", network.proposer(0).to_bytes()))
             .send()
             .await
             .unwrap();
@@ -195,7 +216,10 @@ mod test {
         // Check the `proposals/limit` and `proposals/count` features.
         assert!(
             client
-                .get::<u64>(&format!("proposals/{}/count", network.proposer(0)))
+                .get::<u64>(&format!(
+                    "proposals/{}/count",
+                    network.proposer(0).to_bytes()
+                ))
                 .send()
                 .await
                 .unwrap()
@@ -208,7 +232,7 @@ mod test {
             client
                 .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                     "proposals/{}/limit/1",
-                    network.proposer(0)
+                    network.proposer(0).to_bytes()
                 ))
                 .send()
                 .await
@@ -220,7 +244,7 @@ mod test {
             client
                 .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                     "proposals/{}/limit/0",
-                    network.proposer(0)
+                    network.proposer(0).to_bytes()
                 ))
                 .send()
                 .await

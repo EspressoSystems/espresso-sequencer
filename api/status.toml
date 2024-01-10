@@ -59,6 +59,7 @@ Returns the fraction of views which resulted in a committed block, as a floating
 
 [route.metrics]
 PATH = ["/metrics"]
+METHOD = "METRICS"
 DOC = """
 Prometheus endpoint exposing various consensus-related metrics.
 """

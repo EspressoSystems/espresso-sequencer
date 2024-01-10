@@ -14,7 +14,7 @@ use super::mocks::{
     DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
     MockTransaction, MockTypes,
 };
-use crate::{data_source::FileSystemDataSource, status::UpdateStatusData};
+use crate::{data_source::FileSystemDataSource, status::UpdateStatusData, SignatureKey};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -29,10 +29,7 @@ use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
-    traits::{
-        election::Membership,
-        signature_key::{EncodedPublicKey, SignatureKey},
-    },
+    traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
@@ -67,8 +64,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
         let stake = 1u64;
-        let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = (0
-            ..total_nodes.into())
+        let known_nodes_with_stake: Vec<
+            <BLSPubKey as hotshot::types::SignatureKey>::StakeTableEntry,
+        > = (0..total_nodes.into())
             .map(|id| pub_keys[id].get_stake_table_entry(stake))
             .collect();
         let nodes = join_all(
@@ -178,8 +176,8 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         self.pub_keys.len()
     }
 
-    pub fn proposer(&self, i: usize) -> EncodedPublicKey {
-        self.pub_keys[i].to_bytes()
+    pub fn proposer(&self, i: usize) -> SignatureKey<MockTypes> {
+        self.pub_keys[i]
     }
 
     pub fn data_source(&self) -> Arc<RwLock<D>> {

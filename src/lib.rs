@@ -256,8 +256,7 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use hotshot_types::traits::signature_key::EncodedPublicKey;
-//! # use hotshot_query_service::QueryResult;
+//! # use hotshot_query_service::{QueryResult, SignatureKey};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
 //! #   TransactionHash, TransactionIndex,
@@ -316,13 +315,13 @@
 //!
 //!     async fn get_proposals(
 //!         &self,
-//!         id: &EncodedPublicKey,
+//!         id: &SignatureKey<AppTypes>,
 //!         limit: Option<usize>,
 //!     ) -> QueryResult<Vec<LeafQueryData<AppTypes>>> {
 //!         self.hotshot_qs.get_proposals(id, limit).await
 //!     }
 //!
-//!     async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+//!     async fn count_proposals(&self, id: &SignatureKey<AppTypes>) -> QueryResult<usize> {
 //!         self.hotshot_qs.count_proposals(id).await
 //!     }
 //! }
@@ -396,8 +395,10 @@ use tide_disco::{App, StatusCode};
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
+pub type Metadata<Types> = <Payload<Types> as BlockPayload>::Metadata;
 /// Item within a [`Payload`].
 pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
+pub type SignatureKey<Types> = <Types as NodeType>::SignatureKey;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -510,9 +511,8 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
-    use hotshot::types::SignatureKey;
+    use hotshot::types::SignatureKey as _;
     use hotshot_signature_key::bn254::BLSPubKey;
-    use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -582,12 +582,12 @@ mod test {
         }
         async fn get_proposals(
             &self,
-            proposer: &EncodedPublicKey,
+            proposer: &SignatureKey<MockTypes>,
             limit: Option<usize>,
         ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
             self.hotshot_qs.get_proposals(proposer, limit).await
         }
-        async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
             self.hotshot_qs.count_proposals(proposer).await
         }
     }
