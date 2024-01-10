@@ -20,7 +20,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
 use async_trait::async_trait;
@@ -37,7 +37,6 @@ use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::NodeType,
-        signature_key::EncodedPublicKey,
     },
 };
 use itertools::Itertools;
@@ -858,7 +857,7 @@ where
 
     async fn get_proposals(
         &self,
-        proposer: &EncodedPublicKey,
+        proposer: &SignatureKey<Types>,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
@@ -867,7 +866,10 @@ where
             // recent leaves, so order by descending height.
             query = format!("{query} ORDER BY height DESC limit {limit}");
         }
-        let rows = self.query(&query, &[&proposer.to_string()]).await?;
+        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize proposer ID: {err}"),
+        })?;
+        let rows = self.query(&query, &[&proposer_json]).await?;
         let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
 
         if limit.is_some() {
@@ -879,9 +881,12 @@ where
         Ok(leaves)
     }
 
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self.query_one(query, &[&proposer.to_string()]).await?;
+        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize proposer ID: {err}"),
+        })?;
+        let row = self.query_one(query, &[&proposer_json]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
     }
@@ -945,6 +950,10 @@ where
         let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
             message: format!("failed to serialize QC: {err}"),
         })?;
+        let proposer_json =
+            serde_json::to_value(&leaf.proposer()).map_err(|err| QueryError::Error {
+                message: format!("failed to serialize proposer ID: {err}"),
+            })?;
         stmts.push((
             "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
              VALUES ($1, $2, $3, $4, $5, $6)"
@@ -952,7 +961,7 @@ where
             vec![
                 Box::new(leaf.height() as i64),
                 Box::new(leaf.hash().to_string()),
-                Box::new(leaf.proposer().to_string()),
+                Box::new(proposer_json),
                 Box::new(leaf.block_hash().to_string()),
                 Box::new(leaf_json),
                 Box::new(qc_json),
@@ -991,7 +1000,7 @@ where
         // Index the transactions in the block.
         let mut values = vec![];
         let mut params: Vec<Box<dyn ToSql + Send + Sync>> = vec![];
-        for (txn_ix, txn) in block.payload().enumerate() {
+        for (txn_ix, txn) in block.enumerate() {
             let txn_ix = serde_json::to_value(&txn_ix).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize transaction index: {err}"),
             })?;
