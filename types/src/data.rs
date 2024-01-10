@@ -306,6 +306,9 @@ pub struct Leaf<TYPES: NodeType> {
     /// It may be empty for nodes not in the DA committee.
     pub block_payload: Option<TYPES::BlockPayload>,
 
+    /// State.
+    pub state: TYPES::StateType,
+
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
@@ -319,6 +322,7 @@ impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
             && self.justify_qc == other.justify_qc
             && self.parent_commitment == other.parent_commitment
             && self.block_header == other.block_header
+            && self.state == other.state
             && self.rejected == other.rejected
     }
 }
@@ -329,6 +333,7 @@ impl<TYPES: NodeType> Hash for Leaf<TYPES> {
         self.justify_qc.hash(state);
         self.parent_commitment.hash(state);
         self.block_header.hash(state);
+        self.state.hash(state);
         self.rejected.hash(state);
     }
 }
@@ -356,6 +361,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: fake_commitment(),
             block_header,
             block_payload: Some(block_payload),
+            state: <TYPES::StateType as State>::initialize(),
             rejected: Vec::new(),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
@@ -424,8 +430,9 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         self.get_block_header().payload_commitment()
     }
     /// The blockchain state after appending this leaf.
-    // The Sequencing Leaf doesn't have a state.
-    pub fn get_state(&self) {}
+    pub fn get_state(&self) -> TYPES::StateType {
+        self.state.clone()
+    }
     /// Transactions rejected or invalidated by the application of this leaf.
     pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
@@ -442,6 +449,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: stored_view.parent,
             block_header: stored_view.block_header,
             block_payload: stored_view.block_payload,
+            state: stored_view.state,
             rejected: stored_view.rejected,
             proposer_id: stored_view.proposer_id,
         }
@@ -543,6 +551,7 @@ where
             justify_qc: leaf.get_justify_qc(),
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
+            state: leaf.get_state(),
             rejected: leaf.get_rejected(),
             proposer_id: leaf.get_proposer_id(),
         }

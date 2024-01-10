@@ -64,7 +64,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         state::ConsensusTime,
         storage::StoredView,
-        BlockPayload,
+        BlockPayload, State,
     },
     HotShotConfig,
 };
@@ -217,6 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
+                    metadata: anchored_leaf.get_state().metadata(),
                 },
             },
         );
@@ -355,13 +356,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Panics
     ///
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) {
+    pub async fn get_state(&self) -> TYPES::StateType {
         self.inner
             .consensus
             .read()
             .await
             .get_decided_leaf()
-            .get_state();
+            .get_state()
     }
 
     /// Returns a copy of the consensus struct

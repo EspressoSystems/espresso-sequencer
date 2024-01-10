@@ -297,7 +297,11 @@ pub trait NodeType:
     type ElectionConfigType: ElectionConfig;
 
     /// The state type that this hotshot setup is using.
-    type StateType: State<BlockPayload = Self::BlockPayload, Time = Self::Time>;
+    type StateType: State<
+        BlockHeader = Self::BlockHeader,
+        BlockPayload = Self::BlockPayload,
+        Time = Self::Time,
+    >;
 
     /// Membership used for this implementation
     type Membership: Membership<Self>;

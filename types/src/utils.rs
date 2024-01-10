@@ -2,7 +2,7 @@
 
 use crate::{
     data::{Leaf, VidCommitment},
-    traits::node_implementation::NodeType,
+    traits::{node_implementation::NodeType, State},
 };
 use commit::Commitment;
 use std::ops::Deref;
@@ -23,6 +23,8 @@ pub enum ViewInner<TYPES: NodeType> {
     Leaf {
         /// Proposed leaf
         leaf: Commitment<Leaf<TYPES>>,
+        /// Application-specific data.
+        metadata: <TYPES::StateType as State>::Metadata,
     },
     /// Leaf has failed
     Failed,
@@ -32,7 +34,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     /// return the underlying leaf hash if it exists
     #[must_use]
     pub fn get_leaf_commitment(&self) -> Option<Commitment<Leaf<TYPES>>> {
-        if let Self::Leaf { leaf } = self {
+        if let Self::Leaf { leaf, .. } = self {
             Some(*leaf)
         } else {
             None

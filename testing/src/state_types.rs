@@ -60,6 +60,8 @@ impl State for TestState {
 
     type Time = ViewNumber;
 
+    type Metadata = ();
+
     fn validate_block(&self, _block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
@@ -91,6 +93,8 @@ impl State for TestState {
     }
 
     fn on_commit(&self) {}
+
+    fn metadata(&self) -> Self::Metadata {}
 }
 
 impl TestableState for TestState {
