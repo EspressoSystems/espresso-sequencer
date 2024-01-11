@@ -5,7 +5,7 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.6" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
