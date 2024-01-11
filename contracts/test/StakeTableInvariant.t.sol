@@ -165,6 +165,17 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
         lightClient.setCurrentEpoch(lightClient.currentEpoch() + 1);
     }
 
+    function deposit(uint256 userIndex, uint64 amount) public {
+        userIndex = bound(userIndex, 0, numberUsers - 1);
+        if (!isUserRegistered[userIndex]) {
+            return;
+        }
+        amount = uint64(bound(amount, 1, 10));
+        BN254.G2Point memory vk = vks[userIndex];
+        vm.prank(users[userIndex]);
+        stakeTable.deposit(vk, amount);
+    }
+
     function withdrawFunds(uint256 rand) public {
         // Check if some withdrawals are possible
         if (requestExitKeys.length == 0) {
