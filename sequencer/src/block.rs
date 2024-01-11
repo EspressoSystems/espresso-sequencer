@@ -178,6 +178,31 @@ impl Header {
     }
 }
 
+fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<SHA3MerkleTree> {
+    anyhow::ensure!(
+        proposal.height == parent.height + 1,
+        anyhow::anyhow!(
+            "Invalid Height Error: {}, {}",
+            parent.height,
+            proposal.height
+        )
+    );
+
+    let mut block_merkle_tree = parent.block_merkle_tree.clone();
+    block_merkle_tree.push(parent.commit()).unwrap();
+    let block_merkle_tree_root = block_merkle_tree.commitment();
+
+    anyhow::ensure!(
+        proposal.block_merkle_tree_root == block_merkle_tree_root,
+        anyhow::anyhow!(
+            "Invalid Root Error: {}, {}",
+            block_merkle_tree_root,
+            proposal.block_merkle_tree_root
+        )
+    );
+    Ok(block_merkle_tree)
+}
+
 impl BlockHeader for Header {
     type Payload = Payload;
     fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
@@ -696,5 +721,59 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+    }
+
+    #[test]
+    fn test_validate_proposal_error_cases() {
+        let (mut header, ..) = Header::genesis();
+        let mut block_merkle_tree = header.block_merkle_tree.clone();
+
+        // Populate the tree with an initial `push`.
+        block_merkle_tree.push(header.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        header.block_merkle_tree = block_merkle_tree.clone();
+        header.block_merkle_tree_root = block_merkle_tree_root;
+        let parent = header.clone();
+        let mut proposal = parent.clone();
+
+        // Advance `proposal.height` to trigger validation error.
+        let result = _validate_proposal(&parent.clone(), &proposal).unwrap_err();
+        assert_eq!(
+            format!("{}", result.root_cause()),
+            "Invalid Height Error: 0, 0"
+        );
+
+        // proposed `Header` root should include parent +
+        // parent.commit
+        proposal.height += 1;
+        let result = _validate_proposal(&parent.clone(), &proposal).unwrap_err();
+        // Fails b/c `proposal` has not advanced from `parent`
+        assert!(format!("{}", result.root_cause()).contains("Invalid Root Error"));
+    }
+
+    #[test]
+    fn test_validate_proposal_success() {
+        let (mut header, ..) = Header::genesis();
+        let mut block_merkle_tree = header.block_merkle_tree.clone();
+
+        // Populate the tree with an initial `push`.
+        block_merkle_tree.push(header.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        header.block_merkle_tree = block_merkle_tree.clone();
+        header.block_merkle_tree_root = block_merkle_tree_root;
+
+        let parent = header.clone();
+        let mut proposal = parent.clone();
+
+        // advance proposal
+        let mut block_merkle_tree = proposal.block_merkle_tree.clone();
+        block_merkle_tree.push(proposal.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        proposal.block_merkle_tree = block_merkle_tree.clone();
+        proposal.block_merkle_tree_root = block_merkle_tree_root;
+
+        proposal.height += 1;
+        let result = _validate_proposal(&parent.clone(), &proposal.clone()).unwrap();
+        assert_eq!(result.commitment(), proposal.block_merkle_tree_root);
     }
 }
