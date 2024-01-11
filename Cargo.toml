@@ -11,7 +11,7 @@ hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", ta
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 hotshot-state-prover = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.6" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 
