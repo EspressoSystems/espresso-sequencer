@@ -19,11 +19,11 @@ use super::{test_launcher::TaskGenerator, GlobalTestEvent};
 
 /// the idea here is to run as long as we want
 
-/// Data Availability task error
+/// Completion Task error
 #[derive(Snafu, Debug)]
 pub struct CompletionTaskErr {}
 
-/// Data availability task state
+/// Completion task state
 pub struct CompletionTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) test_event_stream: ChannelStream<GlobalTestEvent>,
     pub(crate) handles: Vec<Node<TYPES, I>>,

@@ -116,7 +116,7 @@ impl BlockPayload for TestBlockPayload {
         ))
     }
 
-    fn from_bytes<E>(encoded_transactions: E, _metadata: Self::Metadata) -> Self
+    fn from_bytes<E>(encoded_transactions: E, _metadata: &Self::Metadata) -> Self
     where
         E: Iterator<Item = u8>,
     {
@@ -214,7 +214,9 @@ impl BlockHeader for TestBlockHeader {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata {}
+    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata {
+        &()
+    }
 }
 
 impl Committable for TestBlockHeader {
