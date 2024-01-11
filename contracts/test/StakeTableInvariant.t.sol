@@ -120,7 +120,7 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
 
         bool res = registerWithSeed(tokenCreator, userIndex, amount);
 
-        stakeTableFirstAvailableRegistrationEpoch = stakeTable._firstAvailableRegistrationEpoch();
+        stakeTableFirstAvailableRegistrationEpoch = stakeTable.firstAvailableRegistrationEpoch();
         stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
 
         registrationSuccessful = res;
@@ -155,7 +155,7 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
             exitEpochForBlsVK[vkHash] = exitEpoch;
             requestExitKeys.push(vk);
 
-            stakeTableFirstAvailableExitEpoch = stakeTable._firstAvailableExitEpoch();
+            stakeTableFirstAvailableExitEpoch = stakeTable.firstAvailableExitEpoch();
             stakeTableNumPendingExits = stakeTable.numPendingExits();
         }
         requestExitSuccessful = res;

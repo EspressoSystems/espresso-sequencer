@@ -54,17 +54,17 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
     /// get the correct epoch
-    uint64 public _firstAvailableRegistrationEpoch;
+    uint64 public firstAvailableRegistrationEpoch;
     /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
     /// total pending queue size!)
-    uint64 public _numPendingRegistrations;
+    uint64 private _numPendingRegistrations;
 
     /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
     /// epoch
-    uint64 public _firstAvailableExitEpoch;
+    uint64 public firstAvailableExitEpoch;
     /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
     /// queue size!)
-    uint64 public _numPendingExits;
+    uint64 private _numPendingExits;
 
     uint64 public maxChurnRate;
 
@@ -75,11 +75,11 @@ contract StakeTable is AbstractStakeTable {
         maxChurnRate = churnRate;
 
         // A set of hardcoded stakers is defined for the first epoch.
-        _firstAvailableRegistrationEpoch = 1;
+        firstAvailableRegistrationEpoch = 1;
         _numPendingRegistrations = 0;
 
         // It is not possible to exit during the first epoch.
-        _firstAvailableExitEpoch = 1;
+        firstAvailableExitEpoch = 1;
         _numPendingExits = 0;
     }
 
@@ -125,14 +125,14 @@ contract StakeTable is AbstractStakeTable {
         uint64 epoch;
         uint64 queueSize;
 
-        if (_firstAvailableRegistrationEpoch < currentEpoch() + 1) {
+        if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 0;
         } else if (_numPendingRegistrations >= maxChurnRate) {
-            epoch = _firstAvailableRegistrationEpoch + 1;
+            epoch = firstAvailableRegistrationEpoch + 1;
             queueSize = 0;
         } else {
-            epoch = _firstAvailableRegistrationEpoch;
+            epoch = firstAvailableRegistrationEpoch;
             queueSize = _numPendingRegistrations;
         }
         return (epoch, queueSize);
@@ -143,7 +143,7 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
-        _firstAvailableRegistrationEpoch = epoch;
+        firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
     }
 
@@ -157,14 +157,14 @@ contract StakeTable is AbstractStakeTable {
         uint64 epoch;
         uint64 queueSize;
 
-        if (_firstAvailableExitEpoch < currentEpoch() + 1) {
+        if (firstAvailableExitEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 0;
         } else if (_numPendingExits >= maxChurnRate) {
-            epoch = _firstAvailableExitEpoch + 1;
+            epoch = firstAvailableExitEpoch + 1;
             queueSize = 0;
         } else {
-            epoch = _firstAvailableExitEpoch;
+            epoch = firstAvailableExitEpoch;
             queueSize = _numPendingExits;
         }
         return (epoch, queueSize);
@@ -174,7 +174,7 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
-        _firstAvailableExitEpoch = epoch;
+        firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
