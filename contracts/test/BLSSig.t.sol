@@ -101,10 +101,14 @@ contract BLSSig_Test is Test {
 
         // Make sure the point is invalid by picking a non valid field element for the x component.
         uint256 invalidX = bound(x, BN254.P_MOD, type(uint256).max);
-        BN254.BaseField xBaseField = BN254.BaseField.wrap(invalidX);
-        BN254.BaseField yBaseField = BN254.BaseField.wrap(y);
-        BN254.G1Point memory invalidPoint = BN254.G1Point(xBaseField, yBaseField);
+        uint256 invalidY = bound(y, BN254.P_MOD, type(uint256).max);
 
+        BN254.G1Point memory invalidPoint =
+            BN254.G1Point(BN254.BaseField.wrap(invalidX), BN254.BaseField.wrap(2));
+        vm.expectRevert("Bn254: invalid G1 point");
+        this.wrapVerifyBlsSig(message, invalidPoint, vk);
+
+        invalidPoint = BN254.G1Point(BN254.BaseField.wrap(10), BN254.BaseField.wrap(invalidY));
         vm.expectRevert("Bn254: invalid G1 point");
         this.wrapVerifyBlsSig(message, invalidPoint, vk);
     }
