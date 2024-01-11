@@ -15,7 +15,7 @@ import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { LightClientTest } from "../test/mocks/LightClientTest.sol";
-import { StakeTable_Test } from "../test/StakeTable.t.sol";
+import { StakeTableCommonTest } from "../test/StakeTable.t.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -23,8 +23,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTableHandler is Test {
-    StakeTable_Test private testStakeTableContract;
+contract StakeTableHandler is Test, StakeTableCommonTest {
     S public stakeTable;
     address public tokenCreator;
     ExampleToken public token;
@@ -76,7 +75,7 @@ contract StakeTableHandler is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = testStakeTableContract.genClientWallet(sender, seed);
+        ) = this.genClientWallet(sender, seed);
         uint64 depositAmount = uint64(bound(amount, 0, 100));
         uint64 validUntilEpoch = 1000;
 

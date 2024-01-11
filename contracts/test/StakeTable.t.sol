@@ -23,21 +23,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTable_Test is Test {
-    event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
-    event Deposit(bytes32, uint256);
-    event Exit(bytes32, uint64);
-
-    S public stakeTable;
-    ExampleToken public token;
-
-    LCTest public lc;
-    LC.LightClientState public genesis;
-    uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
-
-    uint256 constant INITIAL_BALANCE = 1_000_000_000;
-    address exampleTokenCreator;
-
+contract StakeTableCommonTest is Test {
     function genClientWallet(address sender, uint8 seed)
         public
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
@@ -63,6 +49,22 @@ contract StakeTable_Test is Test {
             blsSig
         );
     }
+}
+
+contract StakeTable_Test is Test, StakeTableCommonTest {
+    event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
+    event Deposit(bytes32, uint256);
+    event Exit(bytes32, uint64);
+
+    S public stakeTable;
+    ExampleToken public token;
+
+    LCTest public lc;
+    LC.LightClientState public genesis;
+    uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
+
+    uint256 constant INITIAL_BALANCE = 1_000_000_000;
+    address exampleTokenCreator;
 
     function registerWithSeed(address sender, uint8 seed, uint64 depositAmount, bool expectRevert)
         private
