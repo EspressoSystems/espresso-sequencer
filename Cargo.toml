@@ -84,7 +84,7 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
-spin_sleep = { version = "1.1", optional = true }
+spin_sleep = { version = "1.2", optional = true }
 tempdir = { version = "0.3", optional = true }
 
 # Dependencies enabled by feature "backtrace-on-stack-overflow".
@@ -102,7 +102,7 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 portpicker = "0.1"
 rand = "0.8"
-spin_sleep = "1.1"
+spin_sleep = "1.2"
 surf = "2.3"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tempdir = "0.3"
