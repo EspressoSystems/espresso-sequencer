@@ -280,7 +280,6 @@ async fn build_quorum_proposal_and_signature(
             block_header: block_header.clone(),
             block_payload: None,
             rejected: vec![],
-            timestamp: 0,
             proposer_id: quorum_membership.get_leader(ViewNumber::new(cur_view)),
         };
         let signature_new_view =
