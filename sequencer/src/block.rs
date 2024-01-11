@@ -21,6 +21,7 @@ use std::{
 use time::OffsetDateTime;
 
 pub type SHA3MerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
+pub type SHA3MerkleCommitment = <SHA3MerkleTree as MerkleTreeScheme>::Commitment;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -72,7 +73,7 @@ pub struct Header {
     pub payload_commitment: VidCommitment,
     pub transactions_root: NMTRoot,
     /// Root Commitment of Block Merkle Tree
-    pub block_merkle_tree_root: <SHA3MerkleTree as MerkleTreeScheme>::Commitment,
+    pub block_merkle_tree_root: SHA3MerkleCommitment,
     /// Frontier of Block Merkle Tree
     pub block_merkle_tree: SHA3MerkleTree,
 }
