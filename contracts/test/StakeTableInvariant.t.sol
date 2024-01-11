@@ -31,6 +31,7 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
     BN254.G2Point[] public vksWithdraw;
     LightClientTest public lightClient;
     address[] public users;
+    mapping(bytes32 vkHash => uint256 userIndex) public userIndexFromVk;
     uint256 public numberUsers;
 
     // Variables for testing invariant relative to Register
@@ -40,12 +41,14 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
     uint64 public stakeTableNumPendingRegistrations;
     bool public registrationSuccessful;
 
-    // Variables for testing invariant relative to requestExit
+    // Variables for testing invariant relative to requestExit and withdrawFunds
     uint64 public nextExitEpochBefore;
     uint64 public pendingExitsBefore;
     uint64 public stakeTableFirstAvailableExitEpoch;
     uint64 public stakeTableNumPendingExits;
     bool public requestExitSuccessful;
+    mapping(bytes32 blsKeyHash => uint64 exitEpoch) public exitEpochForBlsVK;
+    BN254.G2Point[] public requestExitKeys;
 
     constructor(
         S _stakeTable,
@@ -98,15 +101,17 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
             validUntilEpoch
         );
         vks[userIndex] = blsVK;
+        bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
+        userIndexFromVk[vkHash] = userIndex;
 
         return res;
     }
 
-    function register(uint8 seed, uint64 amount) public {
+    function register(uint8 userIndex, uint64 amount) public {
         (nextRegistrationEpochBefore, pendingRegistrationsBefore) =
             stakeTable.nextRegistrationEpoch();
 
-        bool res = registerWithSeed(tokenCreator, seed, amount);
+        bool res = registerWithSeed(tokenCreator, userIndex, amount);
 
         stakeTableFirstAvailableRegistrationEpoch = stakeTable._firstAvailableRegistrationEpoch();
         stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
@@ -119,11 +124,31 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
         (nextExitEpochBefore, pendingExitsBefore) = stakeTable.nextExitEpoch();
 
         vm.prank(users[index]);
-        bool res = stakeTable.requestExit(vks[index]);
+        BN254.G2Point memory vk = vks[index];
+        bool res = stakeTable.requestExit(vk);
+        if (res) {
+            bytes32 vkHash = stakeTable._hashBlsKey(vk);
+            (
+                address account,
+                AbstractStakeTable.StakeType stakeType,
+                uint64 balance,
+                uint64 registerEpoch,
+                uint64 exitEpoch,
+            ) = stakeTable.nodes(vkHash);
 
-        stakeTableFirstAvailableExitEpoch = stakeTable._firstAvailableExitEpoch();
-        stakeTableNumPendingExits = stakeTable.numPendingExits();
-        requestExitSuccessful = res;
+            // In order to avoid sol-lint warnings.
+            account;
+            stakeType;
+            balance;
+            registerEpoch;
+
+            exitEpochForBlsVK[vkHash] = exitEpoch;
+            requestExitKeys.push(vk);
+
+            stakeTableFirstAvailableExitEpoch = stakeTable._firstAvailableExitEpoch();
+            stakeTableNumPendingExits = stakeTable.numPendingExits();
+            requestExitSuccessful = res;
+        }
     }
 
     function advanceEpoch() public {
@@ -133,16 +158,29 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
     }
 
     function withdrawFunds(uint256 rand) public {
-        uint256 index = bound(rand, 0, numberUsers - 1);
-        BN254.G2Point memory vk = vks[index];
+        // Check if some withdrawals are possible
+        if (requestExitKeys.length == 0) {
+            return;
+        }
 
-        uint64 currentEpoch = lightClient.currentEpoch();
+        uint256 index = bound(rand, 0, requestExitKeys.length);
+        BN254.G2Point memory vk = requestExitKeys[index];
+        bytes32 vkHash = stakeTable._hashBlsKey(vk);
+        uint64 exitEpoch = exitEpochForBlsVK[vkHash];
+
+        // Ensure we have reached the right epoch before withdrawing
         uint64 slackForEscrowPeriod = 100;
-        uint64 nextEpoch = currentEpoch + slackForEscrowPeriod;
+        uint64 nextEpoch = exitEpoch + slackForEscrowPeriod;
         lightClient.setCurrentEpoch(nextEpoch);
 
-        vm.prank(users[index]);
+        uint256 userIndex = userIndexFromVk[vkHash];
+        vm.prank(users[userIndex]);
         stakeTable.withdrawFunds(vk);
+        exitEpochForBlsVK[vkHash] = 0;
+
+        // Remove element from array
+        requestExitKeys[index] = requestExitKeys[requestExitKeys.length - 1];
+        requestExitKeys.pop();
     }
 }
 
