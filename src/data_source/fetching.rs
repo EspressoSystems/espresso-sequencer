@@ -29,7 +29,7 @@ use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::{
-    future::{join_all, BoxFuture, FutureExt},
+    future::{join_all, Future, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
@@ -513,23 +513,17 @@ where
             });
 
         // Trigger an active fetch from a remote provider if possible.
-        if let Some(active) = T::active_fetch(self, req).await {
-            let fetcher = self.clone();
-            spawn(async move {
-                tracing::info!("spawned active fetch for {req:?}");
-                let obj = active.await;
-                tracing::info!("fetched object {req:?}");
-
-                // Store the resource in local storage, so we can avoid fetching it in the future.
-                let mut storage = fetcher.storage.write().await;
-                if let Err(err) = obj.store(&mut *storage).await {
-                    // It is unfortunate if this fails, but we can still proceed by returning the
-                    // resource that we fetched, keeping it in memory. Simply log the error and move
-                    // on.
-                    tracing::warn!("failed to store fetched resource {req:?}: {err}");
-                }
-            });
-        }
+        let fetcher = self.clone();
+        T::active_fetch(self, req, |obj| async move {
+            // Store the resource in local storage, so we can avoid fetching it in the future.
+            let mut storage = fetcher.storage.write().await;
+            if let Err(err) = obj.store(&mut *storage).await {
+                // It is unfortunate if this fails, but we can still proceed by returning the
+                // resource that we fetched, keeping it in memory. Simply log the error and move
+                // on.
+                tracing::warn!("failed to store fetched resource {req:?}: {err}");
+            }
+        });
 
         // Wait for the object to arrive.
         Fetch::Pending(fut.boxed())
@@ -553,7 +547,7 @@ where
     /// Does this object satisfy the given request?
     fn satisfies(&self, req: Self::Request) -> bool;
 
-    /// Create a future for fetching the object from a remote provider, if possible.
+    /// Spawn a task to fetch the object from a remote provider, if possible.
     ///
     /// An active fetch will only be triggered if:
     /// * There is not already an active fetch in progress for the same object
@@ -563,18 +557,23 @@ where
     ///   leaf by height but not by hash, since we can't guarantee that a leaf with an arbitrary
     ///   hash exists.
     ///
-    /// If we do not trigger an active fetch for an object, but the object does in fact exist, we
-    /// will still eventually receive it passively, since we will eventually receive all blocks and
-    /// leaves that are ever produced.
-    async fn active_fetch<S, P>(
+    /// If we do trigger an active fetch for an object, the provided callback will be called if and
+    /// when the fetch completes successfully. The callback should be responsible for notifying any
+    /// passive listeners that the object has been retrieved. If we do not trigger an active fetch
+    /// for an object, this function does nothing.
+    ///
+    /// In either case, as long as the requested object does in fact exist, we will eventually
+    /// receive it passively, since we will eventually receive all blocks and leaves that are ever
+    /// produced. Active fetching merely helps us receive certain objects sooner.
+    fn active_fetch<S, P, Fut>(
         _fetcher: &Fetcher<Types, S, P>,
         _req: Self::Request,
-    ) -> Option<BoxFuture<'static, Self>>
-    where
+        _callback: impl FnOnce(Self) -> Fut,
+    ) where
         S: AvailabilityStorage<Types>,
+        Fut: Future<Output = ()>,
     {
         // TODO implement active fetching
-        None
     }
 
     /// Wait for someone else to fetch the object.
