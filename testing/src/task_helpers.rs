@@ -245,9 +245,11 @@ async fn build_quorum_proposal_and_signature(
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
     };
+
+    // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
         consensus.state_map.insert(
-            ViewNumber::new(1),
+            ViewNumber::new(cur_view - 1),
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: leaf.commit(),
@@ -280,7 +282,7 @@ async fn build_quorum_proposal_and_signature(
             block_payload: None,
             rejected: vec![],
             timestamp: 0,
-            proposer_id: *api.public_key(),
+            proposer_id: quorum_membership.get_leader(ViewNumber::new(cur_view)),
         };
         let signature_new_view =
             <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
