@@ -221,7 +221,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
                 let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
@@ -308,7 +307,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
 
@@ -376,6 +374,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Updating view from {} to {} in consensus task",
                 *self.cur_view, *new_view
             );
+
+            if *self.cur_view / 100 != *new_view / 100 {
+                // TODO (https://github.com/EspressoSystems/HotShot/issues/2296):
+                // switch to info! when INFO logs become less cluttered
+                error!("Progress: entered view {:>6}", *new_view);
+            }
+
             // cancel the old timeout task
             if let Some(timeout_task) = self.timeout_task.take() {
                 cancel_task(timeout_task).await;
@@ -531,7 +536,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_header: proposal.data.block_header,
                         block_payload: None,
                         rejected: Vec::new(),
-                        timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender,
                     };
 
@@ -556,7 +560,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.data.block_header,
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender,
                 };
                 let leaf_commitment = leaf.commit();
@@ -1167,7 +1170,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 ),
                 block_payload: None,
                 rejected: vec![],
-                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().clone(),
             };
 

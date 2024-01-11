@@ -309,10 +309,6 @@ pub struct Leaf<TYPES: NodeType> {
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
-    // TODO (Keyao) Remove.
-    /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
-    pub timestamp: i128,
-
     /// the proposer id of the leaf
     pub proposer_id: TYPES::SignatureKey,
 }
@@ -361,7 +357,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_header,
             block_payload: Some(block_payload),
             rejected: Vec::new(),
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }
@@ -435,10 +430,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
-    /// Real-world time when this leaf was created.
-    pub fn get_timestamp(&self) -> i128 {
-        self.timestamp
-    }
     /// Identity of the network participant who proposed this leaf.
     pub fn get_proposer_id(&self) -> TYPES::SignatureKey {
         self.proposer_id.clone()
@@ -452,7 +443,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_header: stored_view.block_header,
             block_payload: stored_view.block_payload,
             rejected: stored_view.rejected,
-            timestamp: stored_view.timestamp,
             proposer_id: stored_view.proposer_id,
         }
     }
@@ -554,7 +544,6 @@ where
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
             rejected: leaf.get_rejected(),
-            timestamp: leaf.get_timestamp(),
             proposer_id: leaf.get_proposer_id(),
         }
     }

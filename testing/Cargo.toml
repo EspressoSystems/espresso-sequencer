@@ -12,9 +12,7 @@ slow-tests = []
 
 [dependencies]
 ark-bls12-381 = { workspace = true }
-ark-serialize = { version = "0.3", features = [
-    "derive",
-] } # TODO upgrade to 0.4 and inherit this dep from workspace https://github.com/EspressoSystems/HotShot/issues/1700
+ark-serialize = { workspace = true, features = ["derive"] }
 espresso-systems-common = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-trait = { workspace = true }
