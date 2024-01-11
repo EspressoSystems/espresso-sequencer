@@ -184,8 +184,10 @@ contract StakeTableInvariant_Tests is Test {
             stakeTableAmountComm: BN254.ScalarField.wrap(1),
             threshold: 10
         });
-        lightClientContract = new LightClientTest(genesis, 10);
-        stakeTable = new S(address(token), address(lightClientContract), 10);
+        uint32 numBlocksPerEpoch = 10;
+        uint64 churnRate = 10;
+        lightClientContract = new LightClientTest(genesis, numBlocksPerEpoch);
+        stakeTable = new S(address(token), address(lightClientContract), churnRate);
         handler = new StakeTableHandler(
             stakeTable, exampleTokenCreator, token, lightClientContract, users
         );
