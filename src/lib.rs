@@ -30,6 +30,7 @@
 //! use hotshot_query_service::{
 //!     availability,
 //!     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+//!     fetching::provider::NoFetching,
 //!     node,
 //!     status::UpdateStatusData,
 //!     status, Error
@@ -41,7 +42,7 @@
 //! use tide_disco::App;
 //!
 //! // Create or open a data source.
-//! let data_source = FileSystemDataSource::<AppTypes>::create(storage_path)
+//! let data_source = FileSystemDataSource::<AppTypes, NoFetching>::create(storage_path, NoFetching)
 //!     .await
 //!     .map_err(Error::internal)?;
 //!
@@ -95,12 +96,13 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
+//! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
-//! let data_source = FileSystemDataSource::create(storage_path).await.map_err(Error::internal)?;
+//! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
 //! spawn(run_standalone_service(options, data_source, hotshot));
 //! # Ok(())
 //! # }
@@ -367,6 +369,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
+pub mod fetching;
 pub mod metrics;
 pub mod node;
 mod resolvable;
@@ -607,7 +610,7 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader)
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
             .await
             .unwrap();
         let module_state =

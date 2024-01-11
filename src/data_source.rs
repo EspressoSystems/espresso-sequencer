@@ -347,7 +347,7 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
@@ -392,7 +392,7 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.

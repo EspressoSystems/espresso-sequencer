@@ -257,47 +257,18 @@ pub struct BlockQueryData<Types: NodeType> {
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
-    /// Collect information about a block.
-    ///
-    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `payload`.
-    ///
-    /// # Errors
-    ///
-    /// Fails with an [`InconsistentLeafError`] if `qc` and `leaf` do not correspond to the same
-    /// block. If `payload` does not correspond to the same block as `leaf`, the behavior is
-    /// unspecified. In debug builds, the call may panic. However, this consistency check is quite
-    /// expensive, and may be omitted in optimized builds. The responsibility of ensuring
-    /// consistency between `leaf` and `payload` ultimately falls on the caller.
-    pub fn new(
-        leaf: &Leaf<Types>,
-        qc: &QuorumCertificate<Types>,
-        payload: Payload<Types>,
-    ) -> Result<Self, InconsistentLeafError<Types>> {
-        ensure!(
-            qc.data.leaf_commit == leaf.commit(),
-            InconsistentLeafSnafu {
-                leaf: leaf.commit(),
-                qc_leaf: qc.data.leaf_commit
-            },
-        );
-        Ok(Self {
-            hash: leaf.block_header.commit(),
-            header: leaf.block_header.clone(),
+    pub fn new(header: Header<Types>, payload: Payload<Types>) -> Self {
+        Self {
+            hash: header.commit(),
+            header,
             size: payload_size::<Types>(&payload),
             payload,
-        })
+        }
     }
 
     pub fn genesis() -> Self {
         let (header, payload, _) = Types::BlockHeader::genesis();
-        let size = payload_size::<Types>(&payload);
-        let hash = header.commit();
-        Self {
-            header,
-            payload,
-            hash,
-            size,
-        }
+        Self::new(header, payload)
     }
 
     pub fn header(&self) -> &Header<Types> {

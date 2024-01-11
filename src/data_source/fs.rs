@@ -39,13 +39,14 @@ use std::path::Path;
 ///
 /// ```
 /// # use hotshot_query_service::data_source::{ExtensibleDataSource, FileSystemDataSource};
+/// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # use std::path::Path;
 /// # async fn doc(storage_path: &Path) -> Result<(), anyhow::Error> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes>, AppState> =
-///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path).await?, "app state");
+/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes, NoFetching>, AppState> =
+///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path, NoFetching).await?, "app state");
 /// # Ok(())
 /// # }
 /// ```
@@ -91,6 +92,7 @@ use std::path::Path;
 /// # use hotshot_query_service::data_source::{
 /// #   FileSystemDataSource, UpdateDataSource, VersionedDataSource,
 /// # };
+/// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
@@ -99,7 +101,7 @@ use std::path::Path;
 /// struct AppState {
 ///     // Top-level storage coordinator
 ///     store: AtomicStore,
-///     hotshot_qs: FileSystemDataSource<AppTypes>,
+///     hotshot_qs: FileSystemDataSource<AppTypes, NoFetching>,
 ///     // additional state for other modules
 /// }
 ///
@@ -109,7 +111,7 @@ use std::path::Path;
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;
-///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader)
+///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader, NoFetching)
 ///         .await
 ///         .map_err(Error::internal)?;
 ///     // Initialize storage for other modules using the same loader.
@@ -139,19 +141,20 @@ use std::path::Path;
 ///     Ok(app)
 /// }
 /// ```
-pub type FileSystemDataSource<Types> = FetchingDataSource<Types, FileSystemStorage<Types>, ()>;
+pub type FileSystemDataSource<Types, P> = FetchingDataSource<Types, FileSystemStorage<Types>, P>;
 
-impl<Types: NodeType> FileSystemDataSource<Types>
+impl<Types: NodeType, P> FileSystemDataSource<Types, P>
 where
     Payload<Types>: QueryablePayload,
+    P: Send + Sync,
 {
     /// Create a new [FileSystemDataSource] with storage at `path`.
     ///
     /// If there is already data at `path`, it will be archived.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub async fn create(path: &Path) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::create(path).await?, ()).await
+    pub async fn create(path: &Path, provider: P) -> anyhow::Result<Self> {
+        FetchingDataSource::new(FileSystemStorage::create(path).await?, provider).await
     }
 
     /// Open an existing [FileSystemDataSource] from storage at `path`.
@@ -159,8 +162,8 @@ where
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub async fn open(path: &Path) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::open(path).await?, ()).await
+    pub async fn open(path: &Path, provider: P) -> anyhow::Result<Self> {
+        FetchingDataSource::new(FileSystemStorage::open(path).await?, provider).await
     }
 
     /// Create a new [FileSystemDataSource] using a persistent storage loader.
@@ -171,8 +174,15 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore](atomic_store::AtomicStore) from `loader`
     /// and managing synchronization of the store.
-    pub async fn create_with_store(loader: &mut AtomicStoreLoader) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::create_with_store(loader).await?, ()).await
+    pub async fn create_with_store(
+        loader: &mut AtomicStoreLoader,
+        provider: P,
+    ) -> anyhow::Result<Self> {
+        FetchingDataSource::new(
+            FileSystemStorage::create_with_store(loader).await?,
+            provider,
+        )
+        .await
     }
 
     /// Open an existing [FileSystemDataSource] using a persistent storage loader.
@@ -183,8 +193,11 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore](atomic_store::AtomicStore) from `loader`
     /// and managing synchronization of the store.
-    pub async fn open_with_store(loader: &mut AtomicStoreLoader) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::open_with_store(loader).await?, ()).await
+    pub async fn open_with_store(
+        loader: &mut AtomicStoreLoader,
+        provider: P,
+    ) -> anyhow::Result<Self> {
+        FetchingDataSource::new(FileSystemStorage::open_with_store(loader).await?, provider).await
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
@@ -215,7 +228,9 @@ mod impl_testable_data_source {
     use tempdir::TempDir;
 
     #[async_trait]
-    impl DataSourceLifeCycle for FileSystemDataSource<MockTypes> {
+    impl<P: Default + Send + Sync + 'static> DataSourceLifeCycle
+        for FileSystemDataSource<MockTypes, P>
+    {
         type Storage = TempDir;
 
         async fn create(node_id: usize) -> Self::Storage {
@@ -223,11 +238,15 @@ mod impl_testable_data_source {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Self::open(storage.path()).await.unwrap()
+            Self::open(storage.path(), Default::default())
+                .await
+                .unwrap()
         }
 
         async fn reset(storage: &Self::Storage) -> Self {
-            Self::create(storage.path()).await.unwrap()
+            Self::create(storage.path(), Default::default())
+                .await
+                .unwrap()
         }
 
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
@@ -241,11 +260,11 @@ mod impl_testable_data_source {
 mod test {
     use super::super::{availability_tests, status_tests};
     use super::FileSystemDataSource;
-    use crate::testing::mocks::MockTypes;
+    use crate::{fetching::provider::NoFetching, testing::mocks::MockTypes};
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(FileSystemDataSource<MockTypes>);
+    instantiate_data_source_tests!(FileSystemDataSource<MockTypes, NoFetching>);
 }

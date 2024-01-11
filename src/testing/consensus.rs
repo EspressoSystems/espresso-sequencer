@@ -14,7 +14,10 @@ use super::mocks::{
     DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
     MockTransaction, MockTypes,
 };
-use crate::{data_source::FileSystemDataSource, status::UpdateStatusData, SignatureKey};
+use crate::{
+    data_source::FileSystemDataSource, fetching::provider::NoFetching, status::UpdateStatusData,
+    SignatureKey,
+};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -48,7 +51,7 @@ pub struct MockNetwork<D: DataSourceLifeCycle> {
 
 // MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
 // convenient type alias.
-pub type MockDataSource = FileSystemDataSource<MockTypes>;
+pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
 
 const MINIMUM_NODES: usize = 2;
 

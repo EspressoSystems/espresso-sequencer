@@ -60,6 +60,7 @@ prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.6" }
+trait-variant = "0.1"
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"

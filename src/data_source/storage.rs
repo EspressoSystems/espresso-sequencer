@@ -28,7 +28,7 @@ use crate::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload, TransactionHash,
         TransactionIndex, UpdateAvailabilityData,
     },
-    Payload, QueryResult,
+    Header, Payload, QueryResult,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -65,6 +65,7 @@ where
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>>;
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
 
     async fn get_leaf_range<R>(
         &self,

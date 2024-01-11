@@ -156,7 +156,7 @@ fn proposer_param<Types: NodeType>(
 mod test {
     use super::*;
     use crate::{
-        data_source::{ExtensibleDataSource, FileSystemDataSource},
+        data_source::ExtensibleDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::MockTypes,
@@ -262,7 +262,7 @@ mod test {
 
         let dir = TempDir::new("test_node_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes>::create(dir.path())
+            MockDataSource::create(dir.path(), Default::default())
                 .await
                 .unwrap(),
             0,
@@ -280,14 +280,12 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
-            MockTypes,
-        >(&Options {
-            extensions: vec![extensions.into()],
-            ..Default::default()
-        })
-        .unwrap();
+        let mut api =
+            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes>(&Options {
+                extensions: vec![extensions.into()],
+                ..Default::default()
+            })
+            .unwrap();
         api.get("get_ext", |_, state| {
             async move { Ok(*state.as_ref()) }.boxed()
         })

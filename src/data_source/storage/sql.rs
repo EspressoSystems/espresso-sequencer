@@ -469,11 +469,20 @@ where
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
-              WHERE {where_clause}
-              LIMIT 1"
+              WHERE {where_clause}"
         );
         let row = self.query_one(&query, [param]).await?;
         parse_block(row)
+    }
+
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
+            ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),
+            ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
+        };
+        let query = format!("SELECT {HEADER_COLUMNS} FROM header WHERE {where_clause}");
+        let row = self.query_one(&query, [param]).await?;
+        parse_header::<Types>(row)
     }
 
     async fn get_leaf_range<R>(
@@ -975,6 +984,21 @@ where
         payload,
         size,
         hash,
+    })
+}
+
+const HEADER_COLUMNS: &str = "data";
+
+fn parse_header<Types>(row: Row) -> QueryResult<Header<Types>>
+where
+    Types: NodeType,
+{
+    // Reconstruct the full header.
+    let data = row.try_get("data").map_err(|err| QueryError::Error {
+        message: format!("error extracting header data from query results: {err}"),
+    })?;
+    serde_json::from_value(data).map_err(|err| QueryError::Error {
+        message: format!("malformed header: {err}"),
     })
 }
 

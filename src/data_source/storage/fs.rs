@@ -26,7 +26,7 @@ use crate::{
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, UpdateNodeData},
-    MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -262,6 +262,10 @@ where
             .nth(n)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)
+    }
+
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        self.get_block(id).await.map(|block| block.header)
     }
 
     async fn get_leaf_range<R>(
