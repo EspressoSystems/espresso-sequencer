@@ -46,8 +46,10 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
     uint64 public pendingExitsBefore;
     uint64 public stakeTableFirstAvailableExitEpoch;
     uint64 public stakeTableNumPendingExits;
+    uint64 public currentEpoch;
     bool public requestExitSuccessful;
     mapping(bytes32 blsKeyHash => uint64 exitEpoch) public exitEpochForBlsVK;
+    mapping(uint256 userIndex => bool registered) public isUserRegistered;
     BN254.G2Point[] public requestExitKeys;
 
     constructor(
@@ -69,8 +71,6 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
         private
         returns (bool)
     {
-        userIndex = bound(userIndex, 0, numberUsers - 1);
-
         uint8 seed = uint8(userIndex);
         address userAddress = users[userIndex];
 
@@ -78,19 +78,19 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = this.genClientWallet(sender, seed);
-        uint64 depositAmount = uint64(bound(amount, 0, 100));
-        uint64 validUntilEpoch = 1000;
+        ) = this.genClientWallet(userAddress, seed);
+        uint64 depositAmount = uint64(bound(amount, 1, 10));
+        uint64 validUntilEpoch = 100000;
 
-        // Transfer some tokens to sender
-        vm.prank(userAddress);
-        token.transfer(sender, depositAmount);
+        // Transfer some tokens to userAddress
+        vm.prank(sender);
+        token.transfer(userAddress, depositAmount);
 
         // Prepare for the token transfer
-        vm.prank(sender);
+        vm.prank(userAddress);
         token.approve(address(stakeTable), depositAmount);
 
-        vm.prank(sender);
+        vm.prank(userAddress);
 
         bool res = stakeTable.register(
             blsVK,
@@ -100,14 +100,21 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
             sig,
             validUntilEpoch
         );
-        vks[userIndex] = blsVK;
-        bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
-        userIndexFromVk[vkHash] = userIndex;
+
+        if (res) {
+            isUserRegistered[userIndex] = true;
+            bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
+            userIndexFromVk[vkHash] = userIndex;
+            vks[userIndex] = blsVK;
+        }
 
         return res;
     }
 
     function register(uint8 userIndex, uint64 amount) public {
+        // Return if the user is already registered
+        userIndex = uint8(bound(userIndex, 0, numberUsers - 1));
+
         (nextRegistrationEpochBefore, pendingRegistrationsBefore) =
             stakeTable.nextRegistrationEpoch();
 
@@ -115,13 +122,16 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
 
         stakeTableFirstAvailableRegistrationEpoch = stakeTable._firstAvailableRegistrationEpoch();
         stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
+
         registrationSuccessful = res;
     }
 
     function requestExit(uint256 rand) public {
+        requestExitSuccessful = false;
         uint256 index = bound(rand, 0, numberUsers - 1);
 
         (nextExitEpochBefore, pendingExitsBefore) = stakeTable.nextExitEpoch();
+        currentEpoch = stakeTable.currentEpoch();
 
         vm.prank(users[index]);
         BN254.G2Point memory vk = vks[index];
@@ -147,14 +157,12 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
 
             stakeTableFirstAvailableExitEpoch = stakeTable._firstAvailableExitEpoch();
             stakeTableNumPendingExits = stakeTable.numPendingExits();
-            requestExitSuccessful = res;
         }
+        requestExitSuccessful = res;
     }
 
     function advanceEpoch() public {
-        uint64 currentEpoch = lightClient.currentEpoch();
-        uint64 nextEpoch = currentEpoch + 1;
-        lightClient.setCurrentEpoch(nextEpoch);
+        lightClient.setCurrentEpoch(lightClient.currentEpoch() + 1);
     }
 
     function withdrawFunds(uint256 rand) public {
@@ -163,20 +171,21 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
             return;
         }
 
-        uint256 index = bound(rand, 0, requestExitKeys.length);
+        uint256 index = bound(rand, 0, requestExitKeys.length - 1);
         BN254.G2Point memory vk = requestExitKeys[index];
         bytes32 vkHash = stakeTable._hashBlsKey(vk);
         uint64 exitEpoch = exitEpochForBlsVK[vkHash];
 
         // Ensure we have reached the right epoch before withdrawing
         uint64 slackForEscrowPeriod = 100;
-        uint64 nextEpoch = exitEpoch + slackForEscrowPeriod;
+        uint64 nextEpoch;
+
+        nextEpoch = exitEpoch + slackForEscrowPeriod; // Move forward to the exit epoch
         lightClient.setCurrentEpoch(nextEpoch);
 
         uint256 userIndex = userIndexFromVk[vkHash];
         vm.prank(users[userIndex]);
         stakeTable.withdrawFunds(vk);
-        exitEpochForBlsVK[vkHash] = 0;
 
         // Remove element from array
         requestExitKeys[index] = requestExitKeys[requestExitKeys.length - 1];
@@ -188,7 +197,7 @@ contract StakeTableInvariant_Tests is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
-    uint256 public constant INITIAL_BALANCE = 1_000_000_000;
+    uint256 public constant INITIAL_BALANCE = 1_000_000_000_000;
     address public exampleTokenCreator;
     address[] public users;
     uint256 public constant NUM_USERS = 10;
@@ -209,7 +218,7 @@ contract StakeTableInvariant_Tests is Test {
             vm.label(userAddress, userLabel);
             users.push(userAddress);
             vm.prank(exampleTokenCreator);
-            SafeTransferLib.safeTransfer(token, userAddress, 1000);
+            SafeTransferLib.safeTransfer(token, userAddress, 10000);
         }
 
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
@@ -263,7 +272,7 @@ contract StakeTableInvariant_Tests is Test {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
         if (handler.requestExitSuccessful()) {
-            assertGe(handler.stakeTableFirstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(handler.stakeTableFirstAvailableExitEpoch(), handler.currentEpoch() + 1);
             assertGe(handler.stakeTableNumPendingExits(), 1);
         }
     }
