@@ -180,7 +180,8 @@ contract StakeTableHandler is Test, StakeTableCommonTest {
         uint64 slackForEscrowPeriod = 100;
         uint64 nextEpoch;
 
-        nextEpoch = exitEpoch + slackForEscrowPeriod; // Move forward to the exit epoch
+        // Move forward to the exit epoch
+        nextEpoch = exitEpoch + slackForEscrowPeriod;
         lightClient.setCurrentEpoch(nextEpoch);
 
         uint256 userIndex = userIndexFromVk[vkHash];
@@ -274,6 +275,8 @@ contract StakeTableInvariant_Tests is Test {
         if (handler.requestExitSuccessful()) {
             assertGe(handler.stakeTableFirstAvailableExitEpoch(), handler.currentEpoch() + 1);
             assertGe(handler.stakeTableNumPendingExits(), 1);
+        } else {
+            assertGe(handler.stakeTableFirstAvailableExitEpoch(), handler.currentEpoch());
         }
     }
 
