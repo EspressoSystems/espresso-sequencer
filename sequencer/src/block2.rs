@@ -508,7 +508,7 @@ mod tx_table_entry {
         type Error = <u64 as TryFrom<TxTableEntryWord>>::Error;
 
         fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            u64::try_from(value.0).map(Self)
+            Ok(Self(From::from(value.0)))
         }
     }
 }

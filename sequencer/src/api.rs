@@ -75,6 +75,7 @@ mod test_helpers {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
+    use commit::Committable;
     use futures::FutureExt;
     use hotshot_types::light_client::StateSignature;
     use portpicker::pick_unused_port;
@@ -176,13 +177,14 @@ mod test_helpers {
 
         client.connect(None).await;
 
-        client
-            .post::<()>("submit/submit")
+        let hash = client
+            .post("submit/submit")
             .body_json(&txn)
             .unwrap()
             .send()
             .await
             .unwrap();
+        assert_eq!(txn.commit(), hash);
 
         // Wait for a Decide event containing transaction matching the one we sent
         wait_for_decide_on_handle(&mut events, &txn).await.unwrap()

@@ -56,8 +56,8 @@ use typenum::U2;
 pub use block::{Header, Payload};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
-    examples::{Sha3Digest, Sha3Node},
     namespaced_merkle_tree::NMT,
+    prelude::{Sha3Digest, Sha3Node},
 };
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
