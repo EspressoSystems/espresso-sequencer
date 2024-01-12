@@ -23,7 +23,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTableHandler is Test, StakeTableCommonTest {
+contract StakeTableHandlerTest is Test, StakeTableCommonTest {
     S public stakeTable;
     address public tokenCreator;
     ExampleToken public token;
@@ -214,7 +214,7 @@ contract StakeTableInvariant_Tests is Test {
     address[] public users;
     uint256 public constant NUM_USERS = 10;
 
-    StakeTableHandler public handler;
+    StakeTableHandlerTest public handler;
 
     function setUp() public {
         exampleTokenCreator = makeAddr("tokenCreator");
@@ -247,7 +247,7 @@ contract StakeTableInvariant_Tests is Test {
         uint64 churnRate = 10;
         lightClientContract = new LightClientTest(genesis, numBlocksPerEpoch);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
-        handler = new StakeTableHandler(
+        handler = new StakeTableHandlerTest(
             stakeTable, exampleTokenCreator, token, lightClientContract, users
         );
 
