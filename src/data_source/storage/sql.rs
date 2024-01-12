@@ -552,7 +552,7 @@ where
     type Error = QueryError;
 
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
+        let mut tx = self.transaction().await?;
 
         // While we don't necessarily have the full block for this leaf yet, we can initialize the
         // header table with block metadata taken from the leaf.
@@ -560,22 +560,24 @@ where
             serde_json::to_value(&leaf.leaf().block_header).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize header: {err}"),
             })?;
-        stmts.push((
-            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3)".into(),
-            vec![
-                Box::new(leaf.height() as i64),
-                Box::new(leaf.block_hash().to_string()),
-                Box::new(header_json),
+        tx.execute_one(
+            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3)",
+            [
+                sql_param(&(leaf.height() as i64)),
+                sql_param(&(leaf.block_hash().to_string())),
+                sql_param(&header_json),
             ],
-        ));
+        )
+        .await?;
 
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        stmts.push((
-            "INSERT INTO payload (height) VALUES ($1)".into(),
-            vec![Box::new(leaf.height() as i64)],
-        ));
+        tx.execute_one(
+            "INSERT INTO payload (height) VALUES ($1)",
+            [leaf.height() as i64],
+        )
+        .await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.
@@ -589,29 +591,25 @@ where
             serde_json::to_value(&leaf.proposer()).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize proposer ID: {err}"),
             })?;
-        stmts.push((
+        tx.execute_one(
             "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
-             VALUES ($1, $2, $3, $4, $5, $6)"
-                .into(),
-            vec![
-                Box::new(leaf.height() as i64),
-                Box::new(leaf.hash().to_string()),
-                Box::new(proposer_json),
-                Box::new(leaf.block_hash().to_string()),
-                Box::new(leaf_json),
-                Box::new(qc_json),
+             VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+                sql_param(&(leaf.height() as i64)),
+                sql_param(&leaf.hash().to_string()),
+                sql_param(&proposer_json),
+                sql_param(&leaf.block_hash().to_string()),
+                sql_param(&leaf_json),
+                sql_param(&qc_json),
             ],
-        ));
-
-        // Grab a transaction and execute all the statements.
-        let mut tx = self.transaction().await?;
-        tx.execute_many(stmts).await?;
+        )
+        .await?;
 
         Ok(())
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
+        let mut tx = self.transaction().await?;
 
         // The header and payload tables should already have been initialized when we inserted the
         // corresponding leaf. All we have to do is add the payload itself and its size.
@@ -622,14 +620,15 @@ where
                 message: format!("failed to serialize block: {err}"),
             })?
             .collect::<Vec<_>>();
-        stmts.push((
-            "UPDATE payload SET (data, size) = ($1, $2) WHERE height = $3".into(),
-            vec![
-                Box::new(payload),
-                Box::new(block.size() as i32),
-                Box::new(block.height() as i64),
+        tx.execute_one(
+            "UPDATE payload SET (data, size) = ($1, $2) WHERE height = $3",
+            [
+                sql_param(&payload),
+                sql_param(&(block.size() as i32)),
+                sql_param(&(block.height() as i64)),
             ],
-        ));
+        )
+        .await?;
 
         // Index the transactions in the block.
         let mut values = vec![];
@@ -649,17 +648,15 @@ where
             params.push(Box::new(txn_ix));
         }
         if !values.is_empty() {
-            stmts.push((
-                format!(
+            tx.execute_one(
+                &format!(
                     "INSERT INTO transaction (hash, block_height, index) VALUES {}",
                     values.join(",")
                 ),
                 params,
-            ));
+            )
+            .await?;
         }
-
-        let mut tx = self.transaction().await?;
-        tx.execute_many(stmts).await?;
 
         Ok(())
     }
@@ -783,7 +780,7 @@ impl<'a> Transaction<'a> {
     /// The results of the statement will be reflected immediately in future statements made within
     /// this transaction, but will not be reflected in the underlying database until the transaction
     /// is committed with [`commit`](VersionedDataSource::commit).
-    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> QueryResult<()>
+    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> QueryResult<u64>
     where
         T: ?Sized + ToStatement,
         P: IntoIterator,
@@ -795,21 +792,32 @@ impl<'a> Transaction<'a> {
             .await
             .map_err(|err| QueryError::Error {
                 message: err.to_string(),
-            })?;
-        Ok(())
+            })
     }
 
-    pub async fn execute_many<S, T, P>(&mut self, statements: S) -> QueryResult<()>
+    /// Execute a statement that is expected to modify exactly one row.
+    ///
+    /// Returns an error if the database is not modified.
+    pub async fn execute_one<T, P>(&mut self, statement: &T, params: P) -> QueryResult<()>
     where
-        S: IntoIterator<Item = (T, P)>,
-        T: ToStatement,
+        T: ?Sized + ToStatement,
         P: IntoIterator,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
     {
-        for (stmt, params) in statements {
-            self.execute(&stmt, params).await?;
+        let nrows = self.execute(statement, params).await?;
+        if nrows == 0 {
+            return Err(QueryError::Error {
+                message: "statement failed: should have affected one row, but affected 0".into(),
+            });
+        } else if nrows > 1 {
+            // If more than one row is affected, we don't return an error, because clearly
+            // _something_ happened and modified the database. So we don't necessarily want the caller
+            // to retry. But we do log an error, because it seems the query did something different
+            // than the caller intended.
+            tracing::error!("statement modified more rows ({nrows}) than expected (1)");
         }
+
         Ok(())
     }
 }
@@ -1051,6 +1059,10 @@ where
     }));
 
     Ok((client, kill))
+}
+
+fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+    param
 }
 
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
