@@ -44,6 +44,7 @@ snafu = { workspace = true }
 tagged-base64 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+typenum = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
