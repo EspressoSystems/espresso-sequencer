@@ -53,7 +53,11 @@ async fn build_vote(
     };
 
     let parent_commitment = parent.commit();
-    let Ok(state) = parent.state.append(&proposal.block_header.clone(), &view) else {
+    let Ok(state) = parent.state.validate_and_apply_header(
+        &proposal.block_header.clone(),
+        &parent.block_header.clone(),
+        &view,
+    ) else {
         panic!("Block header doesn't extend the proposal",);
     };
 

@@ -212,7 +212,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return false;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent.state.append(&proposal.block_header.clone(), &view) else {
+                let Ok(state) = parent.state.validate_and_apply_header(
+                    &proposal.block_header.clone(),
+                    &parent.block_header.clone(),
+                    &view,
+                ) else {
                     error!("Block header doesn't extend the proposal",);
                     return false;
                 };
@@ -302,7 +306,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return false;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent.state.append(&proposal.block_header.clone(), &view) else {
+                let Ok(state) = parent.state.validate_and_apply_header(
+                    &proposal.block_header.clone(),
+                    &parent.block_header.clone(),
+                    &view,
+                ) else {
                     error!("Block header doesn't extend the proposal",);
                     return false;
                 };
@@ -538,43 +546,50 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
                     );
-                    let Ok(state) = consensus
-                        .get_decided_state()
-                        .append(&proposal.data.block_header.clone(), &view)
-                    else {
-                        error!("Block header doesn't extend the proposal",);
-                        return;
-                    };
-                    let leaf = Leaf {
-                        view_number: view,
-                        justify_qc: justify_qc.clone(),
-                        parent_commitment: justify_qc.get_data().leaf_commit,
-                        block_header: proposal.data.block_header,
-                        state,
-                        block_payload: None,
-                        rejected: Vec::new(),
-                        proposer_id: sender,
-                    };
+                    // TODO (Keyao) If not, should/how do we update?
+                    if let Ok(parent_leaf) = consensus.get_leaf(view - 1) {
+                        let parent_state = parent_leaf.get_state();
+                        let Ok(state) = parent_state.validate_and_apply_header(
+                            &proposal.data.block_header.clone(),
+                            &parent_leaf.block_header.clone(),
+                            &view,
+                        ) else {
+                            error!("Block header doesn't extend the proposal",);
+                            return;
+                        };
+                        let leaf = Leaf {
+                            view_number: view,
+                            justify_qc: justify_qc.clone(),
+                            // TODO (Keyao) Use info from justify QC or the parent leaf?
+                            parent_commitment: justify_qc.get_data().leaf_commit,
+                            block_header: proposal.data.block_header,
+                            state,
+                            block_payload: None,
+                            rejected: Vec::new(),
+                            proposer_id: sender,
+                        };
 
-                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-                    consensus.state_map.insert(
-                        view,
-                        View {
-                            view_inner: ViewInner::Leaf {
-                                leaf: leaf.commit(),
-                                metadata: leaf.get_state().metadata(),
+                        let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                        consensus.state_map.insert(
+                            view,
+                            View {
+                                view_inner: ViewInner::Leaf {
+                                    leaf: leaf.commit(),
+                                    metadata: leaf.get_state().metadata(),
+                                },
                             },
-                        },
-                    );
-                    consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                        );
+                        consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                    }
 
                     return;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent
-                    .state
-                    .append(&proposal.data.block_header.clone(), &view)
-                else {
+                let Ok(state) = parent.state.validate_and_apply_header(
+                    &proposal.data.block_header.clone(),
+                    &parent.block_header.clone(),
+                    &view,
+                ) else {
                     error!("Block header doesn't extend the proposal",);
                     return;
                 };
@@ -1190,7 +1205,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 commit_and_metadata.metadata.clone(),
                 &parent_header,
             );
-            let Ok(state) = parent_leaf.state.append(&block_header.clone(), &view) else {
+            let Ok(state) = parent_leaf.state.validate_and_apply_header(
+                &block_header.clone(),
+                &parent_leaf.block_header.clone(),
+                &view,
+            ) else {
                 error!("Block header doesn't extend the proposal",);
                 return false;
             };

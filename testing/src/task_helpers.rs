@@ -139,10 +139,11 @@ async fn build_quorum_proposal_and_signature(
     );
     let view_number = ViewNumber::new(view);
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
-    let Ok(state) = parent_leaf
-        .state
-        .append(&block_header.clone(), &view_number)
-    else {
+    let Ok(state) = parent_leaf.state.validate_and_apply_header(
+        &block_header.clone(),
+        &parent_leaf.block_header.clone(),
+        &view_number,
+    ) else {
         panic!("Block header doesn't extend the proposal",);
     };
     let leaf = Leaf {

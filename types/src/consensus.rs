@@ -333,27 +333,34 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.state_map = self.state_map.split_off(&new_anchor_view);
     }
 
-    /// Gets the last decided leaf
+    /// Get the leaf corresponding to the given view.
+    ///
+    /// # Errors
+    /// If the view doesn't exist in the saved leaves set, due to the garbage collection for views
+    /// that are older than the last decided view.
+    ///
     /// # Panics
-    /// if the last decided view does not exist in the state map
-    /// this should never happen.
-    #[must_use]
-    pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
-        let decided_view_num = self.last_decided_view;
-        let view = self.state_map.get(&decided_view_num).unwrap();
+    /// If the last decided view does not exist in the state map, which should never happen.
+    pub fn get_leaf(&self, view: TYPES::Time) -> Result<Leaf<TYPES>, HotShotError<TYPES>> {
+        let view = self.state_map.get(&view).unwrap();
         let leaf = view
             .get_leaf_commitment()
             .expect("Decided state not found! Consensus internally inconsistent");
-        self.saved_leaves.get(&leaf).unwrap().clone()
+        Ok(self.saved_leaves.get(&leaf).unwrap().clone())
     }
 
-    /// Gets the last decided state
+    /// Get the last decided leaf.
+    ///
     /// # Panics
-    /// if the last decided view does not exist in the state map
-    /// this should never happen.
+    /// If the last decided view does not exist in
+    /// * The saved leaves set, or
+    /// * The state map,
+    ///
+    /// Either of which should never happen.
     #[must_use]
-    pub fn get_decided_state(&self) -> TYPES::StateType {
-        self.get_decided_leaf().get_state()
+    pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
+        let last_decided_view = self.last_decided_view;
+        self.get_leaf(last_decided_view).unwrap()
     }
 }
 
