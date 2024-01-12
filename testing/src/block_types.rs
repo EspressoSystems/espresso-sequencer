@@ -221,12 +221,10 @@ impl BlockHeader for TestBlockHeader {
 
 impl Committable for TestBlockHeader {
     fn commit(&self) -> Commitment<Self> {
-        let payload_commitment_bytes: [u8; 32] = self.payload_commitment().into();
-
         RawCommitmentBuilder::new("Header Comm")
             .u64_field("block number", self.block_number())
             .constant_str("payload commitment")
-            .fixed_size_bytes(&payload_commitment_bytes)
+            .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
             .finalize()
     }
 
