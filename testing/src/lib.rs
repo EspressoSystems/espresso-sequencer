@@ -30,6 +30,9 @@ pub mod completion_task;
 /// task to spin nodes up and down
 pub mod spinning_task;
 
+/// task for checking if view sync got activated
+pub mod view_sync_task;
+
 /// block types
 pub mod block_types;
 
