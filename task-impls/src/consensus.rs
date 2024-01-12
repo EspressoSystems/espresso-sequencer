@@ -533,34 +533,40 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 //
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
-                    // TODO (Keyao) Can we store the state in this case?
-                    // // If no parent then just update our state map and return.  We will not vote.
-                    // error!(
-                    //     "Proposal's parent missing from storage with commitment: {:?}",
-                    //     justify_qc.get_data().leaf_commit
-                    // );
-                    // let leaf = Leaf {
-                    //     view_number: view,
-                    //     justify_qc: justify_qc.clone(),
-                    //     parent_commitment: justify_qc.get_data().leaf_commit,
-                    //     block_header: proposal.data.block_header,
-                    //     state: parent.state.append(proposal.block_header.clone(), view),
-                    //     block_payload: None,
-                    //     rejected: Vec::new(),
-                    //     proposer_id: sender,
-                    // };
+                    // If no parent then just update our state map and return.  We will not vote.
+                    error!(
+                        "Proposal's parent missing from storage with commitment: {:?}",
+                        justify_qc.get_data().leaf_commit
+                    );
+                    let Ok(state) = consensus
+                        .get_decided_state()
+                        .append(&proposal.data.block_header.clone(), &view)
+                    else {
+                        error!("Block header doesn't extend the proposal",);
+                        return;
+                    };
+                    let leaf = Leaf {
+                        view_number: view,
+                        justify_qc: justify_qc.clone(),
+                        parent_commitment: justify_qc.get_data().leaf_commit,
+                        block_header: proposal.data.block_header,
+                        state,
+                        block_payload: None,
+                        rejected: Vec::new(),
+                        proposer_id: sender,
+                    };
 
-                    // let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-                    // consensus.state_map.insert(
-                    //     view,
-                    //     View {
-                    //         view_inner: ViewInner::Leaf {
-                    //             leaf: leaf.commit(),
-                    //             metadata: leaf.get_state().metadata(),
-                    //         },
-                    //     },
-                    // );
-                    // consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                    consensus.state_map.insert(
+                        view,
+                        View {
+                            view_inner: ViewInner::Leaf {
+                                leaf: leaf.commit(),
+                                metadata: leaf.get_state().metadata(),
+                            },
+                        },
+                    );
+                    consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
 
                     return;
                 };

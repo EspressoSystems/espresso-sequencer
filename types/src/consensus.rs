@@ -333,9 +333,9 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.state_map = self.state_map.split_off(&new_anchor_view);
     }
 
-    /// Gets the last decided state
+    /// Gets the last decided leaf
     /// # Panics
-    /// if the last decided view's state does not exist in the state map
+    /// if the last decided view does not exist in the state map
     /// this should never happen.
     #[must_use]
     pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
@@ -345,6 +345,15 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .get_leaf_commitment()
             .expect("Decided state not found! Consensus internally inconsistent");
         self.saved_leaves.get(&leaf).unwrap().clone()
+    }
+
+    /// Gets the last decided state
+    /// # Panics
+    /// if the last decided view does not exist in the state map
+    /// this should never happen.
+    #[must_use]
+    pub fn get_decided_state(&self) -> TYPES::StateType {
+        self.get_decided_leaf().get_state()
     }
 }
 
