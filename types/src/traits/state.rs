@@ -21,10 +21,9 @@ use super::block_contents::BlockHeader;
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
 ///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
-///   * The ability to validate that a block is actually a valid extension of this state
-///     ([`validate_block`](State::validate_block))
-///   * The ability to produce a new state, with the modifications from the block applied
-///     ([`append`](State::append))
+///   * The ability to validate that a block header is actually a valid extension of this state and
+/// produce a new state, with the modifications from the block applied
+/// ([`validate_and_apply_header`](State::validate_and_apply_header))
 pub trait State:
     Serialize
     + DeserializeOwned
@@ -49,22 +48,22 @@ pub trait State:
     /// Application-specific data.
     type Metadata: Debug + Send + Sync;
 
-    /// Returns true if and only if the provided block header is valid and can extend this state
-    fn validate_block(&self, block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool;
-
-    /// Initialize the state.
-    fn initialize() -> Self;
-
-    /// Appends the given block header to this state, returning an new state
+    /// Check if the proposed block header is valid and apply it to the state if so.
+    ///
+    /// Returns the new state.
     ///
     /// # Errors
     ///
-    /// Should produce and error if appending this block header would lead to an invalid state
-    fn append(
+    /// If the block header is invalid or appending it would lead to an invalid state.
+    fn validate_and_apply_header(
         &self,
-        block_header: &Self::BlockHeader,
+        proposed_header: &Self::BlockHeader,
+        parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
+
+    /// Initialize the state.
+    fn initialize() -> Self;
 
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
