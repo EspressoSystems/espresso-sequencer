@@ -763,16 +763,12 @@ mod test_headers {
         header.block_merkle_tree_root = block_merkle_tree_root;
 
         let parent = header.clone();
-        let mut proposal = parent.clone();
 
-        // advance proposal
+        // get a proposal from a parent
+        let proposal = Header::new(parent.payload_commitment, parent.transactions_root, &parent);
+
         let mut block_merkle_tree = proposal.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        proposal.block_merkle_tree = block_merkle_tree.clone();
-        proposal.block_merkle_tree_root = block_merkle_tree_root;
-
-        proposal.height += 1;
         let result = _validate_proposal(&parent.clone(), &proposal.clone()).unwrap();
         assert_eq!(result.commitment(), proposal.block_merkle_tree_root);
     }
