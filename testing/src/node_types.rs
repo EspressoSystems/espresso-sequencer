@@ -5,19 +5,16 @@ use crate::{
     state_types::TestState,
 };
 
-use hotshot::{
-    traits::{
-        election::static_committee::{StaticCommittee, StaticElectionConfig},
-        implementations::{
-            CombinedCommChannel, Libp2pCommChannel, MemoryCommChannel, MemoryStorage,
-            WebCommChannel,
-        },
-        NodeImplementation,
+use hotshot::traits::{
+    election::static_committee::{StaticCommittee, StaticElectionConfig},
+    implementations::{
+        CombinedCommChannel, Libp2pCommChannel, MemoryCommChannel, MemoryStorage, WebCommChannel,
     },
-    types::bn254::BLSPubKey,
+    NodeImplementation,
 };
 use hotshot_types::{
     data::ViewNumber,
+    signature_key::BLSPubKey,
     traits::node_implementation::{ChannelMaps, NodeType},
 };
 use serde::{Deserialize, Serialize};

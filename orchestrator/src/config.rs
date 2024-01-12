@@ -186,7 +186,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// ```ignore
     /// # use hotshot_orchestrator::config::NetworkConfig;
-    /// # use hotshot_signature_key::bn254::BLSPubKey;
+    /// # use hotshot_types::signature_key::BLSPubKey;
     /// // # use hotshot::traits::election::static_committee::StaticElectionConfig;
     /// let file = "/path/to/my/config".to_string();
     /// // NOTE: broken due to staticelectionconfig not being importable
