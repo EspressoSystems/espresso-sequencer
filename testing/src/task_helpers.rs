@@ -225,6 +225,7 @@ async fn build_quorum_proposal_and_signature(
             .total_nodes(),
     );
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
+    // current leaf that can be re-assigned everytime when entering a new view
     let mut leaf = Leaf {
         view_number: ViewNumber::new(1),
         justify_qc: consensus.high_qc.clone(),
@@ -247,6 +248,7 @@ async fn build_quorum_proposal_and_signature(
 
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
+        // save states for the previous view to pass all the qc checks
         consensus.state_map.insert(
             ViewNumber::new(cur_view - 1),
             View {
@@ -256,6 +258,7 @@ async fn build_quorum_proposal_and_signature(
             },
         );
         consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+        // create a qc by aggregate signatures on the previous view (the data signed is last leaf commitment)
         let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
         let quorum_data = QuorumData {
             leaf_commit: leaf.commit(),
@@ -272,6 +275,7 @@ async fn build_quorum_proposal_and_signature(
             public_key,
             private_key,
         );
+        // create a new leaf for the current view
         let parent_leaf = leaf.clone();
         let leaf_new_view = Leaf {
             view_number: ViewNumber::new(cur_view),
