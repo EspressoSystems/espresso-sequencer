@@ -3,7 +3,7 @@
 
 use crate::{
     stake_table::StakeTableEntry,
-    traits::{qc::QuorumCertificate, signature_key::SignatureKey},
+    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
 };
 use ark_std::{
     fmt::Debug,
@@ -41,7 +41,7 @@ pub struct QCParams<K: SignatureKey, P: for<'a> Deserialize<'a>> {
     pub agg_sig_pp: P,
 }
 
-impl<A> QuorumCertificate<A> for BitVectorQC<A>
+impl<A> QuorumCertificateScheme<A> for BitVectorQC<A>
 where
     A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
     A::VerificationKey: SignatureKey,

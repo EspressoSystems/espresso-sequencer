@@ -3,7 +3,7 @@
 use crate::{
     qc::{BitVectorQC, QCParams},
     stake_table::StakeTableEntry,
-    traits::{qc::QuorumCertificate, signature_key::SignatureKey},
+    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
 };
 use bitvec::{slice::BitSlice, vec::BitVec};
 use ethereum_types::U256;
