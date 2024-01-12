@@ -3,7 +3,10 @@ use bitvec::prelude::*;
 use ethereum_types::U256;
 use jf_primitives::errors::PrimitivesError;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, hash::Hash};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 use tagged_base64::TaggedBase64;
 
 /// Type representing stake table entries in a `StakeTable`
@@ -27,8 +30,9 @@ pub trait SignatureKey:
     + Eq
     + PartialOrd
     + Ord
-    + TryFrom<TaggedBase64>
-    + TryInto<TaggedBase64>
+    + Display
+    + for<'a> TryFrom<&'a TaggedBase64>
+    + Into<TaggedBase64>
 {
     /// The private key type for this signature algorithm
     type PrivateKey: Send
