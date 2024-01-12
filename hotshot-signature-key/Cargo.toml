@@ -9,7 +9,7 @@ rust-version = { workspace = true }
 [dependencies]
 bincode = { workspace = true }
 bitvec = { workspace = true }
-blake3 = { workspace = true }
+blake3 = { workspace = true, features = ["traits-preview"] }
 custom_debug = { workspace = true }
 ethereum-types = { workspace = true }
 hotshot-qc = { path = "../hotshot-qc" }
