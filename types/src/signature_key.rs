@@ -1,52 +1,37 @@
-use super::{BLSPrivKey, SignatureKey};
-use bitvec::prelude::*;
-use blake3::traits::digest::generic_array::GenericArray;
+//! Types and structs for the hotshot signature keys
+
+use crate::{
+    qc::{BitVectorQC, QCParams},
+    stake_table::StakeTableEntry,
+    traits::{qc::QuorumCertificate, signature_key::SignatureKey},
+};
+use bitvec::{slice::BitSlice, vec::BitVec};
 use ethereum_types::U256;
-use hotshot_qc::bit_vector_old::{
-    BitVectorQC, QCParams as JFQCParams, StakeTableEntry as JFStakeTableEntry,
+use generic_array::GenericArray;
+use jf_primitives::{
+    errors::PrimitivesError,
+    signatures::{
+        bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair, SignKey, VerKey},
+        SignatureScheme,
+    },
 };
-use hotshot_types::traits::qc::QuorumCertificate;
-use jf_primitives::errors::PrimitivesError;
-use jf_primitives::signatures::{
-    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey},
-    SignatureScheme,
-};
-use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, fmt::Debug};
-use tracing::{instrument, warn};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+use tracing::instrument;
 use typenum::U32;
 
-/// Public key type for an bn254 [`SignatureKey`] pair
-///
-/// This type makes use of noise for non-deterministic signatures.
-#[derive(Clone, PartialEq, Eq, Hash, Copy, Serialize, Deserialize, Debug)]
-
-pub struct BLSPubKey {
-    /// The public key for this keypair
-    pub_key: VerKey,
-}
-
-impl PartialOrd for BLSPubKey {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for BLSPubKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let self_bytes = &self.pub_key.to_string();
-        let other_bytes = &other.pub_key.to_string();
-        self_bytes.cmp(other_bytes)
-    }
-}
+/// BLS private key used to sign a message
+pub type BLSPrivKey = SignKey;
+/// BLS public key used to verify a signature
+pub type BLSPubKey = VerKey;
+/// Public parameters for BLS signature scheme
+pub type BLSPublicParam = ();
 
 impl SignatureKey for BLSPubKey {
     type PrivateKey = BLSPrivKey;
-    type StakeTableEntry = JFStakeTableEntry<VerKey>;
-    type QCParams = JFQCParams<
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey,
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::PublicParameter,
-    >;
+    type StakeTableEntry = StakeTableEntry<VerKey>;
+    type QCParams =
+        QCParams<BLSPubKey, <BLSOverBN254CurveSignatureScheme as SignatureScheme>::PublicParameter>;
     type PureAssembledSignatureType =
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
     type QCType = (Self::PureAssembledSignatureType, BitVec);
@@ -54,11 +39,9 @@ impl SignatureKey for BLSPubKey {
 
     #[instrument(skip(self))]
     fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool {
-        let ver_key = self.pub_key;
-
         // This is the validation for QC partial signature before append().
         let generic_msg: &GenericArray<u8, U32> = GenericArray::from_slice(data);
-        BLSOverBN254CurveSignatureScheme::verify(&(), &ver_key, generic_msg, signature).is_ok()
+        BLSOverBN254CurveSignatureScheme::verify(&(), self, generic_msg, signature).is_ok()
     }
 
     fn sign(
@@ -69,51 +52,53 @@ impl SignatureKey for BLSPubKey {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::sign(
             &(),
             generic_msg,
-            &sk.priv_key,
+            sk,
             &mut rand::thread_rng(),
         )
     }
 
     fn from_private(private_key: &Self::PrivateKey) -> Self {
-        let pub_key = VerKey::from(&private_key.priv_key);
-        Self { pub_key }
+        BLSPubKey::from(private_key)
     }
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut buf = vec![];
-        ark_serialize::CanonicalSerialize::serialize_compressed(&self.pub_key, &mut buf)
+        ark_serialize::CanonicalSerialize::serialize_compressed(self, &mut buf)
             .expect("Serialization should not fail.");
         buf
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError> {
-        let pub_key: VerKey = ark_serialize::CanonicalDeserialize::deserialize_compressed(bytes)?;
-        Ok(Self { pub_key })
+        Ok(ark_serialize::CanonicalDeserialize::deserialize_compressed(
+            bytes,
+        )?)
     }
 
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey) {
-        let priv_key = Self::PrivateKey::generated_from_seed_indexed(seed, index);
-        (Self::from_private(&priv_key), priv_key)
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&seed);
+        hasher.update(&index.to_le_bytes());
+        let new_seed = *hasher.finalize().as_bytes();
+        let kp = KeyPair::generate(&mut ChaCha20Rng::from_seed(new_seed));
+        (kp.ver_key(), kp.sign_key_ref().clone())
     }
 
     fn get_stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry {
-        JFStakeTableEntry {
-            stake_key: self.pub_key,
+        StakeTableEntry {
+            stake_key: *self,
             stake_amount: U256::from(stake),
         }
     }
 
     fn get_public_key(entry: &Self::StakeTableEntry) -> Self {
-        Self {
-            pub_key: entry.stake_key,
-        }
+        entry.stake_key
     }
 
     fn get_public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
     ) -> Self::QCParams {
-        JFQCParams {
+        QCParams {
             stake_entries,
             threshold,
             agg_sig_pp: (),
@@ -139,12 +124,9 @@ impl SignatureKey for BLSPubKey {
     }
 
     fn genesis_proposer_pk() -> Self {
-        use jf_primitives::signatures::bls_over_bn254::KeyPair;
         use rand::rngs::mock::StepRng;
         let mut my_rng = StepRng::new(42, 1337);
         let kp = KeyPair::generate(&mut my_rng);
-        BLSPubKey {
-            pub_key: kp.ver_key(),
-        }
+        kp.ver_key()
     }
 }
