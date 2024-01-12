@@ -67,10 +67,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
         numberUsers = users.length;
     }
 
-    function registerWithSeed(address sender, uint256 userIndex, uint256 amount)
-        private
-        returns (bool)
-    {
+    function registerWithSeed(address sender, uint256 userIndex, uint256 amount) private {
         uint8 seed = uint8(userIndex);
         address userAddress = users[userIndex];
 
@@ -92,7 +89,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
 
         vm.prank(userAddress);
 
-        bool res = stakeTable.register(
+        stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -101,14 +98,10 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
             validUntilEpoch
         );
 
-        if (res) {
-            isUserRegistered[userIndex] = true;
-            bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
-            userIndexFromVk[vkHash] = userIndex;
-            vks[userIndex] = blsVK;
-        }
-
-        return res;
+        isUserRegistered[userIndex] = true;
+        bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
+        userIndexFromVk[vkHash] = userIndex;
+        vks[userIndex] = blsVK;
     }
 
     function register(uint8 userIndex, uint64 amount) public {
@@ -118,12 +111,12 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
         (nextRegistrationEpochBefore, pendingRegistrationsBefore) =
             stakeTable.nextRegistrationEpoch();
 
-        bool res = registerWithSeed(tokenCreator, userIndex, amount);
+        registerWithSeed(tokenCreator, userIndex, amount);
 
         stakeTableFirstAvailableRegistrationEpoch = stakeTable.firstAvailableRegistrationEpoch();
         stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
 
-        registrationSuccessful = res;
+        registrationSuccessful = true;
     }
 
     function requestExit(uint256 rand) public {
@@ -135,30 +128,30 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
 
         vm.prank(users[index]);
         BN254.G2Point memory vk = vks[index];
-        bool res = stakeTable.requestExit(vk);
-        if (res) {
-            bytes32 vkHash = stakeTable._hashBlsKey(vk);
-            (
-                address account,
-                AbstractStakeTable.StakeType stakeType,
-                uint64 balance,
-                uint64 registerEpoch,
-                uint64 exitEpoch,
-            ) = stakeTable.nodes(vkHash);
+        stakeTable.requestExit(vk);
 
-            // In order to avoid sol-lint warnings.
-            account;
-            stakeType;
-            balance;
-            registerEpoch;
+        bytes32 vkHash = stakeTable._hashBlsKey(vk);
+        (
+            address account,
+            AbstractStakeTable.StakeType stakeType,
+            uint64 balance,
+            uint64 registerEpoch,
+            uint64 exitEpoch,
+        ) = stakeTable.nodes(vkHash);
 
-            exitEpochForBlsVK[vkHash] = exitEpoch;
-            requestExitKeys.push(vk);
+        // In order to avoid sol-lint warnings.
+        account;
+        stakeType;
+        balance;
+        registerEpoch;
 
-            stakeTableFirstAvailableExitEpoch = stakeTable.firstAvailableExitEpoch();
-            stakeTableNumPendingExits = stakeTable.numPendingExits();
-        }
-        requestExitSuccessful = res;
+        exitEpochForBlsVK[vkHash] = exitEpoch;
+        requestExitKeys.push(vk);
+
+        stakeTableFirstAvailableExitEpoch = stakeTable.firstAvailableExitEpoch();
+        stakeTableNumPendingExits = stakeTable.numPendingExits();
+
+        requestExitSuccessful = true;
     }
 
     function advanceEpoch() public {

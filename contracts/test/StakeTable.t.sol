@@ -90,7 +90,7 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
         if (expectRevert) {
             vm.expectRevert(S.NodeAlreadyRegistered.selector);
         }
-        bool res = stakeTable.register(
+        stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -98,11 +98,6 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
             sig,
             validUntilEpoch
         );
-        if (!expectRevert) {
-            assertTrue(res);
-        } else {
-            assertFalse(res);
-        }
 
         return (blsVK, depositAmount);
     }
@@ -345,7 +340,7 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
             stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
         vm.prank(exampleTokenCreator);
-        bool res = stakeTable.register(
+        stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -353,8 +348,6 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
             sig,
             validUntilEpoch
         );
-
-        assertTrue(res);
 
         // Balance after registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
@@ -505,10 +498,9 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
 
         // Make the exit request
         vm.prank(exampleTokenCreator);
-        bool res = stakeTable.requestExit(blsVK);
+        stakeTable.requestExit(blsVK);
 
         // Check the outcome of the request
-        assertTrue(res);
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
         assertEq(node.exitEpoch, exitEpoch);
     }

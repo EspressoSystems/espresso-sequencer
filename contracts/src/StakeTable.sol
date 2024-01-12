@@ -216,8 +216,6 @@ contract StakeTable is AbstractStakeTable {
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     ///
-    /// @return success status
-    ///
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
     /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
@@ -230,7 +228,7 @@ contract StakeTable is AbstractStakeTable {
         StakeType stakeType,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external override returns (bool) {
+    ) external override {
         if (stakeType != StakeType.Native) {
             revert RestakingNotImplemented();
         }
@@ -272,8 +270,6 @@ contract StakeTable is AbstractStakeTable {
         } // Other case will be implemented when we support restaking
 
         emit Registered(key, registerEpoch, stakeType, amount);
-
-        return true;
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -319,8 +315,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @param blsVK The BLS verification key to exit
-    /// @return success status
-    function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
+    function requestExit(BN254.G2Point memory blsVK) external override {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -347,8 +342,6 @@ contract StakeTable is AbstractStakeTable {
         appendExitQueue(exitEpoch, queueSize);
 
         emit Exit(key, exitEpoch);
-
-        return true;
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
