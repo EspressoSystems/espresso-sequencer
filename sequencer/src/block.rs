@@ -20,8 +20,8 @@ use std::{
 };
 use time::OffsetDateTime;
 
-pub type SHA3MerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
-pub type SHA3MerkleCommitment = <SHA3MerkleTree as MerkleTreeScheme>::Commitment;
+pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
+pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -73,9 +73,9 @@ pub struct Header {
     pub payload_commitment: VidCommitment,
     pub transactions_root: NMTRoot,
     /// Root Commitment of Block Merkle Tree
-    pub block_merkle_tree_root: SHA3MerkleCommitment,
+    pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Frontier of Block Merkle Tree
-    pub block_merkle_tree: SHA3MerkleTree,
+    pub block_merkle_tree: BlockMerkleTree,
 }
 
 impl Committable for Header {
@@ -119,8 +119,8 @@ impl Header {
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
-        block_merkle_tree_root: <SHA3MerkleTree as MerkleTreeScheme>::Commitment,
-        block_merkle_tree: SHA3MerkleTree,
+        block_merkle_tree_root: <BlockMerkleTree as MerkleTreeScheme>::Commitment,
+        block_merkle_tree: BlockMerkleTree,
     ) -> Self {
         // Increment height.
         let height = parent.height + 1;
@@ -178,7 +178,7 @@ impl Header {
     }
 }
 
-fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<SHA3MerkleTree> {
+fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<BlockMerkleTree> {
     anyhow::ensure!(
         proposal.height == parent.height + 1,
         anyhow::anyhow!(
@@ -246,7 +246,7 @@ impl BlockHeader for Header {
         let (payload, transactions_root) = Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let block_merkle_tree =
-            SHA3MerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+            BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let header = Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
@@ -578,7 +578,7 @@ mod test_headers {
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
             let block_merkle_tree =
-                SHA3MerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
             let block_merkle_tree_root = block_merkle_tree.commitment();
 
             let header = Header::from_info(
@@ -599,7 +599,7 @@ mod test_headers {
             assert_eq!(header.l1_finalized, self.expected_l1_finalized);
             assert_eq!(
                 header.block_merkle_tree,
-                SHA3MerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap()
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap()
             );
         }
     }
