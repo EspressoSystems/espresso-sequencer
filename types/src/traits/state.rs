@@ -21,10 +21,9 @@ use super::block_contents::BlockHeader;
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
 ///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
-///   * The ability to validate that a block is actually a valid extension of this state
-///     ([`validate_block`](State::validate_block))
-///   * The ability to produce a new state, with the modifications from the block applied
-///     ([`append`](State::append))
+///   * The ability to validate that a block header is actually a valid extension of this state and
+/// produce a new state, with the modifications from the block applied
+/// ([`validate_and_apply_header`](State::validate_and_apply_header))
 pub trait State:
     Serialize
     + DeserializeOwned
