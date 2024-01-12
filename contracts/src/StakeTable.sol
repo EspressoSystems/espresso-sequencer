@@ -365,9 +365,9 @@ contract StakeTable is AbstractStakeTable {
             revert PrematureWithdrawal();
         }
         uint64 balance = node.balance;
-        SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
-
         delete nodes[key];
+
+        SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
         return balance;
     }
