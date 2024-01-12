@@ -594,10 +594,6 @@ where
         let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
             message: format!("failed to serialize QC: {err}"),
         })?;
-        let proposer_json =
-            serde_json::to_value(&leaf.proposer()).map_err(|err| QueryError::Error {
-                message: format!("failed to serialize proposer ID: {err}"),
-            })?;
         stmts.push((
             "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
              VALUES ($1, $2, $3, $4, $5, $6)"
@@ -605,7 +601,7 @@ where
             vec![
                 Box::new(leaf.height() as i64),
                 Box::new(leaf.hash().to_string()),
-                Box::new(proposer_json),
+                Box::new(leaf.proposer().to_string()),
                 Box::new(leaf.block_hash().to_string()),
                 Box::new(leaf_json),
                 Box::new(qc_json),
@@ -707,10 +703,7 @@ where
             // recent leaves, so order by descending height.
             query = format!("{query} ORDER BY height DESC limit {limit}");
         }
-        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
-            message: format!("failed to serialize proposer ID: {err}"),
-        })?;
-        let rows = self.query(&query, &[&proposer_json]).await?;
+        let rows = self.query(&query, &[&proposer.to_string()]).await?;
         let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
 
         if limit.is_some() {
@@ -724,10 +717,7 @@ where
 
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
-            message: format!("failed to serialize proposer ID: {err}"),
-        })?;
-        let row = self.query_one(query, &[&proposer_json]).await?;
+        let row = self.query_one(query, &[&proposer.to_string()]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
     }

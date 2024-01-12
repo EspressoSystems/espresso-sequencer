@@ -23,7 +23,7 @@ CREATE TABLE leaf
 (
     height     BIGINT  PRIMARY KEY REFERENCES header (height),
     hash       VARCHAR NOT NULL UNIQUE,
-    proposer   JSONB   NOT NULL,
+    proposer   VARCHAR NOT NULL,
     block_hash VARCHAR NOT NULL REFERENCES header (hash),
 
     -- For convenience, we store the entire leaf and justifying QC as JSON blobs. There is a bit of

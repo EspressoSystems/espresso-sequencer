@@ -52,13 +52,13 @@ derive_more = "0.99"
 either = "1.8"
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
 hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
 itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.6" }
 trait-variant = "0.1"
 time = "0.3"
@@ -105,5 +105,10 @@ portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.2"
 surf = "2.3"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tempdir = "0.3"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "update/jellyfish" }
+hotshot-types = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "update/jellyfish" }
+hotshot-utils = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "update/jellyfish" }
+hotshot-testing = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "update/jellyfish" }

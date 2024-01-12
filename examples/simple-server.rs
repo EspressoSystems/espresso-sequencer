@@ -35,10 +35,9 @@ use hotshot_query_service::{
     testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
     Error,
 };
-use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    consensus::ConsensusMetricsValue, light_client::StateKeyPair, ExecutionType, HotShotConfig,
-    ValidatorConfig,
+    consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
+    ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 
@@ -130,13 +129,9 @@ async fn main() -> Result<(), Error> {
 async fn init_consensus(
     data_sources: &[DataSource],
 ) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
-    let priv_keys = (0..data_sources.len())
-        .map(|_| BLSPrivKey::generate())
-        .collect::<Vec<_>>();
-    let pub_keys = priv_keys
-        .iter()
-        .map(BLSPubKey::from_private)
-        .collect::<Vec<_>>();
+    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..data_sources.len())
+        .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
+        .unzip();
     let master_map = MasterMap::new();
     let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = pub_keys
         .iter()

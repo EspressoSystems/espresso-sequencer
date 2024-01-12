@@ -10,9 +10,36 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-//! Remote data availability providers.
+//! Asynchronous fetching from external data availability providers.
+//!
+//! Occasionally, data will be missing from the local persistent storage of this query service. This
+//! may be because the query service never received the data from the attached HotShot instance,
+//! which happens for each block payload committed while the attached HotShot instance is not a
+//! member of the DA committee. It may also be because the query service was started some time after
+//! the start of consensus, and needs to catch up on existing data. Or it may simply be a result of
+//! failures in the local storage medium.
+//!
+//! In any case, the query service is able to fetch missing data asynchronously and out of
+//! chronological order, and pending [`Fetch`](crate::availability::Fetch) requests for the missing
+//! data will resolve as soon as the data is available. Data can be fetched from any external data
+//! availability service, including the HotShot CDN, the data availability committee which is
+//! responsible for providing a particular payload, or another instance of this same query service.
+//!
+//! This module defines an abstract interface [`Provider`], which allows data to be fetched from any
+//! data availability provider, as well as various implementations for different data sources,
+//! including:
+//! * [`QueryServiceFetcher`]
+//!
+//! We also provide combinators for modularly adding functionality to existing fetchers:
+//! * [`AnyFetcher`]
+//! * [`TestFetcher`](testing::TestFetcher)
+//!
 
 use super::Request;
+
+mod query_service;
+
+pub use query_service::QueryServiceFetcher;
 
 /// A provider which is able to satisfy requests for data of type `T`.
 #[trait_variant::make(Provider: Send)]
