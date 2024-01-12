@@ -60,40 +60,30 @@ impl State for TestState {
 
     type Time = ViewNumber;
 
-    fn validate_block(
+    fn validate_and_apply_header(
         &self,
         _proposed_header: &Self::BlockHeader,
         _parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
-    ) -> bool {
+    ) -> Result<Self, Self::Error> {
         if view_number == &ViewNumber::genesis() {
-            &self.view_number == view_number
-        } else {
-            self.view_number < *view_number
+            if &self.view_number != view_number {
+                return Err(BlockError::InvalidBlockHeader);
+            }
+        } else if self.view_number >= *view_number {
+            return Err(BlockError::InvalidBlockHeader);
         }
+        Ok(TestState {
+            block_height: self.block_height + 1,
+            view_number: *view_number,
+            prev_state_commitment: self.commit(),
+        })
     }
 
     fn initialize() -> Self {
         let mut state = Self::default();
         state.block_height += 1;
         state
-    }
-
-    fn append(
-        &self,
-        proposed_header: &Self::BlockHeader,
-        parent_header: &Self::BlockHeader,
-        view_number: &Self::Time,
-    ) -> Result<Self, Self::Error> {
-        if !self.validate_block(proposed_header, parent_header, view_number) {
-            return Err(BlockError::InvalidBlockHeader);
-        }
-
-        Ok(TestState {
-            block_height: self.block_height + 1,
-            view_number: *view_number,
-            prev_state_commitment: self.commit(),
-        })
     }
 
     fn on_commit(&self) {}

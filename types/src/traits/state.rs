@@ -47,28 +47,22 @@ pub trait State:
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
-    /// Returns true if and only if the proposed block header is valid and can extend this state.
-    fn validate_block(
-        &self,
-        proposed_header: &Self::BlockHeader,
-        parent_header: &Self::BlockHeader,
-        view_number: &Self::Time,
-    ) -> bool;
-
-    /// Initialize the state.
-    fn initialize() -> Self;
-
-    /// Appends the given block header to this state, returning an new state
+    /// Check if the proposed block header is valid and apply it to the state if so.
+    ///
+    /// Returns the new state.
     ///
     /// # Errors
     ///
-    /// Should produce and error if appending this block header would lead to an invalid state
-    fn append(
+    /// If the block header is invalid or appending it would lead to an invalid state.
+    fn validate_and_apply_header(
         &self,
         proposed_header: &Self::BlockHeader,
         parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
+
+    /// Initialize the state.
+    fn initialize() -> Self;
 
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
