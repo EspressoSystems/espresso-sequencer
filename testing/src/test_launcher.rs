@@ -10,7 +10,7 @@ use hotshot_task::{
 };
 use hotshot_types::{traits::node_implementation::NodeType, HotShotConfig};
 
-use crate::spinning_task::SpinningTask;
+use crate::{spinning_task::SpinningTask, view_sync_task::ViewSyncTask};
 
 use super::{
     completion_task::CompletionTask, overall_safety_task::OverallSafetyTask,
@@ -71,9 +71,11 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub completion_task_generator: TaskGenerator<CompletionTask<TYPES, I>>,
     /// overall safety task generator
     pub overall_safety_task_generator: TaskGenerator<OverallSafetyTask<TYPES, I>>,
-
+    /// task for spinning nodes up/down
     pub spinning_task_generator: TaskGenerator<SpinningTask<TYPES, I>>,
-
+    /// task for view sync
+    pub view_sync_task_generator: TaskGenerator<ViewSyncTask<TYPES, I>>,
+    /// extra hooks in case we want to check additional things
     pub hooks: Vec<Hook>,
 }
 
@@ -129,6 +131,17 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     ) -> Self {
         Self {
             txn_task_generator,
+            ..self
+        }
+    }
+
+    /// override the view sync task generator
+    pub fn with_view_sync_task_generator(
+        self,
+        view_sync_task_generator: TaskGenerator<ViewSyncTask<TYPES, I>>,
+    ) -> Self {
+        Self {
+            view_sync_task_generator,
             ..self
         }
     }
