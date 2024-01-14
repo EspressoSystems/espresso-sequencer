@@ -149,7 +149,7 @@ impl BlockPayload for TestBlockPayload {
         Ok(TestTransaction::encode(self.transactions.clone())?.into_iter())
     }
 
-    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+    fn transaction_commitments(&self, _metadata: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
