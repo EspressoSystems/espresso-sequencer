@@ -1,9 +1,10 @@
+use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
-use futures::{future::try_join_all, stream::StreamExt};
+use futures::{future::join_all, stream::StreamExt};
 use hotshot_query_service::availability::LeafQueryData;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
@@ -185,15 +186,33 @@ async fn sync_with_l1(
     };
 
     // Download leaves between `contract_block_height` and `hotshot_block_height`.
-    let leaves = try_join_all(
+    let leaves = join_all(
         (contract_block_height..hotshot_block_height)
             .take(max_blocks)
             .map(|height| hotshot.get_leaf(height)),
     )
-    .await
-    .map_err(|e| SyncError::Other(e.into()))?;
+    .await;
+    // It is possible that we failed to fetch some leaves. But as long as we successfully fetched a
+    // prefix of the desired list (since leaves must be sent to the contract in order) we can make
+    // some progress.
+    let leaves = leaves
+        .into_iter()
+        .scan(contract_block_height, |height, leaf| match leaf {
+            Ok(leaf) => {
+                *height += 1;
+                Some(leaf)
+            }
+            Err(err) => {
+                tracing::error!("error fetching leaf {height}: {err}");
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if leaves.is_empty() {
+        return Err(SyncError::Other(anyhow!("failed to fetch any leaves")));
+    }
     let num_leaves = leaves.len();
-    tracing::info!("sending {} leaves to the contract", num_leaves);
+    tracing::info!("sending {num_leaves} leaves to the contract");
 
     // Send the leaves to the contract.
     let txn = build_sequence_batches_txn(contract, leaves);
@@ -253,7 +272,7 @@ mod test {
 
     #[derive(Clone, Debug, Default)]
     struct MockDataSource {
-        leaves: Vec<LeafQueryData<SeqTypes>>,
+        leaves: Vec<Option<LeafQueryData<SeqTypes>>>,
     }
 
     #[async_trait]
@@ -276,9 +295,16 @@ mod test {
         }
 
         async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes>, Self::Error> {
-            self.leaves.get(height as usize).cloned().ok_or_else(|| {
-                Self::Error::catch_all(StatusCode::NotFound, format!("no leaf for height {height}"))
-            })
+            self.leaves
+                .get(height as usize)
+                .cloned()
+                .flatten()
+                .ok_or_else(|| {
+                    Self::Error::catch_all(
+                        StatusCode::NotFound,
+                        format!("no leaf for height {height}"),
+                    )
+                })
         }
     }
 
@@ -335,7 +361,7 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
         for i in 0..num_batches {
-            data.leaves.push(mock_leaf(i as u64));
+            data.leaves.push(Some(mock_leaf(i as u64)));
         }
         tracing::info!("sequencing batches: {:?}", data.leaves);
 
@@ -343,7 +369,11 @@ mod test {
         let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
 
         // Ensure the transaction we're going to execute is less than the Geth RPC size limit.
-        let txn = build_sequence_batches_txn(&l1.hotshot, data.leaves.clone()).tx;
+        let txn = build_sequence_batches_txn(
+            &l1.hotshot,
+            data.leaves.clone().into_iter().map(Option::unwrap),
+        )
+        .tx;
         let size = txn.rlp().len();
         tracing::info!("transaction is {size} bytes");
         assert!(size < 131072);
@@ -366,7 +396,8 @@ mod test {
         assert_eq!(
             call.qcs,
             data.leaves
-                .iter()
+                .into_iter()
+                .map(Option::unwrap)
                 .map(|leaf| Qc {
                     height: leaf.height().into(),
                     block_commitment: U256::from_little_endian(&<[u8; 32]>::from(
@@ -400,7 +431,7 @@ mod test {
 
         // Create a test batch.
         let mut data = MockDataSource::default();
-        data.leaves.push(mock_leaf(0));
+        data.leaves.push(Some(mock_leaf(0)));
 
         // Connect to the HotShot contract with the expected L1 client.
         let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
@@ -425,7 +456,7 @@ mod test {
         assert_eq!(l1.hotshot.block_height().call().await.unwrap().as_u64(), 1);
 
         // Once a new batch is available, we can sequence it.
-        data.leaves.push(mock_leaf(1));
+        data.leaves.push(Some(mock_leaf(1)));
         sync_with_l1(1, &data, &hotshot).await.unwrap();
         let (event, _) = wait_for_new_batches(&l1, from_block.as_u64()).await;
         assert_eq!(event.first_block_number.as_u64(), 1);
@@ -433,15 +464,56 @@ mod test {
         // Double-check the data in the contract.
         assert_eq!(
             l1.hotshot.commitments(0.into()).call().await.unwrap(),
-            commitment_to_u256(data.leaves[0].block_hash())
+            commitment_to_u256(data.leaves[0].clone().unwrap().block_hash())
         );
         assert_eq!(
             l1.hotshot.commitments(1.into()).call().await.unwrap(),
-            commitment_to_u256(data.leaves[1].block_hash())
+            commitment_to_u256(data.leaves[1].clone().unwrap().block_hash())
         );
         assert_eq!(
             l1.hotshot.commitments(2.into()).call().await.unwrap(),
             0.into()
         );
+    }
+
+    #[async_std::test]
+    async fn test_error_handling() {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = AnvilOptions::default().spawn().await;
+
+        let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
+        let l1_initial_block = l1.provider.get_block_number().await.unwrap();
+        let adaptor_l1_signer = Arc::new(
+            connect_rpc(
+                l1.provider.url(),
+                TEST_MNEMONIC,
+                l1.clients.funded[0].index,
+                None,
+            )
+            .await
+            .unwrap(),
+        );
+
+        // Create a sequence of leaves, some of which are missing.
+        let mut data = MockDataSource::default();
+        data.leaves.extend([None, Some(mock_leaf(1)), None]);
+
+        // Connect to the HotShot contract with the expected L1 client.
+        let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
+
+        // If the first leaf is missing, we cannot make any progress, and sync should fail.
+        sync_with_l1(3, &data, &hotshot).await.unwrap_err();
+
+        // If the first leaf is present but subsequent leaves are missing, we should sequence the
+        // leaves that are available.
+        data.leaves[0] = Some(mock_leaf(0));
+        sync_with_l1(3, &data, &hotshot).await.unwrap();
+
+        // Check the NewBatches event.
+        let event = wait_for_new_batches(&l1, l1_initial_block.as_u64()).await.0;
+        assert_eq!(event.first_block_number, 0.into());
+        assert_eq!(event.num_blocks, 2.into());
     }
 }
