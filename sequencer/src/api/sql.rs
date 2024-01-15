@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId, ResourceId},
-    data_source::sql::{include_migrations, Config, Migration, Query, SqlDataSource},
+    data_source::sql::{include_migrations, Config, Query, SqlDataSource},
     QueryError, QueryResult,
 };
 use tokio_postgres::Row;
@@ -128,7 +128,7 @@ impl SequencerDataSource for DataSource {
         // Find the specific block that starts the requested window.
         let first_block = match from.into() {
             ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self.get_block(h).await?.height() as usize,
+            ResourceId::Hash(h) => self.get_block(h).await.await.height() as usize,
         };
 
         // Find all blocks starting from `first_block` with timestamps less than `end`. Block
@@ -157,7 +157,7 @@ impl SequencerDataSource for DataSource {
 
         // Find the block just before the window.
         let prev = if first_block > 0 {
-            let prev = self.get_block(first_block - 1).await?;
+            let prev = self.get_block(first_block - 1).await.await;
             Some(prev.header().clone())
         } else {
             None

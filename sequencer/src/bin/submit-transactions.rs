@@ -128,7 +128,7 @@ async fn main() {
         }
 
         // Clear pending transactions from the block.
-        for (_, tx) in block.payload().enumerate() {
+        for (_, tx) in block.payload().enumerate(block.metadata()) {
             if pending.remove(&tx.commit()) {
                 tracing::debug!("got transaction {}", tx.commit());
             }

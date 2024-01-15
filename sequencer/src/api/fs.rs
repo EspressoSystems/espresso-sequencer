@@ -33,9 +33,9 @@ impl SequencerDataSource for DataSource {
         let mut index = Index::default();
 
         // Index blocks by timestamp.
-        let mut blocks = data_source.get_block_range(..).await?;
+        let mut blocks = data_source.get_block_range(..).await;
         while let Some(block) = blocks.next().await {
-            index_block_by_time(&mut index.blocks_by_time, &block?);
+            index_block_by_time(&mut index.blocks_by_time, &block.await);
         }
         drop(blocks);
 
@@ -50,15 +50,12 @@ impl SequencerDataSource for DataSource {
         // one block into memory, and rarely very many.
         let blocks: Vec<_> = self
             .get_block_range(from_block..)
-            .await?
+            .await
             .enumerate()
             .collect()
             .await;
-        for (i, block) in blocks {
-            let Ok(block) = block else {
-                tracing::warn!("missing block {}, index may be out of date", from_block + i);
-                continue;
-            };
+        for (_, block) in blocks {
+            let block = block.await;
             index_block_by_time(&mut self.as_mut().blocks_by_time, &block);
         }
 
@@ -88,22 +85,22 @@ impl SequencerDataSource for DataSource {
     {
         let first_block = match from.into() {
             ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self.get_block(h).await?.height() as usize,
+            ResourceId::Hash(h) => self.get_block(h).await.await.height() as usize,
         };
 
         let mut res = TimeWindowQueryData::default();
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
-            let prev = self.get_block(first_block - 1).await?;
+            let prev = self.get_block(first_block - 1).await.await;
             res.prev = Some(prev.header().clone());
         }
 
         // Add blocks to the window, starting from `first_block`, until we reach the end of the
         // requested time window.
-        let mut blocks = self.get_block_range(first_block..).await?;
+        let mut blocks = self.get_block_range(first_block..).await;
         while let Some(block) = blocks.next().await {
-            let block = block?;
+            let block = block.await;
             let header = block.header().clone();
             if header.timestamp >= end {
                 res.next = Some(header);
