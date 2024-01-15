@@ -33,10 +33,11 @@ use hotshot_query_service::{
     testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
     Error,
 };
-use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    consensus::ConsensusMetricsValue, light_client::StateKeyPair, ExecutionType, HotShotConfig,
-    ValidatorConfig,
+    consensus::ConsensusMetricsValue,
+    light_client::StateKeyPair,
+    signature_key::{BLSPrivKey, BLSPubKey},
+    ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 
@@ -127,7 +128,7 @@ async fn init_consensus(
     data_sources: &[DataSource],
 ) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
     let priv_keys = (0..data_sources.len())
-        .map(|_| BLSPrivKey::generate())
+        .map(|_| BLSPrivKey::generate(&mut rand::thread_rng()))
         .collect::<Vec<_>>();
     let pub_keys = priv_keys
         .iter()
