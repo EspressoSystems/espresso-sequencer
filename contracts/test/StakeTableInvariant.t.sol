@@ -23,7 +23,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTableHandlerTest is Test, StakeTableCommonTest {
+contract StakeTableHandlerTest is StakeTableCommonTest {
     S public stakeTable;
     address public tokenCreator;
     ExampleToken public token;

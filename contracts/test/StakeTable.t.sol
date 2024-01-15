@@ -51,7 +51,7 @@ contract StakeTableCommonTest is Test {
     }
 }
 
-contract StakeTable_Test is Test, StakeTableCommonTest {
+contract StakeTable_Test is StakeTableCommonTest {
     S public stakeTable;
     ExampleToken public token;
 
