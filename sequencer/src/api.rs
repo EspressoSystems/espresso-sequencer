@@ -117,7 +117,7 @@ mod test_helpers {
         // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
         // check the success rate metrics.
         while client
-            .get::<u64>("status/latest_block_height")
+            .get::<u64>("status/block-height")
             .send()
             .await
             .unwrap()
@@ -126,7 +126,7 @@ mod test_helpers {
             sleep(Duration::from_secs(1)).await;
         }
         let success_rate = client
-            .get::<f64>("status/success_rate")
+            .get::<f64>("status/success-rate")
             .send()
             .await
             .unwrap();
@@ -306,7 +306,7 @@ mod generic_tests {
             // Wait for the next block to be sequenced.
             loop {
                 let block_height = client
-                    .get::<usize>("status/latest_block_height")
+                    .get::<usize>("status/block-height")
                     .send()
                     .await
                     .unwrap();

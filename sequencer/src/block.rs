@@ -86,7 +86,7 @@ impl Committable for Header {
             .u64_field("l1_head", self.l1_head)
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .fixed_size_bytes(&self.payload_commitment.into())
+            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
             .field("transactions_root", self.transactions_root.commit())
             .finalize()
     }
@@ -271,8 +271,8 @@ impl BlockHeader for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> NMTRoot {
-        self.transactions_root
+    fn metadata(&self) -> &NMTRoot {
+        &self.transactions_root
     }
 }
 
@@ -312,12 +312,13 @@ impl QueryablePayload for Payload {
     type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
 
-    fn len(&self) -> usize {
+    fn len(&self, _meta: &Self::Metadata) -> usize {
         self.transaction_nmt.num_leaves() as usize
     }
 
     fn transaction_with_proof(
         &self,
+        _meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         match self.transaction_nmt.lookup(index) {
@@ -326,8 +327,8 @@ impl QueryablePayload for Payload {
         }
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
-        Box::new(0..self.len() as u64)
+    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
+        Box::new(0..self.len(meta) as u64)
     }
 }
 
@@ -349,7 +350,7 @@ impl BlockPayload for Payload {
         Ok((Self { transaction_nmt }, root))
     }
 
-    fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
@@ -367,8 +368,13 @@ impl BlockPayload for Payload {
         Ok(bincode::serialize(self)?.into_iter())
     }
 
-    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
-        self.enumerate().map(|(_, tx)| tx.commit()).collect()
+    fn transaction_commitments(
+        &self,
+        metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate(metadata)
+            .map(|(_, tx)| tx.commit())
+            .collect()
     }
 }
 
@@ -529,9 +535,15 @@ mod reference {
 
     #[test]
     fn test_reference_header() {
+        let (h, _, _) = Header::genesis();
+        println!(
+            "example json header: {}",
+            serde_json::to_string(&h).unwrap()
+        );
+
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
+            "BLOCK~vuyXaIHGnh8J1zxkWWv_Rdd2DrcFMiS2FcrmxHzz_9Rm",
             |header| header.commit(),
         );
     }
