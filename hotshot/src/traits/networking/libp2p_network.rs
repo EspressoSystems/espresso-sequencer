@@ -24,7 +24,7 @@ use hotshot_types::{
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
-        state::ConsensusTime,
+        states::ConsensusTime,
     },
 };
 use hotshot_utils::bincode::bincode_opts;

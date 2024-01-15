@@ -34,7 +34,7 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{NodeImplementation, NodeType},
-        state::ConsensusTime,
+        states::ConsensusTime,
         BlockPayload,
     },
 };

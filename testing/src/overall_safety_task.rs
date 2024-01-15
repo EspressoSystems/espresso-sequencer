@@ -105,7 +105,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub block_map: HashMap<VidCommitment, usize>,
 
     /// state -> # entries decided on that state
-    pub state_map: HashMap<TYPES::StateType, usize>,
+    pub state_map: HashMap<TYPES::ValidatedState, usize>,
 
     pub num_txns_map: HashMap<u64, usize>,
 }

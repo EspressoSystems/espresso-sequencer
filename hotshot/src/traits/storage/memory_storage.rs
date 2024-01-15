@@ -113,13 +113,14 @@ mod test {
     use hotshot_testing::{
         block_types::{genesis_vid_commitment, TestBlockHeader, TestBlockPayload},
         node_types::TestTypes,
-        state_types::TestState,
+        state_types::TestValidatedState,
     };
     use hotshot_types::{
         data::{fake_commitment, Leaf},
         simple_certificate::QuorumCertificate,
         traits::{
-            node_implementation::NodeType, signature_key::SignatureKey, state::ConsensusTime, State,
+            node_implementation::NodeType, signature_key::SignatureKey, states::ConsensusTime,
+            ValidatedState,
         },
     };
     use std::marker::PhantomData;
@@ -148,7 +149,7 @@ mod test {
             header.clone(),
             Some(payload),
             dummy_leaf_commit,
-            TestState::initialize(&header),
+            TestValidatedState::initialize(&header),
             Vec::new(),
             <<TestTypes as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         )

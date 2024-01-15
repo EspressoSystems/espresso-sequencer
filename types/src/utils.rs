@@ -2,7 +2,7 @@
 
 use crate::{
     data::{Leaf, VidCommitment},
-    traits::{node_implementation::NodeType, State},
+    traits::{node_implementation::NodeType, ValidatedState},
 };
 use commit::Commitment;
 use std::ops::Deref;
@@ -24,7 +24,7 @@ pub enum ViewInner<TYPES: NodeType> {
         /// Proposed leaf
         leaf: Commitment<Leaf<TYPES>>,
         /// Application-specific data.
-        metadata: <TYPES::StateType as State>::Metadata,
+        metadata: <TYPES::ValidatedState as ValidatedState>::Metadata,
     },
     /// Leaf has failed
     Failed,

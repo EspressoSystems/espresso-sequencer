@@ -7,8 +7,7 @@ use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{vid_commitment, BlockHeader, Transaction},
-        state::TestableBlock,
+        block_contents::{vid_commitment, BlockHeader, TestableBlock, Transaction},
         BlockPayload,
     },
 };

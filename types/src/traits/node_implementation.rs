@@ -4,12 +4,12 @@
 //! describing the overall behavior of a node, as a composition of implementations of the node trait.
 
 use super::{
-    block_contents::{BlockHeader, Transaction},
+    block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
     network::{CommunicationChannel, TestableNetworkingImplementation},
-    state::{ConsensusTime, TestableBlock, TestableState},
+    states::{ConsensusTime, InstanceState, TestableState},
     storage::{StorageError, StorageState, TestableStorage},
-    State,
+    ValidatedState,
 };
 use crate::{
     data::{Leaf, TestableLeaf},
@@ -138,7 +138,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
     /// otherwise panics
     /// `padding` is the bytes of padding to add to the transaction
     fn state_create_random_transaction(
-        state: Option<&TYPES::StateType>,
+        state: Option<&TYPES::ValidatedState>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
@@ -178,7 +178,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
-    TYPES::StateType: TestableState,
+    TYPES::ValidatedState: TestableState,
     TYPES::BlockPayload: TestableBlock,
     I::Storage: TestableStorage<TYPES>,
     I::QuorumNetwork: TestableChannelImplementation<TYPES>,
@@ -196,11 +196,11 @@ where
     }
 
     fn state_create_random_transaction(
-        state: Option<&TYPES::StateType>,
+        state: Option<&TYPES::ValidatedState>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
-        <TYPES::StateType as TestableState>::create_random_transaction(state, rng, padding)
+        <TYPES::ValidatedState as TestableState>::create_random_transaction(state, rng, padding)
     }
 
     fn leaf_create_random_transaction(
@@ -279,13 +279,13 @@ pub trait NodeType:
 {
     /// The time type that this hotshot setup is using.
     ///
-    /// This should be the same `Time` that `StateType::Time` is using.
+    /// This should be the same `Time` that `ValidatedState::Time` is using.
     type Time: ConsensusTime;
     /// The block header type that this hotshot setup is using.
     type BlockHeader: BlockHeader<Payload = Self::BlockPayload>;
     /// The block type that this hotshot setup is using.
     ///
-    /// This should be the same block that `StateType::BlockPayload` is using.
+    /// This should be the same block that `ValidatedState::BlockPayload` is using.
     type BlockPayload: BlockPayload<Transaction = Self::Transaction>;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
@@ -296,12 +296,15 @@ pub trait NodeType:
     /// The election config type that this hotshot setup is using.
     type ElectionConfigType: ElectionConfig;
 
-    /// The state type that this hotshot setup is using.
-    type StateType: State<
+    /// The validated state type that this hotshot setup is using.
+    type ValidatedState: ValidatedState<
         BlockHeader = Self::BlockHeader,
         BlockPayload = Self::BlockPayload,
         Time = Self::Time,
     >;
+
+    /// The instance-level state type that this hotshot setup is using.
+    type InstanceState: InstanceState;
 
     /// Membership used for this implementation
     type Membership: Membership<Self>;

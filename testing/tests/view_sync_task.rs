@@ -1,7 +1,7 @@
 use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
-use hotshot_types::{data::ViewNumber, traits::state::ConsensusTime};
+use hotshot_types::{data::ViewNumber, traits::states::ConsensusTime};
 use std::collections::HashMap;
 
 #[cfg(test)]
