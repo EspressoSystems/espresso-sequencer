@@ -11,10 +11,7 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use hotshot_query_service::{
-    availability::{BlockQueryData, QueryablePayload},
-    Error,
-};
+use hotshot_query_service::{availability::BlockQueryData, Error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use sequencer::{options::parse_duration, SeqTypes, Transaction};
@@ -128,7 +125,7 @@ async fn main() {
         }
 
         // Clear pending transactions from the block.
-        for (_, tx) in block.payload().enumerate(block.metadata()) {
+        for (_, tx) in block.enumerate() {
             if pending.remove(&tx.commit()) {
                 tracing::debug!("got transaction {}", tx.commit());
             }

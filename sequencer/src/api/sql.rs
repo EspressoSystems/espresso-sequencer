@@ -128,7 +128,12 @@ impl SequencerDataSource for DataSource {
         // Find the specific block that starts the requested window.
         let first_block = match from.into() {
             ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self.get_block(h).await.await.height() as usize,
+            ResourceId::Hash(h) => self
+                .get_block(h)
+                .await
+                .try_resolve()
+                .map_err(|_| QueryError::Missing)?
+                .height() as usize,
         };
 
         // Find all blocks starting from `first_block` with timestamps less than `end`. Block
@@ -157,7 +162,11 @@ impl SequencerDataSource for DataSource {
 
         // Find the block just before the window.
         let prev = if first_block > 0 {
-            let prev = self.get_block(first_block - 1).await.await;
+            let prev = self
+                .get_block(first_block - 1)
+                .await
+                .try_resolve()
+                .map_err(|_| QueryError::Missing)?;
             Some(prev.header().clone())
         } else {
             None

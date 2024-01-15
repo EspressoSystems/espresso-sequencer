@@ -5,7 +5,8 @@ use futures::StreamExt;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId, BlockQueryData, ResourceId},
     data_source::{ExtensibleDataSource, FileSystemDataSource},
-    NotFoundSnafu, QueryResult,
+    node::NodeDataSource,
+    NotFoundSnafu, QueryError, QueryResult,
 };
 use snafu::OptionExt;
 use std::{collections::BTreeMap, path::Path};
@@ -33,9 +34,14 @@ impl SequencerDataSource for DataSource {
         let mut index = Index::default();
 
         // Index blocks by timestamp.
-        let mut blocks = data_source.get_block_range(..).await;
+        let mut blocks = data_source
+            .get_block_range(..data_source.block_height().await?)
+            .await;
         while let Some(block) = blocks.next().await {
-            index_block_by_time(&mut index.blocks_by_time, &block.await);
+            index_block_by_time(
+                &mut index.blocks_by_time,
+                &block.try_resolve().map_err(|_| QueryError::Missing)?,
+            );
         }
         drop(blocks);
 
@@ -54,8 +60,11 @@ impl SequencerDataSource for DataSource {
             .enumerate()
             .collect()
             .await;
-        for (_, block) in blocks {
-            let block = block.await;
+        for (i, block) in blocks {
+            let Ok(block) = block.try_resolve() else {
+                tracing::warn!("missing block {}, index may be out of date", from_block + i);
+                continue;
+            };
             index_block_by_time(&mut self.as_mut().blocks_by_time, &block);
         }
 
@@ -85,22 +94,33 @@ impl SequencerDataSource for DataSource {
     {
         let first_block = match from.into() {
             ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self.get_block(h).await.await.height() as usize,
+            ResourceId::Hash(h) => self
+                .get_block(h)
+                .await
+                .try_resolve()
+                .map_err(|_| QueryError::Missing)?
+                .height() as usize,
         };
 
         let mut res = TimeWindowQueryData::default();
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
-            let prev = self.get_block(first_block - 1).await.await;
+            let prev = self
+                .get_block(first_block - 1)
+                .await
+                .try_resolve()
+                .map_err(|_| QueryError::Missing)?;
             res.prev = Some(prev.header().clone());
         }
 
         // Add blocks to the window, starting from `first_block`, until we reach the end of the
         // requested time window.
-        let mut blocks = self.get_block_range(first_block..).await;
+        let mut blocks = self
+            .get_block_range(first_block..self.block_height().await?)
+            .await;
         while let Some(block) = blocks.next().await {
-            let block = block.await;
+            let block = block.try_resolve().map_err(|_| QueryError::Missing)?;
             let header = block.header().clone();
             if header.timestamp >= end {
                 res.next = Some(header);
