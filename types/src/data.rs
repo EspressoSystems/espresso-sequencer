@@ -6,14 +6,13 @@
 use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
     traits::{
-        block_contents::vid_commitment,
-        block_contents::BlockHeader,
+        block_contents::{vid_commitment, BlockHeader, TestableBlock},
         election::Membership,
         node_implementation::NodeType,
         signature_key::SignatureKey,
-        state::{ConsensusTime, TestableBlock, TestableState},
+        states::{ConsensusTime, TestableState, ValidatedState},
         storage::StoredView,
-        BlockPayload, State,
+        BlockPayload,
     },
     vote::{Certificate, HasViewNumber},
 };
@@ -105,9 +104,10 @@ impl std::ops::Sub<u64> for ViewNumber {
     }
 }
 
-/// The `Transaction` type associated with a `State`, as a syntactic shortcut
-pub type Transaction<STATE> = <<STATE as State>::BlockPayload as BlockPayload>::Transaction;
-/// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
+/// The `Transaction` type associated with a `ValidatedState`, as a syntactic shortcut
+pub type Transaction<STATE> =
+    <<STATE as ValidatedState>::BlockPayload as BlockPayload>::Transaction;
+/// `Commitment` to the `Transaction` type associated with a `ValidatedState`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
 /// A proposal to start providing data availability for a block.
@@ -307,7 +307,7 @@ pub struct Leaf<TYPES: NodeType> {
     pub block_payload: Option<TYPES::BlockPayload>,
 
     /// State.
-    pub state: TYPES::StateType,
+    pub state: TYPES::ValidatedState,
 
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
@@ -361,7 +361,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: fake_commitment(),
             block_header: block_header.clone(),
             block_payload: Some(block_payload),
-            state: <TYPES::StateType as State>::initialize(&block_header),
+            state: <TYPES::ValidatedState as ValidatedState>::initialize(&block_header),
             rejected: Vec::new(),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
@@ -430,7 +430,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         self.get_block_header().payload_commitment()
     }
     /// The blockchain state after appending this leaf.
-    pub fn get_state(&self) -> TYPES::StateType {
+    pub fn get_state(&self) -> TYPES::ValidatedState {
         self.state.clone()
     }
     /// Transactions rejected or invalidated by the application of this leaf.
@@ -458,7 +458,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 
 impl<TYPES: NodeType> TestableLeaf for Leaf<TYPES>
 where
-    TYPES::StateType: TestableState,
+    TYPES::ValidatedState: TestableState,
     TYPES::BlockPayload: TestableBlock,
 {
     type NodeType = TYPES;
@@ -468,7 +468,7 @@ where
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction {
-        TYPES::StateType::create_random_transaction(None, rng, padding)
+        TYPES::ValidatedState::create_random_transaction(None, rng, padding)
     }
 }
 /// Fake the thing a genesis block points to. Needed to avoid infinite recursion

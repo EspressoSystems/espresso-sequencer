@@ -131,7 +131,7 @@ pub struct StoredView<TYPES: NodeType> {
     /// It may be empty for nodes not in the DA committee.
     pub block_payload: Option<TYPES::BlockPayload>,
     /// State.
-    pub state: TYPES::StateType,
+    pub state: TYPES::ValidatedState,
     /// transactions rejected in this view
     pub rejected: Vec<TYPES::Transaction>,
     /// the proposer id
@@ -152,7 +152,7 @@ where
         block_header: TYPES::BlockHeader,
         block_payload: Option<TYPES::BlockPayload>,
         parent_commitment: Commitment<Leaf<TYPES>>,
-        state: TYPES::StateType,
+        state: TYPES::ValidatedState,
         rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
         proposer_id: TYPES::SignatureKey,
     ) -> Self {

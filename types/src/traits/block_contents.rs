@@ -76,6 +76,15 @@ pub trait BlockPayload:
     ) -> Vec<Commitment<Self::Transaction>>;
 }
 
+/// extra functions required on block to be usable by hotshot-testing
+pub trait TestableBlock: BlockPayload + Debug {
+    /// generate a genesis block
+    fn genesis() -> Self;
+
+    /// the number of transactions in this block
+    fn txn_count(&self) -> u64;
+}
+
 /// Compute the VID payload commitment.
 /// # Panics
 /// If the VID computation fails.

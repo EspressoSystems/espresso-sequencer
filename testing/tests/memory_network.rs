@@ -8,9 +8,10 @@ use hotshot::traits::implementations::{
 };
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
+use hotshot_testing::state_types::TestInstanceState;
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::TestState,
+    state_types::TestValidatedState,
 };
 use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
@@ -20,7 +21,7 @@ use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType};
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
-    traits::state::ConsensusTime,
+    traits::states::ConsensusTime,
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
@@ -50,7 +51,8 @@ impl NodeType for Test {
     type SignatureKey = BLSPubKey;
     type Transaction = TestTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = TestState;
+    type ValidatedState = TestValidatedState;
+    type InstanceState = TestInstanceState;
     type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
 }
 

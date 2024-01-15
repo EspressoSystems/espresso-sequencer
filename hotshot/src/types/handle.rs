@@ -20,7 +20,7 @@ use hotshot_types::{
     error::HotShotError,
     event::EventType,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::NodeType, state::ConsensusTime, storage::Storage},
+    traits::{node_implementation::NodeType, states::ConsensusTime, storage::Storage},
 };
 use std::sync::Arc;
 use tracing::error;

@@ -23,7 +23,7 @@ use hotshot_types::{
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        state::ConsensusTime,
+        states::ConsensusTime,
     },
     utils::ViewInner,
     vote::HasViewNumber,

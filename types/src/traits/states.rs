@@ -14,7 +14,7 @@ use std::{
     ops::{Deref, Sub},
 };
 
-use super::block_contents::BlockHeader;
+use super::block_contents::{BlockHeader, TestableBlock};
 
 /// Abstraction over the state that blocks modify
 ///
@@ -24,7 +24,7 @@ use super::block_contents::BlockHeader;
 ///   * The ability to validate that a block header is actually a valid extension of this state and
 /// produce a new state, with the modifications from the block applied
 /// ([`validate_and_apply_header`](State::validate_and_apply_header))
-pub trait State:
+pub trait ValidatedState:
     Serialize
     + DeserializeOwned
     + Clone
@@ -74,6 +74,21 @@ pub trait State:
     fn metadata(&self) -> Self::Metadata;
 }
 
+/// extra functions required on state to be usable by hotshot-testing
+pub trait TestableState: ValidatedState
+where
+    <Self as ValidatedState>::BlockPayload: TestableBlock,
+{
+    /// Creates random transaction if possible
+    /// otherwise panics
+    /// `padding` is the bytes of padding to add to the transaction
+    fn create_random_transaction(
+        state: Option<&Self>,
+        rng: &mut dyn rand::RngCore,
+        padding: u64,
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction;
+}
+
 // TODO Seuqnecing here means involving DA in consensus
 
 /// Trait for time compatibility needed for reward collection
@@ -106,26 +121,5 @@ pub trait ConsensusTime:
     fn get_u64(&self) -> u64;
 }
 
-/// extra functions required on state to be usable by hotshot-testing
-pub trait TestableState: State
-where
-    <Self as State>::BlockPayload: TestableBlock,
-{
-    /// Creates random transaction if possible
-    /// otherwise panics
-    /// `padding` is the bytes of padding to add to the transaction
-    fn create_random_transaction(
-        state: Option<&Self>,
-        rng: &mut dyn rand::RngCore,
-        padding: u64,
-    ) -> <Self::BlockPayload as BlockPayload>::Transaction;
-}
-
-/// extra functions required on block to be usable by hotshot-testing
-pub trait TestableBlock: BlockPayload + Debug {
-    /// generate a genesis block
-    fn genesis() -> Self;
-
-    /// the number of transactions in this block
-    fn txn_count(&self) -> u64;
-}
+/// Instance-level state, which allows us to fetch missing validated state.
+pub trait InstanceState {}

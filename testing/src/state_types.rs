@@ -4,8 +4,8 @@ use commit::{Commitment, Committable};
 use hotshot_types::{
     data::{fake_commitment, BlockError, ViewNumber},
     traits::{
-        state::{ConsensusTime, TestableState},
-        BlockPayload, State,
+        states::{ConsensusTime, InstanceState, TestableState, ValidatedState},
+        BlockPayload,
     },
 };
 
@@ -18,7 +18,7 @@ pub use crate::node_types::TestTypes;
 
 /// sequencing demo entry state
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct TestState {
+pub struct TestValidatedState {
     /// the block height
     block_height: u64,
     /// the view number
@@ -27,7 +27,7 @@ pub struct TestState {
     prev_state_commitment: Commitment<Self>,
 }
 
-impl Committable for TestState {
+impl Committable for TestValidatedState {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Test State Commit")
             .u64_field("block_height", self.block_height)
@@ -41,7 +41,7 @@ impl Committable for TestState {
     }
 }
 
-impl Default for TestState {
+impl Default for TestValidatedState {
     fn default() -> Self {
         Self {
             block_height: 0,
@@ -51,7 +51,7 @@ impl Default for TestState {
     }
 }
 
-impl State for TestState {
+impl ValidatedState for TestValidatedState {
     type Error = BlockError;
 
     type BlockHeader = TestBlockHeader;
@@ -75,7 +75,7 @@ impl State for TestState {
         } else if self.view_number >= *view_number {
             return Err(BlockError::InvalidBlockHeader);
         }
-        Ok(TestState {
+        Ok(TestValidatedState {
             block_height: self.block_height + 1,
             view_number: *view_number,
             prev_state_commitment: self.commit(),
@@ -94,7 +94,7 @@ impl State for TestState {
     fn metadata(&self) -> Self::Metadata {}
 }
 
-impl TestableState for TestState {
+impl TestableState for TestValidatedState {
     fn create_random_transaction(
         _state: Option<&Self>,
         _rng: &mut dyn rand::RngCore,
@@ -105,3 +105,7 @@ impl TestableState for TestState {
         TestTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
     }
 }
+
+pub struct TestInstanceState {}
+
+impl InstanceState for TestInstanceState {}
