@@ -512,7 +512,7 @@ mod test {
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
     use hotshot::types::SignatureKey as _;
-    use hotshot_signature_key::bn254::BLSPubKey;
+    use hotshot_types::signature_key::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -687,7 +687,7 @@ mod test {
         let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
-                .get::<u64>(&format!("node/proposals/{}/count", key.to_bytes()))
+                .get::<u64>(&format!("node/proposals/{}/count", key))
                 .send()
                 .await
                 .unwrap(),

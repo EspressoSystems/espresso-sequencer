@@ -24,10 +24,9 @@ use crate::{api::load_api, QueryError, SignatureKey};
 use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
-use hotshot::types::SignatureKey as _;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ResultExt, Snafu};
+use snafu::{ResultExt, Snafu};
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, RequestParams, StatusCode};
@@ -69,7 +68,7 @@ pub enum Error {
     #[from(ignore)]
     QueryProposals {
         source: QueryError,
-        proposer: EncodedPublicKey,
+        proposer: String,
     },
     #[snafu(display("malformed signature key"))]
     #[from(ignore)]
@@ -118,7 +117,7 @@ where
                     .count_proposals(&proposer)
                     .await
                     .context(QueryProposalsSnafu {
-                        proposer: proposer.to_bytes(),
+                        proposer: proposer.to_string(),
                     })
             }
             .boxed()
@@ -131,7 +130,7 @@ where
                     .get_proposals(&proposer, limit)
                     .await
                     .context(QueryProposalsSnafu {
-                        proposer: proposer.to_bytes(),
+                        proposer: proposer.to_string(),
                     })
             }
             .boxed()
@@ -143,13 +142,8 @@ fn proposer_param<Types: NodeType>(
     req: &RequestParams,
     param: &str,
 ) -> Result<SignatureKey<Types>, Error> {
-    // The HotShot signature key trait temporarily lacks the trait bounds required to convert
-    // directly from TaggedBase64. As a workaround, we parse the TaggedBase64 as an
-    // EncodedPublicKey and then decode to the actual signature key type.
-    //
-    // This can be simplified after https://github.com/EspressoSystems/HotShot/issues/2374.
-    let encoded: EncodedPublicKey = req.blob_param(param)?;
-    SignatureKey::<Types>::from_bytes(&encoded).context(InvalidSignatureKeySnafu)
+    let encoded = req.tagged_base64_param(param)?;
+    encoded.try_into().map_err(|_| Error::InvalidSignatureKey)
 }
 
 #[cfg(test)]
@@ -170,7 +164,7 @@ mod test {
     };
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BLSPubKey;
+    use hotshot_types::signature_key::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -205,7 +199,7 @@ mod test {
 
         // Check proposals for node 0.
         let proposals: Vec<LeafQueryData<MockTypes>> = client
-            .get(&format!("proposals/{}", network.proposer(0).to_bytes()))
+            .get(&format!("proposals/{}", network.proposer(0)))
             .send()
             .await
             .unwrap();
@@ -216,10 +210,7 @@ mod test {
         // Check the `proposals/limit` and `proposals/count` features.
         assert!(
             client
-                .get::<u64>(&format!(
-                    "proposals/{}/count",
-                    network.proposer(0).to_bytes()
-                ))
+                .get::<u64>(&format!("proposals/{}/count", network.proposer(0)))
                 .send()
                 .await
                 .unwrap()
@@ -232,7 +223,7 @@ mod test {
             client
                 .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                     "proposals/{}/limit/1",
-                    network.proposer(0).to_bytes()
+                    network.proposer(0)
                 ))
                 .send()
                 .await
@@ -244,7 +235,7 @@ mod test {
             client
                 .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                     "proposals/{}/limit/0",
-                    network.proposer(0).to_bytes()
+                    network.proposer(0)
                 ))
                 .send()
                 .await
@@ -319,7 +310,7 @@ mod test {
         let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
-                .get::<u64>(&format!("proposals/{}/count", key.to_bytes()))
+                .get::<u64>(&format!("proposals/{}/count", key))
                 .send()
                 .await
                 .unwrap(),

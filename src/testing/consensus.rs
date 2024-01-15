@@ -25,10 +25,10 @@ use hotshot::{
     types::SystemContextHandle,
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
+    signature_key::{BLSPrivKey, BLSPubKey},
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
@@ -55,7 +55,7 @@ const MINIMUM_NODES: usize = 2;
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
         let priv_keys = (0..MINIMUM_NODES)
-            .map(|_| BLSPrivKey::generate())
+            .map(|_| BLSPrivKey::generate(&mut rand::thread_rng()))
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()

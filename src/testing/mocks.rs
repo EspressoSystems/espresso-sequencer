@@ -25,13 +25,13 @@ use hotshot::{
     },
     types::Event,
 };
-use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestState,
 };
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
+    signature_key::BLSPubKey,
     traits::node_implementation::{ChannelMaps, NodeType},
 };
 use serde::{Deserialize, Serialize};

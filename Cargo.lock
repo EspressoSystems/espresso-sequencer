@@ -2746,7 +2746,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2784,12 +2784,12 @@ dependencies = [
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2858,7 +2858,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2877,7 +2877,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2902,7 +2902,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -2926,7 +2926,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "ark-bls12-381",
  "ark-ed-on-bn254",
@@ -2971,7 +2971,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "bincode",
 ]
@@ -2979,7 +2979,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -3432,7 +3432,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jf-plonk"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#33f963714707a9b11c407a0e60c63799f983f788"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -3461,7 +3461,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#33f963714707a9b11c407a0e60c63799f983f788"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
@@ -3485,6 +3485,7 @@ dependencies = [
  "digest 0.10.7",
  "displaydoc",
  "espresso-systems-common 0.4.0",
+ "generic-array",
  "hashbrown 0.13.2",
  "itertools 0.10.5",
  "jf-relation",
@@ -3505,7 +3506,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#33f963714707a9b11c407a0e60c63799f983f788"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -3531,7 +3532,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#33f963714707a9b11c407a0e60c63799f983f788"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -3922,7 +3923,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#c5ce532095784b91e5ef48d87db044b475b0a101"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.7#18a528c672ebb65ea611f136a1fafcd200401931"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
