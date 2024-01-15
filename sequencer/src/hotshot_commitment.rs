@@ -212,7 +212,11 @@ async fn sync_with_l1(
         return Err(SyncError::Other(anyhow!("failed to fetch any leaves")));
     }
     let num_leaves = leaves.len();
-    tracing::info!("sending {num_leaves} leaves to the contract");
+    tracing::info!(
+        "sending {num_leaves} leaves to the contract ({}-{})",
+        leaves[0].height(),
+        leaves[num_leaves - 1].height()
+    );
 
     // Send the leaves to the contract.
     let txn = build_sequence_batches_txn(contract, leaves);
