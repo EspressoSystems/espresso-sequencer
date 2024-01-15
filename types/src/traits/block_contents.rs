@@ -70,7 +70,10 @@ pub trait BlockPayload:
     fn encode(&self) -> Result<Self::Encode<'_>, Self::Error>;
 
     /// List of transaction commitments.
-    fn transaction_commitments(&self, metadata: &Self::Metadata) -> Vec<Commitment<Self::Transaction>>;
+    fn transaction_commitments(
+        &self,
+        metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>>;
 }
 
 /// Compute the VID payload commitment.

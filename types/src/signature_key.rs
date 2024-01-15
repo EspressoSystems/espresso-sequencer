@@ -124,9 +124,7 @@ impl SignatureKey for BLSPubKey {
     }
 
     fn genesis_proposer_pk() -> Self {
-        use rand::rngs::mock::StepRng;
-        let mut my_rng = StepRng::new(42, 1337);
-        let kp = KeyPair::generate(&mut my_rng);
+        let kp = KeyPair::generate(&mut ChaCha20Rng::from_seed([0u8; 32]));
         kp.ver_key()
     }
 }
