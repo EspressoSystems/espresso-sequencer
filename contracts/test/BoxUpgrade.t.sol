@@ -56,7 +56,7 @@ contract BoxTest is Test {
         uint256 boxSize = 1;
         uint256 amount = 1 ether;
         boxV1Proxy.addBox(boxSize);
-        boxV1Proxy.deposit{ value: amount }();
+        boxV1Proxy.deposit{ value: amount }(address(this));
         assertEq(boxV1Proxy.getBox().balance, amount);
 
         boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
@@ -72,7 +72,7 @@ contract BoxTest is Test {
 
         //deposit
         vm.prank(msg.sender);
-        boxV1Proxy.deposit{ value: amount }();
+        boxV1Proxy.deposit{ value: amount }(msg.sender);
 
         vm.prank(msg.sender);
         assertEq(boxV1Proxy.getBox().balance, amount);
@@ -90,6 +90,42 @@ contract BoxTest is Test {
         vm.prank(msg.sender);
 
         assertEq(boxV2Proxy.getBox().balance, 0);
+    }
+
+    function testNewDepositLogicWorksWithUpdatedClientPostUpgrade() public {
+        vm.prank(msg.sender);
+
+        uint256 boxSize = 1;
+        uint256 amount = 1 ether;
+        boxV1Proxy.addBox(boxSize);
+
+        //upgrade
+        boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
+
+        //deposit
+        vm.prank(msg.sender);
+        boxV2Proxy.deposit{ value: amount }(address(0), msg.sender);
+
+        vm.prank(msg.sender);
+        assertEq(boxV2Proxy.getBox().balance, amount);
+    }
+
+    function testNewDepositLogicWorksWithOldClientPostUpgrade() public {
+        vm.prank(msg.sender);
+
+        uint256 boxSize = 1;
+        uint256 amount = 1 ether;
+        boxV1Proxy.addBox(boxSize);
+
+        //upgrade
+        boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
+
+        //deposit
+        vm.prank(msg.sender);
+        boxV2Proxy.deposit{ value: amount }(msg.sender);
+
+        vm.prank(msg.sender);
+        assertEq(boxV2Proxy.getBox().balance, amount);
     }
 
     function testUpgradeNewStructElement() public {

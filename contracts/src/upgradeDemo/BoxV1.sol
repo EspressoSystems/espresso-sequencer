@@ -11,6 +11,11 @@ import { UUPSUpgradeable } from
 /// @title An arbitrary Box contract that is only used for upgrade Sanity Checks
 /// @notice The Box can be used by an account and they can deposit into their box
 contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+    error BoxAlreadyExists();
+    error BoxSizeTooSmall();
+    error NoBoxExists();
+    error YouMustDepositETH();
+
     /// @notice Box status which might be upgraded
     enum BoxStatus {
         EMPTY,
@@ -45,16 +50,27 @@ contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice add a box for the user if it does not exist
     function addBox(uint256 _size) public {
-        require(boxes[msg.sender].size == 0, "box already created for this user");
+        if (boxes[msg.sender].size != 0) {
+            revert BoxAlreadyExists();
+        }
 
-        require(_size > 0, "box size must be > 0");
+        if (_size == 0) {
+            revert BoxSizeTooSmall();
+        }
+
         boxes[msg.sender] = Box({ size: _size, status: BoxStatus.EMPTY, balance: 0 });
     }
 
     /// @notice update a box for the user if it exists
     function updateBox(uint256 _newSize) public {
-        require(_newSize > 0, "box size must be > 0");
-        require(boxes[msg.sender].size != 0, "No box exists for this user");
+        if (_newSize == 0) {
+            revert BoxSizeTooSmall();
+        }
+
+        if (boxes[msg.sender].size == 0) {
+            revert NoBoxExists();
+        }
+
         Box memory thisBox = boxes[msg.sender];
         thisBox.size = _newSize;
         boxes[msg.sender] = thisBox;
@@ -62,7 +78,9 @@ contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice update a box status for the user if it exists
     function updateBoxStatus(BoxStatus _status) public {
-        require(boxes[msg.sender].size != 0, "No box exists for this user");
+        if (boxes[msg.sender].size == 0) {
+            revert NoBoxExists();
+        }
         boxes[msg.sender].status = _status;
     }
 
@@ -72,10 +90,16 @@ contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice allows sender to deposit into the contract and their balance is recorded in the box
-    function deposit() public payable {
-        require(msg.value > 0, "You must deposit some ETH");
-        require(boxes[msg.sender].size != 0, "No box exists for this user");
-        boxes[msg.sender].balance += msg.value;
+    function deposit(address receiver) public payable {
+        if (msg.value == 0) {
+            revert YouMustDepositETH();
+        }
+
+        if (boxes[msg.sender].size == 0) {
+            revert NoBoxExists();
+        }
+
+        boxes[receiver].balance += msg.value;
     }
 
     /// @notice only the owner can authorize an upgrade
