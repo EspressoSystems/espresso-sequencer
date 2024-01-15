@@ -1,10 +1,7 @@
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
-use ark_ff::{
-    field_hashers::{DefaultFieldHasher, HashToField},
-    BigInt,
-};
+use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
@@ -453,8 +450,7 @@ fn main() {
 
             let exponent: u64 = cli.args[0].parse::<u64>().unwrap();
             let mut point = G2Affine::generator();
-            let exp_big_int: BigInt<4> = BigInt::from(exponent);
-            point = point.mul_bigint(&exp_big_int).into_affine();
+            point = (point * Fr::from(exponent)).into();
             let point_parsed: ParsedG2Point = point.into();
             let res = point_parsed;
             println!("{}", (res.encode_hex()));
