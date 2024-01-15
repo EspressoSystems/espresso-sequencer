@@ -82,6 +82,13 @@ impl State for TestState {
         })
     }
 
+    fn initialize(block_header: &Self::BlockHeader) -> Self {
+        Self {
+            block_height: block_header.block_number,
+            ..Default::default()
+        }
+    }
+
     fn on_commit(&self) {}
 
     fn metadata(&self) -> Self::Metadata {}

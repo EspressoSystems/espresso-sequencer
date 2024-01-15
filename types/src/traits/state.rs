@@ -62,6 +62,11 @@ pub trait State:
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
 
+    /// Initialize the state with the given block header.
+    ///
+    /// This can also be used to reinitialize the state for catchup.
+    fn initialize(block_header: &Self::BlockHeader) -> Self;
+
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
 

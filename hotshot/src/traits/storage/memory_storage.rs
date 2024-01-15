@@ -145,10 +145,10 @@ mod test {
                 view_number,
                 _pd: PhantomData,
             },
-            header,
+            header.clone(),
             Some(payload),
             dummy_leaf_commit,
-            TestState::initialize(),
+            TestState::initialize(&header),
             Vec::new(),
             <<TestTypes as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         )

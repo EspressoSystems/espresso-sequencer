@@ -546,7 +546,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
                     );
-                    // TODO (Keyao) If not, should/how do we update?
                     if let Ok(parent_leaf) = consensus.get_leaf(view - 1) {
                         let parent_state = parent_leaf.get_state();
                         let Ok(state) = parent_state.validate_and_apply_header(

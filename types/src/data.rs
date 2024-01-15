@@ -359,9 +359,9 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),
             parent_commitment: fake_commitment(),
-            block_header,
+            block_header: block_header.clone(),
             block_payload: Some(block_payload),
-            state: <TYPES::StateType as State>::initialize(),
+            state: <TYPES::StateType as State>::initialize(&block_header),
             rejected: Vec::new(),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
