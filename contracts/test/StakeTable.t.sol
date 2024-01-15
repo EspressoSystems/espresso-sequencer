@@ -52,10 +52,6 @@ contract StakeTableCommonTest is Test {
 }
 
 contract StakeTable_Test is Test, StakeTableCommonTest {
-    event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
-    event Deposit(bytes32, uint256);
-    event Exit(bytes32, uint64);
-
     S public stakeTable;
     ExampleToken public token;
 
@@ -336,7 +332,7 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
 
         // Check event is emitted after calling successfully `register`
         vm.expectEmit(true, true, true, true, address(stakeTable));
-        emit Registered(
+        emit AbstractStakeTable.Registered(
             stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
         vm.prank(exampleTokenCreator);
@@ -428,7 +424,7 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
 
         lc.setCurrentEpoch(3);
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit Deposit(stakeTable._hashBlsKey(blsVK), newDepositAmount);
+        emit AbstractStakeTable.Deposit(stakeTable._hashBlsKey(blsVK), newDepositAmount);
         uint64 newBalance;
         uint64 effectiveEpoch;
         uint64 expectedNewBalance = stake + newDepositAmount;
@@ -494,7 +490,7 @@ contract StakeTable_Test is Test, StakeTableCommonTest {
         vm.expectEmit(false, false, false, true, address(stakeTable));
         bytes32 key = stakeTable._hashBlsKey(blsVK);
         uint64 exitEpoch = 6;
-        emit Exit(key, exitEpoch);
+        emit AbstractStakeTable.Exit(key, exitEpoch);
 
         // Make the exit request
         vm.prank(exampleTokenCreator);
