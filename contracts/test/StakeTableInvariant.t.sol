@@ -38,7 +38,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
     uint64 public pendingRegistrationsBefore;
     uint64 public stakeTableFirstAvailableRegistrationEpoch;
     uint64 public stakeTableNumPendingRegistrations;
-    bool public registrationSuccessful;
+    bool public registrationCalledAtLeastOnce;
 
     // Variables for testing invariant relative to requestExit and withdrawFunds
     uint64 public nextExitEpochBefore;
@@ -46,7 +46,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
     uint64 public stakeTableFirstAvailableExitEpoch;
     uint64 public stakeTableNumPendingExits;
     uint64 public currentEpoch;
-    bool public requestExitCalled;
+    bool public requestExitCalledAtLeastOnce;
 
     mapping(bytes32 blsKeyHash => uint64 exitEpoch) public exitEpochForBlsVK;
     BN254.G2Point[] public requestExitKeys;
@@ -61,7 +61,8 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
         token = _token;
         tokenCreator = _tokenCreator;
         lightClient = _lightClient;
-        requestExitCalled = false;
+        requestExitCalledAtLeastOnce = false;
+        registrationCalledAtLeastOnce = false;
     }
 
     function getNodeAndVKFromUserIndex(uint256 userIndex)
@@ -142,7 +143,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
         stakeTableFirstAvailableRegistrationEpoch = stakeTable.firstAvailableRegistrationEpoch();
         stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
 
-        registrationSuccessful = true;
+        registrationCalledAtLeastOnce = true;
     }
 
     function requestExit(uint256 rand) public {
@@ -179,7 +180,7 @@ contract StakeTableHandlerTest is Test, StakeTableCommonTest {
         bytes32 vkHash = stakeTable._hashBlsKey(vk);
         exitEpochForBlsVK[vkHash] = node.exitEpoch;
         requestExitKeys.push(vk);
-        requestExitCalled = true;
+        requestExitCalledAtLeastOnce = true;
     }
 
     function advanceEpoch() public {
@@ -305,7 +306,7 @@ contract StakeTableInvariant_Tests is Test {
     function invariant_Register() external {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
-        if (handler.registrationSuccessful()) {
+        if (handler.registrationCalledAtLeastOnce()) {
             assertEq(
                 handler.stakeTableFirstAvailableRegistrationEpoch(),
                 handler.nextRegistrationEpochBefore()
@@ -314,13 +315,16 @@ contract StakeTableInvariant_Tests is Test {
                 handler.stakeTableNumPendingRegistrations(),
                 handler.pendingRegistrationsBefore() + 1
             );
+        } else {
+            assertEq(handler.stakeTableFirstAvailableRegistrationEpoch(), 0);
+            assertEq(handler.stakeTableNumPendingRegistrations(), 0);
         }
     }
 
     function invariant_RequestExit() external {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
-        if (handler.requestExitCalled()) {
+        if (handler.requestExitCalledAtLeastOnce()) {
             assertGe(handler.stakeTableFirstAvailableExitEpoch(), handler.currentEpoch() + 1);
             assertGe(handler.stakeTableNumPendingExits(), 1);
         } else {
