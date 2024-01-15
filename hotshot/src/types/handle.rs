@@ -16,16 +16,20 @@ use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::Consensus,
+    data::Leaf,
     error::HotShotError,
     event::EventType,
-    message::{MessageKind, SequencingMessage},
-    traits::{
-        election::Membership, node_implementation::NodeType, state::ConsensusTime, storage::Storage,
-    },
+    simple_certificate::QuorumCertificate,
+    traits::{node_implementation::NodeType, state::ConsensusTime, storage::Storage},
 };
-use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
 use std::sync::Arc;
 use tracing::error;
+
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::{
+    message::{MessageKind, SequencingMessage},
+    traits::election::Membership,
+};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///

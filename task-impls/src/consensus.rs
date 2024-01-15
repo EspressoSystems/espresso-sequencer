@@ -664,8 +664,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 }
 
                                 leaf_views.push(leaf.clone());
-                                if let Some(payload) = leaf.block_payload {
-                                    for txn in payload.transaction_commitments() {
+                                if let Some(ref payload) = leaf.block_payload {
+                                    for txn in payload
+                                        .transaction_commitments(leaf.get_block_header().metadata())
+                                    {
                                         included_txns.insert(txn);
                                     }
                                 }
