@@ -5,9 +5,9 @@ use hotshot::{
         random_quorom_certificate, random_transaction, random_validating_leaf, VDemoBlock,
         VDemoState,
     },
-    traits::{BlockPayload, Storage, ValidatedState},
+    traits::{BlockPayload, State, Storage},
 };
-use hotshot_types::{data::ViewNumber, traits::statesTestableState};
+use hotshot_types::{data::ViewNumber, traits::state::TestableState};
 use rand::thread_rng;
 
 type AtomicStorage = hotshot::traits::implementations::AtomicStorage<DEntryState>;
@@ -94,7 +94,7 @@ async fn test_happy_path_leaves() {
     let mut store = AtomicStorage::open(path).expect("Could not open atomic store");
 
     // Add some leaves
-    let mut leaves = Vec::<Leaf<DEntryBlock, ValidatedState, H_256>>::new();
+    let mut leaves = Vec::<Leaf<DEntryBlock, State, H_256>>::new();
     for _ in 0..10 {
         let leaf = random_validating_leaf(DEntryBlock {
             previous_block: StateHash::random(),

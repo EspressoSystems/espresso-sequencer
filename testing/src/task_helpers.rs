@@ -18,12 +18,13 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
-        block_contents::{vid_commitment, BlockHeader, TestableBlock},
+        block_contents::vid_commitment,
+        block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::NodeType,
-        states::{ConsensusTime, ValidatedState},
-        BlockPayload,
+        state::{ConsensusTime, TestableBlock},
+        BlockPayload, State,
     },
     vote::HasViewNumber,
 };

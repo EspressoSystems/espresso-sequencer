@@ -17,7 +17,7 @@ use crate::{
     },
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
-        states::ConsensusTime,
+        state::ConsensusTime,
     },
     vote::{Certificate, HasViewNumber},
 };

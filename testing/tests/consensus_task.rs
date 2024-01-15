@@ -11,7 +11,7 @@ use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
-    traits::{states::ConsensusTime, ValidatedState},
+    traits::{state::ConsensusTime, State},
 };
 use hotshot_types::{
     simple_vote::QuorumData,

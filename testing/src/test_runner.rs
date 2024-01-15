@@ -17,7 +17,7 @@ use hotshot_task::{
 use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    traits::{election::Membership, node_implementation::NodeType, states::ConsensusTime},
+    traits::{election::Membership, node_implementation::NodeType, state::ConsensusTime},
     HotShotConfig, ValidatorConfig,
 };
 use std::{

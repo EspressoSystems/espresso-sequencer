@@ -62,9 +62,9 @@ use hotshot_types::{
         network::{CommunicationChannel, NetworkError},
         node_implementation::{NodeType, SendToTasks},
         signature_key::SignatureKey,
-        states::{ConsensusTime, ValidatedState},
+        state::ConsensusTime,
         storage::StoredView,
-        BlockPayload,
+        BlockPayload, State,
     },
     HotShotConfig,
 };
@@ -362,7 +362,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Panics
     ///
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) -> TYPES::ValidatedState {
+    pub async fn get_state(&self) -> TYPES::StateType {
         self.inner
             .consensus
             .read()

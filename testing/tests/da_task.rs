@@ -9,7 +9,7 @@ use hotshot_types::{
     simple_vote::{DAData, DAVote},
     traits::{
         block_contents::vid_commitment, consensus_api::ConsensusApi, election::Membership,
-        node_implementation::NodeType, states::ConsensusTime,
+        node_implementation::NodeType, state::ConsensusTime,
     },
 };
 use sha2::{Digest, Sha256};

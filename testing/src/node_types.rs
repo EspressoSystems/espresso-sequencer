@@ -2,7 +2,7 @@ use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 
 use crate::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::{TestInstanceState, TestValidatedState},
+    state_types::TestState,
 };
 
 use hotshot::traits::{
@@ -40,8 +40,7 @@ impl NodeType for TestTypes {
     type SignatureKey = BLSPubKey;
     type Transaction = TestTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type ValidatedState = TestValidatedState;
-    type InstanceState = TestInstanceState;
+    type StateType = TestState;
     type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
 }
 

@@ -32,11 +32,10 @@ use hotshot_types::{
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
     traits::{
-        block_contents::TestableBlock,
         election::Membership,
         network::CommunicationChannel,
         node_implementation::NodeType,
-        states::{ConsensusTime, TestableState},
+        state::{ConsensusTime, TestableBlock, TestableState},
     },
     HotShotConfig,
 };
@@ -290,7 +289,7 @@ pub trait RunDA<
         Storage = MemoryStorage<TYPES>,
     >,
 > where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
@@ -513,7 +512,7 @@ impl<
         NODE,
     > for WebServerDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -615,7 +614,7 @@ impl<
         NODE,
     > for Libp2pDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -708,7 +707,7 @@ impl<
         NODE,
     > for CombinedDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -817,7 +816,7 @@ pub async fn main_entry_point<
 >(
     args: ValidatorArgs,
 ) where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
 {
@@ -872,7 +871,7 @@ pub async fn main_entry_point<
 
     for round in 0..rounds {
         for _ in 0..transactions_to_send_per_round {
-            let mut txn = <TYPES::ValidatedState>::create_random_transaction(
+            let mut txn = <TYPES::StateType>::create_random_transaction(
                 None,
                 &mut txn_rng,
                 transaction_size as u64,
