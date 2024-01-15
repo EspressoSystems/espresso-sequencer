@@ -20,7 +20,7 @@ use crate::{
     fetching::{
         self,
         request::{self, PayloadRequest},
-        Provider,
+        Callback, Provider,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
@@ -36,7 +36,7 @@ use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::{
-    future::{self, join_all, BoxFuture, Future, FutureExt},
+    future::{join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
@@ -45,6 +45,7 @@ use std::{
     cmp::{min, Ordering},
     fmt::{Debug, Display},
     future::IntoFuture,
+    iter::once,
     ops::{Bound, Deref, DerefMut, Range, RangeBounds},
 };
 
@@ -357,8 +358,8 @@ where
 {
     storage: RwLock<NotifyStorage<Types, S>>,
     provider: Arc<P>,
-    payload_fetcher: Arc<fetching::Fetcher<request::PayloadRequest>>,
-    leaf_fetcher: Arc<fetching::Fetcher<request::LeafRequest>>,
+    payload_fetcher: Arc<fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>>,
+    leaf_fetcher: Arc<fetching::Fetcher<request::LeafRequest, LeafCallback<Types, S, P>>>,
 }
 
 #[derive(Debug)]
@@ -608,7 +609,7 @@ where
         //   can never release the _original_ read lock we had on `storage`, and so we can never
         //   unblock the task waiting for a write lock, which in turn means we can never become
         //   unblocked ourselves.
-        T::active_fetch(self.clone(), storage, req, |_, _| future::ready(())).await;
+        T::active_fetch(self.clone(), storage, req).await;
 
         // Wait for the object to arrive.
         Fetch::Pending(fut.boxed())
@@ -663,15 +664,13 @@ where
     /// In either case, as long as the requested object does in fact exist, we will eventually
     /// receive it passively, since we will eventually receive all blocks and leaves that are ever
     /// produced. Active fetching merely helps us receive certain objects sooner.
-    async fn active_fetch<S, P, Fut>(
+    async fn active_fetch<S, P>(
         fetcher: Arc<Fetcher<Types, S, P>>,
         storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
-        callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, Self) -> Fut,
     ) where
         S: AvailabilityStorage<Types> + 'static,
-        P: AvailabilityProvider<Types>,
-        Fut: Future<Output = ()> + Send + 'static;
+        P: AvailabilityProvider<Types>;
 
     /// Wait for someone else to fetch the object.
     async fn passive_fetch<S>(
@@ -735,60 +734,15 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P, Fut>(
+    async fn active_fetch<S, P>(
         fetcher: Arc<Fetcher<Types, S, P>>,
         storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
-        callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, Self) -> Fut,
     ) where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
-        Fut: Future<Output = ()> + Send + 'static,
     {
-        match req {
-            LeafId::Number(n) => {
-                let height = storage.height as usize;
-                if n >= height {
-                    // If the requested leaf has yet to be produced, based on the current block
-                    // height, there is no point in requesting it. We will receive it passively once
-                    // it is created.
-                    tracing::info!("not fetching leaf {n} because height is only {height}");
-                    return;
-                }
-
-                let fetcher = fetcher.clone();
-                spawn(async move {
-                    tracing::info!("spawned active fetch for leaf {n}");
-                    fetcher
-                        .leaf_fetcher
-                        .clone()
-                        .fetch(n.into(), fetcher.provider.clone(), move |leaf| async move {
-                            tracing::info!("fetched leaf {n}");
-
-                            // Store the leaf in local storage, so we can avoid fetching it in the
-                            // future.
-                            {
-                                let mut storage = fetcher.storage.write().await;
-                                if let Err(err) = store_leaf(&mut *storage, leaf.clone()).await {
-                                    // It is unfortunate if this fails, but we can still proceed by
-                                    // returning the leaf that we fetched, keeping it in memory.
-                                    // Simply log the error and move on.
-                                    tracing::warn!("failed to store fetched leaf {req:?}: {err}");
-                                }
-                            }
-
-                            callback(fetcher, leaf).await;
-                        })
-                        .await;
-                });
-            }
-            LeafId::Hash(h) => {
-                // We don't actively fetch leaves when requested by hash, because we have no way of
-                // knowing whether a leaf with such a hash actually exists, and we don't want to
-                // bother peers with requests for non-existant leaves.
-                tracing::info!("not fetching unknown leaf {h}");
-            }
-        }
+        fetch_leaf_with_callbacks(fetcher, storage, req, None).await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
@@ -804,6 +758,53 @@ where
     }
 }
 
+async fn fetch_leaf_with_callbacks<Types, S, P, I>(
+    fetcher: Arc<Fetcher<Types, S, P>>,
+    storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+    req: LeafId<Types>,
+    callbacks: I,
+) where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+    I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
+    I::IntoIter: Send,
+{
+    match req {
+        LeafId::Number(n) => {
+            let height = storage.height as usize;
+            if n >= height {
+                // If the requested leaf has yet to be produced, based on the current block height,
+                // there is no point in requesting it. We will receive it passively once it is
+                // created.
+                tracing::info!("not fetching leaf {n} because height is only {height}");
+                return;
+            }
+
+            let fetcher = fetcher.clone();
+            spawn(async move {
+                tracing::info!("spawned active fetch for leaf {n}");
+                fetcher
+                    .leaf_fetcher
+                    .clone()
+                    .fetch(
+                        n.into(),
+                        fetcher.provider.clone(),
+                        once(LeafCallback::Leaf { fetcher }).chain(callbacks),
+                    )
+                    .await;
+            });
+        }
+        LeafId::Hash(h) => {
+            // We don't actively fetch leaves when requested by hash, because we have no way of
+            // knowing whether a leaf with such a hash actually exists, and we don't want to bother
+            // peers with requests for non-existant leaves.
+            tracing::info!("not fetching unknown leaf {h}");
+        }
+    }
+}
+
 async fn store_leaf<Types, S>(
     storage: &mut NotifyStorage<Types, S>,
     leaf: LeafQueryData<Types>,
@@ -812,6 +813,7 @@ where
     Types: NodeType,
     S: UpdateAvailabilityData<Types> + VersionedDataSource,
 {
+    tracing::info!("storing leaf");
     storage.insert_leaf(leaf).await?;
     storage.commit().await?;
     Ok(())
@@ -925,15 +927,13 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P, Fut>(
+    async fn active_fetch<S, P>(
         fetcher: Arc<Fetcher<Types, S, P>>,
         storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
-        callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, Self) -> Fut,
     ) where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
-        Fut: Future<Output = ()> + Send + 'static,
     {
         match req {
             BlockRequest::Id(id) => {
@@ -946,7 +946,7 @@ where
                 //    able to provide payloads, not full blocks, such as HotShot DA committee
                 //    members.
                 if let Some(header) = load_header(&**storage, id).await.ok_or_trace() {
-                    spawn(fetch_block_with_header(fetcher, header, callback));
+                    spawn(fetch_block_with_header(fetcher, header));
                     return;
                 }
 
@@ -956,13 +956,11 @@ where
                 // we already have its corresponding header and leaf.
                 match id {
                     BlockId::Number(n) => {
-                        LeafQueryData::active_fetch(
-                            fetcher,
+                        fetch_leaf_with_callbacks(
+                            fetcher.clone(),
                             storage,
                             n.into(),
-                            move |fetcher, leaf| {
-                                fetch_block_with_header(fetcher, leaf.leaf.block_header, callback)
-                            },
+                            [LeafCallback::Block { fetcher }],
                         )
                         .await;
                     }
@@ -1038,16 +1036,14 @@ where
     }
 }
 
-async fn fetch_block_with_header<Types, S, P, Fut>(
+async fn fetch_block_with_header<Types, S, P>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     header: Header<Types>,
-    callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, BlockQueryData<Types>) -> Fut,
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
-    Fut: Future<Output = ()> + Send,
 {
     // Now that we have the header, we only need to retrieve the payload.
     tracing::info!(
@@ -1057,27 +1053,13 @@ async fn fetch_block_with_header<Types, S, P, Fut>(
     );
     fetcher
         .payload_fetcher
-        .clone()
         .fetch(
-            PayloadRequest::new::<Types>(&header),
+            PayloadRequest(header.payload_commitment()),
             fetcher.provider.clone(),
-            move |payload| async move {
-                tracing::info!("fetched payload {:?}", header.payload_commitment());
-                let block = BlockQueryData::new(header, payload);
-
-                // Store the block in local storage, so we can avoid fetching it in the future.
-                {
-                    let mut storage = fetcher.storage.write().await;
-                    if let Err(err) = store_block(&mut *storage, block.clone()).await {
-                        // It is unfortunate if this fails, but we can still proceed by returning
-                        // the block that we fetched, keeping it in memory. Simply log the error and
-                        // move on.
-                        tracing::warn!("failed to store fetched block {}: {err}", block.height());
-                    }
-                }
-
-                callback(fetcher, block).await;
-            },
+            once(PayloadCallback {
+                header,
+                fetcher: fetcher.clone(),
+            }),
         )
         .await;
 }
@@ -1148,15 +1130,13 @@ where
         .boxed()
     }
 
-    async fn active_fetch<S, P, Fut>(
+    async fn active_fetch<S, P>(
         _fetcher: Arc<Fetcher<Types, S, P>>,
         _storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
-        _callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, Self) -> Fut,
     ) where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
-        Fut: Future<Output = ()> + Send + 'static,
     {
         // We don't actively fetch blocks when requested by transaction, because without the block
         // payload, we have no way of knowing whether a block with such a transaction actually
@@ -1204,23 +1184,18 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P, Fut>(
+    async fn active_fetch<S, P>(
         fetcher: Arc<Fetcher<Types, S, P>>,
         storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
-        callback: impl 'static + Send + FnOnce(Arc<Fetcher<Types, S, P>>, Self) -> Fut,
     ) where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
-        Fut: Future<Output = ()> + Send + 'static,
     {
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
-        BlockQueryData::active_fetch(fetcher, storage, req.into(), |fetcher, block| {
-            callback(fetcher, block.into())
-        })
-        .await
+        BlockQueryData::active_fetch(fetcher, storage, req.into()).await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
@@ -1260,6 +1235,124 @@ where
             _ => {}
         }
         storage.storage.get_payload_range(range).await
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+struct PayloadCallback<Types: NodeType, S, P> {
+    header: Header<Types>,
+    #[derivative(Debug = "ignore")]
+    fetcher: Arc<Fetcher<Types, S, P>>,
+}
+
+impl<Types: NodeType, S, P> PartialEq for PayloadCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for PayloadCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> Ord for PayloadCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.header.block_number().cmp(&other.header.block_number())
+    }
+}
+
+impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
+where
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types>,
+    P: AvailabilityProvider<Types>,
+{
+    async fn run(self, payload: Payload<Types>) {
+        tracing::info!("fetched payload {:?}", self.header.payload_commitment());
+        let block = BlockQueryData::new(self.header, payload);
+
+        // Store the block in local storage, so we can avoid fetching it in the future.
+        {
+            let mut storage = self.fetcher.storage.write().await;
+            if let Err(err) = store_block(&mut *storage, block.clone()).await {
+                // It is unfortunate if this fails, but we can still proceed by returning
+                // the block that we fetched, keeping it in memory. Simply log the error and
+                // move on.
+                tracing::warn!("failed to store fetched block {}: {err}", block.height());
+            }
+        }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum LeafCallback<Types: NodeType, S, P> {
+    /// Callback when fetching the leaf for its own sake.
+    Leaf {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+    /// Callback when fetching the leaf in order to then look up a block.
+    Block {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+}
+
+impl<Types: NodeType, S, P> PartialEq for LeafCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for LeafCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> Ord for LeafCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            // Store leaves in the database before storing blocks.
+            (Self::Leaf { .. }, Self::Block { .. }) => Ordering::Less,
+            (Self::Block { .. }, Self::Leaf { .. }) => Ordering::Greater,
+            _ => Ordering::Equal,
+        }
+    }
+}
+
+impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
+where
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    async fn run(self, leaf: LeafQueryData<Types>) {
+        let height = leaf.height();
+        tracing::info!("fetched leaf {height}");
+
+        match self {
+            Self::Leaf { fetcher } => {
+                let mut storage = fetcher.storage.write().await;
+                if let Err(err) = store_leaf(&mut *storage, leaf).await {
+                    // It is unfortunate if this fails, but we can still proceed by
+                    // returning the leaf that we fetched, keeping it in memory.
+                    // Simply log the error and move on.
+                    tracing::warn!("failed to store fetched leaf {height}: {err}");
+                }
+            }
+            Self::Block { fetcher } => {
+                fetch_block_with_header(fetcher, leaf.leaf.block_header).await;
+            }
+        }
     }
 }
 

@@ -23,8 +23,7 @@
 
 use async_std::sync::Mutex;
 use derivative::Derivative;
-use futures::future::Future;
-use std::{collections::HashSet, fmt::Debug};
+use std::collections::{hash_map::Entry, BTreeSet, HashMap};
 
 pub mod provider;
 pub mod request;
@@ -32,43 +31,81 @@ pub mod request;
 pub use provider::Provider;
 pub use request::Request;
 
-/// Management of concurrent requests to fetch resources.
-#[derive(Derivative)]
-#[derivative(Debug(bound = "T: Debug"), Default(bound = ""))]
-pub struct Fetcher<T> {
-    in_progress: Mutex<HashSet<T>>,
+/// A callback to process the result of a request.
+///
+/// Sometimes, we may fetch the same object for multiple purposes, so a request may have more than
+/// one callback registered. For example, we may fetch a leaf for its own sake and also to
+/// reconstruct a block. Or, we may fetch the same payload for two different blocks. In both of
+/// these cases, there are two objects that must be processed and stored after the fetch completes.
+///
+/// In these cases, we only want one task to actually fetch the resource, but there may be several
+/// unrelated actions to take after the resource is fetched. This trait allows us to identify a
+/// callback, so that when the task that actually fetched the resource completes, it will run one
+/// instance of each distinct callback which was registered. Callbacks will run in the order
+/// determined by `Ord`.
+#[trait_variant::make(Callback: Send)]
+pub trait LocalCallback<T>: Ord {
+    async fn run(self, response: T);
 }
 
-impl<T> Fetcher<T> {
+/// Management of concurrent requests to fetch resources.
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Default(bound = ""))]
+pub struct Fetcher<T, C> {
+    #[derivative(Debug = "ignore")]
+    in_progress: Mutex<HashMap<T, BTreeSet<C>>>,
+}
+
+impl<T, C> Fetcher<T, C> {
     /// Fetch a resource, if it is not already being fetched.
     ///
     /// Returns the requested resource if possible. Returns [`None`] if the resource is already
     /// being fetched, or if the given provider is unable to fetch it.
-    pub async fn fetch<Types, Fut>(
+    pub async fn fetch<Types>(
         &self,
         req: T,
         provider: impl Provider<Types, T>,
-        callback: impl FnOnce(T::Response) -> Fut,
+        callbacks: impl IntoIterator<Item = C>,
     ) where
         T: Request<Types>,
-        Fut: Future<Output = ()>,
+        C: Callback<T::Response>,
     {
         // Check if the requested object is already being fetched. If not, take a lock on it so
         // we are the only ones to fetch this particular object.
         {
             let mut in_progress = self.in_progress.lock().await;
-            if !in_progress.insert(req) {
-                tracing::info!("resource {req:?} is already being fetched");
-                return;
+            match in_progress.entry(req) {
+                Entry::Occupied(mut e) => {
+                    // If the object is already being fetched, add our callback for the fetching
+                    // task to execute upon completion.
+                    e.get_mut().extend(callbacks);
+                    tracing::info!("resource {req:?} is already being fetched");
+                    return;
+                }
+                Entry::Vacant(e) => {
+                    // If the object is not being fetched, we will register our own callback and
+                    // then fetch it ourselves.
+                    e.insert(callbacks.into_iter().collect());
+                }
             }
         }
 
         // Now we are responsible for fetching the object, reach out to the provider.
-        if let Some(obj) = provider.fetch(req).await {
-            callback(obj).await;
-        }
+        let res = provider.fetch(req).await;
 
-        // Done fetching, remove our lock on the object.
-        self.in_progress.lock().await.remove(&req);
+        // Done fetching, remove our lock on the object and execute all callbacks.
+        //
+        // We will keep this lock the whole time we are running the callbacks. We can't release it
+        // earlier because we can't allow another task to register a callback after we have taken
+        // the list of callbacks that we will execute. We also don't want to allow any new fetches
+        // until we have executed the callbacks, because one of the callbacks may store some
+        // resource that obviates the need for another fetch.
+        let mut in_progress = self.in_progress.lock().await;
+        let callbacks = in_progress.remove(&req).unwrap_or_default();
+        if let Some(res) = res {
+            for callback in callbacks {
+                callback.run(res.clone()).await;
+            }
+        }
     }
 }

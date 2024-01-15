@@ -43,7 +43,7 @@ where
     async fn fetch(&self, req: PayloadRequest) -> Option<Payload<Types>> {
         match self
             .client
-            .get::<PayloadQueryData<Types>>(&format!("availability/payload/{}", req.height))
+            .get::<PayloadQueryData<Types>>(&format!("availability/payload/hash/{}", req.0))
             .send()
             .await
         {
@@ -102,9 +102,9 @@ mod test {
     };
     use async_std::task::spawn;
     use commit::Committable;
-    use futures::stream::StreamExt;
+    use futures::{future::join, stream::StreamExt};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
+    use std::{future::IntoFuture, time::Duration};
     use tide_disco::App;
 
     type Provider = TestProvider<QueryServiceProvider>;
@@ -300,8 +300,114 @@ mod test {
         }
     }
 
-    // TODO test fetching payload
-    // TODO test fetching block and leaf concurrently
+    #[async_std::test]
+    async fn test_fetch_block_and_leaf_concurrently() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(
+            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
+        );
+        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until the block height reaches 3. This gives us the genesis block, one additional
+        // block at the end, and then one block that we can use to test fetching.
+        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = leaves.take(2).collect::<Vec<_>>().await;
+        let test_leaf = &leaves[0];
+
+        // Tell the node about a leaf after the one of interest so it learns about the block height.
+        data_source.insert_leaf(leaves[1].clone()).await.unwrap();
+        data_source.commit().await.unwrap();
+
+        // Fetch a leaf and the corresponding block at the same time. This will result in two tasks
+        // trying to fetch the same leaf, but one should win and notify the other, which ultimately
+        // ends up not fetching anything.
+        let (leaf, block) = join(
+            data_source
+                .get_leaf(test_leaf.height() as usize)
+                .await
+                .into_future(),
+            data_source
+                .get_block(test_leaf.height() as usize)
+                .await
+                .into_future(),
+        )
+        .await;
+        assert_eq!(leaf, *test_leaf);
+        assert_eq!(leaf.header(), block.header());
+    }
+
+    #[async_std::test]
+    async fn test_fetch_different_blocks_same_payload() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(
+            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
+        );
+        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until the block height reaches 4. This gives us the genesis block, one additional
+        // block at the end, and then two blocks that we can use to test fetching.
+        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = leaves.take(4).collect::<Vec<_>>().await;
+
+        // Tell the node about a leaf after the range of interest so it learns about the block
+        // height.
+        data_source
+            .insert_leaf(leaves.last().cloned().unwrap())
+            .await
+            .unwrap();
+        data_source.commit().await.unwrap();
+
+        // All the blocks here are empty, so they have the same payload:
+        assert_eq!(leaves[0].payload_hash(), leaves[1].payload_hash());
+        // If we fetch both blocks at the same time, we can check that we haven't broken anything
+        // with whatever optimizations we add to deduplicate payload fetching.
+        let (block1, block2) = join(
+            data_source
+                .get_block(leaves[0].height() as usize)
+                .await
+                .into_future(),
+            data_source
+                .get_block(leaves[1].height() as usize)
+                .await
+                .into_future(),
+        )
+        .await;
+        assert_eq!(block1.header(), leaves[0].header());
+        assert_eq!(block2.header(), leaves[1].header());
+    }
+
     // TODO test subscriptions
     // TODO test get transaction
 }
