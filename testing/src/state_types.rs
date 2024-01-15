@@ -80,12 +80,6 @@ impl State for TestState {
         })
     }
 
-    fn initialize() -> Self {
-        let mut state = Self::default();
-        state.block_height += 1;
-        state
-    }
-
     fn on_commit(&self) {}
 }
 
