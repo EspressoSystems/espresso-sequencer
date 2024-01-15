@@ -30,7 +30,14 @@ sql-data-source = [
 	"tokio",
 	"tokio-postgres",
 ]
-testing = ["espresso-macros", "hotshot-testing", "portpicker", "rand", "spin_sleep", "tempdir"]
+testing = [
+	"espresso-macros",
+	"hotshot-testing",
+	"portpicker",
+	"rand",
+	"spin_sleep",
+	"tempdir",
+]
 
 [[example]]
 name = "simple-server"
@@ -39,7 +46,7 @@ required-features = ["sql-data-source", "testing"]
 [dependencies]
 anyhow = "1.0"
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
-    "logging-utils",
+	"logging-utils",
 ] }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-trait = "0.1"
@@ -51,10 +58,9 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.8"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.7" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.7" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.7" }
 itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
@@ -81,7 +87,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.6", optional = true }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.7", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.2", optional = true }
@@ -100,11 +106,11 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
+# Adding since it was showing some warnings in the `testing/mocks.rs`
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.7" }
 portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.2"
 surf = "2.3"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tempdir = "0.3"
-# Adding since it was showing some warnings in the `testing/mocks.rs`
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.5"}
