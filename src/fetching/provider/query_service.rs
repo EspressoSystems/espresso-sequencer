@@ -408,6 +408,55 @@ mod test {
         assert_eq!(block2.header(), leaves[1].header());
     }
 
-    // TODO test subscriptions
+    #[async_std::test]
+    async fn test_fetch_stream() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(
+            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
+        );
+        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Subscribe to blocks and leaves from the future.
+        let blocks = data_source.subscribe_blocks(0).await;
+        let leaves = data_source.subscribe_leaves(0).await;
+
+        // Wait for a few blocks to be finalized.
+        let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
+        let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
+
+        // Tell the node about a leaf after the range of interest so it learns about the block
+        // height.
+        data_source
+            .insert_leaf(finalized_leaves.last().cloned().unwrap())
+            .await
+            .unwrap();
+        data_source.commit().await.unwrap();
+
+        // Check the subscriptions.
+        let blocks = blocks.take(5).collect::<Vec<_>>().await;
+        let leaves = leaves.take(5).collect::<Vec<_>>().await;
+        for i in 0..5 {
+            tracing::info!("checking block {i}");
+            assert_eq!(leaves[i], finalized_leaves[i]);
+            assert_eq!(blocks[i].header(), finalized_leaves[i].header());
+        }
+    }
+
     // TODO test get transaction
 }

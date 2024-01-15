@@ -91,7 +91,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         next_view_timeout: 10000,
                         timeout_ratio: (11, 10),
                         propose_min_round_time: Duration::from_secs(0),
-                        propose_max_round_time: Duration::from_secs(2),
+                        propose_max_round_time: Duration::from_millis(500),
                         min_transactions: 1,
                         max_transactions: NonZeroUsize::new(100).unwrap(),
                         num_bootstrap: 0,

@@ -496,6 +496,13 @@ where
         // Storage may return fewer objects than asked for if we hit the end of the current chain.
         // Pad out to the end of the chunk with None, indicating that objects we don't have yet must
         // be fetched.
+        if ts.len() < chunk.len() {
+            tracing::info!(
+                "items {}-{} in chunk are not available, will be fetched",
+                ts.len(),
+                chunk.len()
+            );
+        }
         let padding = std::iter::repeat(None).take(chunk.len() - ts.len());
         let ts = ts.chain(padding);
         // Kick off a fetch for each missing object.
