@@ -535,9 +535,15 @@ mod reference {
 
     #[test]
     fn test_reference_header() {
+        let (h, _, _) = Header::genesis();
+        println!(
+            "example json header: {}",
+            serde_json::to_string(&h).unwrap()
+        );
+
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
+            "BLOCK~vuyXaIHGnh8J1zxkWWv_Rdd2DrcFMiS2FcrmxHzz_9Rm",
             |header| header.commit(),
         );
     }
