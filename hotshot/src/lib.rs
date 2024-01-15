@@ -60,7 +60,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{ChannelMaps, NodeType, SendToTasks},
+        node_implementation::{NodeType, SendToTasks},
         signature_key::SignatureKey,
         state::ConsensusTime,
         storage::StoredView,
@@ -78,6 +78,10 @@ use std::{
 };
 use tasks::add_vid_task;
 use tracing::{debug, error, info, instrument, trace, warn};
+
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::node_implementation::ChannelMaps;
+
 // -- Rexports
 // External
 /// Reexport rand crate
@@ -162,6 +166,7 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
     /// latter of which is only applicable for sequencing consensus.
+    #[cfg(feature = "hotshot-testing")]
     channel_maps: (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>),
 
     // global_registry: GlobalRegistry,
@@ -257,6 +262,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
+            #[cfg(feature = "hotshot-testing")]
             channel_maps: I::new_channel_maps(start_view),
             consensus,
             public_key,

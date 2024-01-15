@@ -7,7 +7,7 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
+    types::{BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;

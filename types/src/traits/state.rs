@@ -62,9 +62,6 @@ pub trait State:
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
 
-    /// Initialize the state.
-    fn initialize() -> Self;
-
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
 

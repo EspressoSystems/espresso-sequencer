@@ -512,7 +512,6 @@ pub fn serialize_signature2<TYPES: NodeType>(
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
-        let payload_commitment_bytes: [u8; 32] = self.get_payload_commitment().into();
         let signatures_bytes = if self.justify_qc.is_genesis {
             let mut bytes = vec![];
             bytes.extend("genesis".as_bytes());
@@ -527,7 +526,7 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
             .u64_field("block number", self.get_height())
             .field("parent Leaf commitment", self.parent_commitment)
             .constant_str("block payload commitment")
-            .fixed_size_bytes(&payload_commitment_bytes)
+            .fixed_size_bytes(self.get_payload_commitment().as_ref().as_ref())
             .constant_str("justify_qc view number")
             .u64(*self.justify_qc.view_number)
             .field(

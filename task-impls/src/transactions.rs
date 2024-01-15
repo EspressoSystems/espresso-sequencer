@@ -16,6 +16,7 @@ use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
     traits::{
+        block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
@@ -121,8 +122,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut included_txn_size = 0;
                 let mut included_txn_count = 0;
                 for leaf in leaf_chain {
-                    if let Some(payload) = leaf.block_payload {
-                        for txn in payload.transaction_commitments() {
+                    if let Some(ref payload) = leaf.block_payload {
+                        for txn in
+                            payload.transaction_commitments(leaf.get_block_header().metadata())
+                        {
                             included_txns.insert(txn);
                         }
                     }
