@@ -155,6 +155,16 @@ impl BlockPayload {
     }
 }
 
+// fn table_len_range()
+
+fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
+    let tx_table_len_range =
+        offset..std::cmp::min(TxTableEntry::byte_len(), table_bytes.len() + offset); // refactor to table_len_range()?
+    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+    entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
+    TxTableEntry::from_bytes_array(entry_bytes)
+}
+
 /// Returns the byte range for a tx in the block payload bytes.
 ///
 /// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
@@ -188,17 +198,38 @@ impl QueryablePayload for BlockPayload {
     type Iter<'a> = Range<Self::TransactionIndex>;
     type InclusionProof = TxInclusionProof;
 
-    fn len(&self, _meta: &Self::Metadata) -> usize {
+    fn len(&self, meta: &Self::Metadata) -> usize {
+        let ns_table_len = std::cmp::min(
+            get_table_len(meta, 0).try_into().unwrap_or(0),
+            ((meta.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len())), // allow space for the ns table length
+        );
+
+        let mut result = 0;
+        for i in 1..=ns_table_len {
+            let bytes = meta
+                .get(((2 * i) * TxTableEntry::byte_len())..((2 * i + 1) * TxTableEntry::byte_len()))
+                .unwrap();
+            tracing::info!("ns table entry: {:?}", bytes);
+
+            result += TxTableEntry::from_bytes(
+                // meta.get(
+                //     ((2 * i) * TxTableEntry::byte_len())..((2 * i + 1) * TxTableEntry::byte_len()),
+                // )
+                bytes, // .unwrap_or(&TxTableEntry::zero().to_bytes()),
+            )
+            .unwrap_or(TxTableEntry::zero())
+            .try_into()
+            .unwrap_or(0);
+        }
+        result
+
+        // TODO do I still need these old  comments?
         // The number of txs in a block is defined as the minimum of:
         // (1) the number of txs indicated in the tx table
         // (2) the number of tx table entries that could fit into the payload
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
         //
         // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
-        std::cmp::min(
-            self.get_tx_table_len_as().unwrap_or(0),
-            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
-        )
     }
 
     fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
@@ -610,6 +641,7 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
+    use hotshot_query_service::availability::QueryablePayload;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
     use std::{collections::HashMap, ops::Range};
@@ -657,6 +689,7 @@ mod test {
 
         // let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
+        let mut total_num_txs = 0;
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
             let mut txs = Vec::new();
@@ -670,6 +703,7 @@ mod test {
                     test_case.len(),
                     tx_lengths.len(),
                 );
+                total_num_txs += tx_lengths.len();
 
                 // generate this namespace's tx payloads
                 let entries = entries_from_lengths(tx_lengths);
@@ -733,6 +767,10 @@ mod test {
             // let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
+
+            // test total tx length
+            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            assert_eq!(block.len(&actual_ns_table), total_num_txs);
 
             // test namespace table length
             let actual_ns_table_len =
