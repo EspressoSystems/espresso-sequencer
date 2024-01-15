@@ -25,7 +25,7 @@ import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTableCommonTest is Test {
     function genClientWallet(address sender, uint8 seed)
-        public
+        internal
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
         // Generate a BLS signature and other values using rust code
