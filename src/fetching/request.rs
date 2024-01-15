@@ -12,9 +12,12 @@
 
 //! Requests for fetching resources.
 
-use crate::{availability::LeafQueryData, Payload};
+use crate::{availability::LeafQueryData, Header, Payload};
 use derive_more::{From, Into};
-use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
+use hotshot_types::{
+    data::VidCommitment,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -27,7 +30,19 @@ pub trait Request<Types>: Copy + Debug + Eq + Hash + Send {
 
 /// A request for a payload with a given commitment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct PayloadRequest(pub VidCommitment);
+pub struct PayloadRequest {
+    pub height: u64,
+    pub hash: VidCommitment,
+}
+
+impl PayloadRequest {
+    pub fn new<Types: NodeType>(header: &Header<Types>) -> Self {
+        Self {
+            height: header.block_number(),
+            hash: header.payload_commitment(),
+        }
+    }
+}
 
 impl<Types: NodeType> Request<Types> for PayloadRequest {
     type Response = Payload<Types>;

@@ -43,7 +43,7 @@ where
     async fn fetch(&self, req: PayloadRequest) -> Option<Payload<Types>> {
         match self
             .client
-            .get::<PayloadQueryData<Types>>(&format!("availability/payload/hash/{}", req.0))
+            .get::<PayloadQueryData<Types>>(&format!("availability/payload/{}", req.height))
             .send()
             .await
         {
@@ -232,21 +232,18 @@ mod test {
 
         // Unblock the request and see that we eventually receive the data.
         provider.unblock().await;
-        tracing::info!("fetching leaf");
         let leaf = data_source
             .get_leaf(test_leaf.height() as usize)
             .await
             .await;
-        tracing::info!("fetching block");
         let block = data_source
             .get_block(test_block.height() as usize)
             .await
             .await;
-        // tracing::info!("fetching payload");
         let payload = data_source
             .get_payload(test_payload.height() as usize)
+            .await
             .await;
-            // .await;
         {
             // Verify the data.
             let truth = network.data_source();
@@ -259,13 +256,13 @@ mod test {
                 block,
                 truth.get_block(test_block.height() as usize).await.await
             );
-            // assert_eq!(
-            //     payload,
-            //     truth
-            //         .get_payload(test_payload.height() as usize)
-            //         .await
-            //         .await
-            // );
+            assert_eq!(
+                payload,
+                truth
+                    .get_payload(test_payload.height() as usize)
+                    .await
+                    .await
+            );
         }
 
         // Fetching the block and payload should have also fetched the corresponding leaves, since

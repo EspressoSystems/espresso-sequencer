@@ -559,7 +559,7 @@ where
         T: Fetchable<Types>,
     {
         let req = req.into();
-        tracing::info!("fetching resource {req:?}");
+        tracing::debug!("fetching resource {req:?}");
 
         // Subscribe to notifications so we are alerted when we get the resource.
         let fut = T::passive_fetch(&**storage, req)
@@ -812,10 +812,8 @@ where
     Types: NodeType,
     S: UpdateAvailabilityData<Types> + VersionedDataSource,
 {
-    tracing::info!("storing leaf");
     storage.insert_leaf(leaf).await?;
     storage.commit().await?;
-    tracing::info!("stored leaf");
     Ok(())
 }
 
@@ -948,7 +946,6 @@ where
                 //    able to provide payloads, not full blocks, such as HotShot DA committee
                 //    members.
                 if let Some(header) = load_header(&**storage, id).await.ok_or_trace() {
-                    tracing::info!("loaded header {id}, now fetching block");
                     spawn(fetch_block_with_header(fetcher, header, callback));
                     return;
                 }
@@ -1062,7 +1059,7 @@ async fn fetch_block_with_header<Types, S, P, Fut>(
         .payload_fetcher
         .clone()
         .fetch(
-            PayloadRequest(header.payload_commitment()),
+            PayloadRequest::new::<Types>(&header),
             fetcher.provider.clone(),
             move |payload| async move {
                 tracing::info!("fetched payload {:?}", header.payload_commitment());
@@ -1093,10 +1090,8 @@ where
     Types: NodeType,
     S: UpdateAvailabilityData<Types> + VersionedDataSource,
 {
-    tracing::info!("storing block");
     storage.insert_block(block).await?;
     storage.commit().await?;
-    tracing::info!("stored block");
     Ok(())
 }
 
