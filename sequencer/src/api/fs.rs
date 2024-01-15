@@ -55,7 +55,7 @@ impl SequencerDataSource for DataSource {
         // function is called every time a new block is added so this usually requires loading only
         // one block into memory, and rarely very many.
         let blocks: Vec<_> = self
-            .get_block_range(from_block..)
+            .get_block_range(from_block..self.block_height().await?)
             .await
             .enumerate()
             .collect()
