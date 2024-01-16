@@ -7,7 +7,6 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 
-
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
@@ -281,7 +280,7 @@ contract StakeTableInvariant_Tests is Test {
             stakeTableAmountComm: BN254.ScalarField.wrap(1),
             threshold: 10
         });
-        uint32 numBlocksPerEpoch = 10;
+        uint32 numBlocksPerEpoch = 4;
         uint64 churnRate = 10;
         lightClientContract = new LightClientTest(genesis, numBlocksPerEpoch);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
