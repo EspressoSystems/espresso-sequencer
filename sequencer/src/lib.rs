@@ -7,6 +7,9 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 use context::SequencerContext;
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state_signature::mock_stake_table_commitment;
 use url::Url;
 mod l1_client;
 pub mod persistence;
@@ -349,6 +352,7 @@ pub async fn init_node(
         .await,
         node_index,
         state_key_pair,
+        mock_stake_table_commitment(config.seed, num_nodes, STAKE_TABLE_CAPACITY),
     ))
 }
 
