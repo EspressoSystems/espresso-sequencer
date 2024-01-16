@@ -93,7 +93,7 @@ mod test {
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
         data_source::{storage::sql::testing::TmpDb, VersionedDataSource},
-        fetching::provider::TestProvider,
+        fetching::provider::{NoFetching, TestProvider},
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::mock_transaction,
@@ -458,5 +458,68 @@ mod test {
         }
     }
 
-    // TODO test get transaction
+    #[async_std::test]
+    async fn fetch_transaction() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus.
+        let db = TmpDb::init().await;
+        let mut data_source = db.config().connect(NoFetching).await.unwrap();
+
+        // Subscribe to blocks.
+        let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let mut blocks = { network.data_source().read().await.subscribe_blocks(1).await };
+
+        // Start consensus.
+        network.start().await;
+
+        // Subscribe to a transaction which hasn't been sequenced yet. This is completely passive
+        // and works without a fetcher; we don't trigger fetches for transactions that we don't know
+        // exist.
+        let tx = mock_transaction(vec![1, 2, 3]);
+        let fut = data_source.get_block_with_transaction(tx.commit()).await;
+
+        // Sequence the transaction.
+        network.submit_transaction(tx.clone()).await;
+
+        // Send blocks to the query service, the future will resolve as soon as it sees a block
+        // containing the transaction.
+        let block = loop {
+            let leaf = leaves.next().await.unwrap();
+            let block = blocks.next().await.unwrap();
+
+            data_source.insert_leaf(leaf).await.unwrap();
+            data_source.insert_block(block.clone()).await.unwrap();
+            data_source.commit().await.unwrap();
+
+            if block.transaction_by_hash(tx.commit()).is_some() {
+                break block;
+            }
+        };
+        let (fetched_block, tx_ix) = fut.await;
+        assert_eq!(block, fetched_block);
+        assert_eq!(
+            tx,
+            *fetched_block.transaction(&tx_ix).unwrap().transaction()
+        );
+
+        // Future queries for this transaction resolve immediately.
+        assert_eq!(
+            (fetched_block, tx_ix),
+            data_source
+                .get_block_with_transaction(tx.commit())
+                .await
+                .await
+        );
+    }
 }

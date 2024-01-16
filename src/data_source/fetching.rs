@@ -1343,11 +1343,10 @@ where
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, leaf: LeafQueryData<Types>) {
-        let height = leaf.height();
-        tracing::info!("fetched leaf {height}");
-
         match self {
             Self::Leaf { fetcher } => {
+                let height = leaf.height();
+                tracing::info!("fetched leaf {height}");
                 let mut storage = fetcher.storage.write().await;
                 if let Err(err) = store_leaf(&mut *storage, leaf).await {
                     // It is unfortunate if this fails, but we can still proceed by
@@ -1357,6 +1356,7 @@ where
                 }
             }
             Self::Block { fetcher } => {
+                tracing::info!("fetched leaf {}, will now fetch payload", leaf.height());
                 fetch_block_with_header(fetcher, leaf.leaf.block_header).await;
             }
         }
