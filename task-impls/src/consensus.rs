@@ -546,6 +546,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
 
                     let high_qc = consensus.high_qc.clone();
+                    let locked_view = consensus.locked_view.clone(); 
+                
 
                     drop(consensus);
 
@@ -571,7 +573,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             self.current_proposal = None;
                         }
                     }
-                    warn!("Failed liveneess check; cannot find parent either");
+                    warn!("Failed liveneess check; cannot find parent either\n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", high_qc, proposal.data.clone(), locked_view);
 
                     return;
                 };
@@ -623,7 +625,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Skip if both saftey and liveness checks fail.
                 if !safety_check && !liveness_check {
-                    error!("Failed safety check and liveness check");
+                    error!("Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", consensus.high_qc, proposal.data.clone(), consensus.locked_view);
                     return;
                 }
 
