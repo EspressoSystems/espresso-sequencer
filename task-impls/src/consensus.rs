@@ -4,7 +4,7 @@ use crate::{
     vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_lock::RwLock;
+use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use commit::Committable;
@@ -495,11 +495,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
-                let mut consensus = self.consensus.write().await;
-
-                if justify_qc.get_view_number() > consensus.high_qc.view_number {
-                    consensus.high_qc = justify_qc.clone();
-                }
+                let consensus = self.consensus.upgradable_read().await;
 
                 // Construct the leaf.
                 let parent = if justify_qc.is_genesis {
@@ -510,6 +506,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .get(&justify_qc.get_data().leaf_commit)
                         .cloned()
                 };
+
+                let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+
+                if justify_qc.get_view_number() > consensus.high_qc.view_number {
+                    debug!("Updating high QC");
+                    consensus.high_qc = justify_qc.clone();
+                }
 
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
