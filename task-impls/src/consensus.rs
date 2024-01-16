@@ -711,10 +711,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     HashSet::new()
                 };
 
-                // promote lock here to add proposal to statemap
-                if high_qc.view_number > consensus.high_qc.view_number {
-                    consensus.high_qc = high_qc;
-                }
                 consensus.state_map.insert(
                     view,
                     View {
