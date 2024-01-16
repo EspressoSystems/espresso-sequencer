@@ -159,8 +159,12 @@ impl BlockPayload {
 // if `table_bytes` has too few bytes at this `offset` then pad with zero.
 // Parse these bytes into a `TxTableEntry` and return.
 fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
-    let tx_table_len_range =
-        offset..std::cmp::min(TxTableEntry::byte_len(), table_bytes.len()) + offset; // refactor to table_len_range()?
+    let end = std::cmp::min(
+        offset.saturating_add(TxTableEntry::byte_len()),
+        table_bytes.len(),
+    );
+    let start = std::cmp::min(offset, end);
+    let tx_table_len_range = start..end;
     let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
     entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
     TxTableEntry::from_bytes_array(entry_bytes)
