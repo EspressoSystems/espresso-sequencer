@@ -87,7 +87,8 @@ where
     }
 }
 
-#[cfg(test)]
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use super::*;
     use crate::{

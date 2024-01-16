@@ -394,16 +394,15 @@ use async_std::{
 };
 use futures::StreamExt;
 use hotshot::types::SystemContextHandle;
-use hotshot_types::{
-    data::Leaf,
-    traits::{
-        node_implementation::{NodeImplementation, NodeType},
-        BlockPayload,
-    },
+use hotshot_types::traits::{
+    node_implementation::{NodeImplementation, NodeType},
+    BlockPayload,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{App, StatusCode};
+
+pub use hotshot_types::data::Leaf;
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
