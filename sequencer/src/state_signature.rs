@@ -89,7 +89,7 @@ impl StateSignatureMemStorage {
 pub type StakeTableCommitmentType = (FieldType, FieldType, FieldType);
 
 /// Helper function for stake table commitment
-pub(crate) fn mock_stake_table_commitment(
+pub(crate) fn static_stake_table_commitment(
     seed: [u8; 32],
     num_nodes: usize,
     capacity: usize,
