@@ -539,6 +539,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
                     consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
 
+                    // If we are missing the parent from storage, the safety check will fail.  But we can
+                    // still vote if the liveness check succeeds.
+                    let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
+
+                    drop(consensus);
+
+                    if liveness_check {
+                        if self.vote_if_able().await {
+                            self.current_proposal = None;
+                        }
+                    }
+
                     return;
                 };
                 let parent_commitment = parent.commit();
