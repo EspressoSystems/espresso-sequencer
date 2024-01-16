@@ -36,7 +36,7 @@ contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
-ethers-contract-derive = "2.0.10"
+ethers-contract-derive = "2.0.12"
 futures = "0.3"
 include_dir = "0.7"
 itertools = { workspace = true }
