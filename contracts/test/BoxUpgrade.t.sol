@@ -93,7 +93,6 @@ contract BoxTest is Test {
         boxV2Proxy.withdrawETH();
 
         //assert that the balance for that user is empty as the user withdrew their funds
-
         vm.prank(msg.sender);
 
         assertEq(boxV2Proxy.getBox().balance, 0);
