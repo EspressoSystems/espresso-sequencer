@@ -571,6 +571,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             self.current_proposal = None;
                         }
                     }
+                    warn!("Failed liveneess check; cannot find parent either");
 
                     return;
                 };
