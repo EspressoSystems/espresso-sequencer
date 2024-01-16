@@ -32,8 +32,6 @@ pub(super) async fn state_signature_loop<N>(
     tracing::debug!("Watching event stream for decided leaves.");
     let stake_table_comm = context.get_stake_table_comm();
     while let Some(event) = events.next().await {
-        tracing::info!("got event {:?}", event);
-
         // Trigger the light client signature hook when a new leaf is decided
         if let Event {
             event: hotshot_types::event::EventType::Decide { leaf_chain, .. },
@@ -41,13 +39,13 @@ pub(super) async fn state_signature_loop<N>(
         } = event
         {
             if let Some(leaf) = leaf_chain.first() {
-                tracing::info!("New leaves decided. Newest leaf: {:?}", leaf);
+                tracing::debug!("New leaves decided. Newest leaf: {:?}", leaf);
                 let new_state = form_light_client_state(leaf, stake_table_comm);
                 context.sign_new_state(&new_state);
             }
         }
     }
-    tracing::warn!("And now his watch has ended.");
+    tracing::debug!("And now his watch has ended.");
 }
 
 fn form_light_client_state(
