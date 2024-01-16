@@ -509,10 +509,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                 };
 
-                //
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
-                    // If no parent then just update our state map and return.  We will not vote.
                     error!(
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
@@ -543,12 +541,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     // still vote if the liveness check succeeds.
                     let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
 
+                    if justify_qc.get_view_number() > consensus.high_qc.view_number {
+                        consensus.high_qc = justify_qc;
+                    }
+
                     drop(consensus);
 
-                    if liveness_check {
-                        if self.vote_if_able().await {
-                            self.current_proposal = None;
-                        }
+                    if liveness_check && self.vote_if_able().await {
+                        self.current_proposal = None;
                     }
 
                     return;

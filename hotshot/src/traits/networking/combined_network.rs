@@ -44,6 +44,7 @@ struct Cache {
     /// The maximum number of items to store in the cache
     capacity: usize,
     /// The cache itself
+    #[allow(clippy::struct_field_names)]
     cache: HashSet<u64>,
     /// The hashes of the messages in the cache, in order of insertion
     hashes: Vec<u64>,

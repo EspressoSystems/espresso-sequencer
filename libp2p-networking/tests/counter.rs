@@ -371,6 +371,7 @@ async fn run_request_response_increment_all(
     requestee_handle.modify_state(|s| *s += 1).await;
     info!("RR REQUESTEE IS {:?}", requestee_handle.peer_id());
     let mut futs = Vec::new();
+    #[allow(clippy::unused_enumerate_index)]
     for (_i, h) in handles.iter().enumerate() {
         if h.lookup_pid(requestee_handle.peer_id()).await.is_err() {
             error!("ERROR LOOKING UP REQUESTEE ADDRS");
