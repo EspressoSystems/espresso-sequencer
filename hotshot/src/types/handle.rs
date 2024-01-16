@@ -27,9 +27,7 @@ use std::sync::Arc;
 use tracing::error;
 
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::{
-    message::{MessageKind, SequencingMessage},
-};
+use hotshot_types::message::{MessageKind, SequencingMessage};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
