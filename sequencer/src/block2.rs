@@ -549,6 +549,10 @@ mod tx_table_entry {
     }
 }
 
+// TODO remove this `boilerplate` module, tidy what's in here.
+// - Skeleton impl of `BlockPayload` for now so as to enable `QueryablePayload`.
+//   https://github.com/EspressoSystems/espresso-sequencer/issues/856
+// - Opaque (not really though) constructor to return an abstract [`PayloadProver`].
 mod boilerplate {
     use super::{
         BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
@@ -563,7 +567,6 @@ mod boilerplate {
     use snafu::OptionExt;
     use std::fmt::Display;
 
-    // Skeleton impl for now so as to enable `QueryablePayload`.
     impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
         type Transaction = Transaction;
