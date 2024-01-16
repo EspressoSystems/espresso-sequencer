@@ -560,7 +560,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_number: view,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    block_header: proposal.data.block_header,
+                    block_header: proposal.data.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
