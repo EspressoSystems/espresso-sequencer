@@ -506,6 +506,8 @@ mod test {
                 break block;
             }
         };
+        tracing::info!("transaction included in block {}", block.height());
+
         let (fetched_block, tx_ix) = fut.await;
         assert_eq!(block, fetched_block);
         assert_eq!(

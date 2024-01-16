@@ -952,7 +952,11 @@ where
                 //    marginally less data to download, there are some providers that may only be
                 //    able to provide payloads, not full blocks, such as HotShot DA committee
                 //    members.
-                if let Some(header) = load_header(&**storage, id).await.ok_or_trace() {
+                if let Some(header) = load_header(&**storage, id)
+                    .await
+                    .context("loading header for block {id}")
+                    .ok_or_trace()
+                {
                     spawn(fetch_block_with_header(fetcher, header));
                     return;
                 }
@@ -1406,7 +1410,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
             Ok(t) => Some(t),
             Err(err) => {
                 tracing::warn!(
-                    "error loading resource from local storage, will try to fetch: {err}"
+                    "error loading resource from local storage, will try to fetch: {err:#}"
                 );
                 None
             }

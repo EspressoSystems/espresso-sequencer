@@ -570,7 +570,7 @@ where
         &self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        // ORDER BY t.id ASC ensures that if there are duplicate transactions, we return the first
+        // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
         let query = format!(
             "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
@@ -578,7 +578,7 @@ where
                 JOIN payload AS p ON h.height = p.height
                 JOIN transaction AS t ON t.block_height = h.height
                 WHERE t.hash = $1
-                ORDER BY t.id ASC
+                ORDER BY (t.block_height, t.index) ASC
                 LIMIT 1"
         );
         let row = self.query_one(&query, &[&hash.to_string()]).await?;
