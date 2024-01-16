@@ -99,7 +99,7 @@ pub(crate) fn static_stake_table_commitment(
         .iter()
         .zip(state_ver_keys)
         .for_each(|(entry, schnorr_key)| {
-            // This `unwrap()` wont fail unless `num_nodes`` exceeds `capacity``
+            // This `unwrap()` wont fail unless number of entries exceeds `capacity`
             st.register(*entry.get_key(), entry.get_stake(), schnorr_key.clone())
                 .unwrap();
         });
