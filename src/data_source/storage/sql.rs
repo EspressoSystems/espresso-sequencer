@@ -616,25 +616,24 @@ where
             serde_json::to_value(&leaf.leaf().block_header).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize header: {err}"),
             })?;
-        tx.execute_one_with_retries(
-            "INSERT INTO header (height, hash, payload_hash, data) VALUES ($1, $2, $3, $4)",
-            [
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "data"],
+            ["height"],
+            [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf.leaf().block_header.payload_commitment().to_string()),
                 sql_param(&header_json),
-            ],
+            ]],
         )
         .await?;
 
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        tx.execute_one_with_retries(
-            "INSERT INTO payload (height) VALUES ($1)",
-            [leaf.height() as i64],
-        )
-        .await?;
+        tx.upsert("payload", ["height"], ["height"], [[leaf.height() as i64]])
+            .await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.
@@ -644,17 +643,18 @@ where
         let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
             message: format!("failed to serialize QC: {err}"),
         })?;
-        tx.execute_one_with_retries(
-            "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
-             VALUES ($1, $2, $3, $4, $5, $6)",
-            [
+        tx.upsert(
+            "leaf",
+            ["height", "hash", "proposer", "block_hash", "leaf", "qc"],
+            ["height"],
+            [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.hash().to_string()),
                 sql_param(&leaf.proposer().to_string()),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf_json),
                 sql_param(&qc_json),
-            ],
+            ]],
         )
         .await?;
 
@@ -673,38 +673,37 @@ where
                 message: format!("failed to serialize block: {err}"),
             })?
             .collect::<Vec<_>>();
-        tx.execute_one_with_retries(
-            "UPDATE payload SET (data, size) = ($1, $2) WHERE height = $3",
-            [
+        tx.upsert(
+            "payload",
+            ["height", "data", "size"],
+            ["height"],
+            [[
+                sql_param(&(block.height() as i64)),
                 sql_param(&payload),
                 sql_param(&(block.size() as i32)),
-                sql_param(&(block.height() as i64)),
-            ],
+            ]],
         )
         .await?;
 
-        // Index the transactions in the block.
-        let mut values = vec![];
-        // For each transaction, collect, separately, its hash, height, and index. These items all
-        // have different types, so we collect them into different vecs.
+        // Index the transactions in the block. For each transaction, collect, separately, its hash,
+        // height, and index. These items all have different types, so we collect them into
+        // different vecs.
         let mut tx_hashes = vec![];
         let mut tx_block_heights = vec![];
         let mut tx_indexes = vec![];
-        for (i, (txn_ix, txn)) in block.enumerate().enumerate() {
+        for (txn_ix, txn) in block.enumerate() {
             let txn_ix = serde_json::to_value(&txn_ix).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize transaction index: {err}"),
             })?;
-            values.push(format!("(${},${},${})", 3 * i + 1, 3 * i + 2, 3 * i + 3));
             tx_hashes.push(txn.commit().to_string());
             tx_block_heights.push(block.height() as i64);
             tx_indexes.push(txn_ix);
         }
-        if !values.is_empty() {
-            tx.execute_many_with_retries(
-                &format!(
-                    "INSERT INTO transaction (hash, block_height, index) VALUES {}",
-                    values.join(",")
-                ),
+        if !tx_hashes.is_empty() {
+            tx.upsert(
+                "transaction",
+                ["hash", "block_height", "index"],
+                ["block_height", "index"],
                 // Now that we have the transaction hashes, block heights, and indexes collected in
                 // memory, we can combine them all into a single vec using type erasure: all the
                 // values get converted to `&dyn ToSql`. The references all borrow from one of
@@ -715,10 +714,7 @@ where
                     tx_block_heights.iter().map(sql_param),
                     tx_indexes.iter().map(sql_param),
                 )
-                // Interleave the three parameters for each transaction, so we have a list of
-                // (hash, height, index) triples, repeated for each transaction.
-                .flat_map(|(hash, height, index)| [hash, height, index])
-                .collect::<Vec<_>>(),
+                .map(|(hash, height, index)| [hash, height, index]),
             )
             .await?;
         }
@@ -956,6 +952,43 @@ impl<'a> Transaction<'a> {
                 }
             }
         }
+    }
+
+    pub async fn upsert<const N: usize, P>(
+        &mut self,
+        table: &str,
+        columns: [&str; N],
+        pk: impl IntoIterator<Item = &str>,
+        rows: impl IntoIterator<Item = [P; N]>,
+    ) -> QueryResult<()>
+    where
+        P: BorrowToSql + Clone,
+    {
+        let set_columns = columns
+            .iter()
+            .map(|col| format!("{col} = excluded.{col}"))
+            .join(",");
+        let columns = columns.into_iter().join(",");
+        let pk = pk.into_iter().join(",");
+
+        let mut values = vec![];
+        let mut params = vec![];
+        for (row, entries) in rows.into_iter().enumerate() {
+            let start = row * N;
+            let end = (row + 1) * N;
+            let row_params = (start..end).map(|i| format!("${}", i + 1)).join(",");
+
+            values.push(format!("({row_params})"));
+            params.extend(entries);
+        }
+        let values = values.into_iter().join(",");
+
+        let stmt = format!(
+            "INSERT INTO {table} ({columns})
+                  VALUES {values}
+             ON CONFLICT ({pk}) DO UPDATE SET {set_columns}"
+        );
+        self.execute_one_with_retries(&stmt, params).await
     }
 }
 
