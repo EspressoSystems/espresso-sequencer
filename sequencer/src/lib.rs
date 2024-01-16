@@ -7,6 +7,9 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 use context::SequencerContext;
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
 pub mod persistence;
@@ -32,6 +35,7 @@ use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{
         metrics::Metrics,
@@ -311,6 +315,9 @@ pub async fn init_node(
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
+    let state_ver_keys = (0..num_nodes)
+        .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
+        .collect::<Vec<_>>();
     let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
@@ -349,6 +356,11 @@ pub async fn init_node(
         .await,
         node_index,
         state_key_pair,
+        static_stake_table_commitment(
+            &known_nodes_with_stake,
+            &state_ver_keys,
+            STAKE_TABLE_CAPACITY,
+        ),
     ))
 }
 

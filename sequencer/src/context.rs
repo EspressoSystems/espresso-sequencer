@@ -1,5 +1,5 @@
 use crate::state_signature::{
-    LightClientState, StateKeyPair, StateSignature, StateSignatureScheme,
+    LightClientState, StakeTableCommitmentType, StateKeyPair, StateSignature, StateSignatureScheme,
 };
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
@@ -31,16 +31,25 @@ pub struct SequencerContext<N: network::Type> {
 
     /// The most recent light client state signatures
     state_signatures: Arc<RwLock<StateSignatureMemStorage>>,
+
+    /// Commitment for current fixed stake table
+    stake_table_comm: Arc<StakeTableCommitmentType>,
 }
 
 impl<N: network::Type> SequencerContext<N> {
     /// Constructor
-    pub fn new(handle: Consensus<N>, node_index: u64, state_key_pair: StateKeyPair) -> Self {
+    pub fn new(
+        handle: Consensus<N>,
+        node_index: u64,
+        state_key_pair: StateKeyPair,
+        stake_table_comm: StakeTableCommitmentType,
+    ) -> Self {
         Self {
             handle,
             node_index,
             state_key_pair: Arc::new(state_key_pair),
             state_signatures: Default::default(),
+            stake_table_comm: Arc::new(stake_table_comm),
         }
     }
 
@@ -76,5 +85,10 @@ impl<N: network::Type> SequencerContext<N> {
             "New signature added for block height {}",
             state.block_height
         );
+    }
+
+    /// Return a commitment of the current fixed stake table
+    pub fn get_stake_table_comm(&self) -> &StakeTableCommitmentType {
+        &self.stake_table_comm
     }
 }
