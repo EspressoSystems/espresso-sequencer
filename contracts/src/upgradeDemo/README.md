@@ -4,7 +4,7 @@ This subfolder was created to test various upgrade scenarios when using the UUPS
 
 ## How to run the tests
 
-`cd contracts` `forge test --match-contract Box -vvv --summary`
+`forge test --match-contract Box -vvv --summary`
 
 ## Tests
 
