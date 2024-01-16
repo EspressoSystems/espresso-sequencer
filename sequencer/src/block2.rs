@@ -135,7 +135,7 @@ impl BlockPayload {
 
         TxTableEntry::from_bytes_array(entry_bytes)
     }
-    fn get_tx_table_len_as<T>(&self) -> Option<T>
+    fn _get_tx_table_len_as<T>(&self) -> Option<T>
     where
         TxTableEntry: TryInto<T>,
     {
@@ -159,7 +159,7 @@ impl BlockPayload {
 
 fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     let tx_table_len_range =
-        offset..std::cmp::min(TxTableEntry::byte_len(), table_bytes.len() + offset); // refactor to table_len_range()?
+        offset..std::cmp::min(TxTableEntry::byte_len(), table_bytes.len()) + offset; // refactor to table_len_range()?
     let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
     entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
     TxTableEntry::from_bytes_array(entry_bytes)
@@ -199,27 +199,31 @@ impl QueryablePayload for BlockPayload {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
+        // the ns_table_len at offset zero could in principle be set to any value x.
+        // however, if meta bytes can only represent y < x namespaces, we will use y.
+        let entry_len = TxTableEntry::byte_len();
         let ns_table_len = std::cmp::min(
             get_table_len(meta, 0).try_into().unwrap_or(0),
-            ((meta.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len())), // allow space for the ns table length
+            (meta.len() - entry_len) / (2 * entry_len),
         );
 
-        let mut result = 0;
+        let mut ns_end_offsets = vec![0usize];
+        // range starts at 1 (skipping the ns_table_len)
         for i in 1..=ns_table_len {
-            let bytes = meta
-                .get(((2 * i) * TxTableEntry::byte_len())..((2 * i + 1) * TxTableEntry::byte_len()))
+            let ns_offset_bytes = meta
+                .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
                 .unwrap();
-            tracing::info!("ns table entry: {:?}", bytes);
 
-            result += TxTableEntry::from_bytes(
-                // meta.get(
-                //     ((2 * i) * TxTableEntry::byte_len())..((2 * i + 1) * TxTableEntry::byte_len()),
-                // )
-                bytes, // .unwrap_or(&TxTableEntry::zero().to_bytes()),
-            )
-            .unwrap_or(TxTableEntry::zero())
-            .try_into()
-            .unwrap_or(0);
+            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
+                .map(|tx| usize::try_from(tx).unwrap())
+                .unwrap();
+            ns_end_offsets.push(ns_offset);
+        }
+        let mut result = 0;
+        assert!(ns_end_offsets.last().unwrap() == &self.payload.len());
+        for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
+            let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
+            result += tx_table_len;
         }
         result
 
@@ -689,11 +693,11 @@ mod test {
 
         // let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        let mut total_num_txs = 0;
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
             let mut txs = Vec::new();
             let mut derived_nss = HashMap::new();
+            let mut total_num_txs = 0;
             for (n, tx_lengths) in test_case.iter().enumerate() {
                 tracing::info!(
                     "test block {} of {} namespace {} of {} with {} txs",
