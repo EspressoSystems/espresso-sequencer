@@ -135,7 +135,7 @@ impl BlockPayload {
 
         TxTableEntry::from_bytes_array(entry_bytes)
     }
-    fn get_tx_table_len_as<T>(&self) -> Option<T>
+    fn _get_tx_table_len_as<T>(&self) -> Option<T>
     where
         TxTableEntry: TryInto<T>,
     {
@@ -153,6 +153,21 @@ impl BlockPayload {
             })
             .as_ref()
     }
+}
+
+// Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
+// if `table_bytes` has too few bytes at this `offset` then pad with zero.
+// Parse these bytes into a `TxTableEntry` and return.
+fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
+    let end = std::cmp::min(
+        offset.saturating_add(TxTableEntry::byte_len()),
+        table_bytes.len(),
+    );
+    let start = std::cmp::min(offset, end);
+    let tx_table_len_range = start..end;
+    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+    entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
+    TxTableEntry::from_bytes_array(entry_bytes)
 }
 
 /// Returns the byte range for a tx in the block payload bytes.
@@ -188,17 +203,43 @@ impl QueryablePayload for BlockPayload {
     type Iter<'a> = Range<Self::TransactionIndex>;
     type InclusionProof = TxInclusionProof;
 
-    fn len(&self, _meta: &Self::Metadata) -> usize {
-        // The number of txs in a block is defined as the minimum of:
-        // (1) the number of txs indicated in the tx table
-        // (2) the number of tx table entries that could fit into the payload
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
-        //
-        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
-        std::cmp::min(
-            self.get_tx_table_len_as().unwrap_or(0),
-            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
-        )
+    fn len(&self, meta: &Self::Metadata) -> usize {
+        let entry_len = TxTableEntry::byte_len();
+
+        // The number of nss in a block is defined as the minimum of:
+        // (1) the number of nss indicated in the ns table
+        // (2) the number of ns table entries that could fit inside the ns table byte len
+        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
+        // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
+        let ns_table_len = std::cmp::min(
+            get_table_len(meta, 0).try_into().unwrap_or(0),
+            (meta.len() - entry_len) / (2 * entry_len),
+        );
+
+        // First, collect the offsets of all the nss
+        // (Range starts at 1 to conveniently skip the ns table prefix.)
+        let mut ns_end_offsets = vec![0usize];
+        for i in 1..=ns_table_len {
+            let ns_offset_bytes = meta
+                .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
+                .unwrap();
+
+            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
+                .map(|tx| usize::try_from(tx).unwrap())
+                .unwrap();
+            ns_end_offsets.push(ns_offset);
+        }
+
+        // for each entry in the ns table:
+        // read the tx table len for that ns
+        // that tx table len is the number of txs in that namespace
+        // sum over these tx table lens
+        let mut result = 0;
+        for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
+            let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
+            result += tx_table_len;
+        }
+        result
     }
 
     fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
@@ -514,6 +555,10 @@ mod tx_table_entry {
     }
 }
 
+// TODO remove this `boilerplate` module, tidy what's in here.
+// - Skeleton impl of `BlockPayload` for now so as to enable `QueryablePayload`.
+//   https://github.com/EspressoSystems/espresso-sequencer/issues/856
+// - Opaque (not really though) constructor to return an abstract [`PayloadProver`].
 mod boilerplate {
     use super::{
         BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
@@ -528,7 +573,6 @@ mod boilerplate {
     use snafu::OptionExt;
     use std::fmt::Display;
 
-    // Skeleton impl for now so as to enable `QueryablePayload`.
     impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
         type Transaction = Transaction;
@@ -610,6 +654,7 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
+    use hotshot_query_service::availability::QueryablePayload;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
     use std::{collections::HashMap, ops::Range};
@@ -661,6 +706,7 @@ mod test {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
             let mut txs = Vec::new();
             let mut derived_nss = HashMap::new();
+            let mut total_num_txs = 0;
             for (n, tx_lengths) in test_case.iter().enumerate() {
                 tracing::info!(
                     "test block {} of {} namespace {} of {} with {} txs",
@@ -670,6 +716,7 @@ mod test {
                     test_case.len(),
                     tx_lengths.len(),
                 );
+                total_num_txs += tx_lengths.len();
 
                 // generate this namespace's tx payloads
                 let entries = entries_from_lengths(tx_lengths);
@@ -733,6 +780,11 @@ mod test {
             // let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
+
+            // test total tx length
+            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            assert_eq!(block.len(&actual_ns_table), total_num_txs);
+            // TODO assert the final ns table entry offset == self.payload.len()
 
             // test namespace table length
             let actual_ns_table_len =
