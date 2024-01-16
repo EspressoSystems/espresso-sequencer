@@ -1,5 +1,5 @@
 // use ark_bls12_381::Parameters as Param381;
-use hotshot_signature_key::bn254::BLSPubKey;
+use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::{
     election::{ElectionConfig, Membership},
     node_implementation::NodeType,
