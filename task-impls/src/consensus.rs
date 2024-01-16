@@ -625,7 +625,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 self.current_proposal = Some(proposal.data.clone());
 
-                let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
                 let mut new_locked_view = consensus.locked_view;
                 let mut last_view_number_visited = view;
