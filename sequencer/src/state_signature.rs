@@ -2,12 +2,12 @@
 
 use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
-use ethers::types::U256;
 use futures::stream::{Stream, StreamExt};
-use hotshot::types::{Event, SignatureKey as _};
+use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::StateVerKey;
 use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
 use hotshot_types::traits::state::ConsensusTime;
 use std::collections::{HashMap, VecDeque};
@@ -90,17 +90,19 @@ pub type StakeTableCommitmentType = (FieldType, FieldType, FieldType);
 
 /// Helper function for stake table commitment
 pub(crate) fn static_stake_table_commitment(
-    seed: [u8; 32],
-    num_nodes: usize,
+    known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
+    state_ver_keys: &[StateVerKey],
     capacity: usize,
 ) -> (FieldType, FieldType, FieldType) {
     let mut st = StakeTable::<BLSPubKey, StateVerKey, FieldType>::new(capacity);
-    (0..num_nodes).for_each(|i| {
-        let bls_key = BLSPubKey::generated_from_seed_indexed(seed, i as u64).0;
-        let state_key = StateKeyPair::generate_from_seed_indexed(seed, i as u64).ver_key();
-        // This `unwrap()` wont fail unless `num_nodes`` exceeds `capacity``
-        st.register(bls_key, U256::from(1u64), state_key).unwrap();
-    });
+    known_nodes_with_stakes
+        .iter()
+        .zip(state_ver_keys)
+        .for_each(|(entry, schnorr_key)| {
+            // This `unwrap()` wont fail unless `num_nodes`` exceeds `capacity``
+            st.register(*entry.get_key(), entry.get_stake(), schnorr_key.clone())
+                .unwrap();
+        });
     st.advance();
     st.advance();
     // This `unwrap()` won't fail
