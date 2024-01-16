@@ -10,6 +10,11 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
 contract LightClient {
+    // === Events ===
+    //
+    // @notice Notify a new epoch is starting
+    event EpochChanged(uint64);
+
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
@@ -183,6 +188,7 @@ contract LightClient {
         frozenThreshold = finalizedState.threshold;
 
         currentEpoch += 1;
+        emit EpochChanged(currentEpoch);
     }
 
     /// @notice Given the light client state, compute the short commitment of the stake table

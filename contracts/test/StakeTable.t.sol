@@ -23,23 +23,9 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTable_Test is Test {
-    event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
-    event Deposit(bytes32, uint256);
-    event Exit(bytes32, uint64);
-
-    S public stakeTable;
-    ExampleToken public token;
-
-    LCTest public lc;
-    LC.LightClientState public genesis;
-    uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
-
-    uint256 constant INITIAL_BALANCE = 1_000_000_000;
-    address exampleTokenCreator;
-
+contract StakeTableCommonTest is Test {
     function genClientWallet(address sender, uint8 seed)
-        private
+        internal
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
         // Generate a BLS signature and other values using rust code
@@ -63,6 +49,18 @@ contract StakeTable_Test is Test {
             blsSig
         );
     }
+}
+
+contract StakeTable_Test is StakeTableCommonTest {
+    S public stakeTable;
+    ExampleToken public token;
+
+    LCTest public lc;
+    LC.LightClientState public genesis;
+    uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
+
+    uint256 constant INITIAL_BALANCE = 1_000_000_000;
+    address exampleTokenCreator;
 
     function registerWithSeed(address sender, uint8 seed, uint64 depositAmount, bool expectRevert)
         private
@@ -88,7 +86,7 @@ contract StakeTable_Test is Test {
         if (expectRevert) {
             vm.expectRevert(S.NodeAlreadyRegistered.selector);
         }
-        bool res = stakeTable.register(
+        stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -96,11 +94,6 @@ contract StakeTable_Test is Test {
             sig,
             validUntilEpoch
         );
-        if (!expectRevert) {
-            assertTrue(res);
-        } else {
-            assertFalse(res);
-        }
 
         return (blsVK, depositAmount);
     }
@@ -339,11 +332,11 @@ contract StakeTable_Test is Test {
 
         // Check event is emitted after calling successfully `register`
         vm.expectEmit(true, true, true, true, address(stakeTable));
-        emit Registered(
+        emit AbstractStakeTable.Registered(
             stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
         vm.prank(exampleTokenCreator);
-        bool res = stakeTable.register(
+        stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -351,8 +344,6 @@ contract StakeTable_Test is Test {
             sig,
             validUntilEpoch
         );
-
-        assertTrue(res);
 
         // Balance after registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
@@ -433,7 +424,7 @@ contract StakeTable_Test is Test {
 
         lc.setCurrentEpoch(3);
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit Deposit(stakeTable._hashBlsKey(blsVK), newDepositAmount);
+        emit AbstractStakeTable.Deposit(stakeTable._hashBlsKey(blsVK), newDepositAmount);
         uint64 newBalance;
         uint64 effectiveEpoch;
         uint64 expectedNewBalance = stake + newDepositAmount;
@@ -499,14 +490,13 @@ contract StakeTable_Test is Test {
         vm.expectEmit(false, false, false, true, address(stakeTable));
         bytes32 key = stakeTable._hashBlsKey(blsVK);
         uint64 exitEpoch = 6;
-        emit Exit(key, exitEpoch);
+        emit AbstractStakeTable.Exit(key, exitEpoch);
 
         // Make the exit request
         vm.prank(exampleTokenCreator);
-        bool res = stakeTable.requestExit(blsVK);
+        stakeTable.requestExit(blsVK);
 
         // Check the outcome of the request
-        assertTrue(res);
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
         assertEq(node.exitEpoch, exitEpoch);
     }
@@ -551,183 +541,5 @@ contract StakeTable_Test is Test {
         );
 
         assertEq(abi.encode(node), abi.encode(nullNode));
-    }
-
-    // Queue logic
-
-    uint256 private constant ARRAY_SIZE = 20;
-
-    /// Helper function to handle registrations in testFuzz_SequencesOfEvents
-    /// This function was extracted to make sol-lint happy by reducing cyclotomic complexity
-    function handleRegistration(
-        uint256 i,
-        uint8[ARRAY_SIZE] memory rands,
-        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
-        bool[ARRAY_SIZE] memory isKeyActive,
-        bool skipEpochs,
-        uint64 numRegistrations
-    ) private returns (bool) {
-        address sender = makeAddr(string(abi.encode(i)));
-        uint64 randDepositAmount = uint64(rands[i]);
-
-        // Check if the seed has already been used. In this case the registration will fail.
-        bool seedUsed = false;
-        for (uint256 j = 0; j < i; j++) {
-            if ((rands[i] == rands[j]) && (isKeyActive[j])) {
-                seedUsed = true;
-                break;
-            }
-        }
-
-        if (seedUsed) {
-            registerWithSeed(sender, rands[i], randDepositAmount, true);
-            return false;
-        } else {
-            (uint64 nextRegistrationEpochBefore, uint64 pendingRegistrationsBefore) =
-                stakeTable.nextRegistrationEpoch();
-
-            (BN254.G2Point memory blsVK,) =
-                registerWithSeed(sender, rands[i], randDepositAmount, false);
-
-            registeredKeys[i] = blsVK;
-            isKeyActive[i] = true;
-
-            // Invariants
-
-            // When we do not skip epochs, the queues of every epoch are filled up.
-            if (!skipEpochs) {
-                assertEq(
-                    nextRegistrationEpochBefore, numRegistrations / stakeTable.maxChurnRate() + 1
-                );
-                assertEq(pendingRegistrationsBefore, numRegistrations % stakeTable.maxChurnRate());
-            }
-
-            // Here we check that the queue state is updated in a consistent manner with the output
-            // of nextExitEpoch.
-            assertEq(stakeTable._firstAvailableRegistrationEpoch(), nextRegistrationEpochBefore);
-            assertEq(stakeTable.numPendingRegistrations(), pendingRegistrationsBefore + 1);
-
-            return true;
-        }
-    }
-
-    /// Helper function to handle exit requests in testFuzz_SequencesOfEvents
-    function handleExit(
-        uint256 i,
-        uint8[ARRAY_SIZE] memory rands,
-        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
-        bool skipEpochs,
-        uint64 numRegistrations,
-        uint64 numExits
-    ) private returns (bool) {
-        uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
-
-        (
-            address sender,
-            AbstractStakeTable.StakeType stakeType,
-            uint64 balance,
-            uint64 registerEpoch,
-            uint64 exitEpoch,
-        ) = stakeTable.nodes(stakeTable._hashBlsKey(registeredKeys[indexRegistration]));
-
-        balance;
-        stakeType;
-
-        BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
-
-        bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
-        if (canExit) {
-            (uint64 nextExitEpochBefore, uint64 pendingExitsBefore) = stakeTable.nextExitEpoch();
-            vm.prank(sender);
-            bool res = stakeTable.requestExit(blsVK);
-
-            assertTrue(res);
-
-            // Invariants
-
-            // When we do not skip epochs, the queues of every epoch are filled up.
-            if (!skipEpochs) {
-                assertEq(nextExitEpochBefore, numExits / stakeTable.maxChurnRate() + 1);
-                assertEq(pendingExitsBefore, numExits % stakeTable.maxChurnRate());
-            }
-            // Here we check that the queue state is updated in a consistent manner with the output
-            // of nextExitEpoch.
-            assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
-            assertGe(stakeTable.numPendingExits(), 1);
-        } else {
-            vm.prank(sender);
-            vm.expectRevert();
-            bool res = stakeTable.requestExit(blsVK);
-            assertFalse(res);
-        }
-
-        return canExit;
-    }
-
-    /// Helper function to handle epoch increments in testFuzz_SequencesOfEvents
-    function handleAdvanceEpoch() private {
-        uint64 currentEpoch = lc.currentEpoch();
-        uint64 nextEpoch = currentEpoch + 1;
-        lc.setCurrentEpoch(nextEpoch);
-        assertEq(stakeTable.currentEpoch(), nextEpoch);
-    }
-
-    ///@dev Test invariants about our queue logic holds during a random sequence of register,
-    /// requestExit, and advanceEpoch operations
-    /// @param events this array is used to sample 3 kinds of events: 0 for a registration, 1 for an
-    /// exit request and 2 for advancing an epoch.
-    /// @param rands this array contains random values that are used as a seed for generating the
-    /// BLS key pair and sampling random deposit amounts.
-    /// @param skipEpochs this boolean flag allows to decide whether we want to advance epochs
-    /// (event
-    /// 2) or not. By allowing not advancing epoch we can capture more of the behaviour of the
-    /// queues.
-    function testFuzz_SequencesOfEvents(
-        uint8[ARRAY_SIZE] memory events,
-        uint8[ARRAY_SIZE] memory rands,
-        bool skipEpochs
-    ) external {
-        BN254.G2Point[ARRAY_SIZE] memory registeredKeys;
-
-        // Tracks the indices corresponding to an active key
-        bool[ARRAY_SIZE] memory isKeyActive;
-
-        uint64 numRegistrations = 0;
-        uint64 numExits = 0;
-
-        for (uint256 i = 0; i < ARRAY_SIZE; i++) {
-            uint256 ev = bound(events[i], 0, 2);
-
-            if (ev == 0) {
-                // Registrations
-                bool res = handleRegistration(
-                    i, rands, registeredKeys, isKeyActive, skipEpochs, numRegistrations
-                );
-                if (res) {
-                    numRegistrations++;
-                }
-            } else if (ev == 1) {
-                // Exits
-                if (numRegistrations == 0) {
-                    continue;
-                }
-
-                bool res =
-                    handleExit(i, rands, registeredKeys, skipEpochs, numRegistrations, numExits);
-                if (res) {
-                    numExits++;
-                }
-            } else {
-                // Advance epoch
-                // ev == 2
-                if (skipEpochs) {
-                    handleAdvanceEpoch();
-                }
-            }
-
-            // Global invariants
-            assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
-            assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
-        }
     }
 }

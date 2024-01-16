@@ -5,7 +5,6 @@ pragma solidity ^0.8.0;
 import { LightClient as LC } from "../../src/LightClient.sol";
 import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "../../src/libraries/PlonkVerifier.sol";
-import { BN254 } from "bn254/BN254.sol";
 import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateVKTest.sol";
 
 /// @dev A helper that wraps LightClient contract for testing

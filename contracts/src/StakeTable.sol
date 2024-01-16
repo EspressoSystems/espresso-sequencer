@@ -4,7 +4,6 @@ import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
-import { ExampleToken } from "../src/ExampleToken.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 
@@ -55,17 +54,17 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
     /// get the correct epoch
-    uint64 public _firstAvailableRegistrationEpoch;
+    uint64 public firstAvailableRegistrationEpoch;
     /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
     /// total pending queue size!)
-    uint64 public _numPendingRegistrations;
+    uint64 private _numPendingRegistrations;
 
     /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
     /// epoch
-    uint64 public _firstAvailableExitEpoch;
+    uint64 public firstAvailableExitEpoch;
     /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
     /// queue size!)
-    uint64 public _numPendingExits;
+    uint64 private _numPendingExits;
 
     uint64 public maxChurnRate;
 
@@ -76,11 +75,11 @@ contract StakeTable is AbstractStakeTable {
         maxChurnRate = churnRate;
 
         // A set of hardcoded stakers is defined for the first epoch.
-        _firstAvailableRegistrationEpoch = 1;
+        firstAvailableRegistrationEpoch = 1;
         _numPendingRegistrations = 0;
 
         // It is not possible to exit during the first epoch.
-        _firstAvailableExitEpoch = 1;
+        firstAvailableExitEpoch = 1;
         _numPendingExits = 0;
     }
 
@@ -126,14 +125,14 @@ contract StakeTable is AbstractStakeTable {
         uint64 epoch;
         uint64 queueSize;
 
-        if (_firstAvailableRegistrationEpoch < currentEpoch() + 1) {
+        if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 0;
         } else if (_numPendingRegistrations >= maxChurnRate) {
-            epoch = _firstAvailableRegistrationEpoch + 1;
+            epoch = firstAvailableRegistrationEpoch + 1;
             queueSize = 0;
         } else {
-            epoch = _firstAvailableRegistrationEpoch;
+            epoch = firstAvailableRegistrationEpoch;
             queueSize = _numPendingRegistrations;
         }
         return (epoch, queueSize);
@@ -144,7 +143,7 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
-        _firstAvailableRegistrationEpoch = epoch;
+        firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
     }
 
@@ -158,14 +157,14 @@ contract StakeTable is AbstractStakeTable {
         uint64 epoch;
         uint64 queueSize;
 
-        if (_firstAvailableExitEpoch < currentEpoch() + 1) {
+        if (firstAvailableExitEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 0;
         } else if (_numPendingExits >= maxChurnRate) {
-            epoch = _firstAvailableExitEpoch + 1;
+            epoch = firstAvailableExitEpoch + 1;
             queueSize = 0;
         } else {
-            epoch = _firstAvailableExitEpoch;
+            epoch = firstAvailableExitEpoch;
             queueSize = _numPendingExits;
         }
         return (epoch, queueSize);
@@ -175,7 +174,7 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
-        _firstAvailableExitEpoch = epoch;
+        firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
@@ -217,8 +216,6 @@ contract StakeTable is AbstractStakeTable {
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     ///
-    /// @return success status
-    ///
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
     /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
@@ -231,7 +228,7 @@ contract StakeTable is AbstractStakeTable {
         StakeType stakeType,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external override returns (bool) {
+    ) external override {
         if (stakeType != StakeType.Native) {
             revert RestakingNotImplemented();
         }
@@ -273,8 +270,6 @@ contract StakeTable is AbstractStakeTable {
         } // Other case will be implemented when we support restaking
 
         emit Registered(key, registerEpoch, stakeType, amount);
-
-        return true;
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -320,8 +315,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @param blsVK The BLS verification key to exit
-    /// @return success status
-    function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
+    function requestExit(BN254.G2Point memory blsVK) external override {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -348,8 +342,6 @@ contract StakeTable is AbstractStakeTable {
         appendExitQueue(exitEpoch, queueSize);
 
         emit Exit(key, exitEpoch);
-
-        return true;
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can

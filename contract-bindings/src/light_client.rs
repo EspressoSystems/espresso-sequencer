@@ -407,30 +407,44 @@ pub mod light_client {
                     },],
                 ),
             ]),
-            events: ::core::convert::From::from([(
-                ::std::borrow::ToOwned::to_owned("NewState"),
-                ::std::vec![::ethers::core::abi::ethabi::Event {
-                    name: ::std::borrow::ToOwned::to_owned("NewState"),
-                    inputs: ::std::vec![
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::borrow::ToOwned::to_owned("viewNum"),
+            events: ::core::convert::From::from([
+                (
+                    ::std::borrow::ToOwned::to_owned("EpochChanged"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("EpochChanged"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
                             kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            indexed: true,
-                        },
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::borrow::ToOwned::to_owned("blockHeight"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            indexed: true,
-                        },
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                             indexed: false,
-                        },
-                    ],
-                    anonymous: false,
-                },],
-            )]),
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("NewState"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("NewState"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("viewNum"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                indexed: true,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("blockHeight"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                indexed: true,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+            ]),
             errors: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("InvalidArgs"),
@@ -614,6 +628,13 @@ pub mod light_client {
                 .method_hash([98, 130, 119, 51], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Gets the contract's `EpochChanged` event
+        pub fn epoch_changed_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, EpochChangedFilter>
+        {
+            self.0.event()
+        }
         ///Gets the contract's `NewState` event
         pub fn new_state_filter(
             &self,
@@ -623,7 +644,8 @@ pub mod light_client {
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, NewStateFilter> {
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LightClientEvents>
+        {
             self.0
                 .event_with_filter(::core::default::Default::default())
         }
@@ -828,6 +850,20 @@ pub mod light_client {
         Eq,
         Hash,
     )]
+    #[ethevent(name = "EpochChanged", abi = "EpochChanged(uint64)")]
+    pub struct EpochChangedFilter(pub u64);
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
     #[ethevent(name = "NewState", abi = "NewState(uint64,uint64,uint256)")]
     pub struct NewStateFilter {
         #[ethevent(indexed)]
@@ -835,6 +871,52 @@ pub mod light_client {
         #[ethevent(indexed)]
         pub block_height: u64,
         pub block_comm_root: ::ethers::core::types::U256,
+    }
+    ///Container type for all of the contract's events
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        serde::Serialize,
+        serde::Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub enum LightClientEvents {
+        EpochChangedFilter(EpochChangedFilter),
+        NewStateFilter(NewStateFilter),
+    }
+    impl ::ethers::contract::EthLogDecode for LightClientEvents {
+        fn decode_log(
+            log: &::ethers::core::abi::RawLog,
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
+            if let Ok(decoded) = EpochChangedFilter::decode_log(log) {
+                return Ok(LightClientEvents::EpochChangedFilter(decoded));
+            }
+            if let Ok(decoded) = NewStateFilter::decode_log(log) {
+                return Ok(LightClientEvents::NewStateFilter(decoded));
+            }
+            Err(::ethers::core::abi::Error::InvalidData)
+        }
+    }
+    impl ::core::fmt::Display for LightClientEvents {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            match self {
+                Self::EpochChangedFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NewStateFilter(element) => ::core::fmt::Display::fmt(element, f),
+            }
+        }
+    }
+    impl ::core::convert::From<EpochChangedFilter> for LightClientEvents {
+        fn from(value: EpochChangedFilter) -> Self {
+            Self::EpochChangedFilter(value)
+        }
+    }
+    impl ::core::convert::From<NewStateFilter> for LightClientEvents {
+        fn from(value: NewStateFilter) -> Self {
+            Self::NewStateFilter(value)
+        }
     }
     ///Container type for all input parameters for the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
     #[derive(

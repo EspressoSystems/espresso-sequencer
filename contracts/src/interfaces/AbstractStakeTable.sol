@@ -102,9 +102,6 @@ abstract contract AbstractStakeTable {
     /// called from
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
-    ///
-    /// @return success status
-    ///
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
     /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
@@ -117,7 +114,7 @@ abstract contract AbstractStakeTable {
         StakeType stakeType,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external virtual returns (bool);
+    ) external virtual;
 
     /// @notice Deposit more stakes to registered keys
     ///
@@ -132,8 +129,7 @@ abstract contract AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @param blsVK The BLS verification key to exit
-    /// @return success status
-    function requestExit(BN254.G2Point memory blsVK) external virtual returns (bool);
+    function requestExit(BN254.G2Point memory blsVK) external virtual;
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.

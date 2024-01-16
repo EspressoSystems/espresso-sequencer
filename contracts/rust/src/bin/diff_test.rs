@@ -80,6 +80,8 @@ enum Action {
     GenBLSHashes,
     /// Generate BLS keys and a signature
     GenBLSSig,
+    /// Generate some random point in G2
+    GenRandomG2Point,
     /// Get mock genesis light client state
     MockGenesis,
     /// Get a consecutive finalized light client states
@@ -440,6 +442,18 @@ fn main() {
                 sender_address,
             );
             println!("{}", res.encode_hex());
+        }
+        Action::GenRandomG2Point => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=exponent");
+            }
+
+            let exponent: u64 = cli.args[0].parse::<u64>().unwrap();
+            let mut point = G2Affine::generator();
+            point = (point * Fr::from(exponent)).into();
+            let point_parsed: ParsedG2Point = point.into();
+            let res = point_parsed;
+            println!("{}", (res.encode_hex()));
         }
         Action::MockGenesis => {
             if cli.args.len() != 2 {
