@@ -543,32 +543,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         consensus.high_qc = justify_qc;
                     }
 
-                    let new_view = self.current_proposal.clone().unwrap().view_number + 1;
-
-                    // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
-                    let should_propose = self.quorum_membership.get_leader(new_view)
-                        == self.public_key
-                        && consensus.high_qc.view_number
-                            == self.current_proposal.clone().unwrap().view_number;
-                    let qc = consensus.high_qc.clone();
+                    let high_qc = consensus.high_qc.clone();
 
                     drop(consensus);
 
                     if liveness_check {
                         self.current_proposal = Some(proposal.data.clone());
+                        let new_view = proposal.data.view_number + 1;
 
+                        // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
+                        let should_propose = self.quorum_membership.get_leader(new_view)
+                            == self.public_key
+                            && high_qc.view_number
+                                == self.current_proposal.clone().unwrap().view_number;
+                        let qc = high_qc.clone();
+                        if should_propose {
+                            debug!(
+                                "Attempting to publish proposal after voting; now in view: {}",
+                                *new_view
+                            );
+                            self.publish_proposal_if_able(qc.view_number + 1, None)
+                                .await;
+                        }
                         if self.vote_if_able().await {
                             self.current_proposal = None;
                         }
-                    }
-
-                    if should_propose {
-                        debug!(
-                            "Attempting to publish proposal after voting; now in view: {}",
-                            *new_view
-                        );
-                        self.publish_proposal_if_able(qc.view_number + 1, None)
-                            .await;
                     }
 
                     return;
