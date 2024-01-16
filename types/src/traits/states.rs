@@ -5,6 +5,7 @@
 
 use crate::traits::BlockPayload;
 use commit::Committable;
+use jf_plonk::proof_system::batch_arg::Instance;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     error::Error,
@@ -39,6 +40,8 @@ pub trait ValidatedState:
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
+    /// The type of the instance-level state this state is assocaited with
+    type Instance: InstanceState;
     /// The type of block header this state is associated with
     type BlockHeader: BlockHeader;
     /// The type of block payload this state is associated with
@@ -51,12 +54,16 @@ pub trait ValidatedState:
     /// Check if the proposed block header is valid and apply it to the state if so.
     ///
     /// Returns the new state.
+    /// 
+    /// # Arguments
+    /// * `instance` - Immutable instance-level state.
     ///
     /// # Errors
     ///
     /// If the block header is invalid or appending it would lead to an invalid state.
     fn validate_and_apply_header(
         &self,
+        instance: &Self::Instance,
         proposed_header: &Self::BlockHeader,
         parent_header: &Self::BlockHeader,
         view_number: &Self::Time,

@@ -54,6 +54,8 @@ impl Default for TestValidatedState {
 impl ValidatedState for TestValidatedState {
     type Error = BlockError;
 
+    type Instance = TestInstanceState;
+
     type BlockHeader = TestBlockHeader;
 
     type BlockPayload = TestBlockPayload;
