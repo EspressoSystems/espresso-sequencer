@@ -65,6 +65,7 @@ pub struct Cache {
     config: Config,
 
     /// the cache for records (key -> value)
+    #[allow(clippy::struct_field_names)]
     cache: Arc<DashMap<Vec<u8>, Vec<u8>>>,
     /// the expiries for the dht cache, in order (expiry time -> key)
     expiries: Arc<RwLock<BTreeMap<SystemTime, Vec<u8>>>>,
