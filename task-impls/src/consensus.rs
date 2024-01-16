@@ -4,7 +4,7 @@ use crate::{
     vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_lock::{RwLock, RwLockUpgradableReadGuard};
+use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use commit::Committable;
@@ -495,7 +495,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
-                let consensus = self.consensus.upgradable_read().await;
+                let mut consensus = self.consensus.write().await;
+
+                if justify_qc.get_view_number() > consensus.high_qc.view_number {
+                    consensus.high_qc = justify_qc.clone();
+                }
 
                 // Construct the leaf.
                 let parent = if justify_qc.is_genesis {
@@ -524,7 +528,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         proposer_id: sender.to_bytes(),
                     };
 
-                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
                     consensus.state_map.insert(
                         view,
                         View {
@@ -538,10 +541,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     // If we are missing the parent from storage, the safety check will fail.  But we can
                     // still vote if the liveness check succeeds.
                     let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
-
-                    if justify_qc.get_view_number() > consensus.high_qc.view_number {
-                        consensus.high_qc = justify_qc;
-                    }
 
                     let high_qc = consensus.high_qc.clone();
 
@@ -713,7 +712,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 // promote lock here to add proposal to statemap
-                let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
                 if high_qc.view_number > consensus.high_qc.view_number {
                     consensus.high_qc = high_qc;
                 }
