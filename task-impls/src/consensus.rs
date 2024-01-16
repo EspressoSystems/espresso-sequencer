@@ -559,7 +559,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         let leaf = Leaf {
                             view_number: view,
                             justify_qc: justify_qc.clone(),
-                            // TODO (Keyao) Use info from justify QC or the parent leaf?
                             parent_commitment: justify_qc.get_data().leaf_commit,
                             block_header: proposal.data.block_header,
                             state,

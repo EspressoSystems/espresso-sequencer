@@ -336,13 +336,14 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Get the leaf corresponding to the given view.
     ///
     /// # Errors
-    /// If the view doesn't exist in the saved leaves set, due to the garbage collection for views
-    /// that are older than the last decided view.
+    /// If the view doesn't exist in the state map, due to the garbage collection for views older
+    /// older than the last decided view.
     ///
     /// # Panics
-    /// If the last decided view does not exist in the state map, which should never happen.
+    /// If the last decided view exists in the state map but not in the saved leaves, which should
+    /// never happen.
     pub fn get_leaf(&self, view: TYPES::Time) -> Result<Leaf<TYPES>, HotShotError<TYPES>> {
-        let view = self.state_map.get(&view).unwrap();
+        let view = self.state_map.get(&view).unwrap_or_else(||{return });
         let leaf = view
             .get_leaf_commitment()
             .expect("Decided state not found! Consensus internally inconsistent");
