@@ -195,23 +195,25 @@ async fn build_quorum_proposal_and_signature(
     QuorumProposal<TestTypes>,
     <BLSPubKey as SignatureKey>::PureAssembledSignatureType,
 ) {
-    let temp_consensus = handle.get_consensus();
-    let cur_consensus = temp_consensus.upgradable_read().await;
+    // build the genesis view
+    let genesis_consensus = handle.get_consensus();
+    let cur_consensus = genesis_consensus.upgradable_read().await;
     let mut consensus = RwLockUpgradableReadGuard::upgrade(cur_consensus).await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
+    // parent_view_number should be equal to 0
     let parent_view_number = &consensus.high_qc.get_view_number();
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
-    let Some(leaf) = parent_view.get_leaf_commitment() else {
+    let Some(leaf_view_0) = parent_view.get_leaf_commitment() else {
         panic!("Parent of high QC points to a view without a proposal");
     };
-    let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
+    let Some(leaf_view_0) = consensus.saved_leaves.get(&leaf_view_0) else {
         panic!("Failed to find high QC parent.");
     };
-    let parent_leaf = leaf.clone();
+    let parent_leaf = leaf_view_0.clone();
 
     // every event input is seen on the event stream in the output.
     let block = <TestBlockPayload as TestableBlock>::genesis();
