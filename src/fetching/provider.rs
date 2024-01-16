@@ -32,7 +32,7 @@
 //!
 //! We also provide combinators for modularly adding functionality to existing fetchers:
 //! * [`AnyProvider`]
-//! * [`TestProvider`](testing::TestProvider)
+//! * [`TestProvider`]
 //!
 
 use super::Request;

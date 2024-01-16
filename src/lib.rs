@@ -261,7 +261,7 @@
 //! # use hotshot_query_service::{QueryResult, SignatureKey};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-//! #   TransactionHash, TransactionIndex,
+//! #   PayloadQueryData, TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
 //! # use hotshot_query_service::node::NodeDataSource;
@@ -287,6 +287,9 @@
 //!     type BlockRange<R> = D::BlockRange<R>
 //!     where
 //!         R: RangeBounds<usize> + Send;
+//!     type PayloadRange<R> = D::PayloadRange<R>
+//!     where
+//!         R: RangeBounds<usize> + Send;
 //!
 //!     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<AppTypes>>
 //!     where
@@ -299,11 +302,17 @@
 //! #   async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<AppTypes>>
 //! #   where
 //! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
+//! #   async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<AppTypes>>
+//! #   where
+//! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
 //! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
 //! #   async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! #   async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+//! #   where
+//! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! }
