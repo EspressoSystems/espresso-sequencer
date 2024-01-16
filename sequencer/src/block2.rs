@@ -155,8 +155,9 @@ impl BlockPayload {
     }
 }
 
-// fn table_len_range()
-
+// Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
+// if `table_bytes` has too few bytes at this `offset` then pad with zero.
+// Parse these bytes into a `TxTableEntry` and return.
 fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     let tx_table_len_range =
         offset..std::cmp::min(TxTableEntry::byte_len(), table_bytes.len()) + offset; // refactor to table_len_range()?
@@ -199,16 +200,21 @@ impl QueryablePayload for BlockPayload {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
-        // the ns_table_len at offset zero could in principle be set to any value x.
-        // however, if meta bytes can only represent y < x namespaces, we will use y.
         let entry_len = TxTableEntry::byte_len();
+
+        // The number of nss in a block is defined as the minimum of:
+        // (1) the number of nss indicated in the ns table
+        // (2) the number of ns table entries that could fit inside the ns table byte len
+        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
+        // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
         let ns_table_len = std::cmp::min(
             get_table_len(meta, 0).try_into().unwrap_or(0),
             (meta.len() - entry_len) / (2 * entry_len),
         );
 
+        // First, collect the offsets of all the nss
+        // (Range starts at 1 to conveniently skip the ns table prefix.)
         let mut ns_end_offsets = vec![0usize];
-        // range starts at 1 (skipping the ns_table_len)
         for i in 1..=ns_table_len {
             let ns_offset_bytes = meta
                 .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
@@ -219,21 +225,17 @@ impl QueryablePayload for BlockPayload {
                 .unwrap();
             ns_end_offsets.push(ns_offset);
         }
+
+        // for each entry in the ns table:
+        // read the tx table len for that ns
+        // that tx table len is the number of txs in that namespace
+        // sum over these tx table lens
         let mut result = 0;
-        assert!(ns_end_offsets.last().unwrap() == &self.payload.len());
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
             let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
             result += tx_table_len;
         }
         result
-
-        // TODO do I still need these old  comments?
-        // The number of txs in a block is defined as the minimum of:
-        // (1) the number of txs indicated in the tx table
-        // (2) the number of tx table entries that could fit into the payload
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
-        //
-        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
     }
 
     fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
@@ -778,6 +780,7 @@ mod test {
             // test total tx length
             tracing::info!("actual_ns_table {:?}", actual_ns_table);
             assert_eq!(block.len(&actual_ns_table), total_num_txs);
+            // TODO assert the final ns table entry offset == self.payload.len()
 
             // test namespace table length
             let actual_ns_table_len =
