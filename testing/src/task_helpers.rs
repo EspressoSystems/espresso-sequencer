@@ -251,6 +251,7 @@ async fn build_quorum_proposal_and_signature(
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
         // save states for the previous view to pass all the qc checks
+        // In the long term, we want to get rid of this, do not manually update consensus state
         consensus.state_map.insert(
             ViewNumber::new(cur_view - 1),
             View {
