@@ -170,6 +170,14 @@ fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     TxTableEntry::from_bytes_array(entry_bytes)
 }
 
+// TODO comment
+fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
+    std::cmp::min(
+        get_table_len(ns_table_bytes, 0).try_into().unwrap_or(0),
+        (ns_table_bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len()),
+    )
+}
+
 /// Returns the byte range for a tx in the block payload bytes.
 ///
 /// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
@@ -211,10 +219,7 @@ impl QueryablePayload for BlockPayload {
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
         // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = std::cmp::min(
-            get_table_len(meta, 0).try_into().unwrap_or(0),
-            (meta.len() - entry_len) / (2 * entry_len),
-        );
+        let ns_table_len = get_ns_table_len(meta);
 
         // First, collect the offsets of all the nss
         // (Range starts at 1 to conveniently skip the ns table prefix.)
@@ -552,6 +557,44 @@ mod tx_table_entry {
         fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
             Ok(Self(From::from(value.0)))
         }
+    }
+}
+
+type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
+
+struct TxIndex2<T> {
+    ns_id: VmId,
+    tx_index: T,
+}
+struct TxIterator<'a, T> {
+    ns_iter: Range<usize>,
+    tx_iter: Range<T>,
+    block_payload: &'a BlockPayload,
+    ns_table: &'a NsTable,
+}
+
+impl<'a, T: num_traits::Zero> TxIterator<'a, T> {
+    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
+        // get the number of nss
+        // get the first ns_id
+        // get the offset for the first ns
+        // read the tx table len for the first ns from the payload
+        // initialize tx_iter to 0..number_of_txs_in_the_first_ns
+        // let ns_table_len = get_ns_table_len(&ns_table);
+        Self {
+            ns_iter: 0..get_ns_table_len(ns_table),
+            tx_iter: T::zero()..T::zero(), // empty range
+            block_payload,
+            ns_table,
+        }
+    }
+}
+
+impl<'a, T> Iterator for TxIterator<'a, T> {
+    type Item = TxIndex2<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
     }
 }
 
