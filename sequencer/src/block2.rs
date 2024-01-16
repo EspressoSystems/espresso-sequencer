@@ -158,6 +158,7 @@ impl BlockPayload {
 // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
 // if `table_bytes` has too few bytes at this `offset` then pad with zero.
 // Parse these bytes into a `TxTableEntry` and return.
+// Returns raw bytes, no checking for large values
 fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     let end = std::cmp::min(
         offset.saturating_add(TxTableEntry::byte_len()),
@@ -176,6 +177,62 @@ fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
         get_table_len(ns_table_bytes, 0).try_into().unwrap_or(0),
         (ns_table_bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len()),
     )
+}
+
+// TODO comment
+fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
+    std::cmp::min(
+        get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
+        (ns_bytes.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
+    )
+}
+
+// returns (ns_id, payload_offset)
+// payload_offset is not checked, could be anything
+fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
+    // range for ns_id bytes in ns table
+    // ensure `range` is within range for ns_table_bytes
+    let start = std::cmp::min(
+        ns_index
+            .saturating_mul(2)
+            .saturating_add(1)
+            .saturating_mul(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let ns_id_range = start..end;
+
+    // parse ns_id bytes from ns table
+    // any failure -> VmId(0)
+    let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
+    ns_id_bytes[..ns_id_range.len()].copy_from_slice(&ns_table_bytes[ns_id_range]);
+    let ns_id =
+        VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(VmId(0));
+
+    // range for ns_offset bytes in ns table
+    // ensure `range` is within range for ns_table_bytes
+    // TODO refactor range checking code
+    let start = end;
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let ns_offset_range = start..end;
+
+    // parse ns_offset bytes from ns table
+    // any failure -> 0 offset (?)
+    // TODO refactor parsing code?
+    let mut ns_offset_bytes = [0u8; TxTableEntry::byte_len()];
+    ns_offset_bytes[..ns_offset_range.len()].copy_from_slice(&ns_table_bytes[ns_offset_range]);
+    let ns_offset =
+        usize::try_from(TxTableEntry::from_bytes(&ns_offset_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(0);
+
+    (ns_id, ns_offset)
 }
 
 /// Returns the byte range for a tx in the block payload bytes.
@@ -242,6 +299,7 @@ impl QueryablePayload for BlockPayload {
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
             let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
+            // TODO handle large tx_table_len!
             result += tx_table_len;
         }
         result
@@ -561,40 +619,77 @@ mod tx_table_entry {
 }
 
 type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
+type TxIndexUnsigned = u32; // need a better name, want `TxIndex` but that's already taken.
 
-struct TxIndex2<T> {
+struct TxIndex2 {
     ns_id: VmId,
-    tx_index: T,
+
+    // Type of `tx_index` should be generic over any unsigned primitive int type `T`.
+    // However, implementing `Iterator` for `TxIterator` requires `T: Step`.
+    // But `Step` trait is not yet stable. (Seriously. Wow.)
+    // https://doc.rust-lang.org/std/iter/trait.Step.html
+    tx_index: TxIndexUnsigned,
 }
-struct TxIterator<'a, T> {
+struct TxIterator<'a> {
     ns_iter: Range<usize>,
-    tx_iter: Range<T>,
+    tx_iter: Range<TxIndexUnsigned>,
     block_payload: &'a BlockPayload,
     ns_table: &'a NsTable,
 }
 
-impl<'a, T: num_traits::Zero> TxIterator<'a, T> {
+impl<'a> TxIterator<'a> {
     fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
-        // get the number of nss
-        // get the first ns_id
-        // get the offset for the first ns
-        // read the tx table len for the first ns from the payload
-        // initialize tx_iter to 0..number_of_txs_in_the_first_ns
-        // let ns_table_len = get_ns_table_len(&ns_table);
         Self {
             ns_iter: 0..get_ns_table_len(ns_table),
-            tx_iter: T::zero()..T::zero(), // empty range
+            tx_iter: 0..0, // empty range
             block_payload,
             ns_table,
         }
     }
 }
 
-impl<'a, T> Iterator for TxIterator<'a, T> {
-    type Item = TxIndex2<T>;
+impl<'a> Iterator for TxIterator<'a> {
+    type Item = TxIndex2;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        match self.tx_iter.next() {
+            Some(tx_index) => Some(TxIndex2 {
+                ns_id: todo!(),
+                tx_index,
+            }),
+            None => {
+                // get the next namespace table entry
+                match self.ns_iter.next() {
+                    Some(ns_index) => {
+                        let start = if ns_index == 0 {
+                            0
+                        } else {
+                            get_ns_table_entry(&self.ns_table, ns_index - 1).1
+                        };
+                        let (ns_id, end) = get_ns_table_entry(&self.ns_table, ns_index);
+
+                        // TODO clamp start..end
+
+                        // read the length of that tx table
+                        let tx_table_len =
+                            get_tx_table_len(&self.block_payload.payload[start..end]); // TODO check range!
+
+                        // TODO if self.tx_iter is empty then we need to do all this again.
+                        // Ugh, need to put this whole thing in a loop.
+
+                        // TODO don't use `as u32` here. Do a type-safe conversion instead.
+                        self.tx_iter = 0..(tx_table_len as u32);
+
+                        // TODO this is wrong but we need something like it
+                        Some(TxIndex2 {
+                            ns_id,
+                            tx_index: self.tx_iter.next().unwrap(),
+                        })
+                    }
+                    None => None,
+                }
+            }
+        }
     }
 }
 
