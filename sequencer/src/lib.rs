@@ -29,10 +29,10 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
-use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    signature_key::BLSPubKey,
     traits::{
         metrics::Metrics,
         network::CommunicationChannel,
@@ -364,7 +364,9 @@ pub mod testing {
     };
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
-        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
+        light_client::StateKeyPair,
+        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -383,7 +385,7 @@ pub mod testing {
 
         // Generate keys for the nodes.
         let priv_keys = (0..num_nodes)
-            .map(|_| PrivKey::generate())
+            .map(|_| PrivKey::generate(&mut rand::thread_rng()))
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
@@ -473,7 +475,9 @@ pub mod testing {
             }) = event
             {
                 if leaf_chain.iter().any(|leaf| match &leaf.block_payload {
-                    Some(block) => block.transaction_commitments().contains(&commitment),
+                    Some(ref block) => block
+                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .contains(&commitment),
                     None => false,
                 }) {
                     return Ok(());

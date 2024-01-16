@@ -46,12 +46,11 @@ serde_json = "1.0"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
-	"with-serde_json-1",
+    "with-serde_json-1",
 ] }
 
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
-hotshot-signature-key = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-task = { workspace = true }
 hotshot-types = { workspace = true }

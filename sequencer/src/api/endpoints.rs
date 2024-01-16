@@ -9,12 +9,11 @@ use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use futures::FutureExt;
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource, BlockHash, QueryBlockSnafu},
+    availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
     Error,
 };
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
@@ -62,7 +61,7 @@ where
         async move {
             let height: usize = req.integer_param("height")?;
             let namespace: u64 = req.integer_param("namespace")?;
-            let block = state.get_block(height).await.context(QueryBlockSnafu {
+            let block = state.get_block(height).await.context(FetchBlockSnafu {
                 resource: height.to_string(),
             })?;
 
