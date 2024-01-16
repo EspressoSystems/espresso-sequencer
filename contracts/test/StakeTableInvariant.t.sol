@@ -7,7 +7,6 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 
-using stdStorage for StdStorage;
 
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
