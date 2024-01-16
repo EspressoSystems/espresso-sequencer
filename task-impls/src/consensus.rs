@@ -495,8 +495,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
-                self.current_proposal = Some(proposal.data.clone());
-
                 let consensus = self.consensus.upgradable_read().await;
 
                 // Construct the leaf.
@@ -519,7 +517,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         view_number: view,
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.get_data().leaf_commit,
-                        block_header: proposal.data.block_header,
+                        block_header: proposal.data.block_header.clone(),
                         block_payload: None,
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
@@ -547,8 +545,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     drop(consensus);
 
-                    if liveness_check && self.vote_if_able().await {
-                        self.current_proposal = None;
+                    if liveness_check {
+                        self.current_proposal = Some(proposal.data.clone());
+
+                        if self.vote_if_able().await {
+                            self.current_proposal = None;
+                        }
                     }
 
                     return;
@@ -604,6 +606,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Failed safety check and liveness check");
                     return;
                 }
+
+                self.current_proposal = Some(proposal.data.clone());
 
                 let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
