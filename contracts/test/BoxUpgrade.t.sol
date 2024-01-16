@@ -89,6 +89,7 @@ contract BoxTest is Test {
 
         //withdraw ETH
         vm.prank(msg.sender);
+        uint256 userBalanceBefore = msg.sender.balance;
 
         boxV2Proxy.withdrawETH();
 
@@ -96,6 +97,7 @@ contract BoxTest is Test {
         vm.prank(msg.sender);
 
         assertEq(boxV2Proxy.getBox().balance, 0);
+        assertEq(msg.sender.balance, userBalanceBefore + amount);
     }
 
     // test that overloading a method works for new implementations
