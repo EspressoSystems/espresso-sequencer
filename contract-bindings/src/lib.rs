@@ -11,6 +11,7 @@ pub mod deploy_hot_shot;
 pub mod ed_on_bn254;
 pub mod erc20;
 pub mod example_token;
+pub mod fee_contract;
 pub mod hot_shot;
 pub mod i_plonk_verifier;
 pub mod light_client;
