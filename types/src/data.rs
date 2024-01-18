@@ -5,6 +5,7 @@
 
 use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_vote::UpgradeProposalData,
     traits::{
         block_contents::vid_commitment,
         block_contents::BlockHeader,
@@ -121,6 +122,19 @@ pub struct DAProposal<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 }
 
+/// A proposal to upgrade the network
+#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[serde(bound = "TYPES: NodeType")]
+pub struct UpgradeProposal<TYPES>
+where
+    TYPES: NodeType,
+{
+    /// The information about which version we are upgrading to.
+    pub upgrade_proposal: UpgradeProposalData<TYPES>,
+    /// View this proposal applies to
+    pub view_number: TYPES::Time,
+}
+
 /// The VID scheme type used in `HotShot`.
 pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
 pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
@@ -218,6 +232,12 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for VidDisperse<TYPES> {
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
+        self.view_number
+    }
+}
+
+impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
     fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
