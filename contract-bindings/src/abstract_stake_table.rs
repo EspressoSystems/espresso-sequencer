@@ -270,13 +270,7 @@ pub mod abstract_stake_table {
                                 ),
                             },
                         ],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("bool"),
-                            ),
-                        },],
+                        outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                     },],
@@ -297,13 +291,7 @@ pub mod abstract_stake_table {
                                 ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                             ),
                         },],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("bool"),
-                            ),
-                        },],
+                        outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                     },],
@@ -572,7 +560,7 @@ pub mod abstract_stake_table {
             stake_type: u8,
             bls_sig: G1Point,
             valid_until_epoch: u64,
-        ) -> ::ethers::contract::builders::ContractCall<M, bool> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [199, 44, 199, 23],
@@ -591,7 +579,7 @@ pub mod abstract_stake_table {
         pub fn request_exit(
             &self,
             bls_vk: G2Point,
-        ) -> ::ethers::contract::builders::ContractCall<M, bool> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([74, 167, 194, 127], (bls_vk,))
                 .expect("method not found (this should never happen)")
@@ -1292,34 +1280,6 @@ pub mod abstract_stake_table {
         Hash,
     )]
     pub struct NumPendingRegistrationsReturn(pub u64);
-    ///Container type for all return fields from the `register` function with signature `register((uint256,uint256,uint256,uint256),(uint256,uint256),uint64,uint8,(uint256,uint256),uint64)` and selector `0xc72cc717`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct RegisterReturn(pub bool);
-    ///Container type for all return fields from the `requestExit` function with signature `requestExit((uint256,uint256,uint256,uint256))` and selector `0x4aa7c27f`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct RequestExitReturn(pub bool);
     ///Container type for all return fields from the `totalKeys` function with signature `totalKeys()` and selector `0x488bdabc`
     #[derive(
         Clone,

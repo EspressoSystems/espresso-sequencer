@@ -2,8 +2,14 @@ pub mod api;
 mod block;
 mod block2;
 mod chain_variables;
+pub mod context;
 pub mod hotshot_commitment;
 pub mod options;
+pub mod state_signature;
+use context::SequencerContext;
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
 pub mod persistence;
@@ -26,10 +32,11 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
-use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    light_client::StateKeyPair,
+    signature_key::BLSPubKey,
     traits::{
         metrics::Metrics,
         network::CommunicationChannel,
@@ -53,8 +60,8 @@ use typenum::U2;
 pub use block::{Header, Payload};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
-    examples::{Sha3Digest, Sha3Node},
     namespaced_merkle_tree::NMT,
+    prelude::{Sha3Digest, Sha3Node},
 };
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
@@ -265,7 +272,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
-) -> anyhow::Result<(SystemContextHandle<SeqTypes, Node<network::Web>>, u64)> {
+) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -308,6 +315,10 @@ pub async fn init_node(
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
+    let state_ver_keys = (0..num_nodes)
+        .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
+        .collect::<Vec<_>>();
+    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
@@ -332,7 +343,7 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    Ok((
+    Ok(SequencerContext::new(
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
@@ -344,6 +355,12 @@ pub async fn init_node(
         )
         .await,
         node_index,
+        state_key_pair,
+        static_stake_table_commitment(
+            &known_nodes_with_stake,
+            &state_ver_keys,
+            STAKE_TABLE_CAPACITY,
+        ),
     ))
 }
 
@@ -359,7 +376,9 @@ pub mod testing {
     };
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
-        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
+        light_client::StateKeyPair,
+        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -378,7 +397,7 @@ pub mod testing {
 
         // Generate keys for the nodes.
         let priv_keys = (0..num_nodes)
-            .map(|_| PrivKey::generate())
+            .map(|_| PrivKey::generate(&mut rand::thread_rng()))
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
@@ -468,7 +487,9 @@ pub mod testing {
             }) = event
             {
                 if leaf_chain.iter().any(|leaf| match &leaf.block_payload {
-                    Some(block) => block.transaction_commitments().contains(&commitment),
+                    Some(ref block) => block
+                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .contains(&commitment),
                     None => false,
                 }) {
                     return Ok(());

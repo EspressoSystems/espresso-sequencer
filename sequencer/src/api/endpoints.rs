@@ -1,20 +1,23 @@
 //! Sequencer-specific API endpoint handlers.
 
 use super::{
-    data_source::{SequencerDataSource, SubmitDataSource},
+    data_source::{SequencerDataSource, StateSignatureDataSource, SubmitDataSource},
     AppState,
 };
 use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
 use async_std::sync::{Arc, RwLock};
+use commit::Committable;
 use futures::FutureExt;
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource, BlockHash, QueryBlockSnafu},
+    availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
     Error,
 };
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
-use tide_disco::{method::WriteState, Api};
+use tide_disco::{
+    method::{ReadState, WriteState},
+    Api, Error as _, StatusCode,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -58,7 +61,7 @@ where
         async move {
             let height: usize = req.integer_param("height")?;
             let namespace: u64 = req.integer_param("namespace")?;
-            let block = state.get_block(height).await.context(QueryBlockSnafu {
+            let block = state.get_block(height).await.context(FetchBlockSnafu {
                 resource: height.to_string(),
             })?;
 
@@ -107,14 +110,43 @@ where
 
     api.post("submit", |req, state| {
         async move {
+            let tx = req
+                .body_auto::<Transaction>()
+                .map_err(Error::from_request_error)?;
+            let hash = tx.commit();
             state
-                .handle()
-                .submit_transaction(
-                    req.body_auto::<Transaction>()
-                        .map_err(|err| Error::internal(err.to_string()))?,
-                )
+                .consensus()
+                .submit_transaction(tx)
                 .await
-                .map_err(|err| Error::internal(err.to_string()))
+                .map_err(|err| Error::internal(err.to_string()))?;
+            Ok(hash)
+        }
+        .boxed()
+    })?;
+
+    Ok(api)
+}
+
+pub(super) fn state_signature<N, S>() -> anyhow::Result<Api<S, Error>>
+where
+    N: network::Type,
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + StateSignatureDataSource<N>,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
+    let mut api = Api::<S, Error>::new(toml)?;
+
+    api.get("get_state_signature", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            state
+                .get_state_signature(height)
+                .ok_or(tide_disco::Error::catch_all(
+                    StatusCode::NotFound,
+                    "Signature not found.".to_owned(),
+                ))
         }
         .boxed()
     })?;

@@ -17,7 +17,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { VkTest } from "./mocks/Transfer1In2Out24DepthVk.sol";
+import { LightClientStateUpdateVKTest as VkTest } from "./mocks/LightClientStateUpdateVKTest.sol";
 import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
 
 // Target contract
@@ -100,12 +100,6 @@ contract PlonkVerifierCommonTest is Test {
         Poly.EvalData memory evalData = Poly.evalDataGen(domain, chal.zeta, publicInput);
 
         return (vk, proof, chal, evalData);
-    }
-
-    /// Thin wrapper to ensure two G1 points are the same
-    function assertEqG1Point(BN254.G1Point memory a, BN254.G1Point memory b) public {
-        assertEq(BN254.BaseField.unwrap(a.x), BN254.BaseField.unwrap(b.x));
-        assertEq(BN254.BaseField.unwrap(a.y), BN254.BaseField.unwrap(b.y));
     }
 }
 
@@ -226,8 +220,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         bytes memory result = vm.ffi(cmds);
         (
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            // solhint-disable-next-line no-unused-vars
-            uint256[][] memory publicInputs,
+            ,
             IPlonkVerifier.PlonkProof[] memory proofs,
             bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
@@ -251,8 +244,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         (
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
-            // solhint-disable-next-line no-unused-vars
-            IPlonkVerifier.PlonkProof[] memory proofs,
+            ,
             bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
@@ -274,8 +266,6 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
             IPlonkVerifier.PlonkProof[] memory proofs,
-            // solhint-disable-next-line no-unused-vars
-            bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
@@ -546,9 +536,12 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         for (uint256 i = 0; i < l; i++) {
             infoCommScalars[i] = BN254.ScalarField.wrap(info.commScalars[i]);
         }
-        assertEqG1Point(BN254.multiScalarMul(info.commBases, infoCommScalars), scalarsAndBasesProd);
-        assertEqG1Point(info.openingProof, openingProof);
-        assertEqG1Point(info.shiftedOpeningProof, shiftedOpeningProof);
+        assertEq(
+            abi.encode(BN254.multiScalarMul(info.commBases, infoCommScalars)),
+            abi.encode(scalarsAndBasesProd)
+        );
+        assertEq(abi.encode(info.openingProof), abi.encode(openingProof));
+        assertEq(abi.encode(info.shiftedOpeningProof), abi.encode(shiftedOpeningProof));
     }
 }
 

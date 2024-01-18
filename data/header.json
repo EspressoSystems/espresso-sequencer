@@ -7,8 +7,16 @@
         "timestamp": "0x456",
         "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     },
-    "payload_commitment": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "payload_commitment": "HASH~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOfu",
     "transactions_root": {
         "root": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-    }
+    },
+      "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
+  "block_merkle_tree": {
+    "root": "Empty",
+    "height": 32,
+    "num_leaves": 0,
+    "_phantom_h": null,
+    "_phantom_ta": null
+  }
 }

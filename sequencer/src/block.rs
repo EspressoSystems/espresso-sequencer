@@ -10,10 +10,7 @@ use hotshot_types::{
     data::VidCommitment,
     traits::block_contents::{vid_commitment, BlockHeader, BlockPayload},
 };
-use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NamespacedMerkleTreeScheme, LookupResult, MerkleCommitment,
-    MerkleTreeScheme,
-};
+use jf_primitives::merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, prelude::*};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -22,6 +19,9 @@ use std::{
     time::Duration,
 };
 use time::OffsetDateTime;
+
+pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
+pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -72,6 +72,10 @@ pub struct Header {
 
     pub payload_commitment: VidCommitment,
     pub transactions_root: NMTRoot,
+    /// Root Commitment of Block Merkle Tree
+    pub block_merkle_tree_root: BlockMerkleCommitment,
+    /// Frontier of Block Merkle Tree
+    pub block_merkle_tree: BlockMerkleTree,
 }
 
 impl Committable for Header {
@@ -82,7 +86,7 @@ impl Committable for Header {
             .u64_field("l1_head", self.l1_head)
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .fixed_size_bytes(&self.payload_commitment.into())
+            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
             .field("transactions_root", self.transactions_root.commit())
             .finalize()
     }
@@ -115,6 +119,8 @@ impl Header {
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
+        block_merkle_tree_root: <BlockMerkleTree as MerkleTreeScheme>::Commitment,
+        block_merkle_tree: BlockMerkleTree,
     ) -> Self {
         // Increment height.
         let height = parent.height + 1;
@@ -166,20 +172,51 @@ impl Header {
             l1_finalized: l1.finalized,
             payload_commitment,
             transactions_root,
+            block_merkle_tree_root,
+            block_merkle_tree,
         }
     }
 }
 
+fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<BlockMerkleTree> {
+    anyhow::ensure!(
+        proposal.height == parent.height + 1,
+        anyhow::anyhow!(
+            "Invalid Height Error: {}, {}",
+            parent.height,
+            proposal.height
+        )
+    );
+
+    let mut block_merkle_tree = parent.block_merkle_tree.clone();
+    block_merkle_tree.push(parent.commit()).unwrap();
+    let block_merkle_tree_root = block_merkle_tree.commitment();
+
+    anyhow::ensure!(
+        proposal.block_merkle_tree_root == block_merkle_tree_root,
+        anyhow::anyhow!(
+            "Invalid Root Error: {}, {}",
+            block_merkle_tree_root,
+            proposal.block_merkle_tree_root
+        )
+    );
+    Ok(block_merkle_tree)
+}
+
 impl BlockHeader for Header {
     type Payload = Payload;
-
     fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
+        let mut block_merkle_tree = parent.block_merkle_tree.clone();
+        block_merkle_tree.push(parent.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+
         // The HotShot APIs should be redesigned so that
         // * they are async
         // * new blocks being created have access to the application state, which in our case could
         //   contain an already connected L1 client.
         // For now, as a workaround, we will create a new L1 client based on environment variables
         // and use `block_on` to query it.
+
         let l1 = if let Some(l1_client) = &*L1_CLIENT {
             block_on(l1_client.snapshot())
         } else {
@@ -196,6 +233,8 @@ impl BlockHeader for Header {
             parent,
             l1,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
+            block_merkle_tree_root,
+            block_merkle_tree,
         )
     }
 
@@ -206,6 +245,9 @@ impl BlockHeader for Header {
     ) {
         let (payload, transactions_root) = Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
+        let block_merkle_tree =
+            BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
         let header = Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.
@@ -215,6 +257,8 @@ impl BlockHeader for Header {
             l1_finalized: None,
             payload_commitment,
             transactions_root,
+            block_merkle_tree_root,
+            block_merkle_tree,
         };
         (header, payload, transactions_root)
     }
@@ -227,8 +271,8 @@ impl BlockHeader for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> NMTRoot {
-        self.transactions_root
+    fn metadata(&self) -> &NMTRoot {
+        &self.transactions_root
     }
 }
 
@@ -268,12 +312,13 @@ impl QueryablePayload for Payload {
     type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
 
-    fn len(&self) -> usize {
+    fn len(&self, _meta: &Self::Metadata) -> usize {
         self.transaction_nmt.num_leaves() as usize
     }
 
     fn transaction_with_proof(
         &self,
+        _meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         match self.transaction_nmt.lookup(index) {
@@ -282,8 +327,8 @@ impl QueryablePayload for Payload {
         }
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
-        Box::new(0..self.len() as u64)
+    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
+        Box::new(0..self.len(meta) as u64)
     }
 }
 
@@ -305,7 +350,7 @@ impl BlockPayload for Payload {
         Ok((Self { transaction_nmt }, root))
     }
 
-    fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
@@ -323,8 +368,13 @@ impl BlockPayload for Payload {
         Ok(bincode::serialize(self)?.into_iter())
     }
 
-    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
-        self.enumerate().map(|(_, tx)| tx.commit()).collect()
+    fn transaction_commitments(
+        &self,
+        metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate(metadata)
+            .map(|(_, tx)| tx.commit())
+            .collect()
     }
 }
 
@@ -485,9 +535,15 @@ mod reference {
 
     #[test]
     fn test_reference_header() {
+        let (h, _, _) = Header::genesis();
+        println!(
+            "example json header: {}",
+            serde_json::to_string(&h).unwrap()
+        );
+
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
+            "BLOCK~vuyXaIHGnh8J1zxkWWv_Rdd2DrcFMiS2FcrmxHzz_9Rm",
             |header| header.commit(),
         );
     }
@@ -533,6 +589,9 @@ mod test_headers {
             parent.timestamp = self.parent_timestamp;
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
+            let block_merkle_tree =
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+            let block_merkle_tree_root = block_merkle_tree.commitment();
 
             let header = Header::from_info(
                 genesis.payload_commitment,
@@ -543,11 +602,17 @@ mod test_headers {
                     finalized: self.l1_finalized,
                 },
                 self.timestamp,
+                block_merkle_tree_root,
+                block_merkle_tree,
             );
             assert_eq!(header.height, parent.height + 1);
             assert_eq!(header.timestamp, self.expected_timestamp);
             assert_eq!(header.l1_head, self.expected_l1_head);
             assert_eq!(header.l1_finalized, self.expected_l1_finalized);
+            assert_eq!(
+                header.block_merkle_tree,
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap()
+            );
         }
     }
 
@@ -668,5 +733,55 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+    }
+
+    #[test]
+    fn test_validate_proposal_error_cases() {
+        let (mut header, ..) = Header::genesis();
+        let mut block_merkle_tree = header.block_merkle_tree.clone();
+
+        // Populate the tree with an initial `push`.
+        block_merkle_tree.push(header.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        header.block_merkle_tree = block_merkle_tree.clone();
+        header.block_merkle_tree_root = block_merkle_tree_root;
+        let parent = header.clone();
+        let mut proposal = parent.clone();
+
+        // Advance `proposal.height` to trigger validation error.
+        let result = _validate_proposal(&parent.clone(), &proposal).unwrap_err();
+        assert_eq!(
+            format!("{}", result.root_cause()),
+            "Invalid Height Error: 0, 0"
+        );
+
+        // proposed `Header` root should include parent +
+        // parent.commit
+        proposal.height += 1;
+        let result = _validate_proposal(&parent.clone(), &proposal).unwrap_err();
+        // Fails b/c `proposal` has not advanced from `parent`
+        assert!(format!("{}", result.root_cause()).contains("Invalid Root Error"));
+    }
+
+    #[test]
+    fn test_validate_proposal_success() {
+        let (mut header, ..) = Header::genesis();
+        let mut block_merkle_tree = header.block_merkle_tree.clone();
+
+        // Populate the tree with an initial `push`.
+        block_merkle_tree.push(header.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        header.block_merkle_tree = block_merkle_tree.clone();
+        header.block_merkle_tree_root = block_merkle_tree_root;
+
+        let parent = header.clone();
+
+        // get a proposal from a parent
+        let proposal = Header::new(parent.payload_commitment, parent.transactions_root, &parent);
+
+        let mut block_merkle_tree = proposal.block_merkle_tree.clone();
+        block_merkle_tree.push(proposal.commit()).unwrap();
+        let result = _validate_proposal(&parent.clone(), &proposal.clone()).unwrap();
+        assert_eq!(result.commitment(), proposal.block_merkle_tree_root);
     }
 }

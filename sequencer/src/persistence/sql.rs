@@ -2,7 +2,7 @@ use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::api::{data_source::SequencerDataSource, sql::DataSource};
 use async_trait::async_trait;
 use clap::Parser;
-use hotshot_query_service::data_source::sql::Query;
+use hotshot_query_service::data_source::{sql::Query, VersionedDataSource};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
@@ -84,6 +84,7 @@ impl SequencerPersistence for Persistence {
             .await?
             .execute("INSERT INTO network_config (config) VALUES ($1)", [&json])
             .await?;
+        self.commit().await?;
         Ok(())
     }
 }
