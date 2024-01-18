@@ -76,4 +76,7 @@ pub trait Membership<TYPES: NodeType>:
 
     /// Returns the threshold for a specific `Membership` implementation
     fn failure_threshold(&self) -> NonZeroU64;
+
+    /// Returns the threshold required to upgrade the network protocol
+    fn upgrade_threshold(&self) -> NonZeroU64;
 }

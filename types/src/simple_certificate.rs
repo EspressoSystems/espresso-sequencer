@@ -12,8 +12,8 @@ use ethereum_types::U256;
 use crate::{
     data::Leaf,
     simple_vote::{
-        DAData, QuorumData, TimeoutData, ViewSyncCommitData, ViewSyncFinalizeData,
-        ViewSyncPreCommitData, Voteable,
+        DAData, QuorumData, TimeoutData, UpgradeProposalData, ViewSyncCommitData,
+        ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
@@ -47,6 +47,16 @@ pub struct OneHonestThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
         membership.failure_threshold().into()
+    }
+}
+
+/// Defines a threshold which is 0.9n + 1 (i.e. over 90% of the nodes with stake)
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
+pub struct UpgradeThreshold {}
+
+impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
+        membership.upgrade_threshold().into()
     }
 }
 
@@ -164,3 +174,6 @@ pub type ViewSyncCommitCertificate2<TYPES> =
 /// Type alias for a `ViewSyncFinalize` certificate over a view number
 pub type ViewSyncFinalizeCertificate2<TYPES> =
     SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>, SuccessThreshold>;
+/// Type alias for a `UpgradeCertificate`, which is a `SimpleCertificate` of `UpgradeProposalData`
+pub type UpgradeCertificate<TYPES> =
+    SimpleCertificate<TYPES, UpgradeProposalData<TYPES>, UpgradeThreshold>;
