@@ -1,5 +1,7 @@
 [package]
 name = "hotshot-constants"
-version.workspace = true
+edition = { workspace = true }
+version = { workspace = true }
 
 [dependencies]
+serde = { workspace = true }

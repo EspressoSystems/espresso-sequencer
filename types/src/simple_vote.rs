@@ -3,7 +3,10 @@
 use std::{fmt::Debug, hash::Hash};
 
 use commit::{Commitment, Committable};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+use hotshot_constants::Version;
 
 use crate::{
     data::{Leaf, VidCommitment},
@@ -59,6 +62,20 @@ pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Upgrade vote.
+pub struct UpgradeProposalData<TYPES: NodeType + DeserializeOwned> {
+    /// The old version that we are upgrading from.
+    pub old_version: Version,
+    /// The new version that we are upgrading to.
+    pub new_version: Version,
+    /// A unique identifier for the specific protocol being voted on.
+    pub new_version_hash: Vec<u8>,
+    /// The last block for which the old version will be in effect.
+    pub old_version_last_block: TYPES::Time,
+    /// The first block for which the new version will be in effect.
+    pub new_version_first_block: TYPES::Time,
 }
 
 /// Marker trait for data or commitments that can be voted on.
@@ -166,10 +183,26 @@ impl Committable for DAData {
             .finalize()
     }
 }
+
 impl Committable for VIDData {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("VID Vote")
             .var_size_bytes(self.payload_commit.as_ref())
+            .finalize()
+    }
+}
+
+impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let builder = commit::RawCommitmentBuilder::new("Upgrade Vote");
+        builder
+            .u64(*self.new_version_first_block)
+            .u64(*self.old_version_last_block)
+            .var_size_bytes(self.new_version_hash.as_slice())
+            .u16(self.new_version.minor)
+            .u16(self.new_version.major)
+            .u16(self.old_version.minor)
+            .u16(self.old_version.major)
             .finalize()
     }
 }
@@ -221,3 +254,5 @@ pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>
 pub type ViewSyncPreCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>>;
 /// View Sync Finalize Vote type alias
 pub type ViewSyncFinalizeVote<TYPES> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>>;
+/// Upgrade proposal vote
+pub type UpgradeVote<TYPES> = SimpleVote<TYPES, UpgradeProposalData<TYPES>>;

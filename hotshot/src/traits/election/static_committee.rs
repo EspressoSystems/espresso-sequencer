@@ -124,6 +124,10 @@ where
         NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64) / 3) + 1).unwrap()
     }
 
+    fn upgrade_threshold(&self) -> NonZeroU64 {
+        NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64 * 9) / 10) + 1).unwrap()
+    }
+
     fn get_committee(
         &self,
         _view_number: <TYPES as NodeType>::Time,

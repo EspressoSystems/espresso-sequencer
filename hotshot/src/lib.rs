@@ -43,6 +43,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use commit::Committable;
 use custom_debug::Debug;
+use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
@@ -346,6 +347,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 .da_network
                 .broadcast_message(
                     Message {
+                        version: PROGRAM_PROTOCOL_VERSION,
                         sender: api.inner.public_key.clone(),
                         kind: MessageKind::from(message),
                     },
@@ -454,7 +456,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 .networks
                 .quorum_network
                 .broadcast_message(
-                    Message { sender: pk, kind },
+                    Message {
+                        version: PROGRAM_PROTOCOL_VERSION,
+                        sender: pk,
+                        kind,
+                    },
                     // TODO this is morally wrong
                     &inner.memberships.quorum_membership.clone(),
                 )
@@ -484,6 +490,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .quorum_network
             .direct_message(
                 Message {
+                    version: PROGRAM_PROTOCOL_VERSION,
                     sender: self.inner.public_key.clone(),
                     kind: kind.into(),
                 },

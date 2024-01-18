@@ -204,6 +204,7 @@ async fn build_quorum_proposal_and_signature(
     };
     // parent_view_number should be equal to 0
     let parent_view_number = &consensus.high_qc.get_view_number();
+    assert_eq!(parent_view_number.get_u64(), 0);
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };

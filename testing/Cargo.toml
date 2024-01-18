@@ -13,12 +13,14 @@ slow-tests = []
 [dependencies]
 async-compatibility-layer = { workspace = true }
 sha3 = "^0.10"
+bincode = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", features = [
   "hotshot-testing",
 ], default-features = false }
+hotshot-constants = { path = "../constants" }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
