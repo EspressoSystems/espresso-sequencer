@@ -3602,7 +3602,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.7"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=release-gibraltar#68628901fc8ba56101e3a4912e5845d44414d362"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=release-gibraltar#3ede26f6993e3f661f92b58d0190ff26421cdae2"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
