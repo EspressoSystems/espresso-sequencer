@@ -88,7 +88,7 @@ where
                     self.insert_block(BlockQueryData::new(leaf.block_header.clone(), block))
                         .await?;
                 } else {
-                    tracing::info!(
+                    tracing::error!(
                         "block {} not available at decide",
                         leaf.block_header.block_number()
                     );
