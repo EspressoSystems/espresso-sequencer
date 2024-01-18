@@ -73,9 +73,6 @@ contract BoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice gets a box for the sender
     function getBox() public view returns (Box memory) {
-        if (boxes[msg.sender].size == 0) {
-            revert NoBoxExists();
-        }
         return boxes[msg.sender];
     }
 

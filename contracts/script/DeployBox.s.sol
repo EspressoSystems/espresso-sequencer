@@ -9,14 +9,16 @@ contract DeployBox is Script {
     /// @notice runs the deployment
     /// @return address of the proxy
     function run() external returns (address) {
-        address proxy = deployBox();
+        address admin = makeAddr("admin");
+        address proxy = deployBox(admin);
         return proxy;
     }
 
     /// @notice deploys the implementation contract and the proxy with the address of implementation
     /// @return address of the proxy
-    function deployBox() public returns (address) {
-        vm.startBroadcast();
+    function deployBox(address admin) public returns (address) {
+        vm.startBroadcast(admin);
+
         BoxV1 box = new BoxV1(); //Our implementation(logic).Proxy will point here to delegate
             // call/borrow the functions
 
