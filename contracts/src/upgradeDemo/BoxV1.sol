@@ -29,6 +29,9 @@ contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 balance;
     }
 
+    /// @notice A simple way to track contract versions
+    uint32 public immutable version = 1;
+
     /// @notice Mapping between owner and box, the data types here will not be upgraded for now
     /// @dev If we want to test data migrations then this should be upgraded
     mapping(address boxOwner => Box box) public boxes;

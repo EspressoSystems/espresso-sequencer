@@ -46,9 +46,12 @@ contract BoxTest is Test {
     // check that the proxy address remains the same
     function testUpgradesSameProxyAddress() public {
         uint256 boxSize = 1;
+        uint256 currentVersion = 1;
         boxV1Proxy.addBox(boxSize);
+        assertEq(boxV1Proxy.version(), currentVersion);
 
         //upgrade box
+        uint256 newVersion = 2;
         boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
         assertEq(address(boxV2Proxy), address(boxV1Proxy));
         uint256 newSize = 2;
@@ -58,6 +61,7 @@ contract BoxTest is Test {
         BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
         assertEq(boxV2.size, newSize);
         assertEq(boxV2.maxItems, newCapacity);
+        assertEq(boxV2Proxy.version(), newVersion);
     }
 
     // test that the ETH balance is correct after the upgrade

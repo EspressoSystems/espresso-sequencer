@@ -35,6 +35,9 @@ contract BoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 maxItems;
     }
 
+    /// @notice A simple way to track contract versions
+    uint32 public immutable version = 2;
+
     /// @notice Box struct with new member
     mapping(address boxOwner => Box box) public boxes;
 
