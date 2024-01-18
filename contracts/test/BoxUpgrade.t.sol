@@ -31,15 +31,16 @@ contract BoxTest is Test {
     // that the data remains the same after upgrading the implementation
     function testUpgradeSameData() public {
         //add Box of size 1
-        uint256 boxSize = 1;
+        uint256 boxSize = 38;
         boxV1Proxy.addBox(boxSize);
         assertEq(boxV1Proxy.getBox().size, boxSize);
 
         //upgrade box and check that the box size is maintained and the capacity is empty
         boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
-        assertEq(boxV2Proxy.getBox().size, boxSize);
-        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY);
-        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min);
+        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        assertEq(boxV2.size, boxSize);
+        assertTrue(boxV2.status == BoxV2.BoxStatus.EMPTY);
+        assertEq(boxV2.maxItems, type(uint256).min);
     }
 
     // check that the proxy address remains the same
@@ -53,7 +54,10 @@ contract BoxTest is Test {
         uint256 newSize = 2;
         uint256 newCapacity = 20;
         boxV2Proxy.updateBox(newSize, newCapacity);
-        assertEq(boxV2Proxy.getBox().size, newSize);
+
+        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        assertEq(boxV2.size, newSize);
+        assertEq(boxV2.maxItems, newCapacity);
     }
 
     // test that the ETH balance is correct after the upgrade
@@ -145,11 +149,13 @@ contract BoxTest is Test {
         boxV1Proxy.addBox(boxSize);
         assertEq(boxV1Proxy.getBox().size, boxSize);
 
-        //upgrade Box Implementation and check that the box size is maintained and the capacity is
+        //upgrade Box
         boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
-        assertEq(boxV2Proxy.getBox().size, boxSize);
-        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY);
-        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min);
+        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+
+        assertEq(boxV2.size, boxSize);
+        assertTrue(boxV2.status == BoxV2.BoxStatus.EMPTY);
+        assertEq(boxV2.maxItems, type(uint256).min);
 
         //use newly updated struct element, maxItems
         uint256 newCapacity = 20;
@@ -164,15 +170,18 @@ contract BoxTest is Test {
         BoxV1.BoxStatus boxStatus = BoxV1.BoxStatus.FULL;
         boxV1Proxy.addBox(boxSize);
         boxV1Proxy.updateBoxStatus(boxStatus);
-        assertEq(boxV1Proxy.getBox().size, boxSize);
-        assertTrue(boxV1Proxy.getBox().status == boxStatus);
+        BoxV1.Box memory boxV1 = boxV1Proxy.getBox();
+        assertEq(boxV1.size, boxSize);
+        assertTrue(boxV1.status == boxStatus);
 
         //upgrade
         boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
         uint256 currentMaxItems = type(uint256).min;
-        assertEq(boxV2Proxy.getBox().size, boxSize);
-        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.FULL);
-        assertEq(boxV2Proxy.getBox().maxItems, currentMaxItems);
+
+        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        assertEq(boxV2.size, boxSize);
+        assertTrue(boxV2.status == BoxV2.BoxStatus.FULL);
+        assertEq(boxV2.maxItems, currentMaxItems);
     }
 
     //test new enum type works
