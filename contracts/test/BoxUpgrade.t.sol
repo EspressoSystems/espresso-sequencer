@@ -37,10 +37,8 @@ contract BoxTest is Test {
         //upgrade box and check that the box size is maintained and the capacity is empty
         boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
         assertEq(boxV2Proxy.getBox().size, boxSize);
-        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY); //is it possible to get
-            // type of the actual item e.g. BoxV2.Feature.maxItems
-        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min); //is it possible to get type of
-            // the actual item e.g. BoxV2.Feature.maxItems
+        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY);
+        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min);
     }
 
     // check that the proxy address remains the same
@@ -148,10 +146,8 @@ contract BoxTest is Test {
         //upgrade Box Implementation and check that the box size is maintained and the capacity is
         boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
         assertEq(boxV2Proxy.getBox().size, boxSize);
-        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY); //is it possible to get
-            // type of the actual item e.g. BoxV2.Feature.maxItems
-        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min); //is it possible to get type of
-            // the actual item e.g. BoxV2.Feature.maxItems
+        assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.EMPTY);
+        assertEq(boxV2Proxy.getBox().maxItems, type(uint256).min);
 
         //use newly updated struct element, maxItems
         uint256 newCapacity = 20;
@@ -174,5 +170,35 @@ contract BoxTest is Test {
         assertEq(boxV2Proxy.getBox().size, boxSize);
         assertTrue(boxV2Proxy.getBox().status == BoxV2.BoxStatus.FULL);
         assertEq(boxV2Proxy.getBox().maxItems, currentMaxItems);
+    }
+
+    //test new enum type works
+    function testNewEnumType() public {
+        //add Box of size 1
+        uint256 boxSize = 1;
+        BoxV1.BoxStatus boxStatus = BoxV1.BoxStatus.FULL;
+        boxV1Proxy.addBox(boxSize);
+        boxV1Proxy.updateBoxStatus(boxStatus);
+
+        boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
+        BoxV2.BoxStatus newBoxStatus = BoxV2.BoxStatus.ALMOST_FULL;
+
+        boxV2Proxy.updateBoxStatus(newBoxStatus);
+
+        assertTrue(boxV2Proxy.getBox().status == newBoxStatus);
+    }
+
+    //test that the function still works as expected when the logic changes
+    function testSameFunctionSigntureDifferentLogic() public {
+        //add Box of size 1
+        uint256 boxSize = 1;
+        boxV1Proxy.addBox(boxSize);
+        uint256 boxV1Size = boxV1Proxy.getBox().size;
+
+        //upgrade box
+        boxV2Proxy = BoxV2(upgrader.run(address(proxy)));
+        uint256 boxV2Size = boxV2Proxy.getBox().size;
+
+        assertEq(boxV1Size, boxV2Size);
     }
 }

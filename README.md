@@ -28,7 +28,7 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 ## Run the tests
 
     just pull # to pull docker images
-    cargo test
+    just test
 
 ## Building figures
 
