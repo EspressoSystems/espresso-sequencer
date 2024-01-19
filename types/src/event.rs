@@ -1,7 +1,10 @@
 //! Events that a `HotShot` instance can emit
 
 use crate::{
-    data::Leaf, error::HotShotError, simple_certificate::QuorumCertificate,
+    data::{DAProposal, Leaf, QuorumProposal},
+    error::HotShotError,
+    message::Proposal,
+    simple_certificate::QuorumCertificate,
     traits::node_implementation::NodeType,
 };
 
@@ -61,5 +64,27 @@ pub enum EventType<TYPES: NodeType> {
     ViewFinished {
         /// The view number that has just finished
         view_number: TYPES::Time,
+    },
+    /// New transactions were received from the network
+    /// or submitted to the network by us
+    Transactions {
+        /// The list of transactions
+        transactions: Vec<TYPES::Transaction>,
+    },
+    /// DA proposal was received from the network
+    /// or submitted to the network by us
+    DAProposal {
+        /// Contents of the proposal
+        proposal: Proposal<TYPES, DAProposal<TYPES>>,
+        /// Public key of the leader submitting the proposal
+        sender: TYPES::SignatureKey,
+    },
+    /// Quorum proposal was received from the network
+    /// or submitted to the network by us
+    QuorumProposal {
+        /// Contents of the proposal
+        proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
+        /// Public key of the leader submitting the proposal
+        sender: TYPES::SignatureKey,
     },
 }
