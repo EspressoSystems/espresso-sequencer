@@ -24,7 +24,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock},
-        BlockPayload, State,
+        BlockPayload,
     },
     vote::HasViewNumber,
 };
@@ -139,20 +139,12 @@ async fn build_quorum_proposal_and_signature(
     );
     let view_number = ViewNumber::new(view);
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
-    let Ok(state) = parent_leaf.state.validate_and_apply_header(
-        &block_header.clone(),
-        &parent_leaf.block_header.clone(),
-        &view_number,
-    ) else {
-        panic!("Block header doesn't extend the proposal",);
-    };
     let leaf = Leaf {
         view_number,
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
         block_header: block_header.clone(),
         block_payload: None,
-        state,
         rejected: vec![],
         proposer_id: *api.public_key(),
     };

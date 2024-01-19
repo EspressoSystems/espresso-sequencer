@@ -205,28 +205,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
                     error!(
-                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
-                                justify_qc.get_data().leaf_commit,
-                                proposal.view_number,
-                            );
+                        "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                        justify_qc.get_data().leaf_commit,
+                        proposal.view_number,
+                    );
                     return false;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent.state.validate_and_apply_header(
-                    &proposal.block_header.clone(),
-                    &parent.block_header.clone(),
-                    &view,
-                ) else {
-                    error!("Block header doesn't extend the proposal",);
-                    return false;
-                };
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
                     justify_qc: proposal.justify_qc.clone(),
                     parent_commitment,
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
-                    state,
                     rejected: Vec::new(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
@@ -306,14 +297,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return false;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent.state.validate_and_apply_header(
-                    &proposal.block_header.clone(),
-                    &parent.block_header.clone(),
-                    &view,
-                ) else {
-                    error!("Block header doesn't extend the proposal",);
-                    return false;
-                };
 
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
@@ -321,7 +304,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
-                    state,
                     rejected: Vec::new(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
@@ -538,7 +520,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                 };
 
-                //
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
                     // If no parent then just update our state map and return.  We will not vote.
@@ -546,44 +527,34 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
                     );
-                    if let Ok(parent_leaf) = consensus.get_leaf(view - 1) {
-                        let parent_state = parent_leaf.get_state();
-                        let Ok(state) = parent_state.validate_and_apply_header(
-                            &proposal.data.block_header.clone(),
-                            &parent_leaf.block_header.clone(),
-                            &view,
-                        ) else {
-                            error!("Block header doesn't extend the proposal",);
-                            return;
-                        };
-                        let leaf = Leaf {
-                            view_number: view,
-                            justify_qc: justify_qc.clone(),
-                            parent_commitment: justify_qc.get_data().leaf_commit,
-                            block_header: proposal.data.block_header,
-                            state,
-                            block_payload: None,
-                            rejected: Vec::new(),
-                            proposer_id: sender,
-                        };
+                    let leaf = Leaf {
+                        view_number: view,
+                        justify_qc: justify_qc.clone(),
+                        parent_commitment: justify_qc.get_data().leaf_commit,
+                        block_header: proposal.data.block_header.clone(),
+                        block_payload: None,
+                        rejected: Vec::new(),
+                        proposer_id: sender,
+                    };
+                    let state =
+                        <TYPES::StateType as State>::from_header(&proposal.data.block_header);
 
-                        let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-                        consensus.state_map.insert(
-                            view,
-                            View {
-                                view_inner: ViewInner::Leaf {
-                                    leaf: leaf.commit(),
-                                    metadata: leaf.get_state().metadata(),
-                                },
+                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                    consensus.state_map.insert(
+                        view,
+                        View {
+                            view_inner: ViewInner::Leaf {
+                                leaf: leaf.commit(),
+                                state,
                             },
-                        );
-                        consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
-                    }
+                        },
+                    );
+                    consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
 
                     return;
                 };
                 let parent_commitment = parent.commit();
-                let Ok(state) = parent.state.validate_and_apply_header(
+                let Ok(state) = consensus.get_decided_state().validate_and_apply_header(
                     &proposal.data.block_header.clone(),
                     &parent.block_header.clone(),
                     &view,
@@ -597,7 +568,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.data.block_header,
                     block_payload: None,
-                    state,
                     rejected: Vec::new(),
                     proposer_id: sender,
                 };
@@ -740,7 +710,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     View {
                         view_inner: ViewInner::Leaf {
                             leaf: leaf.commit(),
-                            metadata: leaf.get_state().metadata(),
+                            state,
                         },
                     },
                 );
@@ -1205,21 +1175,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 commit_and_metadata.metadata.clone(),
                 &parent_header,
             );
-            let Ok(state) = parent_leaf.state.validate_and_apply_header(
-                &block_header.clone(),
-                &parent_leaf.block_header.clone(),
-                &view,
-            ) else {
-                error!("Block header doesn't extend the proposal",);
-                return false;
-            };
             let leaf = Leaf {
                 view_number: view,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
                 block_header: block_header.clone(),
                 block_payload: None,
-                state,
                 rejected: vec![],
                 proposer_id: self.api.public_key().clone(),
             };

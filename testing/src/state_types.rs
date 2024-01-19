@@ -82,7 +82,7 @@ impl State for TestState {
         })
     }
 
-    fn initialize(block_header: &Self::BlockHeader) -> Self {
+    fn from_header(block_header: &Self::BlockHeader) -> Self {
         Self {
             block_height: block_header.block_number,
             ..Default::default()

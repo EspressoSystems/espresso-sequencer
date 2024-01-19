@@ -223,7 +223,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
-                    metadata: anchored_leaf.get_state().metadata(),
+                    state: TYPES::StateType::genesis(),
                 },
             },
         );
@@ -359,20 +359,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(())
     }
 
-    /// Returns a copy of the state
-    ///
-    /// # Panics
-    ///
-    /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) -> TYPES::StateType {
-        self.inner
-            .consensus
-            .read()
-            .await
-            .get_decided_leaf()
-            .get_state()
-    }
-
     /// Returns a copy of the consensus struct
     #[must_use]
     pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
@@ -381,9 +367,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
     /// Returns a copy of the last decided leaf
     /// # Panics
-    /// Panics if internal state for consensus is inconsistent
+    /// Panics if internal leaf for consensus is inconsistent
     pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.inner.consensus.read().await.get_decided_leaf()
+    }
+
+    /// Returns a copy of the last decided validated state.
+    ///
+    /// # Panics
+    /// Panics if internal state for consensus is inconsistent
+    pub async fn get_decided_state(&self) -> TYPES::StateType {
+        self.inner
+            .consensus
+            .read()
+            .await
+            .get_decided_state()
+            .clone()
     }
 
     /// Initializes a new hotshot and does the work of setting up all the background tasks

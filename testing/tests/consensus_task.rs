@@ -11,7 +11,7 @@ use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
-    traits::{state::ConsensusTime, State},
+    traits::state::ConsensusTime,
 };
 use hotshot_types::{
     simple_vote::QuorumData,
@@ -53,13 +53,6 @@ async fn build_vote(
     };
 
     let parent_commitment = parent.commit();
-    let Ok(state) = parent.state.validate_and_apply_header(
-        &proposal.block_header.clone(),
-        &parent.block_header.clone(),
-        &view,
-    ) else {
-        panic!("Block header doesn't extend the proposal",);
-    };
 
     let leaf: Leaf<_> = Leaf {
         view_number: view,
@@ -67,7 +60,6 @@ async fn build_vote(
         parent_commitment,
         block_header: proposal.block_header,
         block_payload: None,
-        state,
         rejected: Vec::new(),
         proposer_id: membership.get_leader(view),
     };

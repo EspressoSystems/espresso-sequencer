@@ -86,7 +86,6 @@ impl TestMetadata {
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 50,
                 check_leaf: true,
-                check_state: true,
                 check_block: true,
                 num_failed_views: 15,
                 transaction_threshold: 0,
@@ -112,7 +111,6 @@ impl TestMetadata {
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 20,
                 check_leaf: true,
-                check_state: true,
                 check_block: true,
                 num_failed_views: 8,
                 transaction_threshold: 0,

@@ -104,9 +104,6 @@ pub struct RoundResult<TYPES: NodeType> {
     /// block -> # entries decided on that block
     pub block_map: HashMap<VidCommitment, usize>,
 
-    /// state -> # entries decided on that state
-    pub state_map: HashMap<TYPES::StateType, usize>,
-
     pub num_txns_map: HashMap<u64, usize>,
 }
 
@@ -117,7 +114,6 @@ impl<TYPES: NodeType> Default for RoundResult<TYPES> {
             failed_nodes: Default::default(),
             leaf_map: Default::default(),
             block_map: Default::default(),
-            state_map: Default::default(),
             num_txns_map: Default::default(),
             status: ViewStatus::InProgress,
         }
@@ -199,16 +195,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                 }
             }
 
-            let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
+            let payload_commitment = leaf.get_payload_commitment();
 
-            match self.state_map.entry(state) {
-                std::collections::hash_map::Entry::Occupied(mut o) => {
-                    *o.get_mut() += 1;
-                }
-                std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(1);
-                }
-            }
             match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
@@ -245,7 +233,6 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         total_num_nodes: usize,
         key: Leaf<TYPES>,
         check_leaf: bool,
-        check_state: bool,
         check_block: bool,
         transaction_threshold: u64,
     ) {
@@ -255,11 +242,6 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         if check_leaf && self.leaf_map.len() != 1 {
             self.status = ViewStatus::Err(OverallSafetyTaskErr::MismatchedLeaf);
-            return;
-        }
-
-        if check_state && self.state_map.len() != 1 {
-            self.status = ViewStatus::Err(OverallSafetyTaskErr::InconsistentStates);
             return;
         }
 
@@ -288,11 +270,9 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             // if not, return error
             // if neither, continue through
 
-            let state_key = key.get_state();
             let block_key = key.get_payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
-                && *self.state_map.get(&state_key).unwrap() == threshold
                 && *self.leaf_map.get(&key).unwrap() == threshold
             {
                 self.status = ViewStatus::Ok;
@@ -334,8 +314,6 @@ pub struct OverallSafetyPropertiesDescription {
     pub num_successful_views: usize,
     /// whether or not to check the leaf
     pub check_leaf: bool,
-    /// whether or not to check the state
-    pub check_state: bool,
     /// whether or not to check the block
     pub check_block: bool,
     /// whether or not to check that we have threshold amounts of transactions each block
@@ -355,7 +333,6 @@ impl std::fmt::Debug for OverallSafetyPropertiesDescription {
         f.debug_struct("OverallSafetyPropertiesDescription")
             .field("num successful views", &self.num_successful_views)
             .field("check leaf", &self.check_leaf)
-            .field("check_state", &self.check_state)
             .field("check_block", &self.check_block)
             .field("num_failed_rounds_total", &self.num_failed_views)
             .finish()
@@ -367,7 +344,6 @@ impl Default for OverallSafetyPropertiesDescription {
         Self {
             num_successful_views: 50,
             check_leaf: false,
-            check_state: true,
             check_block: true,
             num_failed_views: 0,
             transaction_threshold: 0,
@@ -384,7 +360,6 @@ impl OverallSafetyPropertiesDescription {
     ) -> TaskGenerator<OverallSafetyTask<TYPES, I>> {
         let Self {
             check_leaf,
-            check_state,
             check_block,
             num_failed_views: num_failed_rounds_total,
             num_successful_views,
@@ -495,7 +470,6 @@ impl OverallSafetyPropertiesDescription {
                                         state.handles.len(),
                                         key,
                                         check_leaf,
-                                        check_state,
                                         check_block,
                                         transaction_threshold,
                                         );

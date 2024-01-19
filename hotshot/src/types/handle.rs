@@ -102,8 +102,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// # Errors
     ///
     /// Returns an error if the underlying `Storage` returns an error
-    pub async fn get_state(&self) {
-        self.hotshot.get_state().await;
+    pub async fn get_state(&self) -> TYPES::StateType {
+        self.hotshot.get_decided_state().await
     }
 
     /// Gets most recent decided leaf
