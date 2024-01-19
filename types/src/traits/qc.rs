@@ -11,7 +11,9 @@ use jf_primitives::{errors::PrimitivesError, signatures::AggregateableSignatureS
 use serde::{Deserialize, Serialize};
 
 /// Trait for validating a QC built from different signatures on the same message
-pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>>
+pub trait QuorumCertificateScheme<
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
+>
 {
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.

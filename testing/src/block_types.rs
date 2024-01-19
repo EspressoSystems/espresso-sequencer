@@ -116,7 +116,7 @@ impl BlockPayload for TestBlockPayload {
         ))
     }
 
-    fn from_bytes<E>(encoded_transactions: E, _metadata: Self::Metadata) -> Self
+    fn from_bytes<E>(encoded_transactions: E, _metadata: &Self::Metadata) -> Self
     where
         E: Iterator<Item = u8>,
     {
@@ -149,7 +149,10 @@ impl BlockPayload for TestBlockPayload {
         Ok(TestTransaction::encode(self.transactions.clone())?.into_iter())
     }
 
-    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+    fn transaction_commitments(
+        &self,
+        _metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
@@ -214,17 +217,17 @@ impl BlockHeader for TestBlockHeader {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata {}
+    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata {
+        &()
+    }
 }
 
 impl Committable for TestBlockHeader {
     fn commit(&self) -> Commitment<Self> {
-        let payload_commitment_bytes: [u8; 32] = self.payload_commitment().into();
-
         RawCommitmentBuilder::new("Header Comm")
             .u64_field("block number", self.block_number())
             .constant_str("payload commitment")
-            .fixed_size_bytes(&payload_commitment_bytes)
+            .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
             .finalize()
     }
 

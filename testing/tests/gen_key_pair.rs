@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use core::panic;
-    use hotshot::types::{bn254::BLSPubKey, SignatureKey};
+    use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_orchestrator::config::ValidatorConfigFile;
     use hotshot_types::ValidatorConfig;
     use std::env;

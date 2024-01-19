@@ -6,8 +6,9 @@ use crate::{
     test_builder::TestMetadata,
 };
 use commit::Committable;
+use ethereum_types::U256;
 use hotshot::{
-    types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
+    types::{BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
@@ -17,18 +18,30 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
+    simple_vote::SimpleVote,
     traits::{
         block_contents::vid_commitment,
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::NodeType,
-        signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
         BlockPayload,
     },
     vote::HasViewNumber,
 };
+
+use async_lock::RwLockUpgradableReadGuard;
+use bitvec::bitvec;
+use hotshot_types::simple_vote::QuorumData;
+use hotshot_types::simple_vote::QuorumVote;
+use hotshot_types::utils::View;
+use hotshot_types::utils::ViewInner;
+use hotshot_types::vote::Certificate;
+use hotshot_types::vote::Vote;
+
+use serde::Serialize;
+use std::{fmt::Debug, hash::Hash};
 
 pub async fn build_system_handle(
     node_id: u64,
@@ -102,27 +115,106 @@ pub async fn build_system_handle(
     .expect("Could not init hotshot")
 }
 
+pub fn build_cert<
+    TYPES: NodeType<SignatureKey = BLSPubKey>,
+    DATAType: Committable + Clone + Eq + Hash + Serialize + Debug + 'static,
+    VOTE: Vote<TYPES, Commitment = DATAType>,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+>(
+    data: DATAType,
+    membership: &TYPES::Membership,
+    view: TYPES::Time,
+    public_key: &TYPES::SignatureKey,
+    private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
+) -> CERT {
+    let real_qc_sig =
+        build_assembled_sig::<TYPES, VOTE, CERT, DATAType>(data.clone(), membership, view);
+
+    let vote =
+        SimpleVote::<TYPES, DATAType>::create_signed_vote(data, view, public_key, private_key)
+            .expect("Failed to sign data!");
+    let cert = CERT::create_signed_certificate(
+        vote.get_data_commitment(),
+        vote.get_data().clone(),
+        real_qc_sig,
+        vote.get_view_number(),
+    );
+    cert
+}
+
+pub fn build_assembled_sig<
+    TYPES: NodeType<SignatureKey = BLSPubKey>,
+    VOTE: Vote<TYPES>,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+    DATAType: Committable + Clone + Eq + Hash + Serialize + Debug + 'static,
+>(
+    data: DATAType,
+    membership: &TYPES::Membership,
+    view: TYPES::Time,
+) -> <TYPES::SignatureKey as SignatureKey>::QCType {
+    let stake_table = membership.get_committee_qc_stake_table();
+    let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
+        <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+            stake_table.clone(),
+            U256::from(CERT::threshold(membership)),
+        );
+    let total_nodes = stake_table.len();
+    let signers = bitvec![1; total_nodes];
+    let mut sig_lists = Vec::new();
+
+    // assemble the vote
+    for node_id in 0..total_nodes {
+        let (private_key_i, public_key_i) = key_pair_for_id(node_id.try_into().unwrap());
+        let vote: SimpleVote<TYPES, DATAType> = SimpleVote::<TYPES, DATAType>::create_signed_vote(
+            data.clone(),
+            view,
+            &public_key_i,
+            &private_key_i,
+        )
+        .expect("Failed to sign data!");
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
+            vote.get_signature();
+        sig_lists.push(original_signature);
+    }
+
+    let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+        &real_qc_pp,
+        signers.as_bitslice(),
+        &sig_lists[..],
+    );
+
+    real_qc_sig
+}
+
 async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
+    public_key: &BLSPubKey,
     view: u64,
-) -> (QuorumProposal<TestTypes>, EncodedSignature) {
-    let consensus_lock = handle.get_consensus();
-    let consensus = consensus_lock.read().await;
+) -> (
+    QuorumProposal<TestTypes>,
+    <BLSPubKey as SignatureKey>::PureAssembledSignatureType,
+) {
+    // build the genesis view
+    let genesis_consensus = handle.get_consensus();
+    let cur_consensus = genesis_consensus.upgradable_read().await;
+    let mut consensus = RwLockUpgradableReadGuard::upgrade(cur_consensus).await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
+    // parent_view_number should be equal to 0
     let parent_view_number = &consensus.high_qc.get_view_number();
+    assert_eq!(parent_view_number.get_u64(), 0);
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
-    let Some(leaf) = parent_view.get_leaf_commitment() else {
+    let Some(leaf_view_0) = parent_view.get_leaf_commitment() else {
         panic!("Parent of high QC points to a view without a proposal");
     };
-    let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
+    let Some(leaf_view_0) = consensus.saved_leaves.get(&leaf_view_0) else {
         panic!("Failed to find high QC parent.");
     };
-    let parent_leaf = leaf.clone();
+    let parent_leaf = leaf_view_0.clone();
 
     // every event input is seen on the event stream in the output.
     let block = <TestBlockPayload as TestableBlock>::genesis();
@@ -136,24 +228,82 @@ async fn build_quorum_proposal_and_signature(
             .total_nodes(),
     );
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
-    let leaf = Leaf {
-        view_number: ViewNumber::new(view),
+    // current leaf that can be re-assigned everytime when entering a new view
+    let mut leaf = Leaf {
+        view_number: ViewNumber::new(1),
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
         block_header: block_header.clone(),
         block_payload: None,
         rejected: vec![],
-        timestamp: 0,
-        proposer_id: api.public_key().to_bytes(),
+        proposer_id: *api.public_key(),
     };
-    let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
-    let proposal = QuorumProposal::<TestTypes> {
-        block_header,
-        view_number: ViewNumber::new(view),
+
+    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
+        .expect("Failed to sign leaf commitment!");
+    let mut proposal = QuorumProposal::<TestTypes> {
+        block_header: block_header.clone(),
+        view_number: ViewNumber::new(1),
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
     };
+
+    // Only view 2 is tested, higher views are not tested
+    for cur_view in 2..=view {
+        // save states for the previous view to pass all the qc checks
+        // In the long term, we want to get rid of this, do not manually update consensus state
+        consensus.state_map.insert(
+            ViewNumber::new(cur_view - 1),
+            View {
+                view_inner: ViewInner::Leaf {
+                    leaf: leaf.commit(),
+                },
+            },
+        );
+        consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+        // create a qc by aggregate signatures on the previous view (the data signed is last leaf commitment)
+        let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
+        let quorum_data = QuorumData {
+            leaf_commit: leaf.commit(),
+        };
+        let created_qc = build_cert::<
+            TestTypes,
+            QuorumData<TestTypes>,
+            QuorumVote<TestTypes>,
+            QuorumCertificate<TestTypes>,
+        >(
+            quorum_data,
+            &quorum_membership,
+            ViewNumber::new(cur_view - 1),
+            public_key,
+            private_key,
+        );
+        // create a new leaf for the current view
+        let parent_leaf = leaf.clone();
+        let leaf_new_view = Leaf {
+            view_number: ViewNumber::new(cur_view),
+            justify_qc: created_qc.clone(),
+            parent_commitment: parent_leaf.commit(),
+            block_header: block_header.clone(),
+            block_payload: None,
+            rejected: vec![],
+            proposer_id: quorum_membership.get_leader(ViewNumber::new(cur_view)),
+        };
+        let signature_new_view =
+            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
+                .expect("Failed to sign leaf commitment!");
+        let proposal_new_view = QuorumProposal::<TestTypes> {
+            block_header: block_header.clone(),
+            view_number: ViewNumber::new(cur_view),
+            justify_qc: created_qc,
+            timeout_certificate: None,
+            proposer_id: leaf_new_view.clone().proposer_id,
+        };
+        proposal = proposal_new_view;
+        signature = signature_new_view;
+        leaf = leaf_new_view;
+    }
 
     (proposal, signature)
 }
@@ -163,8 +313,9 @@ pub async fn build_quorum_proposal(
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
 ) -> Proposal<TestTypes, QuorumProposal<TestTypes>> {
+    let public_key = &BLSPubKey::from_private(private_key);
     let (proposal, signature) =
-        build_quorum_proposal_and_signature(handle, private_key, view).await;
+        build_quorum_proposal_and_signature(handle, private_key, public_key, view).await;
     Proposal {
         data: proposal,
         signature,

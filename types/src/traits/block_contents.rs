@@ -56,7 +56,7 @@ pub trait BlockPayload:
     /// and the associated number of VID storage nodes
     ///
     /// `I` may be, but not necessarily is, the `Encode` type directly from `fn encode`.
-    fn from_bytes<I>(encoded_transactions: I, metadata: Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>;
 
@@ -70,7 +70,10 @@ pub trait BlockPayload:
     fn encode(&self) -> Result<Self::Encode<'_>, Self::Error>;
 
     /// List of transaction commitments.
-    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;
+    fn transaction_commitments(
+        &self,
+        metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>>;
 }
 
 /// Compute the VID payload commitment.
@@ -118,5 +121,5 @@ pub trait BlockHeader:
     fn payload_commitment(&self) -> VidCommitment;
 
     /// Get the metadata.
-    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata;
+    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata;
 }

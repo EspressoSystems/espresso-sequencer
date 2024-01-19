@@ -15,7 +15,9 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
+    event::{Event, EventType},
     traits::{
+        block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
@@ -91,28 +93,42 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsRecv(transactions) => {
-                let consensus = self.consensus.read().await;
-                self.transactions
-                    .modify(|txns| {
-                        for transaction in transactions {
-                            let size = bincode_opts().serialized_size(&transaction).unwrap_or(0);
+                futures::join! {
+                    self.api
+                        .send_event(Event {
+                            view_number: self.cur_view,
+                            event: EventType::Transactions {
+                                transactions: transactions.clone(),
+                            },
+                        }),
+                    async {
+                        let consensus = self.consensus.read().await;
+                        self.transactions
+                            .modify(|txns| {
+                                for transaction in transactions {
+                                    let size =
+                                        bincode_opts().serialized_size(&transaction).unwrap_or(0);
 
-                            // If we didn't already know about this transaction, update our mempool metrics.
-                            if !self.seen_transactions.remove(&transaction.commit())
-                                && txns.insert(transaction.commit(), transaction).is_none()
-                            {
-                                consensus.metrics.outstanding_transactions.update(1);
-                                consensus
-                                    .metrics
-                                    .outstanding_transactions_memory_size
-                                    .update(i64::try_from(size).unwrap_or_else(|e| {
-                                        warn!("Conversion failed: {e}. Using the max value.");
-                                        i64::MAX
-                                    }));
-                            }
-                        }
-                    })
-                    .await;
+                                    // If we didn't already know about this transaction, update our mempool metrics.
+                                    if !self.seen_transactions.remove(&transaction.commit())
+                                        && txns.insert(transaction.commit(), transaction).is_none()
+                                    {
+                                        consensus.metrics.outstanding_transactions.update(1);
+                                        consensus
+                                            .metrics
+                                            .outstanding_transactions_memory_size
+                                            .update(i64::try_from(size).unwrap_or_else(|e| {
+                                                warn!(
+                                                    "Conversion failed: {e}. Using the max value."
+                                                );
+                                                i64::MAX
+                                            }));
+                                    }
+                                }
+                            })
+                            .await;
+                    }
+                };
 
                 return None;
             }
@@ -121,8 +137,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut included_txn_size = 0;
                 let mut included_txn_count = 0;
                 for leaf in leaf_chain {
-                    if let Some(payload) = leaf.block_payload {
-                        for txn in payload.transaction_commitments() {
+                    if let Some(ref payload) = leaf.block_payload {
+                        for txn in
+                            payload.transaction_commitments(leaf.get_block_header().metadata())
+                        {
                             included_txns.insert(txn);
                         }
                     }

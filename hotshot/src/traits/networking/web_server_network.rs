@@ -114,7 +114,7 @@ impl<TYPES: NodeType> WebServerNetwork<TYPES> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// let (tx, _rx): (TaskChannel<MyKey>, _) = tokio::sync::mpsc::unbounded_channel();
 /// ```
 ///
@@ -130,9 +130,9 @@ type TaskChannel<K> = UnboundedSender<ConsensusIntentEvent<K>>;
 ///
 /// # Examples
 ///
-/// ```
-/// use your_crate::TaskMap;
-/// let mut map: TaskMap<MyKey> = TaskMap::default();
+/// ```ignore
+/// # use crate::TaskMap;
+/// let mut map: TaskMap<u64> = TaskMap::default();
 /// ```
 ///
 /// # Note
@@ -160,9 +160,10 @@ impl<K: SignatureKey> TaskMap<K> {
     ///
     /// # Examples
     ///
-    /// ```
-    /// let mut map: TaskMap<MyKey> = TaskMap::default();
-    /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal).await;
+    /// ```ignore
+    /// # use crate::TaskMap;
+    /// let mut map: TaskMap<u64> = TaskMap::default();
+    /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal(5)).await;
     /// ```
     async fn prune_tasks(
         &mut self,
@@ -260,6 +261,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
                 MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
+                MessagePurpose::Upgrade => config::get_upgrade_route(view_number),
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -415,6 +417,15 @@ impl<TYPES: NodeType> Inner<TYPES> {
 
                             MessagePurpose::Internal => {
                                 error!("Received internal message in web server network");
+                            }
+
+                            MessagePurpose::Upgrade => {
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
                             }
                         }
                     }
@@ -645,6 +656,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             MessagePurpose::ViewSyncVote => config::post_view_sync_vote_route(*view_number),
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
             MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
+            MessagePurpose::Upgrade => config::post_upgrade_route(*view_number),
         };
 
         let network_msg: SendMsg<Message<TYPES>> = SendMsg {

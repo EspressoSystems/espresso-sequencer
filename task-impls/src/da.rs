@@ -13,6 +13,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
+    event::{Event, EventType},
     message::Proposal,
     simple_certificate::DACertificate,
     simple_vote::{DAData, DAVote},
@@ -141,6 +142,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
+                // Proposal is fresh and valid, notify the application layer
+                self.api
+                    .send_event(Event {
+                        view_number: self.cur_view,
+                        event: EventType::DAProposal {
+                            proposal: proposal.clone(),
+                            sender: sender.clone(),
+                        },
+                    })
+                    .await;
+
                 if !self.da_membership.has_stake(&self.public_key) {
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
@@ -149,14 +161,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
                 // Generate and send vote
-                let vote = DAVote::create_signed_vote(
+                let Ok(vote) = DAVote::create_signed_vote(
                     DAData {
                         payload_commit: payload_commitment,
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign DA Vote!");
+                    return None;
+                };
 
                 // ED Don't think this is necessary?
                 // self.cur_view = view;
@@ -275,8 +290,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
                 // sign the encoded transactions as opposed to the VID commitment
-                let signature =
-                    TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash);
+                let Ok(signature) =
+                    TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash)
+                else {
+                    error!("Failed to sign block payload!");
+                    return None;
+                };
+
                 let data: DAProposal<TYPES> = DAProposal {
                     encoded_transactions,
                     metadata: metadata.clone(),

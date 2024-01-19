@@ -3,14 +3,14 @@
 use std::{fmt::Debug, hash::Hash};
 
 use commit::{Commitment, Committable};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+use hotshot_constants::Version;
 
 use crate::{
     data::{Leaf, VidCommitment},
-    traits::{
-        node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vote::{HasViewNumber, Vote},
 };
 
@@ -63,6 +63,20 @@ pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Upgrade vote.
+pub struct UpgradeProposalData<TYPES: NodeType + DeserializeOwned> {
+    /// The old version that we are upgrading from.
+    pub old_version: Version,
+    /// The new version that we are upgrading to.
+    pub new_version: Version,
+    /// A unique identifier for the specific protocol being voted on.
+    pub new_version_hash: Vec<u8>,
+    /// The last block for which the old version will be in effect.
+    pub old_version_last_block: TYPES::Time,
+    /// The first block for which the new version will be in effect.
+    pub new_version_first_block: TYPES::Time,
+}
 
 /// Marker trait for data or commitments that can be voted on.
 /// Only structs in this file can implement voteable.  This is enforced with the `Sealed` trait
@@ -85,11 +99,14 @@ mod sealed {
     impl<C: Committable> Sealed for C {}
 }
 
-/// A simple yes vote over some votable type.  
+/// A simple yes vote over some votable type.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     /// The signature share associated with this vote
-    pub signature: (EncodedPublicKey, EncodedSignature),
+    pub signature: (
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ),
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
@@ -106,10 +123,10 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
     type Commitment = DATA;
 
     fn get_signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
-        <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
+        self.signature.0.clone()
     }
 
-    fn get_signature(&self) -> EncodedSignature {
+    fn get_signature(&self) -> <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType {
         self.signature.1.clone()
     }
 
@@ -124,17 +141,21 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
 
 impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     /// Creates and signs a simple vote
+    /// # Errors
+    /// If we are unable to sign the data
     pub fn create_signed_vote(
         data: DATA,
         view: TYPES::Time,
         pub_key: &TYPES::SignatureKey,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Self {
-        let signature = TYPES::SignatureKey::sign(private_key, data.commit().as_ref());
-        Self {
-            signature: (pub_key.to_bytes(), signature),
-            data,
-            view_number: view,
+    ) -> Result<Self, <TYPES::SignatureKey as SignatureKey>::SignError> {
+        match TYPES::SignatureKey::sign(private_key, data.commit().as_ref()) {
+            Ok(signature) => Ok(Self {
+                signature: (pub_key.clone(), signature),
+                data,
+                view_number: view,
+            }),
+            Err(e) => Err(e),
         }
     }
 }
@@ -162,10 +183,26 @@ impl Committable for DAData {
             .finalize()
     }
 }
+
 impl Committable for VIDData {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("VID Vote")
             .var_size_bytes(self.payload_commit.as_ref())
+            .finalize()
+    }
+}
+
+impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let builder = commit::RawCommitmentBuilder::new("Upgrade Vote");
+        builder
+            .u64(*self.new_version_first_block)
+            .u64(*self.old_version_last_block)
+            .var_size_bytes(self.new_version_hash.as_slice())
+            .u16(self.new_version.minor)
+            .u16(self.new_version.major)
+            .u16(self.old_version.minor)
+            .u16(self.old_version.major)
             .finalize()
     }
 }
@@ -217,3 +254,5 @@ pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>
 pub type ViewSyncPreCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>>;
 /// View Sync Finalize Vote type alias
 pub type ViewSyncFinalizeVote<TYPES> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>>;
+/// Upgrade proposal vote
+pub type UpgradeVote<TYPES> = SimpleVote<TYPES, UpgradeProposalData<TYPES>>;

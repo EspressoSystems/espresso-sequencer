@@ -2,14 +2,14 @@ use crate::view_sync::ViewSyncPhase;
 
 use either::Either;
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, VidCommitment, VidDisperse},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidCommitment, VidDisperse},
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncCommitCertificate2,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DAVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{node_implementation::NodeType, BlockPayload},
@@ -105,10 +105,22 @@ pub enum HotShotEvent<TYPES: NodeType> {
     LeafDecided(Vec<Leaf<TYPES>>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader
     ///
-    /// Like [`DAProposalSend`].
+    /// Like [`HotShotEvent::DAProposalSend`].
     VidDisperseSend(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vid disperse data has been received from the network; handled by the DA task
     ///
-    /// Like [`DAProposalRecv`].
+    /// Like [`HotShotEvent::DAProposalRecv`].
     VidDisperseRecv(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Upgrade proposal has been received from the network
+    UpgradeProposalRecv(UpgradeProposal<TYPES>),
+    /// Upgrade proposal has been sent to the network
+    UpgradeProposalSend(UpgradeProposal<TYPES>),
+    /// Upgrade vote has been received from the network
+    UpgradeVoteRecv(UpgradeVote<TYPES>),
+    /// Upgrade vote has been sent to the network
+    UpgradeVoteSend(UpgradeVote<TYPES>),
+    /// Upgrade certificate has been received from the network
+    UpgradeCertificateRecv(UpgradeCertificate<TYPES>),
+    /// Upgrade certificate has been sent to the network
+    UpgradeCertificateSend(UpgradeCertificate<TYPES>),
 }
