@@ -104,7 +104,12 @@ mod test_helpers {
                 for handle in &handles {
                     handle.hotshot.start_consensus().await;
                 }
-                SequencerContext::new(handles[0].clone(), 0, Default::default())
+                SequencerContext::new(
+                    handles[0].clone(),
+                    0,
+                    Default::default(),
+                    Default::default(),
+                )
             }
             .boxed()
         };
@@ -164,8 +169,15 @@ mod test_helpers {
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut context, .. } = options
             .serve(|_| {
-                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
-                    .boxed()
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
             })
             .await
             .unwrap();
@@ -209,8 +221,15 @@ mod test_helpers {
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { context, .. } = options
             .serve(|_| {
-                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
-                    .boxed()
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
             })
             .await
             .unwrap();
@@ -283,7 +302,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { SequencerContext::new(handle, 0, Default::default()) }.boxed())
+            .serve(|_| async move { SequencerContext::new(handle, 0, Default::default(), Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -485,8 +504,15 @@ mod test {
         let options = Options::from(options::Http { port });
         options
             .serve(|_| {
-                async move { SequencerContext::new(handles[0].clone(), 0, Default::default()) }
-                    .boxed()
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
             })
             .await
             .unwrap();
