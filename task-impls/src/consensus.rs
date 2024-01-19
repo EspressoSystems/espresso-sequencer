@@ -567,10 +567,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_number: view,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    block_header: proposal.data.block_header,
+                    block_header: proposal.data.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    proposer_id: sender,
+                    proposer_id: sender.clone(),
                 };
                 let leaf_commitment = leaf.commit();
 
@@ -612,6 +612,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Failed safety check and liveness check");
                     return;
                 }
+
+                // We accept the proposal, notify the application layer
+                self.api
+                    .send_event(Event {
+                        view_number: self.cur_view,
+                        event: EventType::QuorumProposal {
+                            proposal: proposal.clone(),
+                            sender,
+                        },
+                    })
+                    .await;
 
                 let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
@@ -1212,12 +1223,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
+
             self.event_stream
                 .publish(HotShotEvent::QuorumProposalSend(
-                    message,
+                    message.clone(),
                     self.public_key.clone(),
                 ))
                 .await;
+
             self.payload_commitment_and_metadata = None;
             return true;
         }
