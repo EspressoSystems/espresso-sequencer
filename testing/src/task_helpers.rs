@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use crate::{
     block_types::{TestBlockHeader, TestBlockPayload},
     node_types::{MemoryImpl, TestTypes},
+    state_types::TestState,
     test_builder::TestMetadata,
 };
 use commit::Committable;
@@ -26,7 +27,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock},
-        BlockPayload,
+        BlockPayload, State,
     },
     vote::HasViewNumber,
 };
@@ -227,7 +228,6 @@ async fn build_quorum_proposal_and_signature(
             .quorum_membership
             .total_nodes(),
     );
-    let view_number = ViewNumber::new(view);
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
     // current leaf that can be re-assigned everytime when entering a new view
     let mut leaf = Leaf {
@@ -239,6 +239,7 @@ async fn build_quorum_proposal_and_signature(
         rejected: vec![],
         proposer_id: *api.public_key(),
     };
+    let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
 
     let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
         .expect("Failed to sign leaf commitment!");
@@ -252,6 +253,9 @@ async fn build_quorum_proposal_and_signature(
 
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
+        let state_new_view = parent_state
+            .validate_and_apply_header(&block_header, &block_header, &ViewNumber::new(cur_view - 1))
+            .unwrap();
         // save states for the previous view to pass all the qc checks
         // In the long term, we want to get rid of this, do not manually update consensus state
         consensus.state_map.insert(
@@ -259,6 +263,7 @@ async fn build_quorum_proposal_and_signature(
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: leaf.commit(),
+                    state: state_new_view.clone(),
                 },
             },
         );
@@ -304,6 +309,7 @@ async fn build_quorum_proposal_and_signature(
         proposal = proposal_new_view;
         signature = signature_new_view;
         leaf = leaf_new_view;
+        parent_state = state_new_view;
     }
 
     (proposal, signature)
