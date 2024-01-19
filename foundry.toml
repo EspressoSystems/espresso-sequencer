@@ -17,9 +17,6 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
-# Etherscan API key
-etherscan_api_key = "none"
-
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 
