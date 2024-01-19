@@ -22,7 +22,7 @@ use std::hash::Hash;
 /// A request for a resource.
 pub trait Request<Types>: Copy + Debug + Eq + Hash + Send {
     /// The type of resource that will be returned as a successful response to this request.
-    type Response: Clone;
+    type Response: Clone + Send;
 }
 
 /// A request for a payload with a given commitment.

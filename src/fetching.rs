@@ -21,7 +21,10 @@
 //! implementations of [`Provider`] for various data availability sources.
 //!
 
-use async_std::sync::Mutex;
+use async_std::{
+    sync::{Arc, Mutex},
+    task::spawn,
+};
 use derivative::Derivative;
 use std::collections::{hash_map::Entry, BTreeSet, HashMap};
 
@@ -50,62 +53,83 @@ pub trait LocalCallback<T>: Ord {
 
 /// Management of concurrent requests to fetch resources.
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
+#[derivative(Clone(bound = ""), Debug(bound = ""), Default(bound = ""))]
 pub struct Fetcher<T, C> {
     #[derivative(Debug = "ignore")]
-    in_progress: Mutex<HashMap<T, BTreeSet<C>>>,
+    in_progress: Arc<Mutex<HashMap<T, BTreeSet<C>>>>,
 }
 
 impl<T, C> Fetcher<T, C> {
     /// Fetch a resource, if it is not already being fetched.
     ///
-    /// Returns the requested resource if possible. Returns [`None`] if the resource is already
-    /// being fetched, or if the given provider is unable to fetch it.
-    pub async fn fetch<Types>(
+    /// This function will spawn a new task to fetch the resource in the background, using callbacks
+    /// to process the fetched resource upon success. If the resource is already being fetched, the
+    /// spawned task will terminate without fetching the resource, but only after registering the
+    /// provided callbacks to be executed by the existing fetching task upon completion, as long as
+    /// there are not already equivalent callbacks registered.
+    ///
+    /// We spawn a (short-lived) task even if the resource is already being fetched, because the
+    /// check that the resource is being fetched requires an exclusive lock, and we do not want to
+    /// block the caller, which might be on the critical path of request handling.
+    ///
+    /// Note that while callbacks are allowed to be async, they are executed sequentially while an
+    /// exclusive lock is held, and thus they should not take too long to run or block indefinitely.
+    pub fn spawn_fetch<Types>(
         &self,
         req: T,
-        provider: impl Provider<Types, T>,
-        callbacks: impl IntoIterator<Item = C>,
+        provider: impl Provider<Types, T> + 'static,
+        callbacks: impl IntoIterator<Item = C> + Send + 'static,
     ) where
-        T: Request<Types>,
-        C: Callback<T::Response>,
+        T: Request<Types> + 'static,
+        C: Callback<T::Response> + 'static,
     {
-        // Check if the requested object is already being fetched. If not, take a lock on it so
-        // we are the only ones to fetch this particular object.
-        {
-            let mut in_progress = self.in_progress.lock().await;
-            match in_progress.entry(req) {
-                Entry::Occupied(mut e) => {
-                    // If the object is already being fetched, add our callback for the fetching
-                    // task to execute upon completion.
-                    e.get_mut().extend(callbacks);
-                    tracing::info!("resource {req:?} is already being fetched");
-                    return;
-                }
-                Entry::Vacant(e) => {
-                    // If the object is not being fetched, we will register our own callback and
-                    // then fetch it ourselves.
-                    e.insert(callbacks.into_iter().collect());
+        let in_progress = self.in_progress.clone();
+
+        spawn(async move {
+            tracing::info!("spawned active fetch for {req:?}");
+
+            // Check if the requested object is already being fetched. If not, take a lock on it so
+            // we are the only ones to fetch this particular object.
+            {
+                let mut in_progress = in_progress.lock().await;
+                match in_progress.entry(req) {
+                    Entry::Occupied(mut e) => {
+                        // If the object is already being fetched, add our callback for the fetching
+                        // task to execute upon completion.
+                        e.get_mut().extend(callbacks);
+                        tracing::info!("resource {req:?} is already being fetched");
+                        return;
+                    }
+                    Entry::Vacant(e) => {
+                        // If the object is not being fetched, we will register our own callback and
+                        // then fetch it ourselves.
+                        e.insert(callbacks.into_iter().collect());
+                    }
                 }
             }
-        }
 
-        // Now we are responsible for fetching the object, reach out to the provider.
-        let res = provider.fetch(req).await;
+            // Now we are responsible for fetching the object, reach out to the provider.
+            let res = provider.fetch(req).await;
 
-        // Done fetching, remove our lock on the object and execute all callbacks.
-        //
-        // We will keep this lock the whole time we are running the callbacks. We can't release it
-        // earlier because we can't allow another task to register a callback after we have taken
-        // the list of callbacks that we will execute. We also don't want to allow any new fetches
-        // until we have executed the callbacks, because one of the callbacks may store some
-        // resource that obviates the need for another fetch.
-        let mut in_progress = self.in_progress.lock().await;
-        let callbacks = in_progress.remove(&req).unwrap_or_default();
-        if let Some(res) = res {
-            for callback in callbacks {
-                callback.run(res.clone()).await;
+            // Done fetching, remove our lock on the object and execute all callbacks.
+            //
+            // We will keep this lock the whole time we are running the callbacks. We can't release
+            // it earlier because we can't allow another task to register a callback after we have
+            // taken the list of callbacks that we will execute. We also don't want to allow any new
+            // fetches until we have executed the callbacks, because one of the callbacks may store
+            // some resource that obviates the need for another fetch.
+            //
+            // The callbacks may acquire arbitrary locks from this task, while we already hold the
+            // lock on `in_progress`. This is fine because we are always running in a freshly
+            // spawned task. Therefore we know that this task holds no locks _before_ acquiring
+            // `in_progress`, and so it is safe to acquire any lock _after_ acquiring `in_progress`.
+            let mut in_progress = in_progress.lock().await;
+            let callbacks = in_progress.remove(&req).unwrap_or_default();
+            if let Some(res) = res {
+                for callback in callbacks {
+                    callback.run(res.clone()).await;
+                }
             }
-        }
+        });
     }
 }

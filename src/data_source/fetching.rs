@@ -28,10 +28,7 @@ use crate::{
     Header, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use anyhow::Context;
-use async_std::{
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    task::spawn,
-};
+use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -749,7 +746,7 @@ where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
     {
-        fetch_leaf_with_callbacks(fetcher, storage, req, None).await
+        fetch_leaf_with_callbacks(fetcher, storage, req, None)
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
@@ -765,7 +762,7 @@ where
     }
 }
 
-async fn fetch_leaf_with_callbacks<Types, S, P, I>(
+fn fetch_leaf_with_callbacks<Types, S, P, I>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
     req: LeafId<Types>,
@@ -790,18 +787,11 @@ async fn fetch_leaf_with_callbacks<Types, S, P, I>(
             }
 
             let fetcher = fetcher.clone();
-            spawn(async move {
-                tracing::info!("spawned active fetch for leaf {n}");
-                fetcher
-                    .leaf_fetcher
-                    .clone()
-                    .fetch(
-                        n.into(),
-                        fetcher.provider.clone(),
-                        once(LeafCallback::Leaf { fetcher }).chain(callbacks),
-                    )
-                    .await;
-            });
+            fetcher.leaf_fetcher.clone().spawn_fetch(
+                n.into(),
+                fetcher.provider.clone(),
+                once(LeafCallback::Leaf { fetcher }).chain(callbacks),
+            );
         }
         LeafId::Hash(h) => {
             // We don't actively fetch leaves when requested by hash, because we have no way of
@@ -957,7 +947,7 @@ where
                     .context("loading header for block {id}")
                     .ok_or_trace()
                 {
-                    spawn(fetch_block_with_header(fetcher, header));
+                    fetch_block_with_header(fetcher, header);
                     return;
                 }
 
@@ -972,8 +962,7 @@ where
                             storage,
                             n.into(),
                             [LeafCallback::Block { fetcher }],
-                        )
-                        .await;
+                        );
                     }
                     BlockId::Hash(h) => {
                         // Given only the hash, we cannot tell if the corresonding leaf actually
@@ -1047,10 +1036,8 @@ where
     }
 }
 
-async fn fetch_block_with_header<Types, S, P>(
-    fetcher: Arc<Fetcher<Types, S, P>>,
-    header: Header<Types>,
-) where
+fn fetch_block_with_header<Types, S, P>(fetcher: Arc<Fetcher<Types, S, P>>, header: Header<Types>)
+where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
@@ -1062,17 +1049,14 @@ async fn fetch_block_with_header<Types, S, P>(
         header.payload_commitment(),
         header.block_number()
     );
-    fetcher
-        .payload_fetcher
-        .fetch(
-            PayloadRequest(header.payload_commitment()),
-            fetcher.provider.clone(),
-            once(PayloadCallback {
-                header,
-                fetcher: fetcher.clone(),
-            }),
-        )
-        .await;
+    fetcher.payload_fetcher.spawn_fetch(
+        PayloadRequest(header.payload_commitment()),
+        fetcher.provider.clone(),
+        once(PayloadCallback {
+            header,
+            fetcher: fetcher.clone(),
+        }),
+    );
 }
 
 async fn store_block<Types, S>(
@@ -1361,7 +1345,7 @@ where
             }
             Self::Block { fetcher } => {
                 tracing::info!("fetched leaf {}, will now fetch payload", leaf.height());
-                fetch_block_with_header(fetcher, leaf.leaf.block_header).await;
+                fetch_block_with_header(fetcher, leaf.leaf.block_header);
             }
         }
     }
