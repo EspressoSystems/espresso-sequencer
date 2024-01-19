@@ -67,6 +67,7 @@ sol-lint:
     solhint --fix 'contracts/{script,src,test}/**/*.sol'
 
 # Build diff-test binary and forge test
+# Note: we use an invalid etherscan api key in order to avoid annoying warnings. See https://github.com/EspressoSystems/espresso-sequencer/issues/979
 sol-test:
     cargo build --bin diff-test --release
-    forge test
+    forge test --etherscan-api-key invalid_key
