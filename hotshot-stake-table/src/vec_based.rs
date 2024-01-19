@@ -57,13 +57,14 @@ where
     /// The stake table used for leader election.
     last_epoch_start: StakeTableSnapshot<K1, K2>,
 
-    /// Total stakes for different versions
+    /// Total stakes in the most update-to-date stake table
     head_total_stake: U256,
-    /// TODO document
+    /// Total stakes in the snapshot version `EpochStart`
     epoch_start_total_stake: U256,
-    /// TODO document
+    /// Total stakes in the snapshot version `LastEpochStart`
     last_epoch_start_total_stake: U256,
 
+    /// Commitment of the stake table snapshot version `EpochStart`
     /// We only support committing the finalized versions.
     /// Commitment for a finalized version is a triple where
     ///  - First item is the rescue hash of the bls keys
@@ -71,7 +72,7 @@ where
     ///  - Third item is the rescue hash of all the stake amounts
     epoch_start_comm: (F, F, F),
 
-    /// TODO document
+    /// Commitment of the stake table snapshot version `LastEpochStart`
     last_epoch_start_comm: (F, F, F),
 
     /// The mapping from public keys to their location in the Merkle tree.

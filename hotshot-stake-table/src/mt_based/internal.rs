@@ -101,7 +101,7 @@ impl<K: Key> MerkleProof<K> {
         &self.index
     }
 
-    /// TODO document
+    /// Returns the public key of the associated stake table entry, if there's any.
     pub fn get_key(&self) -> Option<&K> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value: _ }) => Some(key),
@@ -109,7 +109,7 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
-    /// TODO document
+    /// Returns the stake amount of the associated stake table entry, if there's any.
     pub fn get_value(&self) -> Option<&U256> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key: _, value }) => Some(value),
@@ -117,7 +117,7 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
-    /// TODO document
+    /// Returns the associated stake table entry, if there's any.
     pub fn get_key_value(&self) -> Option<(&K, &U256)> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => Some((key, value)),
@@ -125,7 +125,9 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
-    /// TODO document
+    /// Compute the root of this Merkle proof.
+    /// # Errors
+    /// Errors could be triggered by internal Rescue hash, or if the proof is malformed.
     pub fn compute_root(&self) -> Result<FieldType, StakeTableError> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => {
@@ -154,7 +156,9 @@ impl<K: Key> MerkleProof<K> {
         }
     }
 
-    /// TODO document
+    /// Verify the Merkle proof against the provided Merkle commitment.
+    /// # Errors
+    /// Error could be triggered while computing the root of this proof, or if the verification fails.
     pub fn verify(&self, comm: &MerkleCommitment) -> Result<(), StakeTableError> {
         if self.tree_height() != comm.tree_height() || !self.compute_root()?.eq(comm.digest()) {
             Err(StakeTableError::VerificationError)

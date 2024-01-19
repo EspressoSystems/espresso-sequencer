@@ -151,31 +151,31 @@ impl LightClientStateVar {
         })
     }
 
-    /// TODO doc
+    /// Returns the view number
     #[must_use]
     pub fn view_number(&self) -> Variable {
         self.vars[0]
     }
 
-    /// TODO doc
+    /// Returns the block height
     #[must_use]
     pub fn block_height(&self) -> Variable {
         self.vars[1]
     }
 
-    /// TODO doc
+    /// Returns the Merkle root of the block commitments
     #[must_use]
     pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
     }
 
-    /// TODO doc
+    /// Returns the commitment of the fee ledger
     #[must_use]
     pub fn fee_ledger_comm(&self) -> Variable {
         self.vars[3]
     }
 
-    /// TODO doc
+    /// Returns the commitment of the associated stake table
     #[must_use]
     pub fn stake_table_comm(&self) -> StakeTableCommVar {
         StakeTableCommVar {
