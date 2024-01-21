@@ -11,41 +11,28 @@ default = []
 slow-tests = []
 
 [dependencies]
-ark-bls12-381 = { workspace = true }
-ark-serialize = { workspace = true, features = ["derive"] }
-espresso-systems-common = { workspace = true }
 async-compatibility-layer = { workspace = true }
-async-trait = { workspace = true }
-# needed for vrf demo
-# so non-optional for now
-blake3 = { workspace = true, features = ["traits-preview"] }
 sha3 = "^0.10"
+bincode = { workspace = true }
 commit = { workspace = true }
-derivative = "2.2.0"
 either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", features = [
   "hotshot-testing",
 ], default-features = false }
-hotshot-types = { path = "../types", default-features = false }
-hotshot-utils = { path = "../utils" }
 hotshot-constants = { path = "../constants" }
+hotshot-types = { path = "../types", default-features = false }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-signature-key = { path = "../hotshot-signature-key" }
 hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
-jf-primitives = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
-ethereum-types = { workspace = true }
-bitvec = { workspace = true }
 sha2 = { workspace = true }
-
-[dev-dependencies]
-bincode = { workspace = true }    # GG any better options for serialization?
+async-lock = { workspace = true }
+bitvec = { workspace = true }
+ethereum-types = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

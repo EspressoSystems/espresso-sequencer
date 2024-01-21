@@ -1,5 +1,5 @@
 // use ark_bls12_381::Parameters as Param381;
-use hotshot_signature_key::bn254::BLSPubKey;
+use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::{
     election::{ElectionConfig, Membership},
     node_implementation::NodeType,
@@ -122,6 +122,10 @@ where
 
     fn failure_threshold(&self) -> NonZeroU64 {
         NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64) / 3) + 1).unwrap()
+    }
+
+    fn upgrade_threshold(&self) -> NonZeroU64 {
+        NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64 * 9) / 10) + 1).unwrap()
     }
 
     fn get_committee(

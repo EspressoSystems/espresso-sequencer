@@ -7,13 +7,14 @@ use hotshot::traits::implementations::{
     MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
 };
 use hotshot::traits::NodeImplementation;
-use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
+use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestState,
 };
 use hotshot_types::message::Message;
+use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
 use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType};
@@ -96,7 +97,7 @@ fn get_pubkey() -> BLSPubKey {
     // random 32 bytes
     let mut bytes = [0; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
-    BLSPubKey::from_private(&BLSPrivKey::generate_from_seed(bytes))
+    BLSPubKey::generated_from_seed_indexed(bytes, 0).0
 }
 
 /// create a message
@@ -109,6 +110,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
         rng.fill_bytes(&mut bytes);
 
         let message = Message {
+            version: PROGRAM_PROTOCOL_VERSION,
             sender: pk,
             kind: MessageKind::Data(DataMessage::SubmitTransaction(
                 TestTransaction(bytes.to_vec()),

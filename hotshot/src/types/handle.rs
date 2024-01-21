@@ -20,14 +20,14 @@ use hotshot_types::{
 };
 
 use hotshot_types::simple_vote::QuorumData;
-
 use hotshot_types::{
     consensus::Consensus,
+    data::Leaf,
     error::HotShotError,
     event::EventType,
+    simple_certificate::QuorumCertificate,
     traits::{node_implementation::NodeType, state::ConsensusTime, storage::Storage},
 };
-use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
 use std::sync::Arc;
 use tracing::error;
 

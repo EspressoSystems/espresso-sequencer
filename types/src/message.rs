@@ -3,13 +3,14 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::data::QuorumProposal;
+use crate::data::{QuorumProposal, UpgradeProposal};
 use crate::simple_certificate::{
-    DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+    DACertificate, UpgradeCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
     ViewSyncPreCommitCertificate2,
 };
 use crate::simple_vote::{
-    DAVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
+    DAVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+    ViewSyncPreCommitVote,
 };
 use crate::traits::signature_key::SignatureKey;
 use crate::vote::HasViewNumber;
@@ -24,6 +25,7 @@ use crate::{
 
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
+use hotshot_constants::Version;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
@@ -32,6 +34,9 @@ use std::{fmt::Debug, marker::PhantomData};
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct Message<TYPES: NodeType> {
+    /// The version of the protocol in use for this message
+    pub version: Version,
+
     /// The sender of this message
     pub sender: TYPES::SignatureKey,
 
@@ -78,6 +83,8 @@ pub enum MessagePurpose {
     Data,
     /// VID disperse, like [`Proposal`].
     VidDisperse,
+    /// Message with an upgrade proposal.
+    Upgrade,
 }
 
 // TODO (da) make it more customized to the consensus layer, maybe separating the specific message
@@ -184,6 +191,9 @@ impl<TYPES: NodeType> ProcessedGeneralConsensusMessage<TYPES> {
             GeneralConsensusMessage::ViewSyncPreCommitCertificate(_) => unimplemented!(),
             GeneralConsensusMessage::ViewSyncCommitCertificate(_) => unimplemented!(),
             GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::UpgradeCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::UpgradeProposal(_) => unimplemented!(),
+            GeneralConsensusMessage::UpgradeVote(_) => unimplemented!(),
         }
     }
 }
@@ -295,6 +305,15 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
     /// Message with a Timeout vote
     TimeoutVote(TimeoutVote<TYPES>),
 
+    /// Message with an upgrade certificate
+    UpgradeCertificate(UpgradeCertificate<TYPES>),
+
+    /// Message with an upgrade proposal
+    UpgradeProposal(UpgradeProposal<TYPES>),
+
+    /// Message with an upgrade vote
+    UpgradeVote(UpgradeVote<TYPES>),
+
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
@@ -364,6 +383,11 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     GeneralConsensusMessage::ViewSyncFinalizeCertificate(message) => {
                         message.get_view_number()
                     }
+                    GeneralConsensusMessage::UpgradeCertificate(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::UpgradeProposal(message) => message.get_view_number(),
+                    GeneralConsensusMessage::UpgradeVote(message) => message.get_view_number(),
                 }
             }
             Right(committee_message) => {
@@ -405,6 +429,10 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                 | GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => {
                     MessagePurpose::ViewSyncProposal
                 }
+
+                GeneralConsensusMessage::UpgradeCertificate(_)
+                | GeneralConsensusMessage::UpgradeProposal(_)
+                | GeneralConsensusMessage::UpgradeVote(_) => MessagePurpose::Upgrade,
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,

@@ -10,9 +10,9 @@ use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader};
 use commit::Commitment;
 use hotshot_types::traits::storage::{
-        AtomicStoreSnafu, Storage, StorageError, StorageResult, StorageState, StorageUpdater,
-        TestableStorage,
-    };
+    AtomicStoreSnafu, Storage, StorageError, StorageResult, StorageState, StorageUpdater,
+    TestableStorage,
+};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::{path::Path, sync::Arc};

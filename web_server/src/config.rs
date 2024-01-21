@@ -49,6 +49,14 @@ pub fn post_vid_disperse_route(view_number: u64) -> String {
     format!("api/vid_disperse/{view_number}")
 }
 
+pub fn get_upgrade_route(view_number: u64) -> String {
+    format!("api/upgrade/{view_number}")
+}
+
+pub fn post_upgrade_route(view_number: u64) -> String {
+    format!("api/upgrade/{view_number}")
+}
+
 pub fn get_vid_vote_route(view_number: u64, index: u64) -> String {
     format!("api/vid_votes/{view_number}/{index}")
 }
