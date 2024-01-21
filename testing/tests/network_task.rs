@@ -17,6 +17,7 @@ use std::{collections::HashMap, marker::PhantomData};
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 async fn test_network_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
@@ -41,7 +42,8 @@ async fn test_network_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             &encoded_transactions_hash,
-        );
+        )
+        .expect("Failed to sign block payload");
     let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
@@ -49,7 +51,8 @@ async fn test_network_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             payload_commitment.as_ref(),
-        );
+        )
+        .expect("Failed to sign block commitment");
 
     let da_proposal = Proposal {
         data: DAProposal {

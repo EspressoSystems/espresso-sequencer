@@ -133,8 +133,8 @@ pub struct ConsensusTaskState<
     /// All the VID shares we've received for current and future views.
     /// In the future we will need a different struct similar to VidDisperse except
     /// it stores only one share.
-    /// TODO https://github.com/EspressoSystems/HotShot/issues/2146
-    /// TODO https://github.com/EspressoSystems/HotShot/issues/1732
+    /// TODO <https://github.com/EspressoSystems/HotShot/issues/2146>
+    /// TODO <https://github.com/EspressoSystems/HotShot/issues/1732>
     pub vid_shares: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
@@ -183,6 +183,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             );
             return false;
         }
+
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
             // No need to check vid share nor da cert for genesis
@@ -220,17 +221,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
-                let vote = QuorumVote::<TYPES>::create_signed_vote(
+                let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                     QuorumData {
                         leaf_commit: leaf.commit(),
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign QuorumData!");
+                    return false;
+                };
 
                 let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
@@ -304,8 +307,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
 
                 // Validate the DAC.
@@ -318,15 +320,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         error!("Block payload commitment does not equal da cert payload commitment. View = {}", *view);
                         return false;
                     }
-                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                    if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                         QuorumData {
                             leaf_commit: leaf.commit(),
                         },
                         view,
                         &self.public_key,
                         &self.private_key,
-                    );
-                    GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    ) {
+                        GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    } else {
+                        error!("Unable to sign quorum vote!");
+                        return false;
+                    }
                 } else {
                     error!(
                         "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
@@ -338,7 +344,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 if let GeneralConsensusMessage::Vote(vote) = message {
                     debug!(
                         "Sending vote to next quorum leader {:?}",
-                        vote.get_view_number()
+                        vote.get_view_number() + 1
                     );
                     self.event_stream
                         .publish(HotShotEvent::QuorumVoteSend(vote))
@@ -347,7 +353,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             debug!(
-                "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
+                "Received VID share, but couldn't find DAC cert for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
@@ -368,6 +374,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Updating view from {} to {} in consensus task",
                 *self.cur_view, *new_view
             );
+
+            if *self.cur_view / 100 != *new_view / 100 {
+                // TODO (https://github.com/EspressoSystems/HotShot/issues/2296):
+                // switch to info! when INFO logs become less cluttered
+                error!("Progress: entered view {:>6}", *new_view);
+            }
+
             // cancel the old timeout task
             if let Some(timeout_task) = self.timeout_task.take() {
                 cancel_task(timeout_task).await;
@@ -440,7 +453,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!(
-                    "Receved Quorum Proposal for view {}",
+                    "Received Quorum Proposal for view {}",
                     *proposal.data.view_number
                 );
 
@@ -509,7 +522,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                 };
 
-                //
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
                     // If no parent then just update our state map and return.  We will not vote.
@@ -524,8 +536,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_header: proposal.data.block_header,
                         block_payload: None,
                         rejected: Vec::new(),
-                        timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                        proposer_id: sender.to_bytes(),
+                        proposer_id: sender,
                     };
 
                     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
@@ -546,11 +557,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_number: view,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    block_header: proposal.data.block_header,
+                    block_header: proposal.data.block_header.clone(),
                     block_payload: None,
                     rejected: Vec::new(),
-                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: sender.to_bytes(),
+                    proposer_id: sender.clone(),
                 };
                 let leaf_commitment = leaf.commit();
 
@@ -592,6 +602,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Failed safety check and liveness check");
                     return;
                 }
+
+                // We accept the proposal, notify the application layer
+                self.api
+                    .send_event(Event {
+                        view_number: self.cur_view,
+                        event: EventType::QuorumProposal {
+                            proposal: proposal.clone(),
+                            sender,
+                        },
+                    })
+                    .await;
 
                 let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
@@ -654,8 +675,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 }
 
                                 leaf_views.push(leaf.clone());
-                                if let Some(payload) = leaf.block_payload {
-                                    for txn in payload.transaction_commitments() {
+                                if let Some(ref payload) = leaf.block_payload {
+                                    for txn in payload
+                                        .transaction_commitments(leaf.get_block_header().metadata())
+                                    {
                                         included_txns.insert(txn);
                                     }
                                 }
@@ -754,6 +777,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.publish_proposal_if_able(qc.view_number + 1, None)
                         .await;
                 }
+
                 if !self.vote_if_able().await {
                     return;
                 }
@@ -905,7 +929,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::DACRecv(cert) => {
-                debug!("DAC Recved for view ! {}", *cert.view_number);
+                debug!("DAC Received for view {}!", *cert.view_number);
                 let view = cert.view_number;
 
                 self.quorum_network
@@ -1024,12 +1048,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(*view))
                     .await;
 
-                let vote = TimeoutVote::create_signed_vote(
+                let Ok(vote) = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign TimeoutData!");
+                    return;
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::TimeoutVoteSend(vote))
@@ -1156,11 +1183,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 ),
                 block_payload: None,
                 rejected: vec![],
-                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                proposer_id: self.api.public_key().to_bytes(),
+                proposer_id: self.api.public_key().clone(),
             };
 
-            let signature = TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref());
+            let Ok(signature) =
+                TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref())
+            else {
+                error!("Failed to sign leaf.commit()!");
+                return false;
+            };
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
                 block_header: leaf.block_header.clone(),
@@ -1180,12 +1211,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
+
             self.event_stream
                 .publish(HotShotEvent::QuorumProposalSend(
-                    message,
+                    message.clone(),
                     self.public_key.clone(),
                 ))
                 .await;
+
             self.payload_commitment_and_metadata = None;
             return true;
         }

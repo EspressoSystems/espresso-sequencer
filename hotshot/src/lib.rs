@@ -19,7 +19,7 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Contains traits consumed by [`HotShot`]
+/// Contains traits consumed by [`SystemContext`]
 pub mod traits;
 /// Contains types used by the crate
 pub mod types;
@@ -43,6 +43,8 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use commit::Committable;
 use custom_debug::Debug;
+use futures::join;
+use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
@@ -53,6 +55,7 @@ use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, PayloadStore, View, ViewInner, ViewQueue},
     data::Leaf,
     error::StorageSnafu,
+    event::EventType,
     message::{
         DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
     },
@@ -60,7 +63,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{ChannelMaps, NodeType, SendToTasks},
+        node_implementation::{NodeType, SendToTasks},
         signature_key::SignatureKey,
         state::ConsensusTime,
         storage::StoredView,
@@ -78,6 +81,10 @@ use std::{
 };
 use tasks::add_vid_task;
 use tracing::{debug, error, info, instrument, trace, warn};
+
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::node_implementation::ChannelMaps;
+
 // -- Rexports
 // External
 /// Reexport rand crate
@@ -162,6 +169,7 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
     /// latter of which is only applicable for sequencing consensus.
+    #[cfg(feature = "hotshot-testing")]
     channel_maps: (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>),
 
     // global_registry: GlobalRegistry,
@@ -256,6 +264,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
+            #[cfg(feature = "hotshot-testing")]
             channel_maps: I::new_channel_maps(start_view),
             consensus,
             public_key,
@@ -314,6 +323,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         };
     }
 
+    /// Emit an external event
+    // A copypasta of `ConsensusApi::send_event`
+    // TODO: remove with https://github.com/EspressoSystems/HotShot/issues/2407
+    async fn send_external_event(&self, event: Event<TYPES>) {
+        debug!(?event, "send_external_event");
+        let mut event_sender = self.inner.event_sender.write().await;
+        if let Some(sender) = &*event_sender {
+            if let Err(e) = sender.send_async(event).await {
+                error!(?e, "Could not send event to event_sender");
+                *event_sender = None;
+            }
+        }
+    }
+
     /// Publishes a transaction asynchronously to the network
     ///
     /// # Errors
@@ -328,24 +351,36 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         // Wrap up a message
         // TODO place a view number here that makes sense
         // we haven't worked out how this will work yet
-        let message = DataMessage::SubmitTransaction(transaction, TYPES::Time::new(0));
+        let message = DataMessage::SubmitTransaction(transaction.clone(), TYPES::Time::new(0));
         let api = self.clone();
-        // TODO We should have a function that can return a network error if there is one
-        // but first we'd need to ensure our network implementations can support that
-        // (and not hang instead)
+
         async_spawn(async move {
-            let _result = api
-                .inner
-                .networks
-                .da_network
-                .broadcast_message(
-                    Message {
-                        sender: api.inner.public_key.clone(),
-                        kind: MessageKind::from(message),
-                    },
-                    &api.inner.memberships.da_membership.clone(),
-                )
-                .await;
+            let da_membership = &api.inner.memberships.da_membership.clone();
+            join! {
+                // TODO We should have a function that can return a network error if there is one
+                // but first we'd need to ensure our network implementations can support that
+                // (and not hang instead)
+                //
+                api
+                    .inner
+                    .networks
+                    .da_network
+                    .broadcast_message(
+                        Message {
+                            version: PROGRAM_PROTOCOL_VERSION,
+                            sender: api.inner.public_key.clone(),
+                            kind: MessageKind::from(message),
+                        },
+                        da_membership,
+                    ),
+                api
+                    .send_external_event(Event {
+                        view_number: api.inner.consensus.read().await.cur_view,
+                        event: EventType::Transactions {
+                            transactions: vec![transaction],
+                        },
+                    }),
+            }
         });
         Ok(())
     }
@@ -448,7 +483,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 .networks
                 .quorum_network
                 .broadcast_message(
-                    Message { sender: pk, kind },
+                    Message {
+                        version: PROGRAM_PROTOCOL_VERSION,
+                        sender: pk,
+                        kind,
+                    },
                     // TODO this is morally wrong
                     &inner.memberships.quorum_membership.clone(),
                 )
@@ -478,6 +517,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .quorum_network
             .direct_message(
                 Message {
+                    version: PROGRAM_PROTOCOL_VERSION,
                     sender: self.inner.public_key.clone(),
                     kind: kind.into(),
                 },
@@ -530,13 +570,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
-    /// Get the [`hotstuff`] field of [`HotShot`].
+    /// Get access to [`Consensus`]
     #[must_use]
     pub fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
         &self.inner.consensus
     }
 
-    /// Spawn all tasks that operate on [`HotShot`].
+    /// Spawn all tasks that operate on [`SystemContextHandle`].
     ///
     /// For a list of which tasks are being spawned, see this module's documentation.
     #[allow(clippy::too_many_lines)]
@@ -631,7 +671,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     }
 }
 
-/// A handle that exposes the interface that hotstuff needs to interact with [`HotShot`]
+/// A handle that exposes the interface that hotstuff needs to interact with a [`SystemContextInner`]
 #[derive(Clone, Debug)]
 pub struct HotShotConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to the [`SystemContextInner`]

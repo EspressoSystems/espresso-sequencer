@@ -1,5 +1,7 @@
 use crate::events::HotShotEvent;
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::spawn_blocking;
 use hotshot_task::{
     event_stream::ChannelStream,
     global_registry::GlobalRegistry,
@@ -22,6 +24,8 @@ use hotshot_types::{
     data::{test_srs, VidScheme, VidSchemeTrait},
     traits::network::ConsensusIntentEvent,
 };
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::spawn_blocking;
 
 use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
@@ -90,9 +94,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let chunk_size = 1 << num_quorum_committee.ilog2();
 
                 // calculate vid shares
-                let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
-                let vid_disperse = vid.disperse(encoded_transactions.clone()).unwrap();
+                let vid_disperse = spawn_blocking(move || {
+                    let vid = VidScheme::new(chunk_size, num_quorum_committee, &srs).unwrap();
+                    vid.disperse(encoded_transactions.clone()).unwrap()
+                })
+                .await;
 
+                #[cfg(async_executor_impl = "tokio")]
+                // Unwrap here will just propogate any panic from the spawned task, it's not a new place we can panic.
+                let vid_disperse = vid_disperse.unwrap();
                 // send the commitment and metadata to consensus for block building
                 self.event_stream
                     .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
@@ -112,14 +122,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             HotShotEvent::BlockReady(vid_disperse, view_number) => {
+                let Ok(signature) = TYPES::SignatureKey::sign(
+                    &self.private_key,
+                    vid_disperse.payload_commitment.as_ref().as_ref(),
+                ) else {
+                    error!("VID: failed to sign dispersal payload");
+                    return None;
+                };
                 debug!("publishing VID disperse for view {}", *view_number);
                 self.event_stream
                     .publish(HotShotEvent::VidDisperseSend(
                         Proposal {
-                            signature: TYPES::SignatureKey::sign(
-                                &self.private_key,
-                                &vid_disperse.payload_commitment,
-                            ),
+                            signature,
                             data: vid_disperse,
                             _pd: PhantomData,
                         },

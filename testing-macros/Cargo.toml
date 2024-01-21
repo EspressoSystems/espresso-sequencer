@@ -10,7 +10,7 @@ async-compatibility-layer = { workspace = true }
 async-trait = { workspace = true }
 # needed for vrf demo
 # so non-optional for now
-blake3 = { workspace = true, features = ["traits-preview"] }
+blake3 = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
