@@ -32,10 +32,9 @@ type Error = ServerError;
 struct WebServerState<KEY> {
     /// view number -> (secret, proposal)
     proposals: HashMap<u64, (String, Vec<u8>)>,
-    /// for view sync: view number -> (secret, proposal)
-    /// TODO guessing here
+    /// for view sync: view number -> (relay, certificate)
     view_sync_proposals: HashMap<u64, Vec<(u64, Vec<u8>)>>,
-    /// view number -> index
+    /// view number -> relay
     view_sync_proposal_index: HashMap<u64, u64>,
     /// view number -> (secret, da_certificates)
     da_certificates: HashMap<u64, (String, Vec<u8>)>,
@@ -51,7 +50,7 @@ struct WebServerState<KEY> {
     oldest_view_sync_proposal: u64,
     /// view number -> Vec(index, vote)
     votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
-    /// view sync: view number -> Vec(index, vote)
+    /// view sync: view number -> Vec(relay, vote)
     view_sync_votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
     /// view number -> highest vote index for that view number
     vote_index: HashMap<u64, u64>,
@@ -61,14 +60,13 @@ struct WebServerState<KEY> {
     oldest_vote: u64,
     /// view sync: view number of oldest votes in memory
     oldest_view_sync_vote: u64,
-    /// view number -> (secret, proposal)
-    /// TODO is this right?
+    /// view number -> (secret, string)
     vid_disperses: HashMap<u64, (String, Vec<u8>)>,
     /// view for the oldest vid disperal
     oldest_vid_disperse: u64,
     /// view of most recent vid dispersal
     recent_vid_disperse: u64,
-    /// TODO document, not sure what this is
+    /// votes that a node got, that is, their VID share
     vid_votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
     /// oldest vid vote view number
     oldest_vid_vote: u64,
@@ -81,7 +79,7 @@ struct WebServerState<KEY> {
     /// index -> transaction
     // TODO ED Make indexable by hash of tx
     transactions: HashMap<u64, Vec<u8>>,
-    /// TODO document
+    /// tx hash -> tx index, is currently unused
     txn_lookup: HashMap<Vec<u8>, u64>,
     /// highest transaction index
     num_txns: u64,
