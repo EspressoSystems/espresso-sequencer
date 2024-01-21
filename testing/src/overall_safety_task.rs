@@ -111,6 +111,7 @@ pub struct RoundResult<TYPES: NodeType> {
     // TODO should we delete this?
     // state is empty now
     /// state -> # entries decided on that state
+    /// <https://github.com/EspressoSystems/HotShot/issues/2435>
     pub state_map: HashMap<(), usize>,
 
     /// node idx -> number transactions
