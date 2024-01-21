@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 #[cfg(test)]
 #[cfg_attr(
     async_executor_impl = "tokio",

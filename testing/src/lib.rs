@@ -5,6 +5,7 @@
     not(any(test, debug_assertions, hotshot_example)),
     deprecated = "suspicious usage of testing/demo implementations in non-test/non-debug build"
 )]
+#![allow(clippy::panicking_unwrap)]
 
 use hotshot_task::{event_stream::ChannelStream, task_impls::HSTWithEvent};
 

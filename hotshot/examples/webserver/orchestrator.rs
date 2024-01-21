@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 //! A orchestrator using the web server
 
 /// types used for this example

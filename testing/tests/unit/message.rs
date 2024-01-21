@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 #[cfg(test)]
 use std::marker::PhantomData;
 

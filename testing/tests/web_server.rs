@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use std::time::Duration;
 
 use async_compatibility_layer::logging::shutdown_logging;

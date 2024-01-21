@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 //! A example program using the web server
 /// types used for this example
 pub mod types;

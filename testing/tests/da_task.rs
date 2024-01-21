@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
