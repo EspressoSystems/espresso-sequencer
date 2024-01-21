@@ -267,6 +267,7 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
         // NOTE: this introduces an invariant that the keys are assigned using this indexed
         // function
         all_keys,
+        None,
         da_keys.clone(),
         da_keys.contains(&pub_key),
     )
