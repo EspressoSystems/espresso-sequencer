@@ -12,19 +12,13 @@ ark-ed-on-bn254 = "0.4.0"
 ark-ff = "0.4.0"
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-bincode = { workspace = true }
-bitvec = { workspace = true }
 digest = { workspace = true }
-displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { workspace = true }
-generic-array = { workspace = true }
 hotshot-types = { path = "../types" }
 jf-primitives = { workspace = true }
-jf-relation = { workspace = true }
 jf-utils = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 tagged-base64 = { workspace = true }
-typenum = { workspace = true }
 
 [dev-dependencies]
 rand_chacha = { workspace = true }

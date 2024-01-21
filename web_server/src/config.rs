@@ -72,13 +72,25 @@ pub fn post_vid_disperse_route(view_number: u64) -> String {
     format!("api/vid_disperse/{view_number}")
 }
 
-/// get vid vote
+/// get upgrade route
+#[must_use]
+pub fn get_upgrade_route(view_number: u64) -> String {
+    format!("api/upgrade/{view_number}")
+}
+
+/// post upgrade route
+#[must_use]
+pub fn post_upgrade_route(view_number: u64) -> String {
+    format!("api/upgrade/{view_number}")
+}
+
+/// get vid vote route
 #[must_use]
 pub fn get_vid_vote_route(view_number: u64, index: u64) -> String {
     format!("api/vid_votes/{view_number}/{index}")
 }
 
-/// post vid vote
+/// post vid vote route
 #[must_use]
 pub fn post_vid_vote_route(view_number: u64) -> String {
     format!("api/vid_votes/{view_number}")

@@ -24,7 +24,7 @@ impl ToFields<FieldType> for StateVerKey {
 }
 
 impl ToFields<FieldType> for QCVerKey {
-    const SIZE: usize = 2;
+    const SIZE: usize = 3;
 
     fn to_fields(&self) -> Vec<FieldType> {
         #[allow(clippy::ignored_unit_patterns)]
