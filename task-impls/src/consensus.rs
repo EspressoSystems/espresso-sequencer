@@ -1206,7 +1206,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             };
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_header: leaf.block_header.clone(),
+                block_header,
                 view_number: leaf.view_number,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),

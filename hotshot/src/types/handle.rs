@@ -95,19 +95,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.internal_event_stream.subscribe(filter).await
     }
 
-    /// Gets the current committed state of the [`SystemContext`] instance
+    /// Get the last decided validated state of the [`SystemContext`] instance.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying `Storage` returns an error
-    pub async fn get_state(&self) -> TYPES::StateType {
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
+    pub async fn get_decided_state(&self) -> TYPES::StateType {
         self.hotshot.get_decided_state().await
     }
 
-    /// Gets most recent decided leaf
-    /// # Panics
+    /// Get the last decided leaf of the [`SystemContext`] instance.
     ///
-    /// Panics if internal consensus is in an inconsistent state.
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
     pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.hotshot.get_decided_leaf().await
     }

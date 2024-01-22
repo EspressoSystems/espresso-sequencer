@@ -334,6 +334,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Gets the last decided leaf.
+    ///
     /// # Panics
     /// if the last decided view's leaf does not exist in the state map or saved leaves, which
     /// should never happen.
@@ -347,9 +348,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.saved_leaves.get(&leaf).unwrap().clone()
     }
 
-    /// Gets the last decided state.
+    /// Gets the last decided validated state.
+    ///
     /// # Panics
-    /// if the last decided view's state does not exist in the state map or saved leaves, which
+    /// If the last decided view's state does not exist in the state map or saved leaves, which
     /// should never happen.
     #[must_use]
     pub fn get_decided_state(&self) -> &TYPES::StateType {

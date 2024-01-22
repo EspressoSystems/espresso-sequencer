@@ -144,7 +144,7 @@ mod test {
                 view_number,
                 _pd: PhantomData,
             },
-            header.clone(),
+            header,
             Some(payload),
             dummy_leaf_commit,
             Vec::new(),
