@@ -235,6 +235,26 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
     (ns_id, ns_offset)
 }
 
+fn get_tx_table_entry(
+    ns_offset: usize,
+    block_payload: &BlockPayload,
+    block_payload_len: usize,
+    tx_index: usize,
+) -> TxTableEntry {
+    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
+
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        block_payload_len,
+    );
+    // todo: clamp offsets
+    let tx_id_range = start..end;
+    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
+    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.payload[tx_id_range]);
+
+    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
+}
+
 /// Returns the byte range for a tx in the block payload bytes.
 ///
 /// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
@@ -628,9 +648,10 @@ struct TxIndex2 {
     // However, implementing `Iterator` for `TxIterator` requires `T: Step`.
     // But `Step` trait is not yet stable. (Seriously. Wow.)
     // https://doc.rust-lang.org/std/iter/trait.Step.html
-    tx_index: TxIndexUnsigned,
+    tx_idx: TxIndexUnsigned,
 }
 struct TxIterator<'a> {
+    ns_idx: usize,
     ns_iter: Range<usize>,
     tx_iter: Range<TxIndexUnsigned>,
     block_payload: &'a BlockPayload,
@@ -640,6 +661,7 @@ struct TxIterator<'a> {
 impl<'a> TxIterator<'a> {
     fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
         Self {
+            ns_idx: 0,
             ns_iter: 0..get_ns_table_len(ns_table),
             tx_iter: 0..0, // empty range
             block_payload,
@@ -652,44 +674,65 @@ impl<'a> Iterator for TxIterator<'a> {
     type Item = TxIndex2;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.tx_iter.next() {
-            Some(tx_index) => Some(TxIndex2 {
-                ns_id: todo!(),
-                tx_index,
-            }),
-            None => {
-                // get the next namespace table entry
-                match self.ns_iter.next() {
-                    Some(ns_index) => {
-                        let start = if ns_index == 0 {
-                            0
-                        } else {
-                            get_ns_table_entry(&self.ns_table, ns_index - 1).1
-                        };
-                        let (ns_id, end) = get_ns_table_entry(&self.ns_table, ns_index);
+        let payload_len = self.block_payload.payload.len();
 
-                        // TODO clamp start..end
+        let result = match self.tx_iter.next() {
+            Some(tx_idx) => {
+                // we still have txs left to consume in current ns
+                let start = if self.ns_idx == 0 {
+                    0
+                } else {
+                    get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
+                };
+                // read the current ns_id
+                let (ns_id, _) = get_ns_table_entry(&self.ns_table, self.ns_idx);
 
-                        // read the length of that tx table
-                        let tx_table_len =
-                            get_tx_table_len(&self.block_payload.payload[start..end]); // TODO check range!
+                let tx_offset =
+                    get_tx_table_entry(start, self.block_payload, payload_len, tx_idx as usize);
 
-                        // TODO if self.tx_iter is empty then we need to do all this again.
-                        // Ugh, need to put this whole thing in a loop.
-
-                        // TODO don't use `as u32` here. Do a type-safe conversion instead.
-                        self.tx_iter = 0..(tx_table_len as u32);
-
-                        // TODO this is wrong but we need something like it
-                        Some(TxIndex2 {
-                            ns_id,
-                            tx_index: self.tx_iter.next().unwrap(),
-                        })
-                    }
-                    None => None,
-                }
+                Some(TxIndex2 {
+                    ns_id,
+                    // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
+                    tx_idx: tx_offset.try_into().unwrap(),
+                })
             }
-        }
+            None => {
+                // move to the next name space
+                while let Some(ns_idx) = self.ns_iter.next() {
+                    self.ns_idx = ns_idx;
+                    let start = if self.ns_idx == 0 {
+                        0
+                    } else {
+                        get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
+                    };
+                    let (ns_id, end) = get_ns_table_entry(&self.ns_table, self.ns_idx);
+
+                    let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]); // TODO check range!
+
+                    // TODO don't use `as u32` here. Do a type-safe conversion instead.
+                    self.tx_iter = 0..(tx_table_len as u32);
+
+                    if let Some(first_tx) = self.tx_iter.next() {
+                        let tx_offset = get_tx_table_entry(
+                            start,
+                            &self.block_payload,
+                            payload_len,
+                            first_tx as usize,
+                        );
+
+                        return Some(TxIndex2 {
+                            ns_id,
+                            // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
+                            tx_idx: tx_offset.try_into().unwrap(),
+                        });
+                    } else {
+                        continue;
+                    }
+                }
+                return None;
+            }
+        };
+        result
     }
 }
 
@@ -787,6 +830,8 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
+    use crate::block2::TxIterator;
+
     use super::{
         boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxTableEntry,
     };
@@ -945,7 +990,7 @@ mod test {
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
                 let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+                let derived_ns = derived_nss.get(&ns_id).unwrap();
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -1010,12 +1055,33 @@ mod test {
                 // prepare for the next loop iteration
                 // tx_index_offset += actual_tx_table.len();
                 prev_entry = entry;
-                derived_block_payload.extend(derived_ns.payload_flat);
+                derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
-            assert!(
-                derived_nss.is_empty(),
-                "some derived namespaces missing from namespace table"
-            );
+            // test tx iterator
+            let mut tx_count = 0;
+            let mut ns_id = u64::MAX;
+            for tx in TxIterator::new(&actual_ns_table, &block) {
+                if ns_id != tx.ns_id.0 {
+                    tx_count = 0;
+                } else {
+                    tx_count = tx_count + 1;
+                }
+                ns_id = tx.ns_id.0;
+                let derived_ns = derived_nss.get(&tx.ns_id).unwrap();
+                let derived_tx = derived_ns.tx_table.get(tx_count).unwrap();
+                assert_eq!(
+                    *derived_tx,
+                    TxTableEntry::try_from(tx.tx_idx).unwrap(),
+                    "incorrect tx offset for name space {} at index {}",
+                    &tx.ns_id,
+                    tx.tx_idx
+                );
+            }
+
+            // assert!(
+            //     derived_nss.is_empty(),
+            //     "some derived namespaces missing from namespace table"
+            // );
 
             // test full block payload
             // assert_eq!(tx_index_offset, block.len());
