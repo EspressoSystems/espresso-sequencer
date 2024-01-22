@@ -125,7 +125,7 @@ impl HotShotDataSource for HotShotClient {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {
-        self.get("status/latest_block_height").send().await
+        self.get("status/block-height").send().await
     }
 
     async fn wait_for_block_height(&self, height: u64) -> Result<(), Self::Error> {
