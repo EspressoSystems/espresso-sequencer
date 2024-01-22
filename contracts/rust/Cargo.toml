@@ -34,7 +34,7 @@ jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
 jf-utils = { workspace = true }
 num-bigint = { version = "0.4", default-features = false }
-num-traits = { workspace = true }
+num-traits = { version = "0.2", default-features = false }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.8", default-features = false }
 
