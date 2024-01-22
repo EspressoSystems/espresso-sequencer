@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! A example program using both the web server and libp2p
 /// types used for this example
 pub mod types;

@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! A multi web server
 use std::sync::Arc;
 

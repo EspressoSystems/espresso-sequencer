@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};

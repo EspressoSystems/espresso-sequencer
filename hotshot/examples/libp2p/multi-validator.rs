@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! A multi-validator using libp2p
 use async_compatibility_layer::{
     art::async_spawn,

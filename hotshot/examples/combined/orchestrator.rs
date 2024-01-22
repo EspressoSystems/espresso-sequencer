@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! Orchestrator using the web server
 /// types used for this example
 pub mod types;

@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! web server example
 use hotshot_testing::state_types::TestTypes;
 use std::sync::Arc;

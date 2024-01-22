@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! An orchestrator using libp2p
 
 /// types used for this example

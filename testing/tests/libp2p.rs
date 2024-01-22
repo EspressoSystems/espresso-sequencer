@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 use std::time::Duration;
 
 use hotshot_testing::{

@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 #![cfg(foo)]
 use hotshot::{
     certificate::QuorumCertificate,

@@ -1,4 +1,3 @@
-#![allow(clippy::panic)]
 //! A validator using both the web server and libp2p
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
