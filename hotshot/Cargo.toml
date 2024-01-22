@@ -120,7 +120,7 @@ async-std = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
 toml = { workspace = true }
 blake3 = { workspace = true }
-local-ip-address = "0.5.6"
+local-ip-address = "0.5.7"
 hotshot-testing = { path = "../testing" }
 
 [lints]
