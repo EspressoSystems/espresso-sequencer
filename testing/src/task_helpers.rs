@@ -197,6 +197,7 @@ pub fn build_assembled_sig<
 }
 
 /// build a quorum proposal and signature
+#[allow(clippy::too_many_lines)]
 async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,

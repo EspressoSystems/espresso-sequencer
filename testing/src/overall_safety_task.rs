@@ -107,7 +107,7 @@ pub struct RoundResult<TYPES: NodeType> {
 
     /// block -> # entries decided on that block
     pub block_map: HashMap<VidCommitment, usize>,
-    
+
     /// node idx -> number transactions
     pub num_txns_map: HashMap<u64, usize>,
 }
