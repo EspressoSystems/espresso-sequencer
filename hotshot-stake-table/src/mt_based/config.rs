@@ -23,6 +23,7 @@ impl ToFields<FieldType> for FieldType {
 impl ToFields<FieldType> for bls_over_bn254::VerKey {
     const SIZE: usize = 2;
     fn to_fields(&self) -> Vec<FieldType> {
+        #[allow(clippy::ignored_unit_patterns)]
         let bytes = jf_utils::to_bytes!(&self.to_affine()).unwrap();
         let x = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[..32]);
         let y = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[32..]);

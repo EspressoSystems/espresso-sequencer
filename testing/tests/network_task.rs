@@ -18,6 +18,7 @@ use std::{collections::HashMap, marker::PhantomData};
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
+#[allow(clippy::too_many_lines)]
 async fn test_network_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
@@ -44,7 +45,7 @@ async fn test_network_task() {
             &encoded_transactions_hash,
         )
         .expect("Failed to sign block payload");
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
+    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let vid_signature =

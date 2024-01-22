@@ -30,6 +30,7 @@ either = { workspace = true, features = ["serde"] }
 espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 generic-array = { workspace = true }
+hotshot-constants = { path = "../constants" }
 hotshot-task = { path = "../task", default-features = false }
 hotshot-utils = { path = "../utils" }
 jf-plonk = { workspace = true }
@@ -54,3 +55,6 @@ async-std = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
+
+[lints]
+workspace = true

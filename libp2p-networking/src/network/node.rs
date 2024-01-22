@@ -1,4 +1,8 @@
+/// configuration for the libp2p network (e.g. how it should be built)
 mod config;
+
+/// libp2p network handle
+/// allows for control over the libp2p network
 mod handle;
 
 pub use self::{

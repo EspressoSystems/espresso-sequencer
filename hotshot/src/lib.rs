@@ -1,16 +1,3 @@
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
-#![allow(clippy::module_name_repetitions)]
-// Temporary
-#![allow(clippy::cast_possible_truncation)]
-// Temporary, should be disabled after the completion of the NodeImplementation refactor
-#![allow(clippy::type_complexity)]
 //! Provides a generic rust implementation of the `HotShot` BFT protocol
 //!
 //! See the [protocol documentation](https://github.com/EspressoSystems/hotshot-spec) for a protocol description.
@@ -43,6 +30,8 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use commit::Committable;
 use custom_debug::Debug;
+use futures::join;
+use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
@@ -53,6 +42,7 @@ use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, PayloadStore, View, ViewInner, ViewQueue},
     data::Leaf,
     error::StorageSnafu,
+    event::EventType,
     message::{
         DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
     },
@@ -222,7 +212,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
-                    metadata: anchored_leaf.get_state().metadata(),
+                    state: TYPES::StateType::genesis(),
                 },
             },
         );
@@ -321,6 +311,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         };
     }
 
+    /// Emit an external event
+    // A copypasta of `ConsensusApi::send_event`
+    // TODO: remove with https://github.com/EspressoSystems/HotShot/issues/2407
+    async fn send_external_event(&self, event: Event<TYPES>) {
+        debug!(?event, "send_external_event");
+        let mut event_sender = self.inner.event_sender.write().await;
+        if let Some(sender) = &*event_sender {
+            if let Err(e) = sender.send_async(event).await {
+                error!(?e, "Could not send event to event_sender");
+                *event_sender = None;
+            }
+        }
+    }
+
     /// Publishes a transaction asynchronously to the network
     ///
     /// # Errors
@@ -335,40 +339,38 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         // Wrap up a message
         // TODO place a view number here that makes sense
         // we haven't worked out how this will work yet
-        let message = DataMessage::SubmitTransaction(transaction, TYPES::Time::new(0));
+        let message = DataMessage::SubmitTransaction(transaction.clone(), TYPES::Time::new(0));
         let api = self.clone();
-        // TODO We should have a function that can return a network error if there is one
-        // but first we'd need to ensure our network implementations can support that
-        // (and not hang instead)
+
         async_spawn(async move {
-            let _result = api
-                .inner
-                .networks
-                .da_network
-                .broadcast_message(
-                    Message {
-                        sender: api.inner.public_key.clone(),
-                        kind: MessageKind::from(message),
-                    },
-                    &api.inner.memberships.da_membership.clone(),
-                )
-                .await;
+            let da_membership = &api.inner.memberships.da_membership.clone();
+            join! {
+                // TODO We should have a function that can return a network error if there is one
+                // but first we'd need to ensure our network implementations can support that
+                // (and not hang instead)
+                //
+                api
+                    .inner
+                    .networks
+                    .da_network
+                    .broadcast_message(
+                        Message {
+                            version: PROGRAM_PROTOCOL_VERSION,
+                            sender: api.inner.public_key.clone(),
+                            kind: MessageKind::from(message),
+                        },
+                        da_membership,
+                    ),
+                api
+                    .send_external_event(Event {
+                        view_number: api.inner.consensus.read().await.cur_view,
+                        event: EventType::Transactions {
+                            transactions: vec![transaction],
+                        },
+                    }),
+            }
         });
         Ok(())
-    }
-
-    /// Returns a copy of the state
-    ///
-    /// # Panics
-    ///
-    /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) -> TYPES::ValidatedState {
-        self.inner
-            .consensus
-            .read()
-            .await
-            .get_decided_leaf()
-            .get_state()
     }
 
     /// Returns a copy of the consensus struct
@@ -379,9 +381,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
     /// Returns a copy of the last decided leaf
     /// # Panics
-    /// Panics if internal state for consensus is inconsistent
+    /// Panics if internal leaf for consensus is inconsistent
     pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.inner.consensus.read().await.get_decided_leaf()
+    }
+
+    /// Returns a copy of the last decided validated state.
+    ///
+    /// # Panics
+    /// Panics if internal state for consensus is inconsistent
+    pub async fn get_decided_state(&self) -> TYPES::StateType {
+        self.inner
+            .consensus
+            .read()
+            .await
+            .get_decided_state()
+            .clone()
     }
 
     /// Initializes a new hotshot and does the work of setting up all the background tasks
@@ -455,7 +470,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 .networks
                 .quorum_network
                 .broadcast_message(
-                    Message { sender: pk, kind },
+                    Message {
+                        version: PROGRAM_PROTOCOL_VERSION,
+                        sender: pk,
+                        kind,
+                    },
                     // TODO this is morally wrong
                     &inner.memberships.quorum_membership.clone(),
                 )
@@ -485,6 +504,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .quorum_network
             .direct_message(
                 Message {
+                    version: PROGRAM_PROTOCOL_VERSION,
                     sender: self.inner.public_key.clone(),
                     kind: kind.into(),
                 },
@@ -631,7 +651,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let task_runner =
             add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
-            task_runner.launch().await;
+            let _ = task_runner.launch().await;
             info!("Task runner exited!");
         });
         handle

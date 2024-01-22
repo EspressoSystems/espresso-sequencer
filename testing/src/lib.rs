@@ -1,3 +1,5 @@
+//! Testing infrastructure for `HotShot`
+
 #![cfg_attr(
     // hotshot_example option is set manually in justfile when running examples
     not(any(test, debug_assertions, hotshot_example)),
@@ -42,17 +44,21 @@ pub mod state_types;
 /// node types
 pub mod node_types;
 
-// TODO node changer (spin up and down)
-
+/// global event at the test level
 #[derive(Clone, Debug)]
 pub enum GlobalTestEvent {
+    /// the test is shutting down
     ShutDown,
 }
 
+/// the reason for shutting down the test
 pub enum ShutDownReason {
+    /// the test is shutting down because of a safety violation
     SafetyViolation,
+    /// the test is shutting down because the test has completed successfully
     SuccessfullyCompleted,
 }
 
+/// type alias for the type of tasks created in testing
 pub type TestTask<ERR, STATE> =
     HSTWithEvent<ERR, GlobalTestEvent, ChannelStream<GlobalTestEvent>, STATE>;

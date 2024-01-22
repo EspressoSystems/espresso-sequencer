@@ -36,6 +36,7 @@ pub fn compute_stake_table_hash<F: RescueParameter, T: SerializableEmulatedStruc
 
 /// Traits for verification keys
 pub trait VerKeyVar<E>: Sized + Clone {
+    /// The type of key
     type KeyType: Default;
 
     /// Returns a list of variables associated with this key variable.
@@ -368,6 +369,7 @@ mod tests {
                 );
         let agg_vk_point: SWPoint<E> = agg_vk_point.into_affine().into();
         let vk_points: Vec<SWPoint<E>> = vk_points.iter().map(|p| p.into_affine().into()).collect();
+        #[allow(clippy::cast_sign_loss)]
         let stake_amts: Vec<F> = (0..5).map(|i| F::from((i + 1) as u32)).collect();
         let threshold = F::from(6u8);
         let digest = compute_stake_table_hash::<F, SWPoint<E>>(&stake_amts[..], &vk_points[..]);
@@ -472,6 +474,7 @@ mod tests {
                 );
         let agg_vk_point: TEPoint<E> = agg_vk_point.into_affine().into();
         let vk_points: Vec<TEPoint<E>> = vk_points.iter().map(|p| p.into_affine().into()).collect();
+        #[allow(clippy::cast_sign_loss)]
         let stake_amts: Vec<F> = (0..5).map(|i| F::from((i + 1) as u32)).collect();
         let threshold = F::from(6u8);
         let digest = compute_stake_table_hash::<F, TEPoint<E>>(&stake_amts[..], &vk_points[..]);

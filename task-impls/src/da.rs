@@ -13,6 +13,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
+    event::{Event, EventType},
     message::Proposal,
     simple_certificate::DACertificate,
     simple_vote::{DAData, DAVote},
@@ -140,6 +141,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Could not verify proposal.");
                     return None;
                 }
+
+                // Proposal is fresh and valid, notify the application layer
+                self.api
+                    .send_event(Event {
+                        view_number: self.cur_view,
+                        event: EventType::DAProposal {
+                            proposal: proposal.clone(),
+                            sender: sender.clone(),
+                        },
+                    })
+                    .await;
 
                 if !self.da_membership.has_stake(&self.public_key) {
                     debug!(

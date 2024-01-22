@@ -45,6 +45,10 @@ use std::{
 };
 use surf_disco::error::ClientError;
 use tracing::{debug, error, info, warn};
+
+/// convenience alias alias for the result of getting transactions from the web server
+pub type TxnResult<TYPES> = Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError>;
+
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
 pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
@@ -261,6 +265,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
                 MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
+                MessagePurpose::Upgrade => config::get_upgrade_route(view_number),
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -417,6 +422,15 @@ impl<TYPES: NodeType> Inner<TYPES> {
                             MessagePurpose::Internal => {
                                 error!("Received internal message in web server network");
                             }
+
+                            MessagePurpose::Upgrade => {
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
+                            }
                         }
                     }
                     Ok(None) => {
@@ -475,12 +489,8 @@ impl<TYPES: NodeType> Inner<TYPES> {
     }
 
     /// Fetches transactions from web server
-    async fn get_txs_from_web_server(
-        &self,
-        endpoint: String,
-    ) -> Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError> {
-        let result: Result<Option<(u64, Vec<Vec<u8>>)>, ClientError> =
-            self.client.get(&endpoint).send().await;
+    async fn get_txs_from_web_server(&self, endpoint: String) -> TxnResult<TYPES> {
+        let result: Result<Option<(_, Vec<Vec<u8>>)>, _> = self.client.get(&endpoint).send().await;
         match result {
             Err(_error) => Err(NetworkError::WebServer {
                 source: WebServerNetworkError::ClientError,
@@ -646,6 +656,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             MessagePurpose::ViewSyncVote => config::post_view_sync_vote_route(*view_number),
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
             MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
+            MessagePurpose::Upgrade => config::post_upgrade_route(*view_number),
         };
 
         let network_msg: SendMsg<Message<TYPES>> = SendMsg {
@@ -1286,7 +1297,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
             let mut network = WebServerNetwork::create(
                 url,
                 Duration::from_millis(100),
-                known_nodes[id as usize].clone(),
+                known_nodes[usize::try_from(id).unwrap()].clone(),
                 is_da,
             );
             network.server_shutdown_signal = Some(sender);

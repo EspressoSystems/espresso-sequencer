@@ -14,6 +14,7 @@ use hotshot_task::{
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::simple_vote::QuorumData;
+use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
@@ -26,10 +27,7 @@ use std::sync::Arc;
 use tracing::error;
 
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::{
-    message::{MessageKind, SequencingMessage},
-    traits::election::Membership,
-};
+use hotshot_types::message::{MessageKind, SequencingMessage};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
@@ -97,19 +95,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.internal_event_stream.subscribe(filter).await
     }
 
-    /// Gets the current committed state of the [`SystemContext`] instance
+    /// Get the last decided validated state of the [`SystemContext`] instance.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying `Storage` returns an error
-    pub async fn get_state(&self) {
-        self.hotshot.get_state().await;
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
+    pub async fn get_decided_state(&self) -> TYPES::StateType {
+        self.hotshot.get_decided_state().await
     }
 
-    /// Gets most recent decided leaf
-    /// # Panics
+    /// Get the last decided leaf of the [`SystemContext`] instance.
     ///
-    /// Panics if internal consensus is in an inconsistent state.
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
     pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.hotshot.get_decided_leaf().await
     }

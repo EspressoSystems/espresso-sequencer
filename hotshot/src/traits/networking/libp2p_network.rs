@@ -55,6 +55,10 @@ use std::{
 };
 use tracing::{error, info, instrument, warn};
 
+/// convienence alias for the type for bootstrap addresses
+/// concurrency primitives are needed for having tests
+pub type BootstrapAddrs = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
+
 /// hardcoded topic of QC used
 pub const QC_TOPIC: &str = "global";
 
@@ -237,7 +241,7 @@ where
                         pubkey.clone(),
                         bootstrap_addrs_ref,
                         num_bootstrap,
-                        node_id as usize,
+                        usize::try_from(node_id).unwrap(),
                         keys,
                         da.clone(),
                         da.contains(&pubkey),
@@ -288,7 +292,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         metrics: NetworkingMetricsValue,
         config: NetworkNodeConfig,
         pk: K,
-        bootstrap_addrs: Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>,
+        bootstrap_addrs: BootstrapAddrs,
         bootstrap_addrs_len: usize,
         id: usize,
         // HACK
@@ -375,6 +379,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
             // cancels on shutdown
             while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
                 /// defines lookahead threshold based on the constant
+                #[allow(clippy::cast_possible_truncation)]
                 const THRESHOLD: u64 = (LOOK_AHEAD as f64 * 0.8) as u64;
 
                 info!("Performing lookup for peer {:?}", pk);

@@ -5,6 +5,7 @@
 
 use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_vote::UpgradeProposalData,
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         election::Membership,
@@ -121,6 +122,19 @@ pub struct DAProposal<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 }
 
+/// A proposal to upgrade the network
+#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[serde(bound = "TYPES: NodeType")]
+pub struct UpgradeProposal<TYPES>
+where
+    TYPES: NodeType,
+{
+    /// The information about which version we are upgrading to.
+    pub upgrade_proposal: UpgradeProposalData<TYPES>,
+    /// View this proposal applies to
+    pub view_number: TYPES::Time,
+}
+
 /// The VID scheme type used in `HotShot`.
 pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
 pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
@@ -223,6 +237,12 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
     }
 }
 
+impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
+        self.view_number
+    }
+}
+
 /// A state change encoded in a leaf.
 ///
 /// [`DeltasType`] represents a [block](NodeType::BlockPayload), but it may not contain the block in
@@ -306,9 +326,6 @@ pub struct Leaf<TYPES: NodeType> {
     /// It may be empty for nodes not in the DA committee.
     pub block_payload: Option<TYPES::BlockPayload>,
 
-    /// State.
-    pub state: TYPES::ValidatedState,
-
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
@@ -322,7 +339,6 @@ impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
             && self.justify_qc == other.justify_qc
             && self.parent_commitment == other.parent_commitment
             && self.block_header == other.block_header
-            && self.state == other.state
             && self.rejected == other.rejected
     }
 }
@@ -333,7 +349,6 @@ impl<TYPES: NodeType> Hash for Leaf<TYPES> {
         self.justify_qc.hash(state);
         self.parent_commitment.hash(state);
         self.block_header.hash(state);
-        self.state.hash(state);
         self.rejected.hash(state);
     }
 }
@@ -361,7 +376,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: fake_commitment(),
             block_header: block_header.clone(),
             block_payload: Some(block_payload),
-            state: <TYPES::ValidatedState as ValidatedState>::initialize(&block_header),
             rejected: Vec::new(),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
@@ -429,10 +443,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_payload_commitment(&self) -> VidCommitment {
         self.get_block_header().payload_commitment()
     }
-    /// The blockchain state after appending this leaf.
-    pub fn get_state(&self) -> TYPES::ValidatedState {
-        self.state.clone()
-    }
     /// Transactions rejected or invalidated by the application of this leaf.
     pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
@@ -449,7 +459,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: stored_view.parent,
             block_header: stored_view.block_header,
             block_payload: stored_view.block_payload,
-            state: stored_view.state,
             rejected: stored_view.rejected,
             proposer_id: stored_view.proposer_id,
         }
@@ -550,7 +559,6 @@ where
             justify_qc: leaf.get_justify_qc(),
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
-            state: leaf.get_state(),
             rejected: leaf.get_rejected(),
             proposer_id: leaf.get_proposer_id(),
         }

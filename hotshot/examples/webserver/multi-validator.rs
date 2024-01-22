@@ -1,3 +1,4 @@
+//! A multi-validator using the web server
 use async_compatibility_layer::{
     art::async_spawn,
     logging::{setup_backtrace, setup_logging},
@@ -10,8 +11,10 @@ use types::VIDNetwork;
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork};
 
+/// types used for this example
 pub mod types;
 
+/// general infra used for this example
 #[path = "../infra/mod.rs"]
 pub mod infra;
 
@@ -40,7 +43,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs::from_multi_args(args, node_index))
-            .await
+            .await;
         });
         nodes.push(node);
     }

@@ -22,8 +22,8 @@ async fn web_server_network() {
     let metadata = TestMetadata {
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },

@@ -1,4 +1,4 @@
-#![allow(clippy::module_name_repetitions, clippy::type_complexity)]
+#![allow(clippy::type_complexity)]
 use bincode::{
     config::{
         LittleEndian, RejectTrailing, VarintEncoding, WithOtherEndian, WithOtherIntEncoding,

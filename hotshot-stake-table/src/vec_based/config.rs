@@ -27,11 +27,16 @@ impl ToFields<FieldType> for QCVerKey {
     const SIZE: usize = 3;
 
     fn to_fields(&self) -> Vec<FieldType> {
-        let bytes = to_bytes!(&self.to_affine()).unwrap();
-        vec![
-            FieldType::from_le_bytes_mod_order(&bytes[..31]),
-            FieldType::from_le_bytes_mod_order(&bytes[31..62]),
-            FieldType::from_le_bytes_mod_order(&bytes[62..]),
-        ]
+        #[allow(clippy::ignored_unit_patterns)]
+        match to_bytes!(&self.to_affine()) {
+            Ok(bytes) => {
+                vec![
+                    FieldType::from_le_bytes_mod_order(&bytes[..31]),
+                    FieldType::from_le_bytes_mod_order(&bytes[31..62]),
+                    FieldType::from_le_bytes_mod_order(&bytes[62..]),
+                ]
+            }
+            Err(_) => unreachable!(),
+        }
     }
 }

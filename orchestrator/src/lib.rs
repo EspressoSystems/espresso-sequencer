@@ -1,4 +1,8 @@
+//! Orchestrator for manipulating nodes and recording results during a run of `HotShot` tests
+
+/// The orchestrator's clients
 pub mod client;
+/// Configuration for the orchestrator
 pub mod config;
 
 use async_lock::RwLock;
@@ -26,6 +30,10 @@ use libp2p::identity::{
     Keypair,
 };
 
+/// Generate an keypair based on a `seed` and an `index`
+/// # Panics
+/// This panics if libp2p is unable to generate a secret key from the seed
+#[must_use]
 pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&seed);
@@ -35,6 +43,7 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
     <EdKeypair as From<SecretKey>>::from(sk_bytes).into()
 }
 
+/// The state of the orchestrator
 #[derive(Default, Clone)]
 struct OrchestratorState<KEY: SignatureKey, ELECTION: ElectionConfig> {
     /// Tracks the latest node index we have generated a configuration for
@@ -53,6 +62,7 @@ struct OrchestratorState<KEY: SignatureKey, ELECTION: ElectionConfig> {
 impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     OrchestratorState<KEY, ELECTION>
 {
+    /// create a new [`OrchestratorState`]
     pub fn new(network_config: NetworkConfig<KEY, ELECTION>) -> Self {
         let mut web_client = None;
         if network_config.web_server_config.is_some() {
@@ -69,14 +79,30 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     }
 }
 
+/// An api exposed by the orchestrator
 pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
+    /// post endpoint for identity
+    /// # Errors
+    /// if unable to serve
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
+    /// post endpoint for each node's config
+    /// # Errors
+    /// if unable to serve
     fn post_getconfig(
         &mut self,
         node_index: u16,
     ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>;
+    /// get endpoint for whether or not the run has started
+    /// # Errors
+    /// if unable to serve
     fn get_start(&self) -> Result<bool, ServerError>;
+    /// post endpoint for whether or not all nodes are ready
+    /// # Errors
+    /// if unable to serve
     fn post_ready(&mut self) -> Result<(), ServerError>;
+    /// post endpoint for the results of the run
+    /// # Errors
+    /// if unable to serve
     fn post_run_results(&mut self) -> Result<(), ServerError>;
 }
 
@@ -116,9 +142,10 @@ where
             let libp2p_config_clone = self.config.libp2p_config.clone().unwrap();
             // Designate node as bootstrap node and store its identity information
             if libp2p_config_clone.bootstrap_nodes.len() < libp2p_config_clone.num_bootstrap_nodes {
-                let port_index = match libp2p_config_clone.index_ports {
-                    true => node_index,
-                    false => 0,
+                let port_index = if libp2p_config_clone.index_ports {
+                    node_index
+                } else {
+                    0
                 };
                 let socketaddr =
                     SocketAddr::new(identity, libp2p_config_clone.base_port + port_index);
@@ -235,6 +262,10 @@ where
 }
 
 /// Runs the orchestrator
+/// # Errors
+/// This errors if tide disco runs into an issue during serving
+/// # Panics
+/// This panics if unable to register the api with tide disco
 pub async fn run_orchestrator<KEY, ELECTION>(
     network_config: NetworkConfig<KEY, ELECTION>,
     url: Url,
@@ -243,13 +274,14 @@ where
     KEY: SignatureKey + 'static + serde::Serialize,
     ELECTION: ElectionConfig + 'static + serde::Serialize,
 {
-    let api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
+    let web_api =
+        define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
     let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
-    app.register_module("api", api.unwrap())
+    app.register_module("api", web_api.unwrap())
         .expect("Error registering api");
     tracing::error!("listening on {:?}", url);
     app.serve(url).await
