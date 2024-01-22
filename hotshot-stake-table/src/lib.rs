@@ -1,7 +1,4 @@
-//! This crate contains some stake table implementations for HotShot system.
-#![deny(warnings)]
-#![deny(missing_docs)]
-
+//! This crate contains some stake table implementations for `HotShot` system.
 pub mod config;
 pub mod mt_based;
 pub mod utils;

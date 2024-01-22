@@ -56,6 +56,9 @@ pub enum TxnTaskDescription {
 
 impl TxnTaskDescription {
     /// build a task
+    /// # Panics
+    /// if unable to get task id
+    #[must_use]
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<TxnTask<TYPES, I>>
@@ -68,7 +71,7 @@ impl TxnTaskDescription {
                 // consistency check
                 match self {
                     TxnTaskDescription::RoundRobinTimeBased(_) => {
-                        assert!(state.next_node_idx.is_some())
+                        assert!(state.next_node_idx.is_some());
                     }
                     TxnTaskDescription::DistributionBased => assert!(state.next_node_idx.is_none()),
                 }
@@ -88,7 +91,7 @@ impl TxnTaskDescription {
                         .boxed()
                     }));
                 let message_handler =
-                    HandleMessage::<TxnTaskTypes<TYPES, I>>(Arc::new(move |_, mut state| {
+                    HandleMessage::<TxnTaskTypes<TYPES, I>>(Arc::new(move |(), mut state| {
                         async move {
                             if let Some(idx) = state.next_node_idx {
                                 // submit to idx handle

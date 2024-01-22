@@ -1,4 +1,4 @@
-extern crate proc_macro;
+//! Macros for testing over all network implementations and nodetype implementations
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -25,6 +25,7 @@ struct CrossTestData {
 }
 
 impl CrossTestDataBuilder {
+    /// if we've extracted all the metadata
     fn is_ready(&self) -> bool {
         self.impls.is_some()
             && self.types.is_some()
@@ -38,10 +39,15 @@ impl CrossTestDataBuilder {
 /// requisite data to generate a single test
 #[derive(derive_builder::Builder, Debug, Clone)]
 struct TestData {
+    /// type
     ty: ExprPath,
+    /// impl
     imply: ExprPath,
+    /// name of test
     test_name: Ident,
+    /// test description
     metadata: Expr,
+    /// whether or not to ignore the test
     ignore: LitBool,
 }
 
@@ -56,7 +62,7 @@ impl ToLowerSnakeStr for ExprPath {
         self.path
             .segments
             .iter()
-            .fold("".to_string(), |mut acc, s| {
+            .fold(String::new(), |mut acc, s| {
                 acc.push_str(&s.ident.to_string().to_lowercase());
                 acc.push('_');
                 acc
@@ -66,16 +72,18 @@ impl ToLowerSnakeStr for ExprPath {
 }
 
 impl ToLowerSnakeStr for ExprTuple {
+    /// allow panic because this is a compiler error
+    #[allow(clippy::panic)]
     fn to_lower_snake_str(&self) -> String {
         self.elems
             .iter()
             .map(|x| {
                 let Expr::Path(expr_path) = x else {
-                    panic!("Expected path expr, got {:?}", x)
+                    panic!("Expected path expr, got {x:?}");
                 };
                 expr_path
             })
-            .fold("".to_string(), |mut acc, s| {
+            .fold(String::new(), |mut acc, s| {
                 acc.push_str(&s.to_lower_snake_str());
                 acc
             })
@@ -83,6 +91,7 @@ impl ToLowerSnakeStr for ExprTuple {
 }
 
 impl TestData {
+    /// generate the code for a single test
     fn generate_test(&self) -> TokenStream2 {
         let TestData {
             ty,
@@ -127,7 +136,9 @@ mod keywords {
 }
 
 impl Parse for CrossTestData {
-    fn parse(input: ParseStream) -> Result<Self> {
+    /// allow panic because this is a compiler error
+    #[allow(clippy::panic)]
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
         let mut description = CrossTestDataBuilder::create_empty();
 
         while !description.is_ready() {
@@ -167,21 +178,24 @@ impl Parse for CrossTestData {
         }
         description
             .build()
-            .map_err(|e| syn::Error::new(proc_macro2::Span::call_site(), format!("{}", e)))
+            .map_err(|e| syn::Error::new(proc_macro2::Span::call_site(), format!("{e}")))
     }
 }
 
+/// Helper function to do the actual code gen
+/// allow panic because this is a compiler error
+#[allow(clippy::panic)]
 fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
     let impls = test_spec.impls.elems.iter().map(|t| {
         let Expr::Path(p) = t else {
-            panic!("Expected Path for Impl! Got {:?}", t)
+            panic!("Expected Path for Impl! Got {t:?}");
         };
         p
     });
     //
     let types = test_spec.types.elems.iter().map(|t| {
         let Expr::Path(p) = t else {
-            panic!("Expected Path for Type! Got {:?}", t)
+            panic!("Expected Path for Type! Got {t:?}");
         };
         p
     });
@@ -231,8 +245,8 @@ fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
 /// Generate a cartesian product of tests across all types
 /// Arguments:
 /// - `Impls: []` - a list of types that implement nodetype
-/// - `Metadata`: TestMetadata::default()` - test metadata
-/// - `Types: []` - a list types that implement NodeImplementation over the types in `Impls`
+/// - `Metadata`: `TestMetadata::default()` - test metadata
+/// - `Types: []` - a list types that implement `NodeImplementation` over the types in `Impls`
 /// - `TestName: example_test` - the name of the test
 /// - `Ignore`: whether or not this set of tests are ignored
 /// Example usage: see tests in this module

@@ -23,3 +23,6 @@ hotshot-types = { path = "../types", default-features = false }
 tokio = { workspace = true }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
+
+[lints]
+workspace = true

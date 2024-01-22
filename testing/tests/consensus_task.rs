@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use commit::Committable;
 use hotshot::{tasks::add_consensus_task, types::SystemContextHandle, HotShotConsensusApi};
 use hotshot_task::event_stream::ChannelStream;
@@ -227,7 +228,7 @@ async fn test_consensus_with_vid() {
     };
     let pub_key = *api.public_key();
     let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
+    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();

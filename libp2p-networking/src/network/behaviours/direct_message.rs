@@ -51,6 +51,7 @@ pub enum DMEvent {
 }
 
 impl DMBehaviour {
+    /// handle a direct message event
     fn handle_dm_event(&mut self, event: Event<DirectMessageRequest, DirectMessageResponse>) {
         match event {
             Event::InboundFailure {

@@ -1,3 +1,4 @@
+//! A multi web server
 use std::sync::Arc;
 
 use async_compatibility_layer::{
@@ -10,9 +11,12 @@ use hotshot_testing::state_types::TestTypes;
 use surf_disco::Url;
 use tracing::error;
 
+/// Arguments to run multiple web servers
 #[derive(Parser, Debug)]
 struct MultiWebServerArgs {
+    /// consensus url
     consensus_url: Url,
+    /// data availability server url
     da_url: Url,
 }
 

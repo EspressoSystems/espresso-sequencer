@@ -122,3 +122,6 @@ toml = { workspace = true }
 blake3 = { workspace = true }
 local-ip-address = "0.5.6"
 hotshot-testing = { path = "../testing" }
+
+[lints]
+workspace = true

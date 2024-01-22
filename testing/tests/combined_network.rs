@@ -23,8 +23,8 @@ async fn test_combined_network() {
     let metadata: TestMetadata = TestMetadata {
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },
@@ -61,8 +61,8 @@ async fn test_combined_network_webserver_crash() {
     let mut metadata: TestMetadata = TestMetadata {
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },
@@ -113,8 +113,8 @@ async fn test_combined_network_reup() {
     let mut metadata: TestMetadata = TestMetadata {
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },
@@ -169,8 +169,8 @@ async fn test_combined_network_half_dc() {
     let mut metadata: TestMetadata = TestMetadata {
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },
@@ -252,8 +252,8 @@ async fn test_stress_combined_network_fuzzy() {
 
         timing_data: TimingData {
             round_start_delay: 25,
-            next_view_timeout: 10000,
-            start_delay: 120000,
+            next_view_timeout: 10_000,
+            start_delay: 120_000,
 
             ..Default::default()
         },

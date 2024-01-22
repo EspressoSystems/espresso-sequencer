@@ -1,16 +1,3 @@
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
-#![allow(clippy::module_name_repetitions)]
-// Temporary
-#![allow(clippy::cast_possible_truncation)]
-// Temporary, should be disabled after the completion of the NodeImplementation refactor
-#![allow(clippy::type_complexity)]
 //! Provides a generic rust implementation of the `HotShot` BFT protocol
 //!
 //! See the [protocol documentation](https://github.com/EspressoSystems/hotshot-spec) for a protocol description.
@@ -664,7 +651,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let task_runner =
             add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
-            task_runner.launch().await;
+            let _ = task_runner.launch().await;
             info!("Task runner exited!");
         });
         handle

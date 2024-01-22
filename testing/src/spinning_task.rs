@@ -14,18 +14,24 @@ use hotshot_types::{event::Event, traits::node_implementation::NodeType};
 use snafu::Snafu;
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node};
+/// convience type for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 
 use super::GlobalTestEvent;
 
+/// error for the spinning task
 #[derive(Snafu, Debug)]
 pub struct SpinningTaskErr {}
 
 /// Spinning task state
 pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// handle to the nodes
     pub(crate) handles: Vec<Node<TYPES, I>>,
+    /// late start nodes
     pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
+    /// time based changes
     pub(crate) changes: HashMap<TYPES::Time, Vec<ChangeNode>>,
+    /// most recent view seen by spinning task
     pub(crate) latest_view: Option<TYPES::Time>,
 }
 
@@ -53,13 +59,20 @@ pub struct ChangeNode {
     pub updown: UpDown,
 }
 
+/// description of the spinning task
+/// (used to build a spinning task)
 #[derive(Clone, Debug)]
 pub struct SpinningTaskDescription {
+    /// the changes in node status, time -> changes
     pub node_changes: Vec<(u64, Vec<ChangeNode>)>,
 }
 
 impl SpinningTaskDescription {
     /// build a task
+    /// # Panics
+    /// If there is no latest view
+    /// or if the node id is over `u32::MAX`
+    #[must_use]
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<SpinningTask<TYPES, I>> {

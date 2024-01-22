@@ -20,7 +20,9 @@ pub const COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL: u64 = 5;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Type for protocol version number
 pub struct Version {
+    /// major version number
     pub major: u16,
+    /// minor version number
     pub minor: u16,
 }
 

@@ -5,3 +5,5 @@ version = { workspace = true }
 
 [dependencies]
 serde = { workspace = true }
+[lints]
+workspace = true

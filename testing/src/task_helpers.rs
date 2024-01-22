@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use std::marker::PhantomData;
 
 use crate::{
@@ -43,6 +44,9 @@ use hotshot_types::vote::Vote;
 use serde::Serialize;
 use std::{fmt::Debug, hash::Hash};
 
+/// create the [`SystemContextHandle`] from a node id
+/// # Panics
+/// if cannot create a [`HotShotInitializer`]
 pub async fn build_system_handle(
     node_id: u64,
 ) -> (
@@ -115,6 +119,9 @@ pub async fn build_system_handle(
     .expect("Could not init hotshot")
 }
 
+/// create certificate
+/// # Panics
+/// if we fail to sign the data
 pub fn build_cert<
     TYPES: NodeType<SignatureKey = BLSPubKey>,
     DATAType: Committable + Clone + Eq + Hash + Serialize + Debug + 'static,
@@ -127,8 +134,7 @@ pub fn build_cert<
     public_key: &TYPES::SignatureKey,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
 ) -> CERT {
-    let real_qc_sig =
-        build_assembled_sig::<TYPES, VOTE, CERT, DATAType>(data.clone(), membership, view);
+    let real_qc_sig = build_assembled_sig::<TYPES, VOTE, CERT, DATAType>(&data, membership, view);
 
     let vote =
         SimpleVote::<TYPES, DATAType>::create_signed_vote(data, view, public_key, private_key)
@@ -142,13 +148,16 @@ pub fn build_cert<
     cert
 }
 
+/// create signature
+/// # Panics
+/// if fails to convert node id into keypair
 pub fn build_assembled_sig<
     TYPES: NodeType<SignatureKey = BLSPubKey>,
     VOTE: Vote<TYPES>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
     DATAType: Committable + Clone + Eq + Hash + Serialize + Debug + 'static,
 >(
-    data: DATAType,
+    data: &DATAType,
     membership: &TYPES::Membership,
     view: TYPES::Time,
 ) -> <TYPES::SignatureKey as SignatureKey>::QCType {
@@ -186,6 +195,7 @@ pub fn build_assembled_sig<
     real_qc_sig
 }
 
+/// build a quorum proposal and signature
 async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
@@ -308,6 +318,7 @@ async fn build_quorum_proposal_and_signature(
     (proposal, signature)
 }
 
+/// create a quorum proposal
 pub async fn build_quorum_proposal(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
@@ -323,6 +334,8 @@ pub async fn build_quorum_proposal(
     }
 }
 
+/// get the keypair for a node id
+#[must_use]
 pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey, BLSPubKey) {
     let private_key =
         <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
@@ -330,8 +343,12 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
     (private_key, public_key)
 }
 
+/// initialize VID
+/// # Panics
+/// if unable to create a [`VidScheme`]
+#[must_use]
 pub fn vid_init<TYPES: NodeType>(
-    membership: TYPES::Membership,
+    membership: &TYPES::Membership,
     view_number: TYPES::Time,
 ) -> VidScheme {
     let num_committee = membership.get_committee(view_number).len();
