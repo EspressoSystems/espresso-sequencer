@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use async_compatibility_layer::art::async_sleep;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_lock::RwLock;
@@ -85,10 +86,13 @@ pub struct ConfigArgs {
 }
 
 /// Reads a network configuration from a given filepath
+/// # Panics
+/// if unable to convert the config file into toml
+#[must_use]
 pub fn load_config_from_file<TYPES: NodeType>(
-    config_file: String,
+    config_file: &str,
 ) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
-    let config_file_as_string: String = fs::read_to_string(config_file.as_str())
+    let config_file_as_string: String = fs::read_to_string(config_file)
         .unwrap_or_else(|_| panic!("Could not read config file located at {config_file}"));
     let config_toml: NetworkConfigFile<TYPES::SignatureKey> =
         toml::from_str::<NetworkConfigFile<TYPES::SignatureKey>>(&config_file_as_string)
@@ -127,7 +131,7 @@ pub async fn run_orchestrator<
     OrchestratorArgs { url, config_file }: OrchestratorArgs,
 ) {
     error!("Starting orchestrator",);
-    let run_config = load_config_from_file::<TYPES>(config_file);
+    let run_config = load_config_from_file::<TYPES>(&config_file);
     let _result = hotshot_orchestrator::run_orchestrator::<
         TYPES::SignatureKey,
         TYPES::ElectionConfigType,
@@ -136,17 +140,23 @@ pub async fn run_orchestrator<
 }
 
 /// Helper function to calculate the nuymber of transactions to send per node per round
+#[allow(clippy::cast_possible_truncation)]
 fn calculate_num_tx_per_round(
     node_index: u64,
     total_num_nodes: usize,
     transactions_per_round: usize,
 ) -> usize {
     transactions_per_round / total_num_nodes
-        + ((total_num_nodes - 1 - node_index as usize) < (transactions_per_round % total_num_nodes))
-            as usize
+        + usize::from(
+            (total_num_nodes - 1 - node_index as usize)
+                < (transactions_per_round % total_num_nodes),
+        )
 }
 
-async fn webserver_network_from_config<TYPES: NodeType>(
+/// create a web server network from a config file + public key
+/// # Panics
+/// Panics if the web server config doesn't exist in `config`
+fn webserver_network_from_config<TYPES: NodeType>(
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     pub_key: TYPES::SignatureKey,
 ) -> WebServerNetwork<TYPES> {
@@ -159,6 +169,12 @@ async fn webserver_network_from_config<TYPES: NodeType>(
     WebServerNetwork::create(url, wait_between_polls, pub_key, false)
 }
 
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_lossless)]
+#[allow(clippy::too_many_lines)]
+/// Create a libp2p network from a config file and public key
+/// # Panics
+/// If unable to create bootstrap nodes multiaddres or the libp2p config is invalid
 async fn libp2p_network_from_config<TYPES: NodeType>(
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     pub_key: TYPES::SignatureKey,
@@ -188,9 +204,10 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
         NetworkNodeType::Regular
     };
     let node_index = config.node_index;
-    let port_index = match libp2p_config.index_ports {
-        true => node_index,
-        false => 0,
+    let port_index = if libp2p_config.index_ports {
+        node_index
+    } else {
+        0
     };
     let bound_addr: Multiaddr = format!(
         "/{}/{}/udp/{}/quic-v1",
@@ -252,6 +269,7 @@ match node_type {
     }
     let node_config = config_builder.build().unwrap();
 
+    #[allow(clippy::cast_possible_truncation)]
     Libp2pNetwork::new(
         NetworkingMetricsValue::default(),
         node_config,
@@ -425,7 +443,7 @@ pub trait RunDA<
                                 for _ in 0..transactions_to_send_per_round {
                                     let tx = transactions.remove(0);
 
-                                    _ = context.submit_transaction(tx).await.unwrap();
+                                    () = context.submit_transaction(tx).await.unwrap();
                                     total_transactions_sent += 1;
                                 }
                             }
@@ -482,10 +500,15 @@ pub trait RunDA<
 
 /// Represents a web server-based run
 pub struct WebServerDARun<TYPES: NodeType> {
+    /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    /// quorum channel
     quorum_channel: WebCommChannel<TYPES>,
+    /// data availability channel
     da_channel: WebCommChannel<TYPES>,
+    /// view sync channel
     view_sync_channel: WebCommChannel<TYPES>,
+    /// vid channel
     vid_channel: WebCommChannel<TYPES>,
 }
 
@@ -531,7 +554,7 @@ where
 
         // create and wait for underlying network
         let underlying_quorum_network =
-            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone());
 
         underlying_quorum_network.wait_for_ready().await;
 
@@ -584,10 +607,15 @@ where
 
 /// Represents a libp2p-based run
 pub struct Libp2pDARun<TYPES: NodeType> {
+    /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    /// quorum channel
     quorum_channel: Libp2pCommChannel<TYPES>,
+    /// data availability channel
     da_channel: Libp2pCommChannel<TYPES>,
+    /// view sync channel
     view_sync_channel: Libp2pCommChannel<TYPES>,
+    /// vid channel
     vid_channel: Libp2pCommChannel<TYPES>,
 }
 
@@ -677,10 +705,15 @@ where
 
 /// Represents a combined-network-based run
 pub struct CombinedDARun<TYPES: NodeType> {
+    /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    /// quorum channel
     quorum_channel: CombinedCommChannel<TYPES>,
+    /// data availability channel
     da_channel: CombinedCommChannel<TYPES>,
+    /// view sync channel
     view_sync_channel: CombinedCommChannel<TYPES>,
+    /// vid channel
     vid_channel: CombinedCommChannel<TYPES>,
 }
 
@@ -736,7 +769,7 @@ where
 
         // create and wait for underlying webserver network
         let webserver_underlying_quorum_network =
-            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone());
 
         let webserver_underlying_da_network =
             WebServerNetwork::create(url, wait_between_polls, pub_key, true);
@@ -796,6 +829,8 @@ where
 }
 
 /// Main entry point for validators
+/// # Panics
+/// if unable to get the local ip address
 pub async fn main_entry_point<
     TYPES: NodeType<
         Transaction = TestTransaction,
@@ -832,7 +867,7 @@ pub async fn main_entry_point<
     };
 
     let orchestrator_client: OrchestratorClient =
-        OrchestratorClient::new(args.clone(), public_ip.to_string()).await;
+        OrchestratorClient::new(args.clone(), public_ip.to_string());
 
     // conditionally save/load config from file or orchestrator
     let (mut run_config, source) =
@@ -901,6 +936,10 @@ pub async fn main_entry_point<
     .await;
 }
 
+/// generate a libp2p identity based on a seed and idx
+/// # Panics
+/// if unable to create a secret key out of bytes
+#[must_use]
 pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&seed);

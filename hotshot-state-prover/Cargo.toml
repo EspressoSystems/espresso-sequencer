@@ -24,3 +24,6 @@ hotshot-stake-table = { path = "../hotshot-stake-table" }
 default = ["parallel"]
 std = ["ark-std/std", "ark-ff/std"]
 parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]
+
+[lints]
+workspace = true

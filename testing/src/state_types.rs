@@ -102,6 +102,9 @@ impl TestableState for TestState {
     ) -> <Self::BlockPayload as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
-        TestTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
+        TestTransaction(vec![
+            0;
+            RANDOM_TX_BASE_SIZE + usize::try_from(padding).unwrap()
+        ])
     }
 }

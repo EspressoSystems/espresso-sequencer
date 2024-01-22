@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+/// a local caching layer for the DHT key value pairs
 mod cache;
 
 use async_compatibility_layer::art::async_block_on;
@@ -23,7 +24,12 @@ use libp2p::{
 use libp2p_identity::PeerId;
 use tracing::{error, info, warn};
 
+/// the number of nodes required to get an answer from
+/// in order to trust that the answer is correct when retrieving from the DHT
+/// TODO why are there two of these?
+/// <https://github.com/EspressoSystems/HotShot/issues/2434>
 pub(crate) const NUM_REPLICATED_TO_TRUST: usize = 2;
+/// the maximum number of nodes to query in the DHT at any one time
 const MAX_DHT_QUERY_SIZE: usize = 5;
 
 use self::cache::Cache;
@@ -374,6 +380,7 @@ impl DHTBehaviour {
 
 impl DHTBehaviour {
     #![allow(clippy::too_many_lines)]
+    /// handle a DHT event
     fn dht_handle_event(&mut self, event: KademliaEvent) {
         match event {
             KademliaEvent::OutboundQueryProgressed {

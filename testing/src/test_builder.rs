@@ -47,13 +47,13 @@ pub struct TestMetadata {
     pub num_bootstrap_nodes: usize,
     /// Size of the DA committee for the test
     pub da_committee_size: usize,
-    // overall safety property description
+    /// overall safety property description
     pub overall_safety_properties: OverallSafetyPropertiesDescription,
     /// spinning properties
     pub spinning_properties: SpinningTaskDescription,
-    // txns timing
+    /// txns timing
     pub txn_description: TxnTaskDescription,
-    // completion task
+    /// completion task
     pub completion_task_description: CompletionTaskDescription,
     /// Minimum transactions required for a block
     pub min_transactions: usize,
@@ -77,6 +77,8 @@ impl Default for TimingData {
 }
 
 impl TestMetadata {
+    /// the default metadata for a stress test
+    #[must_use]
     pub fn default_stress() -> Self {
         let num_nodes = 100;
         TestMetadata {
@@ -103,6 +105,8 @@ impl TestMetadata {
         }
     }
 
+    /// the default metadata for multiple rounds
+    #[must_use]
     pub fn default_multiple_rounds() -> TestMetadata {
         let num_nodes = 10;
         TestMetadata {
@@ -117,7 +121,7 @@ impl TestMetadata {
                 threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
             },
             timing_data: TimingData {
-                start_delay: 120000,
+                start_delay: 120_000,
                 round_start_delay: 25,
                 ..TimingData::default()
             },
@@ -127,6 +131,7 @@ impl TestMetadata {
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
+    #[must_use]
     pub fn default_more_nodes() -> TestMetadata {
         let num_nodes = 20;
         TestMetadata {
@@ -187,6 +192,11 @@ impl Default for TestMetadata {
 }
 
 impl TestMetadata {
+    /// turn a description of a test (e.g. a [`TestMetadata`]) into
+    /// a [`TestLauncher`] that can be used to launch the test.
+    /// # Panics
+    /// if some of the the configuration values are zero
+    #[must_use]
     pub fn gen_launcher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
         node_id: u64,

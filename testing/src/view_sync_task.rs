@@ -14,13 +14,14 @@ use std::{collections::HashSet, sync::Arc};
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 
-/// ViewSync Task error
+/// `ViewSync` Task error
 #[derive(Snafu, Debug, Clone)]
 pub struct ViewSyncTaskErr {
+    /// set of node ids that hit view sync
     hit_view_sync: HashSet<usize>,
 }
 
-/// ViewSync task state
+/// `ViewSync` task state
 pub struct ViewSyncTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// the node handles
     pub(crate) handles: Vec<Node<TYPES, I>>,
@@ -30,7 +31,7 @@ pub struct ViewSyncTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for ViewSyncTask<TYPES, I> {}
 
-/// ViewSync task types
+/// `ViewSync` task types
 pub type ViewSyncTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     ViewSyncTaskErr,
     GlobalTestEvent,
@@ -40,6 +41,7 @@ pub type ViewSyncTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     ViewSyncTask<TYPES, I>,
 >;
 
+/// enum desecribing whether a node should hit view sync
 #[derive(Clone, Debug, Copy)]
 pub enum ShouldHitViewSync {
     /// the node should hit view sync
@@ -58,6 +60,10 @@ pub enum ViewSyncTaskDescription {
 }
 
 impl ViewSyncTaskDescription {
+    /// build a view sync task from its description
+    /// # Panics
+    /// if there is an violation of the view sync description
+    #[must_use]
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<ViewSyncTask<TYPES, I>> {

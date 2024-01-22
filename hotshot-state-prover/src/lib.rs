@@ -1,4 +1,4 @@
-//! SNARK-assisted light client state update verification in HotShot
+//! SNARK-assisted light client state update verification in `HotShot`
 
 /// State verifier circuit builder
 pub mod circuit;
@@ -37,6 +37,9 @@ pub type Proof = jf_plonk::proof_system::structs::Proof<Bn254>;
 pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 
 /// Given a SRS, returns the proving key and verifying key for state update
+/// # Errors
+/// Errors if unable to preprocess
+#[allow(clippy::cast_possible_truncation)]
 pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
     srs: &UniversalSrs,
 ) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
@@ -51,10 +54,14 @@ pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a bit vector indicates the signers
 /// - a quorum threshold
-/// Returns error or a pair (proof, public_inputs) asserting that
+/// Returns error or a pair `(proof, public_inputs)` asserting that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all signed schnorr signatures are valid
+/// # Errors
+/// Errors if unable to generate proof
+/// # Panics
+/// if the stake table is not up to date
 pub fn generate_state_update_proof<ST, R, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
     rng: &mut R,
     pk: &ProvingKey,
@@ -124,6 +131,7 @@ mod tests {
     const ST_CAPACITY: usize = 20;
 
     // FIXME(Chengyu): see <https://github.com/EspressoSystems/jellyfish/issues/249>
+    #[allow(clippy::unnecessary_wraps)]
     fn universal_setup_for_testing<R>(
         max_degree: usize,
         rng: &mut R,
@@ -234,7 +242,7 @@ mod tests {
                 .0
                 .num_gates();
         let test_srs = universal_setup_for_testing(num_gates + 2, &mut prng).unwrap();
-        ark_std::println!("Number of constraint in the circuit: {}", num_gates);
+        ark_std::println!("Number of constraint in the circuit: {num_gates}");
 
         let result = preprocess::<ST_CAPACITY>(&test_srs);
         assert!(result.is_ok());

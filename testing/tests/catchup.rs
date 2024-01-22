@@ -106,7 +106,7 @@ async fn test_catchup_web() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(100000),
+                duration: Duration::from_millis(100_000),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {

@@ -1,7 +1,10 @@
 /// networking behaviours wrapping libp2p's behaviours
 pub mod behaviours;
+/// defines the swarm and network definition (internal)
 mod def;
+/// libp2p network errors
 pub mod error;
+/// functionality of a libp2p network node
 mod node;
 
 pub use self::{

@@ -62,7 +62,7 @@ where
     #[cfg(not(feature = "randomized-leader-election"))]
     /// Index the vector of public keys with the current view number
     fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
-        let index = (*view_number % self.nodes_with_stake.len() as u64) as usize;
+        let index = usize::try_from(*view_number % self.nodes_with_stake.len() as u64).unwrap();
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }

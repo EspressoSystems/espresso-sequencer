@@ -44,12 +44,16 @@ pub enum CacheError {
     },
 }
 
+/// configuration describing the cache
 #[derive(Clone, derive_builder::Builder, custom_debug::Debug, Default)]
 pub struct Config {
     #[builder(default = "Some(\"dht.cache\".to_string())")]
+    /// filename to save to
     pub filename: Option<String>,
     #[builder(default = "Duration::from_secs(KAD_DEFAULT_REPUB_INTERVAL_SEC * 16)")]
+    /// time before entry expires
     pub expiry: Duration,
+    /// max differences with disk before write
     #[builder(default = "4")]
     pub max_disk_parity_delta: u32,
 }
@@ -60,20 +64,20 @@ impl Default for Cache {
     }
 }
 
+/// key value cache
 pub struct Cache {
     /// the cache's config
     config: Config,
-
     /// the cache for records (key -> value)
     inner: Arc<DashMap<Vec<u8>, Vec<u8>>>,
     /// the expiries for the dht cache, in order (expiry time -> key)
     expiries: Arc<RwLock<BTreeMap<SystemTime, Vec<u8>>>>,
-
     /// number of inserts since the last save
     disk_parity_delta: Arc<AtomicU32>,
 }
 
 impl Cache {
+    /// create a new cache
     pub async fn new(config: Config) -> Self {
         let cache = Self {
             inner: Arc::new(DashMap::new()),
@@ -90,6 +94,7 @@ impl Cache {
         cache
     }
 
+    /// load from file if configured to do so
     pub async fn load(&self) -> Result<(), CacheError> {
         if let Some(filename) = &self.config.filename {
             let encoded = std::fs::read(filename).context(DiskSnafu)?;
@@ -111,6 +116,7 @@ impl Cache {
         Ok(())
     }
 
+    /// save to file if configured to do so
     pub async fn save(&self) -> Result<(), CacheError> {
         if let Some(filename) = &self.config.filename {
             // prune first
@@ -142,6 +148,7 @@ impl Cache {
         Ok(())
     }
 
+    /// prune stale entries
     async fn prune(&self) {
         let now = SystemTime::now();
         let mut expiries = self.expiries.write().await;
@@ -162,6 +169,7 @@ impl Cache {
         }
     }
 
+    /// get value for `key` if exists
     pub async fn get(&self, key: &Vec<u8>) -> Option<Ref<'_, Vec<u8>, Vec<u8>>> {
         // prune, save if necessary
         self.prune().await;
@@ -171,6 +179,8 @@ impl Cache {
         self.inner.get(key)
     }
 
+    /// insert key and value into cache and experies, then save to disk if max disk parity delta
+    /// exceeded
     pub async fn insert(&self, key: Vec<u8>, value: Vec<u8>) {
         // insert into cache and expiries
         self.inner.insert(key.clone(), value);
@@ -184,6 +194,7 @@ impl Cache {
         self.save_if_necessary().await;
     }
 
+    /// save to disk if differences is over max disk parity delta
     async fn save_if_necessary(&self) {
         let cur_disk_parity_delta = self.disk_parity_delta.load(Ordering::Relaxed);
         if cur_disk_parity_delta >= self.config.max_disk_parity_delta {

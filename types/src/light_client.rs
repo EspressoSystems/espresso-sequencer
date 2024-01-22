@@ -1,10 +1,16 @@
 //! Types and structs associated with light client state
 
+use ark_ed_on_bn254::EdwardsConfig as Config;
 use ark_ff::PrimeField;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use jf_primitives::signatures::schnorr;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+use tagged_base64::tagged;
 
-/// A serialized light client state for proof generation
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+/// A light client state
+#[tagged("LIGHT_CLIENT_STATE")]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Default)]
 pub struct LightClientState<F: PrimeField> {
     /// Current view number
     pub view_number: usize,
@@ -44,10 +50,6 @@ impl<F: PrimeField> From<&LightClientState<F>> for [F; 7] {
         ]
     }
 }
-
-use ark_ed_on_bn254::EdwardsConfig as Config;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 
 /// Signatures
 pub type StateSignature = schnorr::Signature<Config>;

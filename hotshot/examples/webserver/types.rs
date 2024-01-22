@@ -5,12 +5,17 @@ use hotshot_types::traits::node_implementation::{ChannelMaps, NodeImplementation
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
+/// dummy struct so we can choose types
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
+/// convenience type alias
 pub type DANetwork = WebCommChannel<TestTypes>;
+/// convenience type alias
 pub type VIDNetwork = WebCommChannel<TestTypes>;
+/// convenience type alias
 pub type QuorumNetwork = WebCommChannel<TestTypes>;
+/// convenience type alias
 pub type ViewSyncNetwork = WebCommChannel<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
@@ -24,4 +29,5 @@ impl NodeImplementation<TestTypes> for NodeImpl {
         (ChannelMaps::new(start_view), None)
     }
 }
+/// convenience type alias
 pub type ThisRun = WebServerDARun<TestTypes>;

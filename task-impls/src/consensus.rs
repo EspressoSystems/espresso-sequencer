@@ -507,8 +507,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
-                self.current_proposal = Some(proposal.data.clone());
-
                 let consensus = self.consensus.upgradable_read().await;
 
                 // Construct the leaf.
@@ -521,9 +519,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                 };
 
+                let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+
+                if justify_qc.get_view_number() > consensus.high_qc.view_number {
+                    debug!("Updating high QC");
+                    consensus.high_qc = justify_qc.clone();
+                }
+
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
-                    // If no parent then just update our state map and return.  We will not vote.
                     error!(
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
@@ -540,7 +544,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let state =
                         <TYPES::StateType as State>::from_header(&proposal.data.block_header);
 
-                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
                     consensus.state_map.insert(
                         view,
                         View {
@@ -551,6 +554,40 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         },
                     );
                     consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+
+                    // If we are missing the parent from storage, the safety check will fail.  But we can
+                    // still vote if the liveness check succeeds.
+                    let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
+
+                    let high_qc = consensus.high_qc.clone();
+                    let locked_view = consensus.locked_view; 
+                
+
+                    drop(consensus);
+
+                    if liveness_check {
+                        self.current_proposal = Some(proposal.data.clone());
+                        let new_view = proposal.data.view_number + 1;
+
+                        // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
+                        let should_propose = self.quorum_membership.get_leader(new_view)
+                            == self.public_key
+                            && high_qc.view_number
+                                == self.current_proposal.clone().unwrap().view_number;
+                        let qc = high_qc.clone();
+                        if should_propose {
+                            debug!(
+                                "Attempting to publish proposal after voting; now in view: {}",
+                                *new_view
+                            );
+                            self.publish_proposal_if_able(qc.view_number + 1, None)
+                                .await;
+                        }
+                        if self.vote_if_able().await {
+                            self.current_proposal = None;
+                        }
+                    }
+                    warn!("Failed liveneess check; cannot find parent either\n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", high_qc, proposal.data.clone(), locked_view);
 
                     return;
                 };
@@ -609,9 +646,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Skip if both saftey and liveness checks fail.
                 if !safety_check && !liveness_check {
-                    error!("Failed safety check and liveness check");
+                    error!("Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", consensus.high_qc, proposal.data.clone(), consensus.locked_view);
                     return;
                 }
+
+                self.current_proposal = Some(proposal.data.clone());
 
                 // We accept the proposal, notify the application layer
                 self.api
@@ -624,7 +663,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     })
                     .await;
 
-                let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
                 let mut new_locked_view = consensus.locked_view;
                 let mut last_view_number_visited = view;
@@ -712,11 +750,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     HashSet::new()
                 };
 
-                // promote lock here to add proposal to statemap
-                let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-                if high_qc.view_number > consensus.high_qc.view_number {
-                    consensus.high_qc = high_qc;
-                }
                 consensus.state_map.insert(
                     view,
                     View {

@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use super::{
     completion_task::CompletionTask,
     overall_safety_task::{OverallSafetyTask, RoundCtx},
@@ -28,20 +29,29 @@ use std::{
 #[allow(deprecated)]
 use tracing::info;
 
+/// a node participating in a test
 #[derive(Clone)]
 pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// the unique identifier of the node
     pub node_id: u64,
+    /// the networks of the node
     pub networks: Networks<TYPES, I>,
+    /// the handle to the node's internals
     pub handle: SystemContextHandle<TYPES, I>,
 }
 
 /// The runner of a test network
 /// spin up and down nodes, execute rounds
 pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// test launcher, contains a bunch of useful metadata and closures
     pub(crate) launcher: TestLauncher<TYPES, I>,
+    /// nodes in the test
     pub(crate) nodes: Vec<Node<TYPES, I>>,
+    /// nodes with a late start
     pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
+    /// the next node unique identifier
     pub(crate) next_node_id: u64,
+    /// overarching test task
     pub(crate) task_runner: TaskRunner,
 }
 
@@ -50,6 +60,9 @@ where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
     /// excecute test
+    /// # Panics
+    /// if the test fails
+    #[allow(clippy::too_many_lines)]
     pub async fn run_test(mut self) {
         let spinning_changes = self
             .launcher
@@ -179,7 +192,7 @@ where
         for (name, result) in results {
             match result {
                 hotshot_task::task::HotShotTaskCompleted::ShutDown => {
-                    info!("Task {} shut down successfully", name)
+                    info!("Task {} shut down successfully", name);
                 }
                 hotshot_task::task::HotShotTaskCompleted::Error(e) => error_list.push((name, e)),
                 _ => {
@@ -187,12 +200,15 @@ where
                 }
             }
         }
-        if !error_list.is_empty() {
-            panic!("TEST FAILED! Results: {:?}", error_list);
-        }
+        assert!(
+            error_list.is_empty(),
+            "TEST FAILED! Results: {error_list:?}"
+        );
     }
 
     /// add nodes
+    /// # Panics
+    /// Panics if unable to create a [`HotShotInitializer`]
     pub async fn add_nodes(&mut self, total: usize, late_start: &HashSet<u64>) -> Vec<u64> {
         let mut results = vec![];
         for i in 0..total {
@@ -230,6 +246,8 @@ where
     }
 
     /// add a specific node with a config
+    /// # Panics
+    /// if unable to initialize the node's `SystemContext` based on the config
     pub async fn add_node_with_config(
         &mut self,
         networks: Networks<TYPES, I>,

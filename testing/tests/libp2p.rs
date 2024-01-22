@@ -39,7 +39,7 @@ async fn libp2p_network() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
 
 /// stress test for libp2p
@@ -58,5 +58,5 @@ async fn test_stress_libp2p_network() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }

@@ -1,5 +1,5 @@
-//! Implementation for BitVectorQC that uses BLS signature + Bit vector.
-//! See more details in HotShot paper.
+//! Implementation for `BitVectorQC` that uses BLS signature + Bit vector.
+//! See more details in `HotShot` paper.
 
 use ark_std::{
     fmt::Debug,
