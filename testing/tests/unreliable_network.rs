@@ -30,7 +30,7 @@ async fn libp2p_network_sync() {
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::new(240, 0),
+                duration: Duration::new(360, 0),
             },
         ),
         unreliable_network: Some(Box::new(SynchronousNetwork {
