@@ -60,7 +60,6 @@ hotshot-query-service = { workspace = true }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
-num-traits = { workspace = true }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
 serde = { version = "1.0.195", features = ["derive"] }
