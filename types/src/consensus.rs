@@ -320,7 +320,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
-                 self.saved_leaves.remove(&leaf);
+                self.saved_leaves.remove(&leaf);
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
         self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);

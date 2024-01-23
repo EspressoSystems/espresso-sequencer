@@ -546,8 +546,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
 
                     let high_qc = consensus.high_qc.clone();
-                    let locked_view = consensus.locked_view; 
-                
+                    let locked_view = consensus.locked_view;
 
                     drop(consensus);
 
