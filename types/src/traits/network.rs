@@ -5,6 +5,7 @@
 use async_compatibility_layer::art::async_sleep;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::future::TimeoutError;
+use dyn_clone::DynClone;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use libp2p_networking::network::NetworkNodeHandleError;
 #[cfg(async_executor_impl = "tokio")]
@@ -360,6 +361,7 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType> {
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static>;
 
     /// Get the number of messages in-flight.
@@ -387,7 +389,7 @@ pub enum NetworkChange<P: SignatureKey> {
 
 /// interface describing how reliable the network is
 #[async_trait]
-pub trait NetworkReliability: Debug + Sync + std::marker::Send {
+pub trait NetworkReliability: Debug + Sync + std::marker::Send + DynClone + 'static {
     /// Sample from bernoulli distribution to decide whether
     /// or not to keep a packet
     /// # Panics
@@ -420,6 +422,9 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send {
     /// whether or not to send duplicates
     /// and whether or not to include noise with the message
     /// then send the message
+    /// note: usually self is stored in a rwlock
+    /// so instead of doing the sending part, we just fiddle with the message
+    /// then return a future that does the sending and delaying
     fn chaos_send_msg(
         &self,
         msg: Vec<u8>,
@@ -445,6 +450,9 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send {
     }
 }
 
+// hack to get clone
+dyn_clone::clone_trait_object!(NetworkReliability);
+
 /// ideal network
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PerfectNetwork {}
@@ -455,10 +463,10 @@ impl NetworkReliability for PerfectNetwork {}
 /// to arrive within `timeout` ns
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SynchronousNetwork {
-    /// Max delay of packet before arrival
-    timeout_ms: u64,
+    /// Max value in milliseconds that a packet may be delayed
+    pub delay_high_ms: u64,
     /// Lowest value in milliseconds that a packet may be delayed
-    delay_low_ms: u64,
+    pub delay_low_ms: u64,
 }
 
 impl NetworkReliability for SynchronousNetwork {
@@ -468,7 +476,7 @@ impl NetworkReliability for SynchronousNetwork {
     }
     fn sample_delay(&self) -> Duration {
         Duration::from_millis(
-            Uniform::new_inclusive(self.delay_low_ms, self.timeout_ms)
+            Uniform::new_inclusive(self.delay_low_ms, self.delay_high_ms)
                 .sample(&mut rand::thread_rng()),
         )
     }
@@ -482,13 +490,13 @@ impl NetworkReliability for SynchronousNetwork {
 #[derive(Debug, Clone, Copy)]
 pub struct AsynchronousNetwork {
     /// numerator for probability of keeping packets
-    keep_numerator: u32,
+    pub keep_numerator: u32,
     /// denominator for probability of keeping packets
-    keep_denominator: u32,
+    pub keep_denominator: u32,
     /// lowest value in milliseconds that a packet may be delayed
-    delay_low_ms: u64,
+    pub delay_low_ms: u64,
     /// highest value in milliseconds that a packet may be delayed
-    delay_high_ms: u64,
+    pub delay_high_ms: u64,
 }
 
 impl NetworkReliability for AsynchronousNetwork {
@@ -512,13 +520,13 @@ impl NetworkReliability for AsynchronousNetwork {
 #[derive(Debug, Clone, Copy)]
 pub struct PartiallySynchronousNetwork {
     /// asynchronous portion of network
-    asynchronous: AsynchronousNetwork,
+    pub asynchronous: AsynchronousNetwork,
     /// synchronous portion of network
-    synchronous: SynchronousNetwork,
+    pub synchronous: SynchronousNetwork,
     /// time when GST occurs
-    gst: std::time::Duration,
+    pub gst: std::time::Duration,
     /// when the network was started
-    start: std::time::Instant,
+    pub start: std::time::Instant,
 }
 
 impl NetworkReliability for PartiallySynchronousNetwork {
@@ -570,7 +578,7 @@ impl SynchronousNetwork {
     #[must_use]
     pub fn new(timeout: u64, delay_low_ms: u64) -> Self {
         SynchronousNetwork {
-            timeout_ms: timeout,
+            delay_high_ms: timeout,
             delay_low_ms,
         }
     }
@@ -613,6 +621,37 @@ impl PartiallySynchronousNetwork {
 }
 
 /// A chaotic network using all the networking calls
+#[derive(Debug, Clone)]
 pub struct ChaosNetwork {
-    // TODO
+    /// numerator for probability of keeping packets
+    pub keep_numerator: u32,
+    /// denominator for probability of keeping packets
+    pub keep_denominator: u32,
+    /// lowest value in milliseconds that a packet may be delayed
+    pub delay_low_ms: u64,
+    /// highest value in milliseconds that a packet may be delayed
+    pub delay_high_ms: u64,
+    /// lowest value of repeats for a message
+    pub repeat_low: usize,
+    /// highest value of repeats for a message
+    pub repeat_high: usize,
+}
+
+impl NetworkReliability for ChaosNetwork {
+    fn sample_keep(&self) -> bool {
+        Bernoulli::from_ratio(self.keep_numerator, self.keep_denominator)
+            .unwrap()
+            .sample(&mut rand::thread_rng())
+    }
+
+    fn sample_delay(&self) -> Duration {
+        Duration::from_millis(
+            Uniform::new_inclusive(self.delay_low_ms, self.delay_high_ms)
+                .sample(&mut rand::thread_rng()),
+        )
+    }
+
+    fn sample_repeat(&self) -> usize {
+        Uniform::new_inclusive(self.repeat_low, self.repeat_high).sample(&mut rand::thread_rng())
+    }
 }

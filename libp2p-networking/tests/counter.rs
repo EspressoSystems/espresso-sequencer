@@ -148,7 +148,8 @@ async fn run_request_response_increment<'a>(
 
         match stream.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+            Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
+            std::process::exit(-1)},
         }
         requester_handle
             .direct_request(requestee_pid, &CounterMessage::AskForCounter)
@@ -156,8 +157,8 @@ async fn run_request_response_increment<'a>(
             .context(HandleSnafu)?;
         match stream.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
-        }
+            Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
+            std::process::exit(-1)},        }
 
         let s1 = requester_handle.state().await;
 
@@ -212,7 +213,10 @@ async fn run_gossip_round(
         // unwrap is okay because stream must have 2 * (len - 1) elements
         match merged_streams.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {i:?} to subscribe to state events"),
+            Err(e) => {
+                error!("timed out waiting for handle {i:?} to subscribe to state events: {e}");
+                std::process::exit(-1)
+            }
         }
     }
 
@@ -343,7 +347,8 @@ async fn run_dht_rounds(
                 handle.get_record_timeout(&key, timeout).await;
             match result {
                 Err(e) => {
-                    panic!("DHT error {e:?} during GET");
+                    error!("DHT error {e:?} during GET");
+                    std::process::exit(-1);
                 }
                 Ok(v) => {
                     assert_eq!(v, value);
@@ -435,7 +440,8 @@ async fn run_request_response_increment_all(
         for handle in handles {
             states.push(handle.state().await);
         }
-        panic!("states: {states:?}");
+        error!("states: {states:?}");
+        std::process::exit(-1);
     }
 }
 

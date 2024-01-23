@@ -20,6 +20,8 @@ use futures::join;
 
 use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
     data::ViewNumber,
     message::Message,
@@ -27,8 +29,7 @@ use hotshot_types::{
         election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent,
-            TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
-            ViewMessage,
+            TestableChannelImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
     },
@@ -144,6 +145,7 @@ pub struct CombinedNetworks<TYPES: NodeType>(
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
 );
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetworks<TYPES> {
     fn generator(
         expected_node_count: usize,
@@ -151,6 +153,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generators = (
             <WebServerNetwork<
@@ -160,14 +163,16 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da
+                is_da,
+                None,
             ),
             <Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> as TestableNetworkingImplementation<_>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da
+                is_da,
+                reliability_config,
             )
         );
         Box::new(move |node_id| CombinedNetworks(generators.0(node_id), generators.1(node_id)))
@@ -181,6 +186,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
     }
 }
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommChannel<TYPES> {
     fn generator(
         expected_node_count: usize,
@@ -188,6 +194,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <CombinedNetworks<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
@@ -195,6 +202,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
             network_id,
             da_committee_size,
             is_da,
+            reliability_config,
         );
         Box::new(move |node_id| Self {
             networks: generator(node_id).into(),
