@@ -60,7 +60,7 @@ services:
     environment:
       - $ESPRESSO_STATE_RELAY_SERVER_PORT
       - $ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
-      - RUST_LOG=error
+      - RUST_LOG
       - RUST_LOG_FORMAT
 
   sequencer0:
