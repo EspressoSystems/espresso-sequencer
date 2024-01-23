@@ -236,6 +236,7 @@ where
 
 pub async fn run_relay_server(
     shutdown_listener: Option<OneShotReceiver<()>>,
+    threshold: u64,
     url: Url,
 ) -> std::io::Result<()> {
     let options = Options::default();
@@ -243,7 +244,7 @@ pub async fn run_relay_server(
     let api = define_api(&options).unwrap();
 
     // We don't have a stake table yet, putting some temporary value here.
-    let threshold = U256::from(3u64);
+    let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
     let mut app = App::<State, Error>::with_state(state);

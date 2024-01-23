@@ -65,7 +65,7 @@ pub(super) async fn state_signature_loop<N>(
                         signature,
                     };
                     if let Err(error) = client
-                        .post::<()>("state/post")
+                        .post::<()>("api/state/post")
                         .body_binary(&request_body)
                         .unwrap()
                         .send()

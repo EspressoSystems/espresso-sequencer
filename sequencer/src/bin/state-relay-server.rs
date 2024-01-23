@@ -12,6 +12,16 @@ struct Args {
         default_value = "8083"
     )]
     port: u16,
+
+    /// Threshold to form an available state signature package.
+    /// WARNING: this is a temporary flag, should remove after integrating with stake table.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD",
+        default_value = "3"
+    )]
+    threshold: u64,
 }
 
 #[async_std::main]
@@ -24,6 +34,7 @@ async fn main() {
     tracing::info!("starting state relay server on port {}", args.port);
     run_relay_server(
         None,
+        args.threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
     )
     .await
