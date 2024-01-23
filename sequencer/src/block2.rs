@@ -638,7 +638,7 @@ pub struct TxIndex2 {
 }
 
 pub struct TxIterator<'a> {
-    ns_idx: usize,
+    ns_idx: usize, // TODO should be able to eliminate this field
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a BlockPayload,
@@ -686,7 +686,7 @@ impl<'a> Iterator for TxIterator<'a> {
                     };
                     let end = get_ns_table_entry(&self.ns_table, self.ns_idx).1;
 
-                    // check range
+                    // TODO refactor range-checking code
                     let end = std::cmp::min(end, payload_len);
                     let start = std::cmp::min(start, end);
 
@@ -805,7 +805,7 @@ mod boilerplate {
 mod test {
     use super::{
         boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex2,
-        TxIterator, TxTableEntry,
+        TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -954,7 +954,7 @@ mod test {
 
             // test each namespace
             // let mut tx_index_offset = 0;
-            let mut block_iter = TxIterator::new(&actual_ns_table, &block); // test iterator correctness
+            let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
@@ -1000,7 +1000,11 @@ mod test {
                     ns_id.0,
                 );
 
+                // tests for individual txs in this namespace
+                // TODO(746) rework this part
+
                 // testing tx iterator
+                // TODO(746) incorporate this test into the following commented code when it's fixed
                 for tx_idx in 0..derived_ns.tx_table.len() {
                     let next_tx = block_iter.next().unwrap();
                     assert_eq!(ns_idx, next_tx.ns_idx);
@@ -1010,6 +1014,9 @@ mod test {
                 // tests for individual txs in this namespace
                 // TODO(746) rework this part
                 //
+                // let mut block_iter = block.iter(); // test iterator correctness
+                // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
+                //     assert!(block_iter.next().is_some());
                 //     let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
                 //     tracing::info!("tx index {}", tx_index,);
                 //
