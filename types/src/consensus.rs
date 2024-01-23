@@ -55,7 +55,7 @@ pub struct Consensus<TYPES: NodeType> {
     ///
     /// Contains the block payload commitment and encoded transactions for every leaf in
     /// `saved_leaves` if that payload is available.
-    pub saved_payloads: PayloadStore,
+    pub saved_payloads: BTreeMap<TYPES::Time, Vec<u8>>,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,
@@ -318,19 +318,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .retain(|view_number, _| *view_number >= old_anchor_view);
         self.state_map
             .range(old_anchor_view..new_anchor_view)
-            .filter_map(|(_view_number, view)| view.get_payload_commitment())
-            .for_each(|payload_commitment| {
-                self.saved_payloads.remove(payload_commitment);
-            });
-        self.state_map
-            .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
-                if let Some(removed) = self.saved_leaves.remove(&leaf) {
-                    self.saved_payloads.remove(removed.get_payload_commitment());
-                }
+                 self.saved_leaves.remove(&leaf);
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
+        self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);
     }
 
     /// Gets the last decided state
