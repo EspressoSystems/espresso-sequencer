@@ -208,6 +208,16 @@ services:
       demo-l1-network:
         condition: service_healthy
 
+  submit-transactions:
+    image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+
   sequencer-db:
     image: postgres
     ports:
