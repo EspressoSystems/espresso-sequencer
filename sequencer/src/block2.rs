@@ -235,7 +235,8 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
     (ns_id, ns_offset)
 }
 
-fn get_tx_table_entry(
+// TODO comment
+fn _get_tx_table_entry(
     ns_offset: usize,
     block_payload: &BlockPayload,
     block_payload_len: usize,
@@ -319,7 +320,7 @@ impl QueryablePayload for BlockPayload {
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
             let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
-            // TODO handle large tx_table_len!
+            // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
         }
         result
@@ -639,21 +640,16 @@ mod tx_table_entry {
 }
 
 type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
-type TxIndexUnsigned = u32; // need a better name, want `TxIndex` but that's already taken.
 
 struct TxIndex2 {
-    ns_id: VmId,
-
-    // Type of `tx_index` should be generic over any unsigned primitive int type `T`.
-    // However, implementing `Iterator` for `TxIterator` requires `T: Step`.
-    // But `Step` trait is not yet stable. (Seriously. Wow.)
-    // https://doc.rust-lang.org/std/iter/trait.Step.html
-    tx_idx: TxIndexUnsigned,
+    ns_idx: usize,
+    tx_idx: usize,
 }
+
 struct TxIterator<'a> {
     ns_idx: usize,
     ns_iter: Range<usize>,
-    tx_iter: Range<TxIndexUnsigned>,
+    tx_iter: Range<usize>,
     block_payload: &'a BlockPayload,
     ns_table: &'a NsTable,
 }
@@ -674,65 +670,47 @@ impl<'a> Iterator for TxIterator<'a> {
     type Item = TxIndex2;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let payload_len = self.block_payload.payload.len();
-
-        let result = match self.tx_iter.next() {
+        match self.tx_iter.next() {
             Some(tx_idx) => {
                 // we still have txs left to consume in current ns
-                let start = if self.ns_idx == 0 {
-                    0
-                } else {
-                    get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
-                };
-                // read the current ns_id
-                let (ns_id, _) = get_ns_table_entry(&self.ns_table, self.ns_idx);
-
-                let tx_offset =
-                    get_tx_table_entry(start, self.block_payload, payload_len, tx_idx as usize);
-
                 Some(TxIndex2 {
-                    ns_id,
+                    ns_idx: self.ns_idx,
                     // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
-                    tx_idx: tx_offset.try_into().unwrap(),
+                    tx_idx,
                 })
             }
             None => {
                 // move to the next name space
-                while let Some(ns_idx) = self.ns_iter.next() {
+                let payload_len = self.block_payload.payload.len();
+                for ns_idx in self.ns_iter.by_ref() {
                     self.ns_idx = ns_idx;
                     let start = if self.ns_idx == 0 {
                         0
                     } else {
-                        get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
+                        get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
                     };
-                    let (ns_id, end) = get_ns_table_entry(&self.ns_table, self.ns_idx);
+                    let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
 
-                    let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]); // TODO check range!
+                    // check range
+                    let end = std::cmp::min(end, payload_len);
+                    let start = std::cmp::min(start, end);
 
-                    // TODO don't use `as u32` here. Do a type-safe conversion instead.
-                    self.tx_iter = 0..(tx_table_len as u32);
+                    let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
 
-                    if let Some(first_tx) = self.tx_iter.next() {
-                        let tx_offset = get_tx_table_entry(
-                            start,
-                            &self.block_payload,
-                            payload_len,
-                            first_tx as usize,
-                        );
-
+                    self.tx_iter = 0..tx_table_len;
+                    if let Some(tx_idx) = self.tx_iter.next() {
                         return Some(TxIndex2 {
-                            ns_id,
+                            ns_idx: self.ns_idx,
                             // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
-                            tx_idx: tx_offset.try_into().unwrap(),
+                            tx_idx,
                         });
                     } else {
                         continue;
                     }
                 }
-                return None;
+                None // all namespaces consumed
             }
-        };
-        result
+        }
     }
 }
 
@@ -982,15 +960,16 @@ mod test {
 
             // test each namespace
             // let mut tx_index_offset = 0;
+            let mut block_iter = TxIterator::new(&actual_ns_table, &block); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_id, entry) in ns_table_iter(&actual_ns_table) {
+            for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
                 let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns = derived_nss.get(&ns_id).unwrap();
+                let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -1027,12 +1006,16 @@ mod test {
                     ns_id.0,
                 );
 
+                // testing tx iterator
+                for tx_idx in 0..derived_ns.tx_table.len() {
+                    let next_tx = block_iter.next().unwrap();
+                    assert_eq!(ns_idx, next_tx.ns_idx);
+                    assert_eq!(tx_idx, next_tx.tx_idx);
+                }
+
                 // tests for individual txs in this namespace
                 // TODO(746) rework this part
                 //
-                // let mut block_iter = block.iter(); // test iterator correctness
-                // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
-                //     assert!(block_iter.next().is_some());
                 //     let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
                 //     tracing::info!("tx index {}", tx_index,);
                 //
@@ -1057,31 +1040,14 @@ mod test {
                 prev_entry = entry;
                 derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
-            // test tx iterator
-            let mut tx_count = 0;
-            let mut ns_id = u64::MAX;
-            for tx in TxIterator::new(&actual_ns_table, &block) {
-                if ns_id != tx.ns_id.0 {
-                    tx_count = 0;
-                } else {
-                    tx_count = tx_count + 1;
-                }
-                ns_id = tx.ns_id.0;
-                let derived_ns = derived_nss.get(&tx.ns_id).unwrap();
-                let derived_tx = derived_ns.tx_table.get(tx_count).unwrap();
-                assert_eq!(
-                    *derived_tx,
-                    TxTableEntry::try_from(tx.tx_idx).unwrap(),
-                    "incorrect tx offset for name space {} at index {}",
-                    &tx.ns_id,
-                    tx.tx_idx
-                );
-            }
-
-            // assert!(
-            //     derived_nss.is_empty(),
-            //     "some derived namespaces missing from namespace table"
-            // );
+            assert!(
+                block_iter.next().is_none(),
+                "expected tx iterator to be exhausted"
+            );
+            assert!(
+                derived_nss.is_empty(),
+                "some derived namespaces missing from namespace table"
+            );
 
             // test full block payload
             // assert_eq!(tx_index_offset, block.len());
