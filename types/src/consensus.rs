@@ -7,7 +7,7 @@ pub use crate::{
 use displaydoc::Display;
 
 use crate::{
-    data::{Leaf, VidCommitment},
+    data::Leaf,
     error::HotShotError,
     simple_certificate::{DACertificate, QuorumCertificate},
     traits::{
@@ -17,9 +17,9 @@ use crate::{
     utils::Terminator,
 };
 use commit::Commitment;
-use derivative::Derivative;
+
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
 };
 use tracing::error;
@@ -337,59 +337,5 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .get_leaf_commitment()
             .expect("Decided state not found! Consensus internally inconsistent");
         self.saved_leaves.get(&leaf).unwrap().clone()
-    }
-}
-
-/// Mapping from block payload commitments to the encoded transactions.
-///
-/// Entries in this mapping are reference-counted, so multiple consensus objects can refer to the
-/// same block, and the block will only be deleted after _all_ such objects are garbage collected.
-/// For example, multiple leaves may temporarily reference the same block on different branches,
-/// before all but one branch are ultimately garbage collected.
-#[derive(Clone, Debug, Derivative)]
-#[derivative(Default(bound = ""))]
-pub struct PayloadStore(HashMap<VidCommitment, (Vec<u8>, u64)>);
-
-impl PayloadStore {
-    /// Save the encoded transactions for later retrieval.
-    ///
-    /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
-    /// `self.get(payload_commitment)` will return `Some(encoded_transactions)`.
-    ///
-    /// This function will increment a reference count on the saved payload commitment, so that
-    /// multiple calls to [`insert`](Self::insert) for the same payload commitment result in
-    /// multiple owning references to the payload commitment. [`remove`](Self::remove) must be
-    /// called once for each reference before the payload commitment will be deallocated.
-    pub fn insert(&mut self, payload_commitment: VidCommitment, encoded_transactions: Vec<u8>) {
-        self.0
-            .entry(payload_commitment)
-            .and_modify(|(_, refcount)| *refcount += 1)
-            .or_insert((encoded_transactions, 1));
-    }
-
-    /// Get the saved encoded transactions, if available.
-    ///
-    /// If the encoded transactions has been saved with [`insert`](Self::insert), this function
-    /// will retrieve it. It may return [`None`] if a block with the given commitment has not been
-    /// saved or if the block has been dropped with [`remove`](Self::remove).
-    #[must_use]
-    pub fn get(&self, payload_commitment: VidCommitment) -> Option<&Vec<u8>> {
-        self.0.get(&payload_commitment).map(|(encoded, _)| encoded)
-    }
-
-    /// Drop a reference to the saved encoded transactions.
-    ///
-    /// If the set exists and this call drops the last reference to it, the set will be returned,
-    /// Otherwise, the return value is [`None`].
-    pub fn remove(&mut self, payload_commitment: VidCommitment) -> Option<Vec<u8>> {
-        if let Entry::Occupied(mut e) = self.0.entry(payload_commitment) {
-            let (_, refcount) = e.get_mut();
-            *refcount -= 1;
-            if *refcount == 0 {
-                let (encoded, _) = e.remove();
-                return Some(encoded);
-            }
-        }
-        None
     }
 }
