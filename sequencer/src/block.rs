@@ -712,7 +712,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~vuyXaIHGnh8J1zxkWWv_Rdd2DrcFMiS2FcrmxHzz_9Rm",
+            "BLOCK~VoJoDVEa8stIa-XZgL4hYsJzUAb9UlAAZBUgmWhCScoo",
             |header| header.commit(),
         );
     }
