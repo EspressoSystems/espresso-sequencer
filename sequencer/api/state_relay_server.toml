@@ -1,0 +1,20 @@
+[meta]
+NAME = "hotshot_state_relay_server"
+DESCRIPTION = "A relay server for storing and serving the light client states and their signatures"
+FORMAT_VERSION = "0.1.0"
+
+[route.poststatesignature]
+PATH = ["state/:height"]
+METHOD = "POST"
+":height" = "Integer"
+DOC = """
+Post a light client state and its signature for a given block height.
+"""
+
+[route.getlateststate]
+PATH = ["state/latest"]
+METHOD = "GET"
+DOC = """
+Fetch the latest light client state who has enough corresponding Schnorr signatures collected,
+as well as a list of those signatures.
+"""

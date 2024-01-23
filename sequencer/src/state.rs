@@ -20,24 +20,33 @@ impl HotShotState for State {
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _header: &Self::BlockHeader, _view_number: &Self::Time) -> bool {
-        unimplemented!("Using sequencing consensus, no validation")
-    }
+    // fn validate_block(&self, _header: &Self::BlockHeader, _view_number: &Self::Time) -> bool {
+    //     unimplemented!("Using sequencing consensus, no validation")
+    // }
 
-    fn initialize() -> Self {
-        Default::default()
-    }
+    // fn initialize() -> Self {
+    //     Default::default()
+    // }
 
-    // This function is called exactly once, with the first block.
-    fn append(
-        &self,
-        _header: &Self::BlockHeader,
-        _view_number: &Self::Time,
-    ) -> Result<Self, Self::Error> {
-        Ok(self.clone())
-    }
+    // // This function is called exactly once, with the first block.
+    // fn append(
+    //     &self,
+    //     _header: &Self::BlockHeader,
+    //     _view_number: &Self::Time,
+    // ) -> Result<Self, Self::Error> {
+    //     Ok(self.clone())
+    // }
 
     fn on_commit(&self) {}
+
+    fn validate_and_apply_header(
+        &self,
+        proposed_header: &Self::BlockHeader,
+        parent_header: &Self::BlockHeader,
+        view_number: &Self::Time,
+    ) -> Result<Self, Self::Error> {
+        todo!()
+    }
 }
 
 // Required for TestableState

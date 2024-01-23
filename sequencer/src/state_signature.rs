@@ -20,6 +20,9 @@ pub use hotshot_types::light_client::StateKeyPair;
 pub use hotshot_types::light_client::StateSignature;
 pub type LightClientState = hotshot_types::light_client::LightClientState<FieldType>;
 
+/// A relay server that's collecting and serving the light client state signatures
+pub mod relay_server;
+
 /// Capacity for the in memory signature storage.
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
