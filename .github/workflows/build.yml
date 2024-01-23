@@ -60,6 +60,7 @@ jobs:
           path: |
             target/release/orchestrator
             target/release/web-server
+            target/release/state-relay-server
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
