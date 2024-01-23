@@ -63,6 +63,7 @@ jobs:
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
+            target/release/submit-transactions
             target/release/reset-storage
 
   build-arm:
@@ -99,6 +100,7 @@ jobs:
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
+            target/release/submit-transactions
             target/release/reset-storage
 
   build-dockers:
@@ -155,6 +157,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
 
+      - name: Generate submit-transactions docker metadata
+        uses: docker/metadata-action@v5
+        id: submit-transactions
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/submit-transactions
+
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v5
         id: example-rollup
@@ -200,3 +208,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.commitment-task.outputs.tags }}
           labels: ${{ steps.commitment-task.outputs.labels }}
+
+      - name: Build and push submit-transactions docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/submit-transactions.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.submit-transactions.outputs.tags }}
+          labels: ${{ steps.submit-transactions.outputs.labels }}

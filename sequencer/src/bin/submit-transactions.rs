@@ -19,50 +19,81 @@ use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use sequencer::{options::parse_duration, SeqTypes, Transaction};
 use snafu::Snafu;
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 use surf_disco::{Client, Url};
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
 struct Options {
     /// Minimum size of transaction to submit.
-    #[clap(long, default_value = "1", value_parser = parse_size)]
+    ///
+    /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
+    #[clap(long, name = "MIN_SIZE", default_value = "1", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_SIZE")]
     min_size: usize,
 
     /// Maximum size of transaction to submit.
-    #[clap(long, default_value = "1kb", value_parser = parse_size)]
+    ///
+    /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
+    #[clap(long, name = "MAX_SIZE", default_value = "1kb", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_SIZE")]
     max_size: usize,
 
     /// Minimum namespace ID to submit to.
-    #[clap(long, default_value = "10000")]
+    #[clap(
+        long,
+        default_value = "10000",
+        env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE"
+    )]
     min_namespace: u64,
 
     /// Maximum namespace ID to submit to.
-    #[clap(long, default_value = "10010")]
+    #[clap(
+        long,
+        default_value = "10010",
+        env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE"
+    )]
     max_namespace: u64,
 
-    /// Optional delay between submitting transactions.
+    /// Minimum delay between submitting transactions.
     ///
-    /// Can be used to moderate the rate of submission.
-    #[clap(long, value_parser = parse_duration)]
-    delay: Option<Duration>,
+    /// The delay after each transaction will be chosen uniformly between MIN_DELAY and MAX_DELAY.
+    #[clap(long, name = "MIN_DELAY", value_parser = parse_duration, default_value = "100ms", env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_DELAY")]
+    min_delay: Duration,
+
+    /// Maximum delay between submitting transactions.
+    ///
+    /// The delay after each transaction will be chosen uniformly between MIN_DELAY and MAX_DELAY.
+    #[clap(long, name = "MAX_DELAY", value_parser = parse_duration, default_value = "10m", env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_DELAY")]
+    max_delay: Duration,
 
     /// Maximum number of unprocessed transaction submissions.
     ///
     /// This can be used to apply backpressure so that the tasks submitting transactions do not get
     /// too far ahead of the task processing results.
-    #[clap(long, default_value = "1000")]
+    #[clap(
+        long,
+        default_value = "1000",
+        env = "ESPRESSO_SUBMIT_TRANSACTIONS_CHANNEL_BOUND"
+    )]
     channel_bound: usize,
 
     /// Seed for reproducible randomness.
-    #[clap(long)]
+    #[clap(long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_SEED")]
     seed: Option<u64>,
 
     /// Number of parallel tasks to run.
-    #[clap(short, long, default_value = "1")]
+    #[clap(
+        short,
+        long,
+        default_value = "1",
+        env = "ESPRESSO_SUBMIT_TRANSACTIONS_JOBS"
+    )]
     jobs: usize,
 
     /// URL of the query service.
+    #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
     url: Url,
 }
 
@@ -111,7 +142,9 @@ async fn main() {
     }
 
     // Keep track of the results.
-    let mut pending = HashSet::new();
+    let mut pending = HashMap::new();
+    let mut total_latency = Duration::default();
+    let mut total_transactions = 0;
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
             Ok(block) => block,
@@ -120,21 +153,26 @@ async fn main() {
                 continue;
             }
         };
-        tracing::info!("got block {}", block.height());
+        let received_at = Instant::now();
+        tracing::debug!("got block {}", block.height());
 
         // Get all transactions which were submitted before this block.
         while let Ok(Some(tx)) = receiver.try_next() {
-            pending.insert(tx);
+            pending.insert(tx.hash, tx.submitted_at);
         }
 
         // Clear pending transactions from the block.
         for (_, tx) in block.payload().enumerate() {
-            if pending.remove(&tx.commit()) {
-                tracing::debug!("got transaction {}", tx.commit());
+            if let Some(submitted_at) = pending.remove(&tx.commit()) {
+                let latency = received_at - submitted_at;
+                tracing::info!("got transaction {}, latency {latency:?}", tx.commit());
+                total_latency += latency;
+                total_transactions += 1;
+                tracing::info!("average latency: {:?}", total_latency / total_transactions);
             }
         }
 
-        tracing::info!("{} transactions still pending", pending.len());
+        tracing::debug!("{} transactions still pending", pending.len());
     }
     tracing::info!(
         "block stream ended with {} transactions still pending",
@@ -142,16 +180,21 @@ async fn main() {
     );
 }
 
+struct SubmittedTransaction {
+    hash: Commitment<Transaction>,
+    submitted_at: Instant,
+}
+
 async fn submit_transactions(
     opt: Options,
-    mut sender: Sender<Commitment<Transaction>>,
+    mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
 ) {
     let client = Client::<Error>::new(opt.url.clone());
     loop {
         let tx = random_transaction(&opt, &mut rng);
         let hash = tx.commit();
-        tracing::debug!(
+        tracing::info!(
             "submitting transaction {hash} for namespace {} of size {}",
             tx.vm(),
             tx.payload().len()
@@ -165,11 +208,15 @@ async fn submit_transactions(
         {
             tracing::error!("failed to submit transaction: {err}");
         }
-        sender.send(hash).await.ok();
+        let submitted_at = Instant::now();
+        sender
+            .send(SubmittedTransaction { hash, submitted_at })
+            .await
+            .ok();
 
-        if let Some(delay) = opt.delay {
-            sleep(delay).await;
-        }
+        let delay = rng.gen_range(opt.min_delay..=opt.max_delay);
+        tracing::info!("sleeping for {delay:?}");
+        sleep(delay).await;
     }
 }
 
