@@ -171,7 +171,9 @@ fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     TxTableEntry::from_bytes_array(entry_bytes)
 }
 
-// TODO comment
+// Parse the table length from the beginning of the namespace table.
+//
+// Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
 fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
     std::cmp::min(
         get_table_len(ns_table_bytes, 0).try_into().unwrap_or(0),
@@ -179,7 +181,9 @@ fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
     )
 }
 
-// TODO comment
+// Parse the table length from the beginning of the tx table inside `ns_bytes`.
+//
+// Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
 fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
     std::cmp::min(
         get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
@@ -235,7 +239,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
     (ns_id, ns_offset)
 }
 
-// TODO comment
+// TODO currently unused but contains code that might get re-used in the near future.
 fn _get_tx_table_entry(
     ns_offset: usize,
     block_payload: &BlockPayload,
