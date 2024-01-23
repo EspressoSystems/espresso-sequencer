@@ -665,46 +665,41 @@ impl<'a> Iterator for TxIterator<'a> {
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.tx_iter.next() {
-            Some(tx_idx) => {
-                // we still have txs left to consume in current ns
-                Some(TxIndex {
-                    ns_idx: self.ns_idx,
-                    // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
-                    tx_idx,
-                })
-            }
-            None => {
-                // move to the next name space
-                let payload_len = self.block_payload.payload.len();
-                for ns_idx in self.ns_iter.by_ref() {
-                    self.ns_idx = ns_idx;
-                    let start = if self.ns_idx == 0 {
-                        0
-                    } else {
-                        get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
-                    };
-                    let end = get_ns_table_entry(&self.ns_table, self.ns_idx).1;
+        if let Some(tx_idx) = self.tx_iter.next() {
+            // we still have txs left to consume in current ns
+            Some(TxIndex {
+                ns_idx: self.ns_idx,
+                tx_idx,
+            })
+        } else {
+            // move to the next name space
+            let payload_len = self.block_payload.payload.len();
+            for ns_idx in self.ns_iter.by_ref() {
+                self.ns_idx = ns_idx;
+                let start = if self.ns_idx == 0 {
+                    0
+                } else {
+                    get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
+                };
+                let end = get_ns_table_entry(&self.ns_table, self.ns_idx).1;
 
-                    // TODO refactor range-checking code
-                    let end = std::cmp::min(end, payload_len);
-                    let start = std::cmp::min(start, end);
+                // TODO refactor range-checking code
+                let end = std::cmp::min(end, payload_len);
+                let start = std::cmp::min(start, end);
 
-                    let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
+                let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
 
-                    self.tx_iter = 0..tx_table_len;
-                    if let Some(tx_idx) = self.tx_iter.next() {
-                        return Some(TxIndex {
-                            ns_idx: self.ns_idx,
-                            // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
-                            tx_idx,
-                        });
-                    } else {
-                        continue;
-                    }
+                self.tx_iter = 0..tx_table_len;
+                if let Some(tx_idx) = self.tx_iter.next() {
+                    return Some(TxIndex {
+                        ns_idx: self.ns_idx,
+                        tx_idx,
+                    });
+                } else {
+                    continue;
                 }
-                None // all namespaces consumed
             }
+            None // all namespaces consumed
         }
     }
 }
