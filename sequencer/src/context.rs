@@ -1,10 +1,13 @@
 use crate::state_signature::{
-    LightClientState, StakeTableCommitmentType, StateKeyPair, StateSignature, StateSignatureScheme,
+    LightClientState, StakeTableCommitmentType, StateKeyPair, StateSignature,
+    StateSignatureRequestBody, StateSignatureScheme,
 };
+use async_std::sync::{Arc, RwLock};
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
+use hotshot_types::light_client::StateVerKey;
 use jf_primitives::signatures::SignatureScheme;
-use std::sync::{Arc, RwLock};
+use url::Url;
 
 use crate::{
     network,
@@ -34,6 +37,9 @@ pub struct SequencerContext<N: network::Type> {
 
     /// Commitment for current fixed stake table
     stake_table_comm: Arc<StakeTableCommitmentType>,
+
+    /// The state relay server url
+    state_relay_server_url: Option<Url>,
 }
 
 impl<N: network::Type> SequencerContext<N> {
@@ -43,6 +49,7 @@ impl<N: network::Type> SequencerContext<N> {
         node_index: u64,
         state_key_pair: StateKeyPair,
         stake_table_comm: StakeTableCommitmentType,
+        state_relay_server_url: Option<Url>,
     ) -> Self {
         Self {
             handle,
@@ -50,6 +57,7 @@ impl<N: network::Type> SequencerContext<N> {
             state_key_pair: Arc::new(state_key_pair),
             state_signatures: Default::default(),
             stake_table_comm: Arc::new(stake_table_comm),
+            state_relay_server_url,
         }
     }
 
@@ -64,31 +72,49 @@ impl<N: network::Type> SequencerContext<N> {
     }
 
     /// Return a signature of a light client state at given height.
-    pub fn get_state_signature(&self, height: u64) -> Option<StateSignature> {
-        let pool_guard = self.state_signatures.read().unwrap();
+    pub async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
+        let pool_guard = self.state_signatures.read().await;
         pool_guard.get_signature(height)
     }
 
     /// Sign the light client state at given height and store it.
-    pub fn sign_new_state(&self, state: &LightClientState) {
-        let state_msg: [state_signature::FieldType; 7] = state.into();
-        let state_signature = StateSignatureScheme::sign(
+    pub async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
+        let msg: [state_signature::FieldType; 7] = state.into();
+        let signature = StateSignatureScheme::sign(
             &(),
             self.state_key_pair.sign_key_ref(),
-            state_msg,
+            msg,
             &mut rand::thread_rng(),
         )
         .unwrap();
-        let mut pool_guard = self.state_signatures.write().unwrap();
-        pool_guard.push(state.block_height as u64, state_signature);
-        tracing::info!(
+        let mut pool_guard = self.state_signatures.write().await;
+        pool_guard.push(
+            state.block_height as u64,
+            StateSignatureRequestBody {
+                key: self.get_state_ver_key(),
+                state: state.clone(),
+                signature: signature.clone(),
+            },
+        );
+        tracing::debug!(
             "New signature added for block height {}",
             state.block_height
         );
+        signature
+    }
+
+    /// Get the public key for light client state
+    pub fn get_state_ver_key(&self) -> StateVerKey {
+        self.state_key_pair.ver_key()
     }
 
     /// Return a commitment of the current fixed stake table
     pub fn get_stake_table_comm(&self) -> &StakeTableCommitmentType {
         &self.stake_table_comm
+    }
+
+    /// Return a url to the state relay server
+    pub fn get_state_relay_server_url(&self) -> &Option<Url> {
+        &self.state_relay_server_url
     }
 }

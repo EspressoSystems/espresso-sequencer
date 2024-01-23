@@ -1,6 +1,6 @@
 use crate::state_signature::StateSignatureScheme;
 
-use super::LightClientState;
+use super::{LightClientState, StateSignatureRequestBody};
 use async_compatibility_layer::channel::OneShotReceiver;
 use async_std::sync::RwLock;
 use clap::Args;
@@ -23,10 +23,10 @@ use tide_disco::{
 };
 use url::Url;
 
-/// The state signature bundle is a light client state and its signatures collected
+/// The state signatures package is a light client state and its signatures collected
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StateSignatureBundle {
-    /// The state for this signature bundle
+pub struct StateSignaturesPackage {
+    /// The state for this signatures package
     state: LightClientState,
     /// The collected signatures
     signatures: HashMap<StateVerKey, StateSignature>,
@@ -38,16 +38,16 @@ pub struct StateSignatureBundle {
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]
 struct StateRelayServerState {
-    /// Minimum weight to form an available state signature bundle
+    /// Minimum weight to form an available state signature package
     threshold: U256,
     /// Stake table
     known_nodes: HashMap<StateVerKey, U256>,
-    /// Signature bundles for each block height
-    bundles: HashMap<u64, StateSignatureBundle>,
+    /// Signatures packages for each block height
+    packages: HashMap<u64, StateSignaturesPackage>,
 
-    /// The latest state signature bundle whose total weight exceeds the threshold
-    latest_available_bundle: Option<StateSignatureBundle>,
-    /// The block height of the latest available state signature bundle
+    /// The latest state signatures package whose total weight exceeds the threshold
+    latest_available_package: Option<StateSignaturesPackage>,
+    /// The block height of the latest available state signature package
     latest_block_height: Option<u64>,
 
     /// A ordered queue of block heights, used for garbage collection.
@@ -58,8 +58,11 @@ struct StateRelayServerState {
 }
 
 impl StateRelayServerState {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(threshold: U256) -> Self {
+        Self {
+            threshold,
+            ..Default::default()
+        }
     }
 
     pub fn with_shutdown_signal(mut self, shutdown_listener: Option<OneShotReceiver<()>>) -> Self {
@@ -77,10 +80,10 @@ type State = RwLock<StateRelayServerState>;
 type Error = ServerError;
 
 pub trait StateRelayServerDataSource {
-    /// Get the latest available signature bundle
+    /// Get the latest available signatures package.
     /// # Errors
-    /// Errors if there's no available signature bundle.
-    fn get_latest_signature_bundle(&self) -> Result<StateSignatureBundle, Error>;
+    /// Errors if there's no available signatures package.
+    fn get_latest_signature_package(&self) -> Result<StateSignaturesPackage, Error>;
 
     /// Post a signature to the relay server
     /// # Errors
@@ -94,9 +97,9 @@ pub trait StateRelayServerDataSource {
 }
 
 impl StateRelayServerDataSource for StateRelayServerState {
-    fn get_latest_signature_bundle(&self) -> Result<StateSignatureBundle, Error> {
-        match &self.latest_available_bundle {
-            Some(bundle) => Ok(bundle.clone()),
+    fn get_latest_signature_package(&self) -> Result<StateSignaturesPackage, Error> {
+        match &self.latest_available_package {
+            Some(package) => Ok(package.clone()),
             None => Err(tide_disco::error::ServerError::catch_all(
                 StatusCode::NotFound,
                 "The light client state signatures are not ready.".to_owned(),
@@ -116,13 +119,13 @@ impl StateRelayServerDataSource for StateRelayServerState {
                 "The posted signature is no longer needed.".to_owned(),
             ));
         }
-        let weight =
-            self.known_nodes
-                .get(&key)
-                .ok_or(tide_disco::error::ServerError::catch_all(
-                    StatusCode::Unauthorized,
-                    "The posted key is not found in the stake table.".to_owned(),
-                ))?;
+        let one = U256::one();
+        let weight = self.known_nodes.get(&key).unwrap_or(&one);
+        // TODO(Chengyu): We don't know where to fetch the stake table yet.
+        // .ok_or(tide_disco::error::ServerError::catch_all(
+        //     StatusCode::Unauthorized,
+        //     "The posted key is not found in the stake table.".to_owned(),
+        // ))?;
         let state_msg: [FieldType; 7] = (&state).into();
         if StateSignatureScheme::verify(&(), &key, state_msg, &signature).is_err() {
             return Err(tide_disco::error::ServerError::catch_all(
@@ -133,23 +136,23 @@ impl StateRelayServerDataSource for StateRelayServerState {
         let block_height = state.block_height as u64;
         // TODO(Chengyu): this serialization should be removed once `LightClientState` implements `Eq`.
         let bytes = to_bytes!(&state).unwrap();
-        let bundle = self.bundles.entry(block_height).or_insert_with(|| {
+        let package = self.packages.entry(block_height).or_insert_with(|| {
             self.queue.insert(block_height);
-            StateSignatureBundle {
+            StateSignaturesPackage {
                 state,
                 signatures: Default::default(),
                 accumulated_weight: U256::from(0),
             }
         });
-        let bundle_bytes = to_bytes!(&bundle.state).unwrap();
-        if bytes != bundle_bytes {
+        let incoming_bytes = to_bytes!(&package.state).unwrap();
+        if bytes != incoming_bytes {
             return Err(tide_disco::error::ServerError::catch_all(
                 StatusCode::BadRequest,
                 "The posted light client is not compatible with the one previously stored."
                     .to_owned(),
             ));
         }
-        match bundle.signatures.entry(key) {
+        match package.signatures.entry(key) {
             std::collections::hash_map::Entry::Occupied(_) => {
                 return Err(tide_disco::error::ServerError::catch_all(
                     StatusCode::BadRequest,
@@ -157,19 +160,24 @@ impl StateRelayServerDataSource for StateRelayServerState {
                 ))
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
+                tracing::info!("Accepting new signature for block height {}.", block_height);
                 entry.insert(signature);
-                bundle.accumulated_weight += *weight;
+                package.accumulated_weight += *weight;
             }
         }
 
-        if bundle.accumulated_weight >= self.threshold {
+        if package.accumulated_weight >= self.threshold {
+            tracing::info!(
+                "State signature package at block height {} is ready to serve.",
+                block_height
+            );
             self.latest_block_height = Some(block_height);
-            self.latest_available_bundle = self.bundles.remove(&block_height);
+            self.latest_available_package = self.packages.remove(&block_height);
             while let Some(height) = self.queue.pop_first() {
                 if height == block_height {
                     break;
                 }
-                self.bundles.remove(&height);
+                self.packages.remove(&height);
             }
         }
         Ok(())
@@ -207,13 +215,17 @@ where
     };
 
     api.get("getlateststate", |_req, state| {
-        async move { state.get_latest_signature_bundle() }.boxed()
+        async move { state.get_latest_signature_package() }.boxed()
     })?
     .post("poststatesignature", |req, state| {
         async move {
-            let key: StateVerKey = req.blob_param("key")?;
-            let lcstate: LightClientState = req.blob_param("state")?;
-            let signature: StateSignature = req.blob_param("signature")?;
+            let StateSignatureRequestBody {
+                key,
+                state: lcstate,
+                signature,
+            } = req
+                .body_auto::<StateSignatureRequestBody>()
+                .map_err(Error::from_request_error)?;
             state.post_signature(key, lcstate, signature)
         }
         .boxed()
@@ -229,7 +241,11 @@ pub async fn run_relay_server(
     let options = Options::default();
 
     let api = define_api(&options).unwrap();
-    let state = State::new(StateRelayServerState::new().with_shutdown_signal(shutdown_listener));
+
+    // We don't have a stake table yet, putting some temporary value here.
+    let threshold = U256::from(3u64);
+    let state =
+        State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
     let mut app = App::<State, Error>::with_state(state);
 
     app.register_module("api", api).unwrap();

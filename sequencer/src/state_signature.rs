@@ -2,6 +2,7 @@
 
 use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
@@ -10,7 +11,10 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
 use hotshot_types::traits::state::ConsensusTime;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use surf_disco::Client;
+use tide_disco::error::ServerError;
 
 /// Types related to the underlying signature schemes.
 pub type StateSignatureScheme =
@@ -32,8 +36,10 @@ pub(super) async fn state_signature_loop<N>(
 ) where
     N: network::Type,
 {
-    tracing::debug!("Watching event stream for decided leaves.");
+    tracing::info!("State signature watcher is watching event stream for decided leaves.");
     let stake_table_comm = context.get_stake_table_comm();
+    let key = context.get_state_ver_key();
+    let state_relay_server_url = context.get_state_relay_server_url();
     while let Some(event) = events.next().await {
         // Trigger the light client signature hook when a new leaf is decided
         if let Event {
@@ -42,13 +48,36 @@ pub(super) async fn state_signature_loop<N>(
         } = event
         {
             if let Some(leaf) = leaf_chain.first() {
-                tracing::debug!("New leaves decided. Newest leaf: {:?}", leaf);
-                let new_state = form_light_client_state(leaf, stake_table_comm);
-                context.sign_new_state(&new_state);
+                let state = form_light_client_state(leaf, stake_table_comm);
+                let signature = context.sign_new_state(&state).await;
+                tracing::info!(
+                    "New leaves decided. Latest block height: {}, posting to relay server {:?}",
+                    leaf.get_height(),
+                    state_relay_server_url,
+                );
+
+                if let Some(state_relay_server_url) = state_relay_server_url {
+                    let client: Client<ServerError> = Client::new(state_relay_server_url.clone());
+                    client.connect(None).await;
+                    let request_body = StateSignatureRequestBody {
+                        key: key.clone(),
+                        state,
+                        signature,
+                    };
+                    if let Err(error) = client
+                        .post::<()>("state/post")
+                        .body_binary(&request_body)
+                        .unwrap()
+                        .send()
+                        .await
+                    {
+                        tracing::warn!("Error posting signature to the relay server: {:?}", error);
+                    }
+                }
             }
         }
     }
-    tracing::debug!("And now his watch has ended.");
+    tracing::info!("And now his watch has ended.");
 }
 
 fn form_light_client_state(
@@ -65,15 +94,23 @@ fn form_light_client_state(
     }
 }
 
+/// Request body to send to the state relay server
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize)]
+pub struct StateSignatureRequestBody {
+    pub key: StateVerKey,
+    pub state: LightClientState,
+    pub signature: StateSignature,
+}
+
 /// A rolling in-memory storage for the most recent light client state signatures.
 #[derive(Debug, Default)]
 pub struct StateSignatureMemStorage {
-    pool: HashMap<u64, StateSignature>,
+    pool: HashMap<u64, StateSignatureRequestBody>,
     deque: VecDeque<u64>,
 }
 
 impl StateSignatureMemStorage {
-    pub fn push(&mut self, height: u64, signature: StateSignature) {
+    pub fn push(&mut self, height: u64, signature: StateSignatureRequestBody) {
         self.pool.insert(height, signature);
         self.deque.push_back(height);
         if self.pool.len() > SIGNATURE_STORAGE_CAPACITY {
@@ -81,7 +118,7 @@ impl StateSignatureMemStorage {
         }
     }
 
-    pub fn get_signature(&self, height: u64) -> Option<StateSignature> {
+    pub fn get_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.pool.get(&height).cloned()
     }
 }

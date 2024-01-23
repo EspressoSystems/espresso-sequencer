@@ -5,7 +5,12 @@ use sequencer::state_signature::relay_server::run_relay_server;
 #[derive(Parser)]
 struct Args {
     /// Port to run the server on.
-    #[clap(short, long, env = "ESPRESSO_STATE_RELAY_SERVER_PORT")]
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_STATE_RELAY_SERVER_PORT",
+        default_value = "8083"
+    )]
     port: u16,
 }
 
