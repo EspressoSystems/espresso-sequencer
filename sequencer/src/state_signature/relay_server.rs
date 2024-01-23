@@ -122,6 +122,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
         let one = U256::one();
         let weight = self.known_nodes.get(&key).unwrap_or(&one);
         // TODO(Chengyu): We don't know where to fetch the stake table yet.
+        // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
         // .ok_or(tide_disco::error::ServerError::catch_all(
         //     StatusCode::Unauthorized,
         //     "The posted key is not found in the stake table.".to_owned(),
@@ -244,6 +245,7 @@ pub async fn run_relay_server(
     let api = define_api(&options).unwrap();
 
     // We don't have a stake table yet, putting some temporary value here.
+    // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
     let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));

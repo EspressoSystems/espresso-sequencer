@@ -15,6 +15,7 @@ struct Args {
 
     /// Threshold to form an available state signature package.
     /// WARNING: this is a temporary flag, should remove after integrating with stake table.
+    /// Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
     #[clap(
         short,
         long,
