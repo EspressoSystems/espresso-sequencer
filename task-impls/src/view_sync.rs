@@ -125,7 +125,7 @@ impl<
 }
 
 /// Types for the main view sync task
-pub type ViewSyncTaskStateTypes<TYPES, I, A> = HSTWithEvent<
+pub type ViewSyncTaskValidatedStates<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
     HotShotEvent<TYPES>,
     ChannelStream<HotShotEvent<TYPES>>,
@@ -175,7 +175,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 }
 
 /// Types for view sync replica state
-pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
+pub type ViewSyncReplicaTaskValidatedStates<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
     HotShotEvent<TYPES>,
     ChannelStream<HotShotEvent<TYPES>>,

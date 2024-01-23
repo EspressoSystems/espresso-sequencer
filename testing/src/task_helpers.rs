@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::{
     block_types::{TestBlockHeader, TestBlockPayload},
     node_types::{MemoryImpl, TestTypes},
-    state_types::TestState,
+    state_types::{TestInstanceState, TestValidatedState},
     test_builder::TestMetadata,
 };
 use commit::Committable;
@@ -216,7 +216,7 @@ async fn build_quorum_proposal_and_signature(
     // parent_view_number should be equal to 0
     let parent_view_number = &consensus.high_qc.get_view_number();
     assert_eq!(parent_view_number.get_u64(), 0);
-    let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
+    let Some(parent_view) = consensus.validated_state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
     let Some(leaf_view_0) = parent_view.get_leaf_commitment() else {
@@ -249,7 +249,8 @@ async fn build_quorum_proposal_and_signature(
         rejected: vec![],
         proposer_id: *api.public_key(),
     };
-    let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
+    let mut parent_state =
+        <TestValidatedState as ValidatedState>::from_header(&parent_leaf.block_header);
 
     let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
         .expect("Failed to sign leaf commitment!");
@@ -264,11 +265,16 @@ async fn build_quorum_proposal_and_signature(
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
         let state_new_view = parent_state
-            .validate_and_apply_header(&block_header, &block_header, &ViewNumber::new(cur_view - 1))
+            .validate_and_apply_header(
+                &TestInstanceState {},
+                &block_header,
+                &block_header,
+                &ViewNumber::new(cur_view - 1),
+            )
             .unwrap();
         // save states for the previous view to pass all the qc checks
         // In the long term, we want to get rid of this, do not manually update consensus state
-        consensus.state_map.insert(
+        consensus.validated_state_map.insert(
             ViewNumber::new(cur_view - 1),
             View {
                 view_inner: ViewInner::Leaf {

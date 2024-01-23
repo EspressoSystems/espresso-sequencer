@@ -1,11 +1,11 @@
-//! Abstraction over the global state that blocks modify
+//! Abstractions over the immutable instance-level state and hte global state that blocks modify.
 //!
-//! This module provides the [`State`] trait, which serves as an compatibility over the current
-//! network state, which is modified by the transactions contained within blocks.
+//! This module provides the [`InstanceState`] and [`ValidatedState`] traits, which serve as
+//! compatibilities over the current network state, which is modified by the transactions contained
+//! within blocks.
 
 use crate::traits::BlockPayload;
 use commit::Committable;
-use jf_plonk::proof_system::batch_arg::Instance;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     error::Error,
@@ -16,6 +16,13 @@ use std::{
 };
 
 use super::block_contents::{BlockHeader, TestableBlock};
+
+/// Instance-level state, which allows us to fetch missing validated state.
+pub trait InstanceState: Send + Sync {
+    /// Construct the state.
+    #[must_use]
+    fn new() -> Self;
+}
 
 /// Abstraction over the state that blocks modify
 ///
@@ -54,7 +61,7 @@ pub trait ValidatedState:
     /// Check if the proposed block header is valid and apply it to the state if so.
     ///
     /// Returns the new state.
-    /// 
+    ///
     /// # Arguments
     /// * `instance` - Immutable instance-level state.
     ///
@@ -74,10 +81,13 @@ pub trait ValidatedState:
     /// This can also be used to rebuild the state for catchup.
     fn from_header(block_header: &Self::BlockHeader) -> Self;
 
-    /// Construct a genesis state.
+    /// Construct a genesis validated state and the instance-level state.
     #[must_use]
-    fn genesis() -> Self {
-        Self::from_header(&Self::BlockHeader::genesis().0)
+    fn genesis() -> (Self, Self::Instance) {
+        (
+            Self::from_header(&Self::BlockHeader::genesis().0),
+            <Self::Instance as InstanceState>::new(),
+        )
     }
 
     /// Gets called to notify the persistence backend that this state has been committed
@@ -133,6 +143,3 @@ pub trait ConsensusTime:
     /// Get the u64 format of time
     fn get_u64(&self) -> u64;
 }
-
-/// Instance-level state, which allows us to fetch missing validated state.
-pub trait InstanceState {}

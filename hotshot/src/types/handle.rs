@@ -99,7 +99,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     ///
     /// # Panics
     /// If the internal consensus is in an inconsistent state.
-    pub async fn get_decided_state(&self) -> TYPES::StateType {
+    pub async fn get_decided_state(&self) -> TYPES::ValidatedState {
         self.hotshot.get_decided_state().await
     }
 

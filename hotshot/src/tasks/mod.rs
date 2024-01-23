@@ -23,7 +23,7 @@ use hotshot_task_impls::{
     },
     transactions::{TransactionTaskState, TransactionsTaskTypes},
     vid::{VIDTaskState, VIDTaskTypes},
-    view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
+    view_sync::{ViewSyncTaskState, ViewSyncTaskValidatedStates},
 };
 use hotshot_types::traits::election::Membership;
 use hotshot_types::{
@@ -509,7 +509,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     ));
 
     let view_sync_task_builder = TaskBuilder::<
-        ViewSyncTaskStateTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>,
+        ViewSyncTaskValidatedStates<TYPES, I, HotShotConsensusApi<TYPES, I>>,
     >::new(view_sync_name.to_string())
     .register_event_stream(event_stream.clone(), view_sync_event_filter)
     .await
@@ -521,7 +521,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     // we *just* registered
     let view_sync_task_id = view_sync_task_builder.get_task_id().unwrap();
 
-    let view_sync_task = ViewSyncTaskStateTypes::build(view_sync_task_builder).launch();
+    let view_sync_task = ViewSyncTaskValidatedStates::build(view_sync_task_builder).launch();
     task_runner.add_task(
         view_sync_task_id,
         view_sync_name.to_string(),

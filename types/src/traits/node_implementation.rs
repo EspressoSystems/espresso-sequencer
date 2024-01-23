@@ -296,15 +296,16 @@ pub trait NodeType:
     /// The election config type that this hotshot setup is using.
     type ElectionConfigType: ElectionConfig;
 
+    /// The instance-level state type that this hotshot setup is using.
+    type InstanceState: InstanceState;
+
     /// The validated state type that this hotshot setup is using.
     type ValidatedState: ValidatedState<
+        Instance = Self::InstanceState,
         BlockHeader = Self::BlockHeader,
         BlockPayload = Self::BlockPayload,
         Time = Self::Time,
     >;
-
-    /// The instance-level state type that this hotshot setup is using.
-    type InstanceState: InstanceState;
 
     /// Membership used for this implementation
     type Membership: Membership<Self>;

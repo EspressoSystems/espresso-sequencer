@@ -126,7 +126,7 @@ impl<
 }
 
 /// Types for a vote accumulator Task
-pub type VoteTaskStateTypes<TYPES, VOTE, CERT> = HSTWithEvent<
+pub type VoteTaskValidatedStates<TYPES, VOTE, CERT> = HSTWithEvent<
     VoteTaskError,
     HotShotEvent<TYPES>,
     ChannelStream<HotShotEvent<TYPES>>,

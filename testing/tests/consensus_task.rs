@@ -12,7 +12,7 @@ use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
-    traits::state::ConsensusTime,
+    traits::states::ConsensusTime,
 };
 use hotshot_types::{
     simple_vote::QuorumData,
@@ -35,7 +35,7 @@ async fn build_vote(
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
     let parent = if justify_qc.is_genesis {
-        let Some(genesis_view) = consensus.state_map.get(&ViewNumber::new(0)) else {
+        let Some(genesis_view) = consensus.validated_state_map.get(&ViewNumber::new(0)) else {
             panic!("Couldn't find genesis view in state map.");
         };
         let Some(leaf) = genesis_view.get_leaf_commitment() else {
@@ -195,6 +195,7 @@ async fn test_consensus_vote() {
 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
 #[ignore]
 async fn test_consensus_with_vid() {
+    use hotshot::traits::BlockPayload;
     use hotshot::types::SignatureKey;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestBlockPayload;
@@ -206,9 +207,7 @@ async fn test_consensus_with_vid() {
     use hotshot_types::simple_certificate::DACertificate;
     use hotshot_types::simple_vote::DAData;
     use hotshot_types::simple_vote::DAVote;
-    use hotshot_types::traits::block_contents::vid_commitment;
-    use hotshot_types::traits::state::TestableBlock;
-    use hotshot_types::traits::BlockPayload;
+    use hotshot_types::traits::block_contents::{vid_commitment, TestableBlock};
     use hotshot_types::{
         data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
     };

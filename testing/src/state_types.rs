@@ -16,7 +16,16 @@ use crate::block_types::TestTransaction;
 use crate::block_types::{TestBlockHeader, TestBlockPayload};
 pub use crate::node_types::TestTypes;
 
-/// sequencing demo entry state
+/// Instance-level state implementation for testing purposes.
+pub struct TestInstanceState {}
+
+impl InstanceState for TestInstanceState {
+    fn new() -> Self {
+        TestInstanceState {}
+    }
+}
+
+/// Validated state implementation for testing purposes.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct TestValidatedState {
     /// the block height
@@ -66,6 +75,7 @@ impl ValidatedState for TestValidatedState {
 
     fn validate_and_apply_header(
         &self,
+        _instance: &Self::Instance,
         _proposed_header: &Self::BlockHeader,
         _parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
@@ -110,7 +120,3 @@ impl TestableState for TestValidatedState {
         ])
     }
 }
-
-pub struct TestInstanceState {}
-
-impl InstanceState for TestInstanceState {}

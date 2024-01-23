@@ -206,13 +206,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .context(StorageSnafu)?;
 
         // insert genesis (or latest block) to state map
-        let mut state_map = BTreeMap::default();
-        state_map.insert(
+        let mut validated_state_map = BTreeMap::default();
+        let (validated_state, instance_state) = TYPES::ValidatedState::genesis();
+        validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
-                    state: TYPES::StateType::genesis(),
+                    state: validated_state,
                 },
             },
         );
@@ -236,7 +237,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let start_view = anchored_leaf.get_view_number();
 
         let consensus = Consensus {
-            state_map,
+            instance_state,
+            validated_state_map,
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
@@ -390,7 +392,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_decided_state(&self) -> TYPES::StateType {
+    pub async fn get_decided_state(&self) -> TYPES::ValidatedState {
         self.inner
             .consensus
             .read()
