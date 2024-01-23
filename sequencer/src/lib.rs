@@ -281,7 +281,7 @@ pub async fn init_node(
     };
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string()).await;
+    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
     let mut config = match persistence.load_config().await? {
         Some(config) => {
