@@ -1,4 +1,4 @@
-use hotshot::types::SignatureKey;
+use hotshot::{traits::NetworkReliability, types::SignatureKey};
 use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
@@ -59,6 +59,8 @@ pub struct TestMetadata {
     pub min_transactions: usize,
     /// timing data
     pub timing_data: TimingData,
+    /// unrelabile networking metadata
+    pub unreliable_network: Option<Box<dyn NetworkReliability>>,
     /// view sync check task
     pub view_sync_properties: ViewSyncTaskDescription,
 }
@@ -188,6 +190,7 @@ impl Default for TestMetadata {
                     duration: Duration::from_millis(10000),
                 },
             ),
+            unreliable_network: None,
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
         }
     }
@@ -216,6 +219,7 @@ impl TestMetadata {
             completion_task_description,
             overall_safety_properties,
             spinning_properties,
+            unreliable_network,
             view_sync_properties,
             ..
         } = self.clone();
@@ -292,6 +296,7 @@ impl TestMetadata {
                     total_nodes,
                     num_bootstrap_nodes,
                     da_committee_size,
+                    unreliable_network,
                 ),
                 storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
                 config,
