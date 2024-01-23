@@ -289,7 +289,7 @@ fn tx_payload_range(
 }
 
 impl QueryablePayload for BlockPayload {
-    type TransactionIndex = TxIndex2;
+    type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
 
@@ -437,7 +437,7 @@ impl TxInclusionProof {
     fn verify<V>(
         &self,
         tx: &Transaction,
-        tx_index: TxIndex2,
+        tx_index: TxIndex,
         vid: &V,
         vid_commit: &V::Commit,
         vid_common: &V::Common,
@@ -632,7 +632,7 @@ type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct TxIndex2 {
+pub struct TxIndex {
     ns_idx: usize,
     tx_idx: usize,
 }
@@ -662,13 +662,13 @@ impl<'a> TxIterator<'a> {
 }
 
 impl<'a> Iterator for TxIterator<'a> {
-    type Item = TxIndex2;
+    type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.tx_iter.next() {
             Some(tx_idx) => {
                 // we still have txs left to consume in current ns
-                Some(TxIndex2 {
+                Some(TxIndex {
                     ns_idx: self.ns_idx,
                     // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
                     tx_idx,
@@ -694,7 +694,7 @@ impl<'a> Iterator for TxIterator<'a> {
 
                     self.tx_iter = 0..tx_table_len;
                     if let Some(tx_idx) = self.tx_iter.next() {
-                        return Some(TxIndex2 {
+                        return Some(TxIndex {
                             ns_idx: self.ns_idx,
                             // todo: change TxTableEntry (https://github.com/EspressoSystems/espresso-sequencer/issues/1012)
                             tx_idx,
@@ -804,7 +804,7 @@ mod boilerplate {
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex2,
+        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex,
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -1173,7 +1173,7 @@ mod test {
         assert!(proof
             .verify(
                 &tx,
-                TxIndex2 {
+                TxIndex {
                     ns_idx: 0,
                     tx_idx: 0
                 },
