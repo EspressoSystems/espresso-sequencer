@@ -186,7 +186,7 @@ services:
 
   submit-transactions:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
-    env:
+    environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
