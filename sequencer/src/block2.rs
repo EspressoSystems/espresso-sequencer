@@ -291,6 +291,8 @@ fn tx_payload_range(
 impl QueryablePayload for BlockPayload {
     type TransactionIndex = u32;
     type Iter<'a> = Range<Self::TransactionIndex>;
+    // type TransactionIndex = TxIndex2;
+    // type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
@@ -645,6 +647,9 @@ mod tx_table_entry {
 
 type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
 
+/// TODO do we really need `PartialOrd`, `Ord` here?
+/// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct TxIndex2 {
     ns_idx: usize,
     tx_idx: usize,
