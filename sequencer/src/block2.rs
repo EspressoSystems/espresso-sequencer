@@ -289,10 +289,8 @@ fn tx_payload_range(
 }
 
 impl QueryablePayload for BlockPayload {
-    type TransactionIndex = u32;
-    type Iter<'a> = Range<Self::TransactionIndex>;
-    // type TransactionIndex = TxIndex2;
-    // type Iter<'a> = TxIterator<'a>;
+    type TransactionIndex = TxIndex2;
+    type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
@@ -333,15 +331,16 @@ impl QueryablePayload for BlockPayload {
     }
 
     fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
-        0..self.len(meta).try_into().unwrap_or(0)
+        TxIterator::new(meta, self)
     }
 
+    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     fn transaction_with_proof(
         &self,
         meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        let index_usize = usize::try_from(*index).ok()?;
+        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
         if index_usize >= self.len(meta) {
             return None; // error: index out of bounds
         }
@@ -633,27 +632,31 @@ type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct TxIndex2 {
+pub struct TxIndex2 {
     ns_idx: usize,
     tx_idx: usize,
 }
 
-struct TxIterator<'a> {
+pub struct TxIterator<'a> {
     ns_idx: usize,
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a BlockPayload,
-    ns_table: &'a NsTable,
+
+    // TODO should be `&'a NsTable`, but that requires upstream change to `QuearyablePayload::iter`:
+    // fn iter<'a>(&'a self, meta: &'a Self::Metadata)
+    //        ++++  ++              ++
+    ns_table: NsTable,
 }
 
 impl<'a> TxIterator<'a> {
-    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
+    fn new(ns_table: &NsTable, block_payload: &'a BlockPayload) -> Self {
         Self {
             ns_idx: 0,
             ns_iter: 0..get_ns_table_len(ns_table),
             tx_iter: 0..0, // empty range
             block_payload,
-            ns_table,
+            ns_table: ns_table.clone(),
         }
     }
 }
@@ -679,9 +682,9 @@ impl<'a> Iterator for TxIterator<'a> {
                     let start = if self.ns_idx == 0 {
                         0
                     } else {
-                        get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
+                        get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
                     };
-                    let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
+                    let end = get_ns_table_entry(&self.ns_table, self.ns_idx).1;
 
                     // check range
                     let end = std::cmp::min(end, payload_len);
