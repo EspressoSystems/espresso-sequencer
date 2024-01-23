@@ -70,4 +70,4 @@ sol-lint:
 # Note: we use an invalid etherscan api key in order to avoid annoying warnings. See https://github.com/EspressoSystems/espresso-sequencer/issues/979
 sol-test:
     cargo build --bin diff-test --release
-    forge test --etherscan-api-key invalid_key
+    forge test
