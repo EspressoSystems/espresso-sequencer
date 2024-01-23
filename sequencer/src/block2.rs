@@ -415,8 +415,6 @@ impl QueryablePayload for BlockPayload {
     }
 }
 
-type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
@@ -430,7 +428,7 @@ pub struct TxInclusionProof {
 }
 
 impl TxInclusionProof {
-    // TODO prototype only!
+    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     //
     // - We need to decide where to store VID params.
     // - Returns `None` if an error occurred.
@@ -440,7 +438,7 @@ impl TxInclusionProof {
     fn verify<V>(
         &self,
         tx: &Transaction,
-        tx_index: TxIndex,
+        tx_index: TxIndex2,
         vid: &V,
         vid_commit: &V::Commit,
         vid_common: &V::Common,
@@ -502,7 +500,7 @@ impl TxInclusionProof {
 
         // Verify proof for tx table entries.
         // Start index missing for the 0th tx
-        let index: usize = tx_index.try_into().ok()?;
+        let index: usize = tx_index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
         let mut tx_table_range_bytes =
             Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
@@ -544,7 +542,7 @@ impl TxInclusionProof {
 }
 
 mod tx_table_entry {
-    use super::{Deserialize, Serialize, TxIndex};
+    use super::{Deserialize, Serialize};
     use crate::VmId;
     use core::fmt;
     use std::mem::size_of;
@@ -611,21 +609,6 @@ mod tx_table_entry {
 
         fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
             usize::try_from(value.0)
-        }
-    }
-
-    impl TryFrom<TxIndex> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<TxIndex>>::Error;
-
-        fn try_from(value: TxIndex) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for TxIndex {
-        type Error = <TxIndex as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            TxIndex::try_from(value.0)
         }
     }
 
@@ -817,10 +800,9 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
-    use crate::block2::TxIterator;
-
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex2,
+        TxIterator, TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -1179,7 +1161,16 @@ mod test {
         // test: fake proof should get rejected
         // TODO should return Some(Err()) instead of None
         assert!(proof
-            .verify(&tx, 0, &vid, &disperse_data.commit, &disperse_data.common)
+            .verify(
+                &tx,
+                TxIndex2 {
+                    ns_idx: 0,
+                    tx_idx: 0
+                },
+                &vid,
+                &disperse_data.commit,
+                &disperse_data.common
+            )
             .is_none());
     }
 
