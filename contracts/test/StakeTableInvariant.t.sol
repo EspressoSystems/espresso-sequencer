@@ -29,7 +29,6 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
     BN254.G2Point[] public vksWithdraw;
     LightClientTest public lightClient;
     address[] public users;
-    mapping(bytes32 vkHash => uint256 userIndex) public userIndexFromVk;
 
     // Variables for testing invariant relative to Register
     uint64 public nextRegistrationEpochBefore;
@@ -47,7 +46,7 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
     bool public requestExitCalledAtLeastOnce;
 
     mapping(bytes32 blsKeyHash => uint64 exitEpoch) public exitEpochForBlsVK;
-    BN254.G2Point[] public requestExitKeys;
+    uint256[] public requestExitKeysIndexes;
 
     constructor(
         S _stakeTable,
@@ -116,8 +115,6 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
             validUntilEpoch
         );
 
-        bytes32 vkHash = stakeTable._hashBlsKey(blsVK);
-        userIndexFromVk[vkHash] = userIndex;
         vks[userIndex] = blsVK;
     }
 
@@ -177,7 +174,7 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
 
         bytes32 vkHash = stakeTable._hashBlsKey(vk);
         exitEpochForBlsVK[vkHash] = node.exitEpoch;
-        requestExitKeys.push(vk);
+        requestExitKeysIndexes.push(index);
         requestExitCalledAtLeastOnce = true;
     }
 
@@ -225,13 +222,13 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
 
     function withdrawFunds(uint256 rand) public {
         // Check if some withdrawals are possible
-        if (requestExitKeys.length == 0) {
+        if (requestExitKeysIndexes.length == 0) {
             return;
         }
 
-        uint256 index = bound(rand, 0, requestExitKeys.length - 1);
+        uint256 index = bound(rand, 0, requestExitKeysIndexes.length - 1);
 
-        BN254.G2Point memory vk = requestExitKeys[index];
+        BN254.G2Point memory vk = vks[requestExitKeysIndexes[index]];
         bytes32 vkHash = stakeTable._hashBlsKey(vk);
         uint64 exitEpoch = exitEpochForBlsVK[vkHash];
 
@@ -243,14 +240,14 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
         nextEpoch = exitEpoch + slackForEscrowPeriod;
         lightClient.setCurrentEpoch(nextEpoch);
 
-        uint256 userIndex = userIndexFromVk[vkHash];
+        uint256 userIndex = requestExitKeysIndexes[index];
         address userAddress = users[userIndex];
         vm.prank(userAddress);
         stakeTable.withdrawFunds(vk);
 
         // Remove element from array
-        requestExitKeys[index] = requestExitKeys[requestExitKeys.length - 1];
-        requestExitKeys.pop();
+        requestExitKeysIndexes[index] = requestExitKeysIndexes[requestExitKeysIndexes.length - 1];
+        requestExitKeysIndexes.pop();
         exitEpochForBlsVK[vkHash] = 0; // No exit in progress anymore
     }
 }
