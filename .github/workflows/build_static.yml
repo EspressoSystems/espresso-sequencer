@@ -80,7 +80,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cli
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/commitment-task
-            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/count-transactions
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/submit-transactions
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/reset-storage
 
   static-dockers:
@@ -141,11 +141,11 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
           flavor: suffix=musl
 
-      - name: Generate count-transactions docker metadata
+      - name: Generate submit-transactions docker metadata
         uses: docker/metadata-action@v5
-        id: count-transactions
+        id: submit-transactions
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/count-transactions
+          images: ghcr.io/espressosystems/espresso-sequencer/submit-transactions
           flavor: suffix=musl
 
       - name: Generate example rollup metadata
@@ -195,12 +195,12 @@ jobs:
           tags: ${{ steps.commitment-task.outputs.tags }}
           labels: ${{ steps.commitment-task.outputs.labels }}
 
-      - name: Build and push count-transactions docker
+      - name: Build and push submit-transactions docker
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./docker/count-transactions.Dockerfile
+          file: ./docker/submit-transactions.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.count-transactions.outputs.tags }}
-          labels: ${{ steps.count-transactions.outputs.labels }}
+          tags: ${{ steps.submit-transactions.outputs.tags }}
+          labels: ${{ steps.submit-transactions.outputs.labels }}
