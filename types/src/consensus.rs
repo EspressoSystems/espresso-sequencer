@@ -53,8 +53,7 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// Saved payloads.
     ///
-    /// Contains the block payload commitment and encoded transactions for every leaf in
-    /// `saved_leaves` if that payload is available.
+    /// Encoded transactions for every view if we got a payload for that view.
     pub saved_payloads: BTreeMap<TYPES::Time, Vec<u8>>,
 
     /// The `locked_qc` view number
