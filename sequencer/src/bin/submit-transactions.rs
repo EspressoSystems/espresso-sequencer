@@ -161,7 +161,11 @@ async fn main() {
         for (_, tx) in block.payload().enumerate() {
             if let Some(submitted_at) = pending.remove(&tx.commit()) {
                 let latency = received_at - submitted_at;
-                tracing::info!("got transaction {}, latency {latency:?}", tx.commit());
+                tracing::info!(
+                    "got transaction {} in block {}, latency {latency:?}",
+                    tx.commit(),
+                    block.height()
+                );
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
