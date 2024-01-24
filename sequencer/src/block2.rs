@@ -117,6 +117,14 @@ impl BlockPayload {
         }
     }
 
+    fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
+        get_ns_table_len(ns_table_bytes)
+    }
+
+    fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
+        0..get_ns_table_len(ns_table_bytes)
+    }
+
     /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
     ///
     /// Typically `r` is `0..TxTableEntry::byte_len()`.
@@ -926,6 +934,8 @@ mod test {
             // let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
+            // test total ns length
+            assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
 
             // test total tx length
             tracing::info!("actual_ns_table {:?}", actual_ns_table);
@@ -945,10 +955,15 @@ mod test {
 
             // test each namespace
             // let mut tx_index_offset = 0;
+            let mut ns_iter = block.namespace_iter(&actual_ns_table);
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
+                // test ns iterator
+                let ns_iter_idx = ns_iter.next().unwrap();
+                assert_eq!(ns_iter_idx, ns_idx);
+
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
@@ -1032,6 +1047,10 @@ mod test {
                 prev_entry = entry;
                 derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
+            assert!(
+                ns_iter.next().is_none(),
+                "expected ns iterator to be exhausted"
+            );
             assert!(
                 block_iter.next().is_none(),
                 "expected tx iterator to be exhausted"
