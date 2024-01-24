@@ -27,6 +27,7 @@ use async_std::{
 };
 use derivative::Derivative;
 use std::{
+    cmp::min,
     collections::{hash_map::Entry, BTreeSet, HashMap},
     time::Duration,
 };
@@ -36,6 +37,26 @@ pub mod request;
 
 pub use provider::Provider;
 pub use request::Request;
+
+// The fastest we will retry failed requests.
+const MIN_RETRY_DELAY: Duration = Duration::from_secs(2);
+// Factor by which to increase the retry delay each failed request.
+//
+// Our backoff strategy is to start with a relatively quick retry delay, but back off very quickly
+// until reaching a maximum delay. This lets us succeed quickly when there is a transient failure in
+// the provider, while limiting spam/failed requests when the provider is down for a long time.
+//
+// Backoff also lets us set a longer maximum delay without affecting optimistic performance, further
+// reducing spam.
+const BACKOFF_FACTOR: u32 = 4;
+
+// The longest we will wait to retry failed requests.
+//
+// Since many of the issues we might encounter when fetching from a peer are of the kind that won't
+// recover immediately, and since we may have many parallel requests for resources and don't want to
+// spam our peers, and since backoff allows us to first try a few times with a faster delay, we can
+// safely wait a long while before retrying failed requests.
+const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
 
 /// A callback to process the result of a request.
 ///
@@ -67,11 +88,7 @@ impl<T, C> Default for Fetcher<T, C> {
     fn default() -> Self {
         Self {
             in_progress: Default::default(),
-            // Since many of the issues we might encounter when fetching from a peer are of the kind
-            // that won't recover immediately, and since we may have many parallel requests for
-            // resources and don't want to spam our peers, we can wait a long while before retrying
-            // failed requests.
-            retry_delay: Duration::from_secs(60),
+            retry_delay: DEFAULT_RETRY_DELAY,
         }
     }
 }
@@ -112,7 +129,7 @@ impl<T, C> Fetcher<T, C> {
         C: Callback<T::Response> + 'static,
     {
         let in_progress = self.in_progress.clone();
-        let retry_delay = self.retry_delay;
+        let max_retry_delay = self.retry_delay;
 
         spawn(async move {
             tracing::info!("spawned active fetch for {req:?}");
@@ -138,6 +155,7 @@ impl<T, C> Fetcher<T, C> {
             }
 
             // Now we are responsible for fetching the object, reach out to the provider.
+            let mut delay = min(MIN_RETRY_DELAY, max_retry_delay);
             let res = loop {
                 if let Some(res) = provider.fetch(req).await {
                     break res;
@@ -154,8 +172,13 @@ impl<T, C> Fetcher<T, C> {
                 // fetching, we require manual intervention only when active fetches are
                 // accumulating because a peer which _should_ have the resource isn't providing it.
                 // In this case, we would require manual intervention on the peer anyways.
-                tracing::warn!("failed to fetch {req:?}, will retry in {retry_delay:?}");
-                sleep(retry_delay).await;
+                tracing::warn!("failed to fetch {req:?}, will retry in {delay:?}");
+                sleep(delay).await;
+
+                // Try a few times with a short delay, on the off chance that the problem resolves
+                // quickly. Back off until we eventually reach the maximum delay, which should be
+                // pretty long.
+                delay = min(delay * BACKOFF_FACTOR, max_retry_delay);
             };
 
             // Done fetching, remove our lock on the object and execute all callbacks.
