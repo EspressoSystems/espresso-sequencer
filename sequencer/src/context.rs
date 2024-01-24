@@ -7,6 +7,8 @@ use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
 use hotshot_types::light_client::StateVerKey;
 use jf_primitives::signatures::SignatureScheme;
+use surf_disco::Client;
+use tide_disco::error::ServerError;
 use url::Url;
 
 use crate::{
@@ -39,7 +41,7 @@ pub struct SequencerContext<N: network::Type> {
     stake_table_comm: Arc<StakeTableCommitmentType>,
 
     /// The state relay server url
-    state_relay_server_url: Option<Url>,
+    state_relay_server_client: Option<Client<ServerError>>,
 }
 
 impl<N: network::Type> SequencerContext<N> {
@@ -57,7 +59,7 @@ impl<N: network::Type> SequencerContext<N> {
             state_key_pair: Arc::new(state_key_pair),
             state_signatures: Default::default(),
             stake_table_comm: Arc::new(stake_table_comm),
-            state_relay_server_url,
+            state_relay_server_client: state_relay_server_url.map(Client::new),
         }
     }
 
@@ -114,7 +116,7 @@ impl<N: network::Type> SequencerContext<N> {
     }
 
     /// Return a url to the state relay server
-    pub fn get_state_relay_server_url(&self) -> &Option<Url> {
-        &self.state_relay_server_url
+    pub fn get_state_relay_server_client(&self) -> &Option<Client<ServerError>> {
+        &self.state_relay_server_client
     }
 }

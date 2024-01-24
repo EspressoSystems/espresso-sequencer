@@ -147,7 +147,10 @@ impl StateRelayServerDataSource for StateRelayServerState {
         match bundle.signatures.entry(key) {
             std::collections::hash_map::Entry::Occupied(_) => {
                 // A signature is already posted for this key with this state
-                return Ok(());
+                return Err(tide_disco::error::ServerError::catch_all(
+                    StatusCode::BadRequest,
+                    "A signature of this light client state is already posted at this block height for this key.".to_owned(),
+                ));
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 tracing::info!("Accepting new signature for block height {}.", block_height);

@@ -13,8 +13,6 @@ use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _}
 use hotshot_types::traits::state::ConsensusTime;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use surf_disco::Client;
-use tide_disco::error::ServerError;
 
 /// Types related to the underlying signature schemes.
 pub type StateSignatureScheme =
@@ -39,7 +37,7 @@ pub(super) async fn state_signature_loop<N>(
     tracing::info!("State signature watcher is watching event stream for decided leaves.");
     let stake_table_comm = context.get_stake_table_comm();
     let key = context.get_state_ver_key();
-    let state_relay_server_url = context.get_state_relay_server_url();
+    let client = context.get_state_relay_server_client();
     while let Some(event) = events.next().await {
         // Trigger the light client signature hook when a new leaf is decided
         if let Event {
@@ -51,14 +49,11 @@ pub(super) async fn state_signature_loop<N>(
                 let state = form_light_client_state(leaf, stake_table_comm);
                 let signature = context.sign_new_state(&state).await;
                 tracing::debug!(
-                    "New leaves decided. Latest block height: {}, posting to relay server {:?}",
+                    "New leaves decided. Latest block height: {}",
                     leaf.get_height(),
-                    state_relay_server_url,
                 );
 
-                if let Some(state_relay_server_url) = state_relay_server_url {
-                    let client: Client<ServerError> = Client::new(state_relay_server_url.clone());
-                    client.connect(None).await;
+                if let Some(client) = client {
                     let request_body = StateSignatureRequestBody {
                         key: key.clone(),
                         state,
