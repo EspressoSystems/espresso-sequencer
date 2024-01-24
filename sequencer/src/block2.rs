@@ -330,7 +330,7 @@ impl QueryablePayload for BlockPayload {
         result
     }
 
-    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
+    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
         TxIterator::new(meta, self)
     }
 
@@ -638,25 +638,21 @@ pub struct TxIndex {
 }
 
 pub struct TxIterator<'a> {
-    ns_idx: usize, // TODO should be able to eliminate this field
+    ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a BlockPayload,
-
-    // TODO should be `&'a NsTable`, but that requires upstream change to `QuearyablePayload::iter`:
-    // fn iter<'a>(&'a self, meta: &'a Self::Metadata)
-    //        ++++  ++              ++
-    ns_table: NsTable,
+    ns_table: &'a NsTable,
 }
 
 impl<'a> TxIterator<'a> {
-    fn new(ns_table: &NsTable, block_payload: &'a BlockPayload) -> Self {
+    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
         Self {
-            ns_idx: 0,
+            ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..get_ns_table_len(ns_table),
             tx_iter: 0..0, // empty range
             block_payload,
-            ns_table: ns_table.clone(),
+            ns_table,
         }
     }
 }
@@ -679,9 +675,9 @@ impl<'a> Iterator for TxIterator<'a> {
                 let start = if self.ns_idx == 0 {
                     0
                 } else {
-                    get_ns_table_entry(&self.ns_table, self.ns_idx - 1).1
+                    get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
                 };
-                let end = get_ns_table_entry(&self.ns_table, self.ns_idx).1;
+                let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
 
                 // TODO refactor range-checking code
                 let end = std::cmp::min(end, payload_len);
