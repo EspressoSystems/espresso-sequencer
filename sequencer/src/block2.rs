@@ -117,11 +117,15 @@ impl BlockPayload {
         }
     }
 
-    fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
         get_ns_table_len(ns_table_bytes)
     }
 
-    fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
         0..get_ns_table_len(ns_table_bytes)
     }
 
