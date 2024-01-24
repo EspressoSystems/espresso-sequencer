@@ -38,6 +38,9 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::node_implementation::ChannelMaps;
+
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::Leaf,
@@ -68,9 +71,6 @@ use std::{
 };
 use tasks::add_vid_task;
 use tracing::{debug, error, info, instrument, trace, warn};
-
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::node_implementation::ChannelMaps;
 
 // -- Rexports
 // External
