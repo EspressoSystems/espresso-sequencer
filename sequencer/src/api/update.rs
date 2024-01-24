@@ -19,7 +19,7 @@ pub(super) async fn update_loop<N, D>(
 {
     tracing::debug!("waiting for event");
     while let Some(event) = events.next().await {
-        tracing::info!("got event {:?}", event);
+        tracing::debug!("got event {:?}", event);
 
         // If update results in an error, program state is unrecoverable
         if let Err(err) = update_state(&mut *state.write().await, &event).await {

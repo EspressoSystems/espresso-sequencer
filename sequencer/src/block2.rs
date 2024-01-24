@@ -117,6 +117,18 @@ impl BlockPayload {
         }
     }
 
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
+        get_ns_table_len(ns_table_bytes)
+    }
+
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
+        0..get_ns_table_len(ns_table_bytes)
+    }
+
     /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
     ///
     /// Typically `r` is `0..TxTableEntry::byte_len()`.
@@ -158,6 +170,7 @@ impl BlockPayload {
 // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
 // if `table_bytes` has too few bytes at this `offset` then pad with zero.
 // Parse these bytes into a `TxTableEntry` and return.
+// Returns raw bytes, no checking for large values
 fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     let end = std::cmp::min(
         offset.saturating_add(TxTableEntry::byte_len()),
@@ -168,6 +181,95 @@ fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
     entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
     TxTableEntry::from_bytes_array(entry_bytes)
+}
+
+// Parse the table length from the beginning of the namespace table.
+//
+// Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
+fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
+    std::cmp::min(
+        get_table_len(ns_table_bytes, 0).try_into().unwrap_or(0),
+        (ns_table_bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len()),
+    )
+}
+
+// Parse the table length from the beginning of the tx table inside `ns_bytes`.
+//
+// Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
+fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
+    std::cmp::min(
+        get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
+        (ns_bytes.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
+    )
+}
+
+// returns (ns_id, payload_offset)
+// payload_offset is not checked, could be anything
+fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
+    // range for ns_id bytes in ns table
+    // ensure `range` is within range for ns_table_bytes
+    let start = std::cmp::min(
+        ns_index
+            .saturating_mul(2)
+            .saturating_add(1)
+            .saturating_mul(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let ns_id_range = start..end;
+
+    // parse ns_id bytes from ns table
+    // any failure -> VmId(0)
+    let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
+    ns_id_bytes[..ns_id_range.len()].copy_from_slice(&ns_table_bytes[ns_id_range]);
+    let ns_id =
+        VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(VmId(0));
+
+    // range for ns_offset bytes in ns table
+    // ensure `range` is within range for ns_table_bytes
+    // TODO refactor range checking code
+    let start = end;
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        ns_table_bytes.len(),
+    );
+    let ns_offset_range = start..end;
+
+    // parse ns_offset bytes from ns table
+    // any failure -> 0 offset (?)
+    // TODO refactor parsing code?
+    let mut ns_offset_bytes = [0u8; TxTableEntry::byte_len()];
+    ns_offset_bytes[..ns_offset_range.len()].copy_from_slice(&ns_table_bytes[ns_offset_range]);
+    let ns_offset =
+        usize::try_from(TxTableEntry::from_bytes(&ns_offset_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(0);
+
+    (ns_id, ns_offset)
+}
+
+// TODO currently unused but contains code that might get re-used in the near future.
+fn _get_tx_table_entry(
+    ns_offset: usize,
+    block_payload: &BlockPayload,
+    block_payload_len: usize,
+    tx_index: usize,
+) -> TxTableEntry {
+    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
+
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        block_payload_len,
+    );
+    // todo: clamp offsets
+    let tx_id_range = start..end;
+    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
+    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.payload[tx_id_range]);
+
+    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
 }
 
 /// Returns the byte range for a tx in the block payload bytes.
@@ -199,8 +301,8 @@ fn tx_payload_range(
 }
 
 impl QueryablePayload for BlockPayload {
-    type TransactionIndex = u32;
-    type Iter<'a> = Range<Self::TransactionIndex>;
+    type TransactionIndex = TxIndex;
+    type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
@@ -211,10 +313,7 @@ impl QueryablePayload for BlockPayload {
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
         // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = std::cmp::min(
-            get_table_len(meta, 0).try_into().unwrap_or(0),
-            (meta.len() - entry_len) / (2 * entry_len),
-        );
+        let ns_table_len = get_ns_table_len(meta);
 
         // First, collect the offsets of all the nss
         // (Range starts at 1 to conveniently skip the ns table prefix.)
@@ -237,21 +336,23 @@ impl QueryablePayload for BlockPayload {
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
             let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
+            // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
         }
         result
     }
 
-    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
-        0..self.len(meta).try_into().unwrap_or(0)
+    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
+        TxIterator::new(meta, self)
     }
 
+    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     fn transaction_with_proof(
         &self,
         meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        let index_usize = usize::try_from(*index).ok()?;
+        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
         if index_usize >= self.len(meta) {
             return None; // error: index out of bounds
         }
@@ -325,8 +426,6 @@ impl QueryablePayload for BlockPayload {
     }
 }
 
-type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
@@ -340,7 +439,7 @@ pub struct TxInclusionProof {
 }
 
 impl TxInclusionProof {
-    // TODO prototype only!
+    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     //
     // - We need to decide where to store VID params.
     // - Returns `None` if an error occurred.
@@ -412,7 +511,7 @@ impl TxInclusionProof {
 
         // Verify proof for tx table entries.
         // Start index missing for the 0th tx
-        let index: usize = tx_index.try_into().ok()?;
+        let index: usize = tx_index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
         let mut tx_table_range_bytes =
             Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
@@ -454,7 +553,7 @@ impl TxInclusionProof {
 }
 
 mod tx_table_entry {
-    use super::{Deserialize, Serialize, TxIndex};
+    use super::{Deserialize, Serialize};
     use crate::VmId;
     use core::fmt;
     use std::mem::size_of;
@@ -524,21 +623,6 @@ mod tx_table_entry {
         }
     }
 
-    impl TryFrom<TxIndex> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<TxIndex>>::Error;
-
-        fn try_from(value: TxIndex) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for TxIndex {
-        type Error = <TxIndex as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            TxIndex::try_from(value.0)
-        }
-    }
-
     impl TryFrom<VmId> for TxTableEntry {
         type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
 
@@ -551,6 +635,79 @@ mod tx_table_entry {
 
         fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
             Ok(Self(From::from(value.0)))
+        }
+    }
+}
+
+type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
+
+/// TODO do we really need `PartialOrd`, `Ord` here?
+/// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct TxIndex {
+    ns_idx: usize,
+    tx_idx: usize,
+}
+
+pub struct TxIterator<'a> {
+    ns_idx: usize, // simpler than using `Peekable`
+    ns_iter: Range<usize>,
+    tx_iter: Range<usize>,
+    block_payload: &'a BlockPayload,
+    ns_table: &'a NsTable,
+}
+
+impl<'a> TxIterator<'a> {
+    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
+        Self {
+            ns_idx: 0, // arbitrary value, changed in first call to next()
+            ns_iter: 0..get_ns_table_len(ns_table),
+            tx_iter: 0..0, // empty range
+            block_payload,
+            ns_table,
+        }
+    }
+}
+
+impl<'a> Iterator for TxIterator<'a> {
+    type Item = TxIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(tx_idx) = self.tx_iter.next() {
+            // we still have txs left to consume in current ns
+            Some(TxIndex {
+                ns_idx: self.ns_idx,
+                tx_idx,
+            })
+        } else {
+            // move to the next name space
+            let payload_len = self.block_payload.payload.len();
+            for ns_idx in self.ns_iter.by_ref() {
+                self.ns_idx = ns_idx;
+                let start = if self.ns_idx == 0 {
+                    0
+                } else {
+                    get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
+                };
+                let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
+
+                // TODO refactor range-checking code
+                let end = std::cmp::min(end, payload_len);
+                let start = std::cmp::min(start, end);
+
+                let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
+
+                self.tx_iter = 0..tx_table_len;
+                if let Some(tx_idx) = self.tx_iter.next() {
+                    return Some(TxIndex {
+                        ns_idx: self.ns_idx,
+                        tx_idx,
+                    });
+                } else {
+                    continue;
+                }
+            }
+            None // all namespaces consumed
         }
     }
 }
@@ -650,7 +807,8 @@ mod boilerplate {
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex,
+        TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -780,6 +938,8 @@ mod test {
             // let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
+            // test total ns length
+            assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
 
             // test total tx length
             tracing::info!("actual_ns_table {:?}", actual_ns_table);
@@ -799,9 +959,15 @@ mod test {
 
             // test each namespace
             // let mut tx_index_offset = 0;
+            let mut ns_iter = block.namespace_iter(&actual_ns_table);
+            let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_id, entry) in ns_table_iter(&actual_ns_table) {
+            for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
+                // test ns iterator
+                let ns_iter_idx = ns_iter.next().unwrap();
+                assert_eq!(ns_iter_idx, ns_idx);
+
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
@@ -846,6 +1012,17 @@ mod test {
 
                 // tests for individual txs in this namespace
                 // TODO(746) rework this part
+
+                // testing tx iterator
+                // TODO(746) incorporate this test into the following commented code when it's fixed
+                for tx_idx in 0..derived_ns.tx_table.len() {
+                    let next_tx = block_iter.next().unwrap();
+                    assert_eq!(ns_idx, next_tx.ns_idx);
+                    assert_eq!(tx_idx, next_tx.tx_idx);
+                }
+
+                // tests for individual txs in this namespace
+                // TODO(746) rework this part
                 //
                 // let mut block_iter = block.iter(); // test iterator correctness
                 // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
@@ -872,8 +1049,16 @@ mod test {
                 // prepare for the next loop iteration
                 // tx_index_offset += actual_tx_table.len();
                 prev_entry = entry;
-                derived_block_payload.extend(derived_ns.payload_flat);
+                derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
+            assert!(
+                ns_iter.next().is_none(),
+                "expected ns iterator to be exhausted"
+            );
+            assert!(
+                block_iter.next().is_none(),
+                "expected tx iterator to be exhausted"
+            );
             assert!(
                 derived_nss.is_empty(),
                 "some derived namespaces missing from namespace table"
@@ -1000,7 +1185,16 @@ mod test {
         // test: fake proof should get rejected
         // TODO should return Some(Err()) instead of None
         assert!(proof
-            .verify(&tx, 0, &vid, &disperse_data.commit, &disperse_data.common)
+            .verify(
+                &tx,
+                TxIndex {
+                    ns_idx: 0,
+                    tx_idx: 0
+                },
+                &vid,
+                &disperse_data.commit,
+                &disperse_data.common
+            )
             .is_none());
     }
 

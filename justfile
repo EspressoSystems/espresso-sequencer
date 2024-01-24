@@ -39,11 +39,15 @@ dev-da-server:
 dev-consensus-server:
     target/release/web-server -p 8082
 
+dev-state-relay-server:
+    target/release/state-relay-server -p 8083
+
 dev-sequencer:
     target/release/sequencer \
     --orchestrator-url http://localhost:8080 \
     --da-server-url http://localhost:8081 \
     --consensus-server-url http://localhost:8082 \
+    --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 
 dev-commitment:

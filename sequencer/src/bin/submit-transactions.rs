@@ -14,6 +14,7 @@ use futures::{
 use hotshot_query_service::{availability::BlockQueryData, Error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
+use rand_distr::Distribution;
 use sequencer::{options::parse_duration, SeqTypes, Transaction};
 use snafu::Snafu;
 use std::{
@@ -53,17 +54,12 @@ struct Options {
     )]
     max_namespace: u64,
 
-    /// Minimum delay between submitting transactions.
+    /// Mean delay between submitting transactions.
     ///
-    /// The delay after each transaction will be chosen uniformly between MIN_DELAY and MAX_DELAY.
-    #[clap(long, name = "MIN_DELAY", value_parser = parse_duration, default_value = "100ms", env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_DELAY")]
-    min_delay: Duration,
-
-    /// Maximum delay between submitting transactions.
-    ///
-    /// The delay after each transaction will be chosen uniformly between MIN_DELAY and MAX_DELAY.
-    #[clap(long, name = "MAX_DELAY", value_parser = parse_duration, default_value = "10m", env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_DELAY")]
-    max_delay: Duration,
+    /// The delay after each transaction will be sampled from an exponential distribution with mean
+    /// DELAY.
+    #[clap(long, name = "DELAY", value_parser = parse_duration, default_value = "30s", env = "ESPRESSO_SUBMIT_TRANSACTIONS_DELAY")]
+    delay: Duration,
 
     /// Maximum number of unprocessed transaction submissions.
     ///
@@ -158,7 +154,11 @@ async fn main() {
         for (_, tx) in block.enumerate() {
             if let Some(submitted_at) = pending.remove(&tx.commit()) {
                 let latency = received_at - submitted_at;
-                tracing::info!("got transaction {}, latency {latency:?}", tx.commit());
+                tracing::info!(
+                    "got transaction {} in block {}, latency {latency:?}",
+                    tx.commit(),
+                    block.height()
+                );
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
@@ -184,6 +184,11 @@ async fn submit_transactions(
     mut rng: ChaChaRng,
 ) {
     let client = Client::<Error>::new(opt.url.clone());
+
+    // Create an exponential distribution for sampling delay times. The distribution should have
+    // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
+    let delay_distr = rand_distr::Exp::<f64>::new(1f64 / opt.delay.as_millis() as f64).unwrap();
+
     loop {
         let tx = random_transaction(&opt, &mut rng);
         let hash = tx.commit();
@@ -207,7 +212,7 @@ async fn submit_transactions(
             .await
             .ok();
 
-        let delay = rng.gen_range(opt.min_delay..=opt.max_delay);
+        let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
         tracing::info!("sleeping for {delay:?}");
         sleep(delay).await;
     }

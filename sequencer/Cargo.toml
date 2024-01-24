@@ -22,6 +22,7 @@ anyhow = "1.0"
 ark-bls12-381 = "0.4"
 ark-ed-on-bn254 = "0.4"
 ark-serialize = { version = "0.4", features = ["derive"] }
+ark-std = "0.4"
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
 ] }
@@ -41,7 +42,8 @@ futures = "0.3"
 include_dir = "0.7"
 itertools = { workspace = true }
 lazy_static = "1.4"
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
+rand_distr = { workspace = true }
 serde_json = "1.0"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
