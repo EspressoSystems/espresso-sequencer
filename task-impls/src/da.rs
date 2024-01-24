@@ -192,7 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Record the payload we have promised to make available.
                 consensus
                     .saved_payloads
-                    .insert(payload_commitment, proposal.data.encoded_transactions);
+                    .insert(view, proposal.data.encoded_transactions);
             }
             HotShotEvent::DAVoteRecv(ref vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number());
