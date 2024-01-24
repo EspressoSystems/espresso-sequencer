@@ -590,8 +590,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     return;
                 };
-                let parent_commitment = parent.commit();
-                let Ok(state) = consensus.get_decided_state().validate_and_apply_header(
+                let Some(parent_state) = consensus.get_state(parent.view_number) else {
+                    error!("Parent state not found! Consensus internally inconsistent");
+                    return;
+                };
+                let Ok(state) = parent_state.validate_and_apply_header(
                     &proposal.data.block_header.clone(),
                     &parent.block_header.clone(),
                     &view,
@@ -599,6 +602,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Block header doesn't extend the proposal",);
                     return;
                 };
+                let parent_commitment = parent.commit();
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
                     justify_qc: justify_qc.clone(),
