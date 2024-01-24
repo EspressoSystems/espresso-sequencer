@@ -86,7 +86,7 @@ pub trait QueryablePayload: traits::BlockPayload {
     }
 
     /// List the transaction indices in the block.
-    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_>;
+    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a>;
 
     /// Enumerate the transactions in the block with their indices.
     fn enumerate<'a>(
