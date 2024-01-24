@@ -44,7 +44,7 @@ async fn libp2p_network_sync() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
 
 #[cfg(test)]
@@ -122,7 +122,7 @@ async fn libp2p_network_async() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
 
 #[cfg(test)]
@@ -260,7 +260,7 @@ async fn libp2p_network_partially_sync() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
 
 #[cfg(test)]
@@ -339,5 +339,5 @@ async fn libp2p_network_chaos() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
