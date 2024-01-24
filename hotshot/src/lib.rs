@@ -42,7 +42,7 @@ use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::traits::node_implementation::ChannelMaps;
 
 use hotshot_types::{
-    consensus::{Consensus, ConsensusMetricsValue, PayloadStore, View, ViewInner, ViewQueue},
+    consensus::{Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::Leaf,
     error::StorageSnafu,
     event::EventType,
@@ -218,11 +218,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let mut saved_leaves = HashMap::new();
-        let mut saved_payloads = PayloadStore::default();
+        let mut saved_payloads = BTreeMap::new();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
-        let payload_commitment = anchored_leaf.get_payload_commitment();
         if let Some(payload) = anchored_leaf.get_block_payload() {
-            let encoded_txns = match payload.encode() {
+            let encoded_txns: Vec<u8> = match payload.encode() {
                 // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
                 // <https://github.com/EspressoSystems/HotShot/issues/2115>
                 Ok(encoded) => encoded.into_iter().collect(),
@@ -230,7 +229,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                     return Err(HotShotError::BlockError { source: e });
                 }
             };
-            saved_payloads.insert(payload_commitment, encoded_txns);
+            saved_payloads.insert(anchored_leaf.get_view_number(), encoded_txns.clone());
+            saved_payloads.insert(TYPES::Time::new(1), encoded_txns);
         }
 
         let start_view = anchored_leaf.get_view_number();

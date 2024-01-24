@@ -10,7 +10,18 @@ use tagged_base64::tagged;
 
 /// A light client state
 #[tagged("LIGHT_CLIENT_STATE")]
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Default)]
+#[derive(
+    Clone,
+    Debug,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+    Default,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub struct LightClientState<F: PrimeField> {
     /// Current view number
     pub view_number: usize,
