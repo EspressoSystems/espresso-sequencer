@@ -9,7 +9,6 @@ use futures::FutureExt;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_types::light_client::{StateSignature, StateVerKey};
 use jf_primitives::signatures::SignatureScheme;
-use jf_utils::to_bytes;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -23,10 +22,10 @@ use tide_disco::{
 };
 use url::Url;
 
-/// The state signatures package is a light client state and its signatures collected
+/// The state signatures bundle is a light client state and its signatures collected
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StateSignaturesPackage {
-    /// The state for this signatures package
+pub struct StateSignaturesBundle {
+    /// The state for this signatures bundle
     state: LightClientState,
     /// The collected signatures
     signatures: HashMap<StateVerKey, StateSignature>,
@@ -38,16 +37,16 @@ pub struct StateSignaturesPackage {
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]
 struct StateRelayServerState {
-    /// Minimum weight to form an available state signature package
+    /// Minimum weight to form an available state signature bundle
     threshold: U256,
     /// Stake table
     known_nodes: HashMap<StateVerKey, U256>,
-    /// Signatures packages for each block height
-    packages: HashMap<u64, StateSignaturesPackage>,
+    /// Signatures bundles for each block height
+    bundles: HashMap<u64, HashMap<LightClientState, StateSignaturesBundle>>,
 
-    /// The latest state signatures package whose total weight exceeds the threshold
-    latest_available_package: Option<StateSignaturesPackage>,
-    /// The block height of the latest available state signature package
+    /// The latest state signatures bundle whose total weight exceeds the threshold
+    latest_available_bundle: Option<StateSignaturesBundle>,
+    /// The block height of the latest available state signature bundle
     latest_block_height: Option<u64>,
 
     /// A ordered queue of block heights, used for garbage collection.
@@ -80,10 +79,10 @@ type State = RwLock<StateRelayServerState>;
 type Error = ServerError;
 
 pub trait StateRelayServerDataSource {
-    /// Get the latest available signatures package.
+    /// Get the latest available signatures bundle.
     /// # Errors
-    /// Errors if there's no available signatures package.
-    fn get_latest_signature_package(&self) -> Result<StateSignaturesPackage, Error>;
+    /// Errors if there's no available signatures bundle.
+    fn get_latest_signature_bundle(&self) -> Result<StateSignaturesBundle, Error>;
 
     /// Post a signature to the relay server
     /// # Errors
@@ -97,9 +96,9 @@ pub trait StateRelayServerDataSource {
 }
 
 impl StateRelayServerDataSource for StateRelayServerState {
-    fn get_latest_signature_package(&self) -> Result<StateSignaturesPackage, Error> {
-        match &self.latest_available_package {
-            Some(package) => Ok(package.clone()),
+    fn get_latest_signature_bundle(&self) -> Result<StateSignaturesBundle, Error> {
+        match &self.latest_available_bundle {
+            Some(bundle) => Ok(bundle.clone()),
             None => Err(tide_disco::error::ServerError::catch_all(
                 StatusCode::NotFound,
                 "The light client state signatures are not ready.".to_owned(),
@@ -114,10 +113,8 @@ impl StateRelayServerDataSource for StateRelayServerState {
         signature: StateSignature,
     ) -> Result<(), Error> {
         if (state.block_height as u64) <= self.latest_block_height.unwrap_or(0) {
-            return Err(tide_disco::error::ServerError::catch_all(
-                StatusCode::Locked,
-                "The posted signature is no longer needed.".to_owned(),
-            ));
+            // This signature is no longer needed
+            return Ok(());
         }
         let one = U256::one();
         let weight = self.known_nodes.get(&key).unwrap_or(&one);
@@ -136,49 +133,41 @@ impl StateRelayServerDataSource for StateRelayServerState {
         }
         let block_height = state.block_height as u64;
         // TODO(Chengyu): this serialization should be removed once `LightClientState` implements `Eq`.
-        let bytes = to_bytes!(&state).unwrap();
-        let package = self.packages.entry(block_height).or_insert_with(|| {
+        let bundles_at_height = self.bundles.entry(block_height).or_insert_with(|| {
             self.queue.insert(block_height);
-            StateSignaturesPackage {
+            Default::default()
+        });
+        let bundle = bundles_at_height
+            .entry(state.clone())
+            .or_insert(StateSignaturesBundle {
                 state,
                 signatures: Default::default(),
                 accumulated_weight: U256::from(0),
-            }
-        });
-        let incoming_bytes = to_bytes!(&package.state).unwrap();
-        if bytes != incoming_bytes {
-            return Err(tide_disco::error::ServerError::catch_all(
-                StatusCode::BadRequest,
-                "The posted light client is not compatible with the one previously stored."
-                    .to_owned(),
-            ));
-        }
-        match package.signatures.entry(key) {
+            });
+        match bundle.signatures.entry(key) {
             std::collections::hash_map::Entry::Occupied(_) => {
-                return Err(tide_disco::error::ServerError::catch_all(
-                    StatusCode::BadRequest,
-                    "A signature is already posted at this block height for this key.".to_owned(),
-                ))
+                // A signature is already posted for this key with this state
+                return Ok(());
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 tracing::info!("Accepting new signature for block height {}.", block_height);
                 entry.insert(signature);
-                package.accumulated_weight += *weight;
+                bundle.accumulated_weight += *weight;
             }
         }
 
-        if package.accumulated_weight >= self.threshold {
+        if bundle.accumulated_weight >= self.threshold {
             tracing::info!(
-                "State signature package at block height {} is ready to serve.",
+                "State signature bundle at block height {} is ready to serve.",
                 block_height
             );
             self.latest_block_height = Some(block_height);
-            self.latest_available_package = self.packages.remove(&block_height);
+            self.latest_available_bundle = Some(bundle.clone());
             while let Some(height) = self.queue.pop_first() {
+                self.bundles.remove(&height);
                 if height == block_height {
                     break;
                 }
-                self.packages.remove(&height);
             }
         }
         Ok(())
@@ -216,7 +205,7 @@ where
     };
 
     api.get("getlateststate", |_req, state| {
-        async move { state.get_latest_signature_package() }.boxed()
+        async move { state.get_latest_signature_bundle() }.boxed()
     })?
     .post("poststatesignature", |req, state| {
         async move {

@@ -4,14 +4,14 @@ DESCRIPTION = "A relay server for storing and serving the light client states an
 FORMAT_VERSION = "0.1.0"
 
 [route.poststatesignature]
-PATH = ["state/post"]
+PATH = ["state"]
 METHOD = "POST"
 DOC = """
 Post a light client state and its signature for a given block height.
 """
 
 [route.getlateststate]
-PATH = ["state/getlatest"]
+PATH = ["state"]
 METHOD = "GET"
 DOC = """
 Fetch the latest light client state who has enough corresponding Schnorr signatures collected,

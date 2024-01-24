@@ -36,7 +36,7 @@ async fn main() {
     run_relay_server(
         None,
         args.threshold,
-        format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
+        format!("0.0.0.0:{}", args.port).parse().unwrap(),
     )
     .await
     .unwrap();

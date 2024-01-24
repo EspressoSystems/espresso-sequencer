@@ -70,8 +70,8 @@ processes:
   state-relay-server:
     command: state-relay-server
     environment:
-      - ESPRESSO_STATE_RELAY_SERVER_PORT:$ESPRESSO_STATE_RELAY_SERVER_PORT
-      - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD:$ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
+      - ESPRESSO_STATE_RELAY_SERVER_PORT
+      - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
     readiness_probe:
       http_get:
         scheme: http

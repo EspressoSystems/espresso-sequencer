@@ -50,7 +50,7 @@ pub(super) async fn state_signature_loop<N>(
             if let Some(leaf) = leaf_chain.first() {
                 let state = form_light_client_state(leaf, stake_table_comm);
                 let signature = context.sign_new_state(&state).await;
-                tracing::info!(
+                tracing::debug!(
                     "New leaves decided. Latest block height: {}, posting to relay server {:?}",
                     leaf.get_height(),
                     state_relay_server_url,
@@ -65,7 +65,7 @@ pub(super) async fn state_signature_loop<N>(
                         signature,
                     };
                     if let Err(error) = client
-                        .post::<()>("api/state/post")
+                        .post::<()>("api/state")
                         .body_binary(&request_body)
                         .unwrap()
                         .send()
