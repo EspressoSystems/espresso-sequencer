@@ -144,6 +144,11 @@ impl StateRelayServerDataSource for StateRelayServerState {
                 signatures: Default::default(),
                 accumulated_weight: U256::from(0),
             });
+        tracing::debug!(
+            "Accepting new signature for block height {} from {}.",
+            block_height,
+            key
+        );
         match bundle.signatures.entry(key) {
             std::collections::hash_map::Entry::Occupied(_) => {
                 // A signature is already posted for this key with this state
@@ -153,7 +158,6 @@ impl StateRelayServerDataSource for StateRelayServerState {
                 ));
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
-                tracing::info!("Accepting new signature for block height {}.", block_height);
                 entry.insert(signature);
                 bundle.accumulated_weight += *weight;
             }
