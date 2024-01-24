@@ -6,8 +6,8 @@
 use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
-    network::{CommunicationChannel, TestableNetworkingImplementation},
-    states::{ConsensusTime, InstanceState, TestableState},
+    network::{CommunicationChannel, NetworkReliability, TestableNetworkingImplementation},
+    states::{ConsensusTime, TestableBlock, TestableState},
     storage::{StorageError, StorageState, TestableStorage},
     ValidatedState,
 };
@@ -172,6 +172,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::CommitteeNetwork)>;
 }
 
@@ -230,6 +231,7 @@ where
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::CommitteeNetwork)> {
         let network_generator = <<I::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
                 expected_node_count,
@@ -237,6 +239,7 @@ where
                 0,
                 da_committee_size,
                 false,
+                reliability_config.clone(),
             );
         let da_generator = <<I::CommitteeNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
                 expected_node_count,
@@ -244,6 +247,7 @@ where
                 1,
                 da_committee_size,
                 true,
+                reliability_config
             );
 
         Box::new(move |id| {

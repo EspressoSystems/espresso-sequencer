@@ -33,7 +33,7 @@ use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use surf_disco::Url;
 
-use hotshot_types::traits::network::ViewMessage;
+use hotshot_types::traits::network::{NetworkReliability, ViewMessage};
 use std::collections::BTreeMap;
 use std::{
     collections::{btree_map::Entry, BTreeSet},
@@ -1259,6 +1259,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         _network_id: usize,
         _da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
@@ -1317,6 +1318,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <WebServerNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
@@ -1324,6 +1326,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel
             network_id,
             da_committee_size,
             is_da,
+            // network reliability is a testing feature
+            // not yet implemented for webcommchannel
+            None,
         );
         Box::new(move |node_id| Self(generator(node_id).into()))
     }

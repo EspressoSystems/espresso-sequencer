@@ -22,6 +22,7 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
 };
+use tracing::error;
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node};
 /// convenience type alias for state and block
@@ -250,6 +251,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         let remaining_nodes = total_num_nodes - (num_decided + num_failed);
 
         if check_leaf && self.leaf_map.len() != 1 {
+            error!("LEAF MAP (that is mismatched) IS: {:?}", self.leaf_map);
             self.status = ViewStatus::Err(OverallSafetyTaskErr::MismatchedLeaf);
             return;
         }

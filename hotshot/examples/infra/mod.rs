@@ -240,22 +240,22 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
     config_builder.to_connect_addrs(to_connect_addrs);
 
     let mesh_params =
-// NOTE I'm arbitrarily choosing these.
-match node_type {
-    NetworkNodeType::Bootstrap => MeshParams {
-        mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
-        mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
-        mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
-        mesh_n: libp2p_config.bootstrap_mesh_n,
-    },
-    NetworkNodeType::Regular => MeshParams {
-        mesh_n_high: libp2p_config.mesh_n_high,
-        mesh_n_low: libp2p_config.mesh_n_low,
-        mesh_outbound_min: libp2p_config.mesh_outbound_min,
-        mesh_n: libp2p_config.mesh_n,
-    },
-    NetworkNodeType::Conductor => unreachable!(),
-};
+        // NOTE I'm arbitrarily choosing these.
+        match node_type {
+            NetworkNodeType::Bootstrap => MeshParams {
+                mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
+                mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
+                mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
+                mesh_n: libp2p_config.bootstrap_mesh_n,
+            },
+            NetworkNodeType::Regular => MeshParams {
+                mesh_n_high: libp2p_config.mesh_n_high,
+                mesh_n_low: libp2p_config.mesh_n_low,
+                mesh_outbound_min: libp2p_config.mesh_outbound_min,
+                mesh_n: libp2p_config.mesh_n,
+            },
+            NetworkNodeType::Conductor => unreachable!(),
+        };
     config_builder.mesh_params(Some(mesh_params));
 
     let mut all_keys = BTreeSet::new();
@@ -286,6 +286,7 @@ match node_type {
         // NOTE: this introduces an invariant that the keys are assigned using this indexed
         // function
         all_keys,
+        None,
         da_keys.clone(),
         da_keys.contains(&pub_key),
     )

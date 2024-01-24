@@ -591,8 +591,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     return;
                 };
-                let parent_commitment = parent.commit();
-                let Ok(state) = consensus.get_decided_state().validate_and_apply_header(
+                let Some(parent_state) = consensus.get_state(parent.view_number) else {
+                    error!("Parent state not found! Consensus internally inconsistent");
+                    return;
+                };
+                let Ok(state) = parent_state.validate_and_apply_header(
                     &consensus.instance_state,
                     &proposal.data.block_header.clone(),
                     &parent.block_header.clone(),
@@ -601,6 +604,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Block header doesn't extend the proposal",);
                     return;
                 };
+                let parent_commitment = parent.commit();
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
                     justify_qc: justify_qc.clone(),
@@ -713,7 +717,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
                                 if let Some(encoded_txns) =
-                                    consensus.saved_payloads.get(leaf.get_payload_commitment())
+                                    consensus.saved_payloads.get(&leaf.get_view_number())
                                 {
                                     let payload = BlockPayload::from_bytes(
                                         encoded_txns.clone().into_iter(),

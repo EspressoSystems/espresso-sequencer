@@ -13,8 +13,13 @@ use hotshot_task::{
     BoxSyncFuture,
 };
 use hotshot_task_impls::events::HotShotEvent;
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::{
+    message::{MessageKind, SequencingMessage},
+    traits::election::Membership,
+};
+
 use hotshot_types::simple_vote::QuorumData;
-use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
@@ -25,9 +30,6 @@ use hotshot_types::{
 };
 use std::sync::Arc;
 use tracing::error;
-
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::message::{MessageKind, SequencingMessage};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
