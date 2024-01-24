@@ -47,10 +47,10 @@ awaited, `Fetch` will return immediately when the data is available, or block un
 available. But it is also possible to check if the data is available now and fail if not, using
 `Fetch::try_resolve()`.
 
-The two use cases of `Fetch` can be characterized as "on demand" fetching: we only look for data
-when asked for it, and only then do we attempt to fetch it if missing. The query service also
-supports proactive fetching, which can limit the impact of missing data on actual clients. This
-proactive fetching takes two forms:
+The uses of `Fetch` can be characterized as "on demand" fetching: we only look for data when asked
+for it, and only then do we attempt to fetch it if missing. The query service also supports
+proactive fetching, which can limit the impact of missing data on actual clients. This proactive
+fetching takes two forms:
 1. When a `Fetch` is created in response to an on-demand request, it may spawn a background task to
    actually retrieve the data, [when appropriate](#when-to-fetch). If the `Fetch` is dropped or
    discarded using `try_resolve`, the background task is allowed to continue, and the data will
