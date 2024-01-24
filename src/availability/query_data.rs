@@ -13,7 +13,7 @@
 use crate::{Header, Metadata, Payload, SignatureKey, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     simple_certificate::QuorumCertificate,
     traits::{
         self,
@@ -230,8 +230,12 @@ impl<Types: NodeType> LeafQueryData<Types> {
         &self.qc
     }
 
+    pub fn header(&self) -> &Header<Types> {
+        &self.leaf.block_header
+    }
+
     pub fn height(&self) -> u64 {
-        self.leaf.block_header.block_number()
+        self.header().block_number()
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
@@ -239,7 +243,11 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
-        self.leaf.block_header.commit()
+        self.header().commit()
+    }
+
+    pub fn payload_hash(&self) -> VidCommitment {
+        self.header().payload_commitment()
     }
 
     pub fn proposer(&self) -> SignatureKey<Types> {
@@ -257,47 +265,18 @@ pub struct BlockQueryData<Types: NodeType> {
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
-    /// Collect information about a block.
-    ///
-    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `payload`.
-    ///
-    /// # Errors
-    ///
-    /// Fails with an [`InconsistentLeafError`] if `qc` and `leaf` do not correspond to the same
-    /// block. If `payload` does not correspond to the same block as `leaf`, the behavior is
-    /// unspecified. In debug builds, the call may panic. However, this consistency check is quite
-    /// expensive, and may be omitted in optimized builds. The responsibility of ensuring
-    /// consistency between `leaf` and `payload` ultimately falls on the caller.
-    pub fn new(
-        leaf: &Leaf<Types>,
-        qc: &QuorumCertificate<Types>,
-        payload: Payload<Types>,
-    ) -> Result<Self, InconsistentLeafError<Types>> {
-        ensure!(
-            qc.data.leaf_commit == leaf.commit(),
-            InconsistentLeafSnafu {
-                leaf: leaf.commit(),
-                qc_leaf: qc.data.leaf_commit
-            },
-        );
-        Ok(Self {
-            hash: leaf.block_header.commit(),
-            header: leaf.block_header.clone(),
+    pub fn new(header: Header<Types>, payload: Payload<Types>) -> Self {
+        Self {
+            hash: header.commit(),
+            header,
             size: payload_size::<Types>(&payload),
             payload,
-        })
+        }
     }
 
     pub fn genesis() -> Self {
         let (header, payload, _) = Types::BlockHeader::genesis();
-        let size = payload_size::<Types>(&payload);
-        let hash = header.commit();
-        Self {
-            header,
-            payload,
-            hash,
-            size,
-        }
+        Self::new(header, payload)
     }
 
     pub fn header(&self) -> &Header<Types> {
@@ -306,6 +285,10 @@ impl<Types: NodeType> BlockQueryData<Types> {
 
     pub fn metadata(&self) -> &Metadata<Types> {
         self.header.metadata()
+    }
+
+    pub fn payload_hash(&self) -> VidCommitment {
+        self.header.payload_commitment()
     }
 
     pub fn payload(&self) -> &Payload<Types> {
@@ -359,6 +342,50 @@ where
         &self,
     ) -> impl '_ + Iterator<Item = (TransactionIndex<Types>, Transaction<Types>)> {
         self.payload.enumerate(self.metadata())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct PayloadQueryData<Types: NodeType> {
+    pub(crate) height: u64,
+    pub(crate) block_hash: BlockHash<Types>,
+    pub(crate) hash: VidCommitment,
+    pub(crate) size: u64,
+    pub(crate) data: Payload<Types>,
+}
+
+impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
+    fn from(block: BlockQueryData<Types>) -> Self {
+        Self {
+            height: block.height(),
+            block_hash: block.hash(),
+            hash: block.header.payload_commitment(),
+            size: block.size(),
+            data: block.payload,
+        }
+    }
+}
+
+impl<Types: NodeType> PayloadQueryData<Types> {
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn hash(&self) -> VidCommitment {
+        self.hash
+    }
+
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.block_hash
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    pub fn data(&self) -> &Payload<Types> {
+        &self.data
     }
 }
 

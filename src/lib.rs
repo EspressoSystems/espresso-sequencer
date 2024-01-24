@@ -30,6 +30,7 @@
 //! use hotshot_query_service::{
 //!     availability,
 //!     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+//!     fetching::provider::NoFetching,
 //!     node,
 //!     status::UpdateStatusData,
 //!     status, Error
@@ -41,7 +42,7 @@
 //! use tide_disco::App;
 //!
 //! // Create or open a data source.
-//! let data_source = FileSystemDataSource::<AppTypes>::create(storage_path)
+//! let data_source = FileSystemDataSource::<AppTypes, NoFetching>::create(storage_path, NoFetching)
 //!     .await
 //!     .map_err(Error::internal)?;
 //!
@@ -95,12 +96,13 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
+//! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
-//! let data_source = FileSystemDataSource::create(storage_path).await.map_err(Error::internal)?;
+//! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
 //! spawn(run_standalone_service(options, data_source, hotshot));
 //! # Ok(())
 //! # }
@@ -259,7 +261,7 @@
 //! # use hotshot_query_service::{QueryResult, SignatureKey};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-//! #   TransactionHash, TransactionIndex,
+//! #   PayloadQueryData, TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
 //! # use hotshot_query_service::node::NodeDataSource;
@@ -285,6 +287,9 @@
 //!     type BlockRange<R> = D::BlockRange<R>
 //!     where
 //!         R: RangeBounds<usize> + Send;
+//!     type PayloadRange<R> = D::PayloadRange<R>
+//!     where
+//!         R: RangeBounds<usize> + Send;
 //!
 //!     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<AppTypes>>
 //!     where
@@ -297,11 +302,17 @@
 //! #   async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<AppTypes>>
 //! #   where
 //! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
+//! #   async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<AppTypes>>
+//! #   where
+//! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
 //! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
 //! #   async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! #   async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+//! #   where
+//! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! }
@@ -367,6 +378,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
+pub mod fetching;
 pub mod metrics;
 pub mod node;
 mod resolvable;
@@ -382,16 +394,15 @@ use async_std::{
 };
 use futures::StreamExt;
 use hotshot::types::SystemContextHandle;
-use hotshot_types::{
-    data::Leaf,
-    traits::{
-        node_implementation::{NodeImplementation, NodeType},
-        BlockPayload,
-    },
+use hotshot_types::traits::{
+    node_implementation::{NodeImplementation, NodeType},
+    BlockPayload,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{App, StatusCode};
+
+pub use hotshot_types::data::Leaf;
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
@@ -497,7 +508,7 @@ mod test {
     use crate::{
         availability::{
             AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-            TransactionHash, TransactionIndex,
+            PayloadQueryData, TransactionHash, TransactionIndex,
         },
         metrics::PrometheusMetrics,
         node::NodeDataSource,
@@ -541,6 +552,12 @@ mod test {
             >>::BlockRange<R>
         where
             R: RangeBounds<usize> + Send;
+        type PayloadRange<R> =
+            <MockDataSource as AvailabilityDataSource<
+                MockTypes,
+            >>::PayloadRange<R>
+        where
+            R: RangeBounds<usize> + Send;
 
         async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
@@ -554,6 +571,12 @@ mod test {
         {
             self.hotshot_qs.get_block(id).await
         }
+        async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_payload(id).await
+        }
         async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -565,6 +588,12 @@ mod test {
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_block_range(range).await
+        }
+        async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            self.hotshot_qs.get_payload_range(range).await
         }
         async fn get_block_with_transaction(
             &self,
@@ -607,7 +636,7 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader)
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
             .await
             .unwrap();
         let module_state =
@@ -687,7 +716,7 @@ mod test {
         let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
-                .get::<u64>(&format!("node/proposals/{}/count", key))
+                .get::<u64>(&format!("node/proposals/{key}/count"))
                 .send()
                 .await
                 .unwrap(),

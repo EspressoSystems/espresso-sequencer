@@ -28,15 +28,15 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_query_service::{
-    data_source, run_standalone_service,
+    data_source,
+    fetching::provider::NoFetching,
+    run_standalone_service,
     status::UpdateStatusData,
     testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
     Error,
 };
 use hotshot_types::{
-    consensus::ConsensusMetricsValue,
-    light_client::StateKeyPair,
-    signature_key::{BLSPrivKey, BLSPubKey},
+    consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
@@ -55,11 +55,11 @@ struct Options {
 }
 
 #[cfg(not(target_os = "windows"))]
-type DataSource = data_source::SqlDataSource<MockTypes>;
+type DataSource = data_source::SqlDataSource<MockTypes, NoFetching>;
 
 // To use SqlDataSource, we need to run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(target_os = "windows")]
-type DataSource = data_source::FileSystemDataSource<MockTypes>;
+type DataSource = data_source::FileSystemDataSource<MockTypes, NoFetching>;
 
 type Db = <DataSource as DataSourceLifeCycle>::Storage;
 
@@ -79,14 +79,16 @@ async fn init_data_source(db: &Db) -> DataSource {
         .user("postgres")
         .password("password")
         .port(db.port())
-        .connect()
+        .connect(Default::default())
         .await
         .unwrap()
 }
 
 #[cfg(target_os = "windows")]
 async fn init_data_source(db: &Db) -> DataSource {
-    DataSource::create(db.path()).await.unwrap()
+    DataSource::create(db.path(), Default::default())
+        .await
+        .unwrap()
 }
 
 #[async_std::main]
@@ -127,13 +129,9 @@ async fn main() -> Result<(), Error> {
 async fn init_consensus(
     data_sources: &[DataSource],
 ) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
-    let priv_keys = (0..data_sources.len())
-        .map(|_| BLSPrivKey::generate(&mut rand::thread_rng()))
-        .collect::<Vec<_>>();
-    let pub_keys = priv_keys
-        .iter()
-        .map(BLSPubKey::from_private)
-        .collect::<Vec<_>>();
+    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..data_sources.len())
+        .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
+        .unzip();
     let master_map = MasterMap::new();
     let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = pub_keys
         .iter()

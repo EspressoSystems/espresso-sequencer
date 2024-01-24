@@ -108,10 +108,10 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::{ExtensibleDataSource, FileSystemDataSource},
+        data_source::ExtensibleDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{MockTransaction, MockTypes},
+            mocks::MockTransaction,
             setup_test, sleep,
         },
         Error,
@@ -233,7 +233,7 @@ mod test {
 
         let dir = TempDir::new("test_status_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes>::create(dir.path())
+            MockDataSource::create(dir.path(), Default::default())
                 .await
                 .unwrap(),
             0,
@@ -250,9 +250,7 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
-        >(&Options {
+        let mut api = define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>>(&Options {
             extensions: vec![extensions.into()],
             ..Default::default()
         })

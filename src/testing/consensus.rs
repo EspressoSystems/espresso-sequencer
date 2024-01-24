@@ -14,7 +14,10 @@ use super::mocks::{
     DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
     MockTransaction, MockTypes,
 };
-use crate::{data_source::FileSystemDataSource, status::UpdateStatusData, SignatureKey};
+use crate::{
+    data_source::FileSystemDataSource, fetching::provider::NoFetching, status::UpdateStatusData,
+    SignatureKey,
+};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -28,7 +31,7 @@ use hotshot::{
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
-    signature_key::{BLSPrivKey, BLSPubKey},
+    signature_key::BLSPubKey,
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
@@ -48,19 +51,15 @@ pub struct MockNetwork<D: DataSourceLifeCycle> {
 
 // MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
 // convenient type alias.
-pub type MockDataSource = FileSystemDataSource<MockTypes>;
+pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
 
 const MINIMUM_NODES: usize = 2;
 
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
-        let priv_keys = (0..MINIMUM_NODES)
-            .map(|_| BLSPrivKey::generate(&mut rand::thread_rng()))
-            .collect::<Vec<_>>();
-        let pub_keys = priv_keys
-            .iter()
-            .map(BLSPubKey::from_private)
-            .collect::<Vec<_>>();
+        let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..MINIMUM_NODES)
+            .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
+            .unzip();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
         let stake = 1u64;
@@ -92,13 +91,13 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         next_view_timeout: 10000,
                         timeout_ratio: (11, 10),
                         propose_min_round_time: Duration::from_secs(0),
-                        propose_max_round_time: Duration::from_secs(2),
+                        propose_max_round_time: Duration::from_millis(500),
                         min_transactions: 1,
                         max_transactions: NonZeroUsize::new(100).unwrap(),
                         num_bootstrap: 0,
                         execution_type: ExecutionType::Continuous,
                         election_config: None,
-                        da_committee_size: total_nodes.into(),
+                        da_committee_size: pub_keys.len(),
                     };
 
                     let pub_keys = pub_keys.clone();

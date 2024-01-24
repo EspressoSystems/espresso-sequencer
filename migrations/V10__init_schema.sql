@@ -2,6 +2,7 @@ CREATE TABLE header
 (
     height    BIGINT  PRIMARY KEY,
     hash      VARCHAR NOT NULL UNIQUE,
+    payload_hash VARCHAR NOT NULL,
 
     -- For convenience, we store the entire application-specific header type as JSON. Just like
     -- `leaf.leaf` and `leaf.qc`, this allows us to easily reconstruct the entire header using
@@ -23,7 +24,7 @@ CREATE TABLE leaf
 (
     height     BIGINT  PRIMARY KEY REFERENCES header (height),
     hash       VARCHAR NOT NULL UNIQUE,
-    proposer   JSONB   NOT NULL,
+    proposer   VARCHAR NOT NULL,
     block_hash VARCHAR NOT NULL REFERENCES header (hash),
 
     -- For convenience, we store the entire leaf and justifying QC as JSON blobs. There is a bit of
@@ -40,7 +41,6 @@ CREATE INDEX leaf_proposer ON leaf (proposer);
 
 CREATE TABLE transaction
 (
-    id   SERIAL PRIMARY KEY,
     hash VARCHAR NOT NULL,
     -- Block containing this transaction.
     block_height BIGINT NOT NULL REFERENCES header(height),
@@ -49,5 +49,6 @@ CREATE TABLE transaction
     -- make use of the transaction index in its own SQL queries.
     index JSONB NOT NULL
 );
+ALTER TABLE transaction ADD CONSTRAINT transaction_pk PRIMARY KEY (block_height, index);
 -- This index is not unique, because nothing stops HotShot from sequencing duplicate transactions.
 CREATE INDEX transaction_hash ON transaction (hash);

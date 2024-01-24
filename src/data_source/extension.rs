@@ -14,7 +14,8 @@ use super::VersionedDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
@@ -137,6 +138,9 @@ where
     type BlockRange<R> = D::BlockRange<R>
     where
         R: RangeBounds<usize> + Send;
+    type PayloadRange<R> = D::PayloadRange<R>
+    where
+        R: RangeBounds<usize> + Send;
 
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
@@ -150,6 +154,12 @@ where
     {
         self.data_source.get_block(id).await
     }
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_payload(id).await
+    }
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
@@ -161,6 +171,12 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
+    }
+    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_payload_range(range).await
     }
     async fn get_block_with_transaction(
         &self,
@@ -277,13 +293,13 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::super::{availability_tests, status_tests, FileSystemDataSource};
+    use super::super::{availability_tests, status_tests};
     use super::ExtensibleDataSource;
-    use crate::testing::mocks::MockTypes;
+    use crate::testing::consensus::MockDataSource;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(ExtensibleDataSource<FileSystemDataSource<MockTypes>, ()>);
+    instantiate_data_source_tests!(ExtensibleDataSource<MockDataSource, ()>);
 }

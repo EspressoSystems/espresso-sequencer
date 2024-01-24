@@ -14,17 +14,21 @@ use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSourc
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        QueryablePayload, ResourceId, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        UpdateAvailabilityData,
+    },
+    fetching::{
+        self,
+        request::{self, PayloadRequest},
+        Callback, Provider,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
-    Payload, QueryResult, SignatureKey,
+    Header, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
-use async_std::{
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    task::spawn,
-};
+use anyhow::Context;
+use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -32,11 +36,13 @@ use futures::{
     future::{join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use snafu::ensure;
 use std::{
     cmp::{min, Ordering},
     fmt::{Debug, Display},
     future::IntoFuture,
+    iter::once,
     ops::{Bound, Deref, DerefMut, Range, RangeBounds},
 };
 
@@ -51,9 +57,9 @@ const RANGE_CHUNK_SIZE: usize = 25;
 /// The most basic kind of data source.
 ///
 /// A data source is constructed modularly by combining a [storage](super::storage) implementation
-/// with a [fetcher](super::fetcher). The former allows the query service to store the data it has
-/// persistently in an easily accessible storage medium, such as the local file system or a
-/// database. This allows it to answer queries efficiently and to maintain its state across
+/// with a [Fetcher](crate::fetching::Fetcher). The former allows the query service to store the
+/// data it has persistently in an easily accessible storage medium, such as the local file system
+/// or a database. This allows it to answer queries efficiently and to maintain its state across
 /// restarts. The latter allows the query service to fetch data that is missing from its storage
 /// from an external data availability provider, such as the Tiramisu DA network or another instance
 /// of the query service.
@@ -92,7 +98,7 @@ where
     /// Create a data source with local storage and a remote data availability provider.
     pub async fn new(storage: S, provider: P) -> anyhow::Result<Self> {
         let mut ds = Self {
-            fetcher: Arc::new(Fetcher::new(storage, provider)),
+            fetcher: Arc::new(Fetcher::new(storage, provider).await),
             metrics: Default::default(),
         };
 
@@ -198,12 +204,15 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
-    P: Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
 {
     type LeafRange<R> = BoxStream<'static, Fetch<LeafQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
     type BlockRange<R> = BoxStream<'static, Fetch<BlockQueryData<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
+    type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
 
@@ -221,6 +230,13 @@ where
         self.fetcher.get(id.into()).await
     }
 
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(id.into()).await
+    }
+
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
@@ -229,6 +245,13 @@ where
     }
 
     async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -254,11 +277,11 @@ where
     type Error = S::Error;
 
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        leaf.store(&mut *self.fetcher.storage.write().await).await
+        self.fetcher.storage.write().await.insert_leaf(leaf).await
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        block.store(&mut *self.fetcher.storage.write().await).await
+        self.fetcher.storage.write().await.insert_block(block).await
     }
 }
 
@@ -331,7 +354,9 @@ where
     Types: NodeType,
 {
     storage: RwLock<NotifyStorage<Types, S>>,
-    _provider: P,
+    provider: Arc<P>,
+    payload_fetcher: Arc<fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>>,
+    leaf_fetcher: Arc<fetching::Fetcher<request::LeafRequest, LeafCallback<Types, S, P>>>,
 }
 
 #[derive(Debug)]
@@ -340,22 +365,66 @@ where
     Types: NodeType,
 {
     storage: S,
+    height: u64,
     block_notifier: Notifier<BlockQueryData<Types>>,
     leaf_notifier: Notifier<LeafQueryData<Types>>,
+}
+
+impl<Types, S> NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: UpdateAvailabilityData<Types>,
+{
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), S::Error> {
+        self.leaf_notifier.notify(&leaf);
+        if leaf.height() + 1 > self.height {
+            self.height = leaf.height() + 1;
+        }
+        self.storage.insert_leaf(leaf).await
+    }
+
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), S::Error> {
+        self.block_notifier.notify(&block);
+        if block.height() + 1 > self.height {
+            self.height = block.height() + 1;
+        }
+        self.storage.insert_block(block).await
+    }
+}
+
+impl<Types, S> NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: VersionedDataSource,
+{
+    async fn commit(&mut self) -> Result<(), S::Error> {
+        self.storage.commit().await
+    }
 }
 
 impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
+    S: NodeDataSource<Types>,
 {
-    fn new(storage: S, provider: P) -> Self {
+    async fn new(storage: S, provider: P) -> Self {
+        // Get the height from storage if possible. If not, it's fine: we'll update this as soon as
+        // we see a new block or leaf anyways.
+        let height = storage.block_height().await.unwrap_or_else(|err| {
+            tracing::error!("unable to load block height, defaulting to 0: {err}");
+            0
+        }) as u64;
+
         Self {
             storage: RwLock::new(NotifyStorage {
                 storage,
+                height,
                 block_notifier: Notifier::new(),
                 leaf_notifier: Notifier::new(),
             }),
-            _provider: provider,
+            provider: Arc::new(provider),
+            payload_fetcher: Default::default(),
+            leaf_fetcher: Default::default(),
         }
     }
 }
@@ -365,7 +434,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
-    P: Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
 {
     async fn get<T, R>(self: &Arc<Self>, req: R) -> Fetch<T>
     where
@@ -378,7 +447,7 @@ where
         // necessary, since sending notifications requires a write lock. Hence, we will not miss a
         // notification.
         let storage = self.storage.read().await;
-        self.ok_or_fetch(&storage, req, T::load(&storage.storage, req).await)
+        self.ok_or_fetch(&storage, req, T::load(&storage, req).await)
             .await
     }
 
@@ -415,7 +484,7 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
-        let ts = T::load_range(&storage.storage, chunk.clone())
+        let ts = T::load_range(&storage, chunk.clone())
             .await
             .unwrap_or_default();
         // Log and discard error information; we want a list of Option where None indicates an
@@ -424,6 +493,13 @@ where
         // Storage may return fewer objects than asked for if we hit the end of the current chain.
         // Pad out to the end of the chunk with None, indicating that objects we don't have yet must
         // be fetched.
+        if ts.len() < chunk.len() {
+            tracing::info!(
+                "items {}-{} in chunk are not available, will be fetched",
+                ts.len(),
+                chunk.len()
+            );
+        }
         let padding = std::iter::repeat(None).take(chunk.len() - ts.len());
         let ts = ts.chain(padding);
         // Kick off a fetch for each missing object.
@@ -453,7 +529,13 @@ where
         R: Into<T::Request> + Send,
         T: Fetchable<Types> + Send + Sync + 'static,
     {
-        self.some_or_fetch(storage, req, res.ok_or_trace()).await
+        let req = req.into();
+        self.some_or_fetch(
+            storage,
+            req,
+            res.context(format!("req: {req:?}")).ok_or_trace(),
+        )
+        .await
     }
 
     async fn some_or_fetch<R, T>(
@@ -513,27 +595,42 @@ where
             });
 
         // Trigger an active fetch from a remote provider if possible.
-        if let Some(active) = T::active_fetch(self, req).await {
-            let fetcher = self.clone();
-            spawn(async move {
-                tracing::info!("spawned active fetch for {req:?}");
-                let obj = active.await;
-                tracing::info!("fetched object {req:?}");
-
-                // Store the resource in local storage, so we can avoid fetching it in the future.
-                let mut storage = fetcher.storage.write().await;
-                if let Err(err) = obj.store(&mut *storage).await {
-                    // It is unfortunate if this fails, but we can still proceed by returning the
-                    // resource that we fetched, keeping it in memory. Simply log the error and move
-                    // on.
-                    tracing::warn!("failed to store fetched resource {req:?}: {err}");
-                }
-            });
-        }
+        //
+        // We pass in the lock we have on `storage`, so that `active_fetch` is allowed to read from
+        // storage without needing to recursively acquire a read lock. This is important because
+        // `active_fetch` sometimes needs to read from storage in order to decide whether it is
+        // appropriate to spawn an active fetching task.
+        //
+        // Ordinarily, taking a read-only lock recursively from the same task would be fine,
+        // but because async_std::RwLock is "write-preferring" (attempts to acquire a read lock
+        // block if there are concurrent attempts to acquire a write lock) we can have the following
+        // deadlock:
+        // * This task acquires `storage` in the caller of this function
+        // * Another task completes a fetch and attempts to acquire a write lock on storage to save
+        //   the fetched resource. This blocks since we have a read lock.
+        // * This task (in `active_fetch`) attempts to acquire a read lock on storage. This blocks
+        //   due to the concurrent request for a write lock. However as long as we are blocked, we
+        //   can never release the _original_ read lock we had on `storage`, and so we can never
+        //   unblock the task waiting for a write lock, which in turn means we can never become
+        //   unblocked ourselves.
+        T::active_fetch(self.clone(), storage, req).await;
 
         // Wait for the object to arrive.
         Fetch::Pending(fut.boxed())
     }
+}
+
+/// A provider which can be used as a fetcher by the availability service.
+trait AvailabilityProvider<Types: NodeType>:
+    Provider<Types, request::LeafRequest> + Provider<Types, request::PayloadRequest> + Sync + 'static
+{
+}
+impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
+    P: Provider<Types, request::LeafRequest>
+        + Provider<Types, request::PayloadRequest>
+        + Sync
+        + 'static
+{
 }
 
 /// Objects which can be fetched from a remote DA provider and cached in local storage.
@@ -553,7 +650,7 @@ where
     /// Does this object satisfy the given request?
     fn satisfies(&self, req: Self::Request) -> bool;
 
-    /// Create a future for fetching the object from a remote provider, if possible.
+    /// Spawn a task to fetch the object from a remote provider, if possible.
     ///
     /// An active fetch will only be triggered if:
     /// * There is not already an active fetch in progress for the same object
@@ -563,19 +660,21 @@ where
     ///   leaf by height but not by hash, since we can't guarantee that a leaf with an arbitrary
     ///   hash exists.
     ///
-    /// If we do not trigger an active fetch for an object, but the object does in fact exist, we
-    /// will still eventually receive it passively, since we will eventually receive all blocks and
-    /// leaves that are ever produced.
+    /// If we do trigger an active fetch for an object, the provided callback will be called if and
+    /// when the fetch completes successfully. The callback should be responsible for notifying any
+    /// passive listeners that the object has been retrieved. If we do not trigger an active fetch
+    /// for an object, this function does nothing.
+    ///
+    /// In either case, as long as the requested object does in fact exist, we will eventually
+    /// receive it passively, since we will eventually receive all blocks and leaves that are ever
+    /// produced. Active fetching merely helps us receive certain objects sooner.
     async fn active_fetch<S, P>(
-        _fetcher: &Fetcher<Types, S, P>,
-        _req: Self::Request,
-    ) -> Option<BoxFuture<'static, Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
-        // TODO implement active fetching
-        None
-    }
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>;
 
     /// Wait for someone else to fetch the object.
     async fn passive_fetch<S>(
@@ -585,13 +684,8 @@ where
     where
         S: AvailabilityStorage<Types>;
 
-    /// Cache the object in local storage.
-    async fn store<S>(self, storage: &mut NotifyStorage<Types, S>) -> Result<(), S::Error>
-    where
-        S: UpdateAvailabilityData<Types> + Send + Sync;
-
     /// Load an object from local storage.
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>;
 }
@@ -605,7 +699,10 @@ where
     type RangedRequest: From<usize> + Send;
 
     /// Load a range of these objects from local storage.
-    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(
+        storage: &NotifyStorage<Types, S>,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static;
@@ -621,8 +718,8 @@ where
 
     fn satisfies(&self, req: Self::Request) -> bool {
         match req {
-            ResourceId::Number(n) => self.height() == n as u64,
-            ResourceId::Hash(h) => self.hash() == h,
+            LeafId::Number(n) => self.height() == n as u64,
+            LeafId::Hash(h) => self.hash() == h,
         }
     }
 
@@ -641,20 +738,82 @@ where
             .boxed()
     }
 
-    async fn store<S>(self, storage: &mut NotifyStorage<Types, S>) -> Result<(), S::Error>
-    where
-        S: UpdateAvailabilityData<Types> + Send + Sync,
+    async fn active_fetch<S, P>(
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>,
     {
-        storage.leaf_notifier.notify(&self);
-        storage.storage.insert_leaf(self).await
+        fetch_leaf_with_callbacks(fetcher, storage, req, None)
     }
 
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.get_leaf(req).await
+        // Fail quickly, without touching storage, if the requested height is greater than the
+        // current height. In this case, we know we don't have the leaf.
+        if let LeafId::Number(n) = req {
+            ensure!((n as u64) < storage.height, NotFoundSnafu);
+        }
+        storage.storage.get_leaf(req).await
     }
+}
+
+fn fetch_leaf_with_callbacks<Types, S, P, I>(
+    fetcher: Arc<Fetcher<Types, S, P>>,
+    storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+    req: LeafId<Types>,
+    callbacks: I,
+) where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+    I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
+    I::IntoIter: Send,
+{
+    match req {
+        LeafId::Number(n) => {
+            let height = storage.height as usize;
+            if n >= height {
+                // If the requested leaf has yet to be produced, based on the current block height,
+                // there is no point in requesting it. We will receive it passively once it is
+                // created.
+                tracing::info!("not fetching leaf {n} because height is only {height}");
+                return;
+            }
+
+            let fetcher = fetcher.clone();
+            fetcher.leaf_fetcher.clone().spawn_fetch(
+                n.into(),
+                fetcher.provider.clone(),
+                once(LeafCallback::Leaf { fetcher }).chain(callbacks),
+            );
+        }
+        LeafId::Hash(h) => {
+            // We don't actively fetch leaves when requested by hash, because we have no way of
+            // knowing whether a leaf with such a hash actually exists, and we don't want to bother
+            // peers with requests for non-existant leaves.
+            tracing::info!("not fetching unknown leaf {h}");
+        }
+    }
+}
+
+async fn store_leaf<Types, S>(
+    storage: &mut NotifyStorage<Types, S>,
+    leaf: LeafQueryData<Types>,
+) -> anyhow::Result<()>
+where
+    Types: NodeType,
+    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+{
+    tracing::info!("storing leaf");
+    storage.insert_leaf(leaf).await?;
+    storage.commit().await?;
+    Ok(())
 }
 
 #[async_trait]
@@ -665,12 +824,22 @@ where
 {
     type RangedRequest = LeafId<Types>;
 
-    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(
+        storage: &NotifyStorage<Types, S>,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.get_leaf_range(range).await
+        // Return quickly, without touching storage, if the start of the requested range is greater
+        // than the current height. In this case, we know storage would return an empty range.
+        match range.start_bound() {
+            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
+            Bound::Excluded(n) if (*n as u64) + 1 >= storage.height => return Ok(vec![]),
+            _ => {}
+        }
+        storage.storage.get_leaf_range(range).await
     }
 }
 
@@ -733,8 +902,9 @@ where
 
     fn satisfies(&self, req: Self::Request) -> bool {
         match req {
-            BlockRequest::Id(ResourceId::Number(n)) => self.height() == n as u64,
-            BlockRequest::Id(ResourceId::Hash(h)) => self.hash() == h,
+            BlockRequest::Id(BlockId::Number(n)) => self.height() == n as u64,
+            BlockRequest::Id(BlockId::Hash(h)) => self.hash() == h,
+            BlockRequest::Id(BlockId::PayloadHash(h)) => self.payload_hash() == h,
             BlockRequest::WithTransaction(h) => self.transaction_by_hash(h).is_some(),
         }
     }
@@ -754,21 +924,87 @@ where
             .boxed()
     }
 
-    async fn store<S>(self, storage: &mut NotifyStorage<Types, S>) -> Result<(), S::Error>
-    where
-        S: UpdateAvailabilityData<Types> + Send + Sync,
+    async fn active_fetch<S, P>(
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>,
     {
-        storage.block_notifier.notify(&self);
-        storage.storage.insert_block(self).await
+        match req {
+            BlockRequest::Id(id) => {
+                // First, check if at least the header is available in local storage. If it is, we
+                // benefit two ways:
+                // 1. We know for sure the corresponding block exists, so we can unconditionally
+                //    trigger an active fetch without unnecessarily bothering our peers.
+                // 2. We only need to fetch the payload, not the full block. Not only is this
+                //    marginally less data to download, there are some providers that may only be
+                //    able to provide payloads, not full blocks, such as HotShot DA committee
+                //    members.
+                if let Some(header) = load_header(&**storage, id)
+                    .await
+                    .context("loading header for block {id}")
+                    .ok_or_trace()
+                {
+                    fetch_block_with_header(fetcher, header);
+                    return;
+                }
+
+                // If the header is _not_ present, we may still be able to fetch the block, but we
+                // need to fetch the header (in fact, the entire leaf) first. This is because we
+                // have an invariant that we should not store a block payload in the database unless
+                // we already have its corresponding header and leaf.
+                match id {
+                    BlockId::Number(n) => {
+                        fetch_leaf_with_callbacks(
+                            fetcher.clone(),
+                            storage,
+                            n.into(),
+                            [LeafCallback::Block { fetcher }],
+                        );
+                    }
+                    BlockId::Hash(h) => {
+                        // Given only the hash, we cannot tell if the corresonding leaf actually
+                        // exists, since we don't have a corresponding header. Therefore, we will
+                        // not spawn an active fetch.
+                        tracing::info!("not fetching unknown block {h}");
+                        return;
+                    }
+                    BlockId::PayloadHash(h) => {
+                        // Same as above, we don't fetch a block with a payload that is not known to
+                        // exist.
+                        tracing::info!("not fetching block with unknown payload {h}");
+                        return;
+                    }
+                }
+            }
+            BlockRequest::WithTransaction(h) => {
+                // We don't actively fetch blocks when requested by transaction, because without the
+                // block payload, we have no way of knowing whether a block with such a transaction
+                // actually exists, and we don't want to bother peers with requests for non-existant
+                // blocks.
+                tracing::info!("not fetching block with unknown transaction {h}");
+            }
+        }
     }
 
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
         match req {
-            BlockRequest::Id(id) => storage.get_block(id).await,
-            BlockRequest::WithTransaction(h) => Ok(storage.get_block_with_transaction(h).await?.0),
+            BlockRequest::Id(id) => {
+                // Fail quickly, without touching storage, if the requested height is greater than
+                // the current height. In this case, we know we don't have the block.
+                if let BlockId::Number(n) = id {
+                    ensure!((n as u64) < storage.height, NotFoundSnafu);
+                }
+                storage.storage.get_block(id).await
+            }
+            BlockRequest::WithTransaction(h) => {
+                Ok(storage.storage.get_block_with_transaction(h).await?.0)
+            }
         }
     }
 }
@@ -781,13 +1017,76 @@ where
 {
     type RangedRequest = BlockRequest<Types>;
 
-    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(
+        storage: &NotifyStorage<Types, S>,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.get_block_range(range).await
+        // Return quickly, without touching storage, if the start of the requested range is greater
+        // than the current height. In this case, we know storage would return an empty range.
+        match range.start_bound() {
+            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
+            Bound::Excluded(n) if (*n as u64 + 1) >= storage.height => return Ok(vec![]),
+            _ => {}
+        }
+        storage.storage.get_block_range(range).await
     }
+}
+
+fn fetch_block_with_header<Types, S, P>(fetcher: Arc<Fetcher<Types, S, P>>, header: Header<Types>)
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    // Now that we have the header, we only need to retrieve the payload.
+    tracing::info!(
+        "spawned active fetch for payload {:?} (height {})",
+        header.payload_commitment(),
+        header.block_number()
+    );
+    fetcher.payload_fetcher.spawn_fetch(
+        PayloadRequest(header.payload_commitment()),
+        fetcher.provider.clone(),
+        once(PayloadCallback {
+            header,
+            fetcher: fetcher.clone(),
+        }),
+    );
+}
+
+async fn store_block<Types, S>(
+    storage: &mut NotifyStorage<Types, S>,
+    block: BlockQueryData<Types>,
+) -> anyhow::Result<()>
+where
+    Types: NodeType,
+    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+{
+    storage.insert_block(block).await?;
+    storage.commit().await?;
+    Ok(())
+}
+
+async fn load_header<Types, S>(
+    storage: &NotifyStorage<Types, S>,
+    id: BlockId<Types>,
+) -> QueryResult<Header<Types>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types>,
+{
+    // Fail quickly, without touching storage, if the requested height is greater than the current
+    // height. In this case, we know we don't have the header.
+    if let BlockId::Number(n) = id {
+        ensure!((n as u64) < storage.height, NotFoundSnafu);
+    }
+    storage.storage.get_header(id).await
 }
 
 #[async_trait]
@@ -826,19 +1125,229 @@ where
         .boxed()
     }
 
-    async fn store<S>(self, storage: &mut NotifyStorage<Types, S>) -> Result<(), S::Error>
-    where
-        S: UpdateAvailabilityData<Types> + Send + Sync,
+    async fn active_fetch<S, P>(
+        _fetcher: Arc<Fetcher<Types, S, P>>,
+        _storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>,
     {
-        storage.block_notifier.notify(&self.0);
-        storage.storage.insert_block(self.0).await
+        // We don't actively fetch blocks when requested by transaction, because without the block
+        // payload, we have no way of knowing whether a block with such a transaction actually
+        // exists, and we don't want to bother peers with requests for non-existant blocks.
+        tracing::info!("not fetching block with unknown transaction {req}");
     }
 
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.get_block_with_transaction(req).await
+        storage.storage.get_block_with_transaction(req).await
+    }
+}
+
+#[async_trait]
+impl<Types> Fetchable<Types> for PayloadQueryData<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+    type Request = BlockId<Types>;
+
+    fn satisfies(&self, req: Self::Request) -> bool {
+        match req {
+            BlockId::Number(n) => self.height() == n as u64,
+            BlockId::Hash(h) => self.block_hash() == h,
+            BlockId::PayloadHash(h) => self.hash() == h,
+        }
+    }
+
+    async fn passive_fetch<S>(
+        storage: &NotifyStorage<Types, S>,
+        req: Self::Request,
+    ) -> BoxFuture<'static, Option<Self>>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage
+            .block_notifier
+            .wait_for(move |block| block.satisfies(req.into()))
+            .await
+            .into_future()
+            .map(|block| block.map(PayloadQueryData::from))
+            .boxed()
+    }
+
+    async fn active_fetch<S, P>(
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>,
+    {
+        // We don't have storage for the payload alone, only the whole block. So if we need to fetch
+        // the payload, we just fetch the whole block (which may end up fetching only the payload,
+        // if that's all that's needed to complete the block).
+        BlockQueryData::active_fetch(fetcher, storage, req.into()).await
+    }
+
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        // Fail quickly, without touching storage, if the requested height is greater than the
+        // current height. In this case, we know we don't have the payload.
+        if let BlockId::Number(n) = req {
+            ensure!((n as u64) < storage.height, NotFoundSnafu);
+        }
+        storage.storage.get_payload(req).await
+    }
+}
+
+#[async_trait]
+impl<Types> RangedFetchable<Types> for PayloadQueryData<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+    type RangedRequest = BlockId<Types>;
+
+    async fn load_range<S, R>(
+        storage: &NotifyStorage<Types, S>,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Self>>>
+    where
+        S: AvailabilityStorage<Types>,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        // Return quickly, without touching storage, if the start of the requested range is greater
+        // than the current height. In this case, we know storage would return an empty range.
+        match range.start_bound() {
+            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
+            Bound::Excluded(n) if (*n as u64 + 1) >= storage.height => return Ok(vec![]),
+            _ => {}
+        }
+        storage.storage.get_payload_range(range).await
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+struct PayloadCallback<Types: NodeType, S, P> {
+    header: Header<Types>,
+    #[derivative(Debug = "ignore")]
+    fetcher: Arc<Fetcher<Types, S, P>>,
+}
+
+impl<Types: NodeType, S, P> PartialEq for PayloadCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for PayloadCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> Ord for PayloadCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.header.block_number().cmp(&other.header.block_number())
+    }
+}
+
+impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
+where
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types>,
+    P: AvailabilityProvider<Types>,
+{
+    async fn run(self, payload: Payload<Types>) {
+        tracing::info!("fetched payload {:?}", self.header.payload_commitment());
+        let block = BlockQueryData::new(self.header, payload);
+
+        // Store the block in local storage, so we can avoid fetching it in the future.
+        {
+            let mut storage = self.fetcher.storage.write().await;
+            if let Err(err) = store_block(&mut *storage, block.clone()).await {
+                // It is unfortunate if this fails, but we can still proceed by returning
+                // the block that we fetched, keeping it in memory. Simply log the error and
+                // move on.
+                tracing::warn!("failed to store fetched block {}: {err}", block.height());
+            }
+        }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum LeafCallback<Types: NodeType, S, P> {
+    /// Callback when fetching the leaf for its own sake.
+    Leaf {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+    /// Callback when fetching the leaf in order to then look up a block.
+    Block {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+}
+
+impl<Types: NodeType, S, P> PartialEq for LeafCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for LeafCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> Ord for LeafCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            // Store leaves in the database before storing blocks.
+            (Self::Leaf { .. }, Self::Block { .. }) => Ordering::Less,
+            (Self::Block { .. }, Self::Leaf { .. }) => Ordering::Greater,
+            _ => Ordering::Equal,
+        }
+    }
+}
+
+impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
+where
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    async fn run(self, leaf: LeafQueryData<Types>) {
+        match self {
+            Self::Leaf { fetcher } => {
+                let height = leaf.height();
+                tracing::info!("fetched leaf {height}");
+                let mut storage = fetcher.storage.write().await;
+                if let Err(err) = store_leaf(&mut *storage, leaf).await {
+                    // It is unfortunate if this fails, but we can still proceed by
+                    // returning the leaf that we fetched, keeping it in memory.
+                    // Simply log the error and move on.
+                    tracing::warn!("failed to store fetched leaf {height}: {err}");
+                }
+            }
+            Self::Block { fetcher } => {
+                tracing::info!("fetched leaf {}, will now fetch payload", leaf.height());
+                fetch_block_with_header(fetcher, leaf.leaf.block_header);
+            }
+        }
     }
 }
 
@@ -884,7 +1393,9 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         match self {
             Ok(t) => Some(t),
             Err(err) => {
-                tracing::warn!("error load resource from local storage, will try to fetch: {err}");
+                tracing::warn!(
+                    "error loading resource from local storage, will try to fetch: {err:#}"
+                );
                 None
             }
         }

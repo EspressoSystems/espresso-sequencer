@@ -85,13 +85,10 @@ where
                 UpdateNodeData::insert_leaf(self, leaf_data).await?;
 
                 if let Some(block) = leaf.get_block_payload() {
-                    // For the same reason, this will not panic either.
-                    self.insert_block(
-                        BlockQueryData::new(leaf, &qc, block).expect("inconsistent block"),
-                    )
-                    .await?;
+                    self.insert_block(BlockQueryData::new(leaf.block_header.clone(), block))
+                        .await?;
                 } else {
-                    tracing::info!(
+                    tracing::error!(
                         "block {} not available at decide",
                         leaf.block_header.block_number()
                     );

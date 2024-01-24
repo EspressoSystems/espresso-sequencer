@@ -2857,6 +2857,7 @@ dependencies = [
  "tokio-postgres",
  "toml 0.8.8",
  "tracing",
+ "trait-variant",
 ]
 
 [[package]]
@@ -7417,6 +7418,17 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "trait-variant"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45e1a477061e97925d81a2f89fb73b2b8038e6baa5a0023bad380ac23b5f4fa6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
 ]
 
 [[package]]

@@ -51,7 +51,7 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 pub mod availability_tests {
     use crate::{
         availability::{
-            payload_size, BlockQueryData, Fetch, LeafQueryData, UpdateAvailabilityData,
+            payload_size, BlockId, BlockQueryData, Fetch, LeafQueryData, UpdateAvailabilityData,
         },
         node::NodeDataSource,
         testing::{
@@ -126,8 +126,9 @@ pub mod availability_tests {
     async fn validate(ds: &RwLock<impl TestableDataSource>) {
         let ds = ds.read().await;
 
-        // Check the consistency of every block/leaf pair. Keep track of transactions we've seen so
-        // we can detect duplicates.
+        // Check the consistency of every block/leaf pair. Keep track of payloads and transactions
+        // we've seen so we can detect duplicates.
+        let mut seen_payloads = HashMap::new();
         let mut seen_transactions = HashMap::new();
         let mut leaves = leaf_range(&*ds, ..).await.enumerate();
         while let Some((i, leaf)) = leaves.next().await {
@@ -154,6 +155,32 @@ pub mod availability_tests {
             // Check indices.
             assert_eq!(block, ds.get_block(i).await.await);
             assert_eq!(ds.get_block(block.hash()).await.await.height(), i as u64);
+            // We should be able to look up the block by payload hash unless its payload is a
+            // duplicate. For duplicate payloads, this function returns the index of the first
+            // duplicate.
+            let ix = seen_payloads
+                .entry(block.payload_hash())
+                .or_insert(i as u64);
+            assert_eq!(
+                ds.get_block(BlockId::PayloadHash(block.payload_hash()))
+                    .await
+                    .await
+                    .height(),
+                *ix
+            );
+
+            // Check payload lookup.
+            let expected_payload = block.clone().into();
+            assert_eq!(ds.get_payload(i).await.await, expected_payload);
+            assert_eq!(ds.get_payload(block.hash()).await.await, expected_payload);
+            if *ix == i as u64 {
+                assert_eq!(
+                    ds.get_payload(BlockId::PayloadHash(block.payload_hash()))
+                        .await
+                        .await,
+                    expected_payload
+                );
+            }
 
             for (j, txn) in block.enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -347,7 +374,7 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
@@ -392,7 +419,7 @@ pub mod availability_tests {
         leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(&leaf, &qc, MockPayload::genesis()).unwrap();
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.

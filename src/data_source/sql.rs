@@ -32,12 +32,15 @@ pub use sql::{Config, Query, Transaction};
 
 impl Config {
     /// Connect to the database with this config.
-    pub async fn connect<Types>(self) -> Result<SqlDataSource<Types>, Error>
+    pub async fn connect<Types, P: Send + Sync>(
+        self,
+        provider: P,
+    ) -> Result<SqlDataSource<Types, P>, Error>
     where
         Types: NodeType,
         Payload<Types>: QueryablePayload,
     {
-        SqlDataSource::connect(self).await
+        SqlDataSource::connect(self, provider).await
     }
 }
 
@@ -185,12 +188,13 @@ impl Config {
 /// # use hotshot_query_service::data_source::{
 /// #   sql::{Config, Error}, ExtensibleDataSource, SqlDataSource,
 /// # };
+/// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # async fn doc(config: Config) -> Result<(), Error> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<SqlDataSource<AppTypes>, AppState> =
-///     ExtensibleDataSource::new(SqlDataSource::connect(config).await?, "app state");
+/// let data_source: ExtensibleDataSource<SqlDataSource<AppTypes, NoFetching>, AppState> =
+///     ExtensibleDataSource::new(config.connect(NoFetching).await?, "app state");
 /// # Ok(())
 /// # }
 /// ```
@@ -236,12 +240,13 @@ impl Config {
 /// # use hotshot_query_service::data_source::{
 /// #   sql::Config, SqlDataSource, UpdateDataSource, VersionedDataSource,
 /// # };
+/// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
 /// # use tide_disco::App;
 /// struct AppState {
-///     hotshot_qs: SqlDataSource<AppTypes>,
+///     hotshot_qs: SqlDataSource<AppTypes, NoFetching>,
 ///     // additional state for other modules
 /// }
 ///
@@ -249,7 +254,7 @@ impl Config {
 ///     config: Config,
 ///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
-///     let mut hotshot_qs = SqlDataSource::connect(config).await.map_err(Error::internal)?;
+///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
 ///     let tx = hotshot_qs.transaction().await.map_err(Error::internal)?;
 ///     // ...
@@ -280,20 +285,20 @@ impl Config {
 ///     Ok(app)
 /// }
 /// ```
-pub type SqlDataSource<Types> = FetchingDataSource<Types, SqlStorage, ()>;
+pub type SqlDataSource<Types, P> = FetchingDataSource<Types, SqlStorage, P>;
 
-impl<Types> SqlDataSource<Types>
+impl<Types, P: Send + Sync> SqlDataSource<Types, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
-    pub async fn connect(config: Config) -> Result<Self, Error> {
-        Self::new(SqlStorage::connect(config).await?, ()).await
+    pub async fn connect(config: Config, provider: P) -> Result<Self, Error> {
+        Self::new(SqlStorage::connect(config).await?, provider).await
     }
 }
 
-impl<Types> SqlDataSource<Types>
+impl<Types, P> SqlDataSource<Types, P>
 where
     Types: NodeType,
 {
@@ -316,7 +321,7 @@ where
 }
 
 #[async_trait]
-impl<Types> Query for SqlDataSource<Types>
+impl<Types, P: Send + Sync> Query for SqlDataSource<Types, P>
 where
     Types: NodeType,
 {
@@ -338,7 +343,7 @@ pub mod testing {
     pub use sql::testing::TmpDb;
 
     #[async_trait]
-    impl DataSourceLifeCycle for SqlDataSource<MockTypes> {
+    impl<P: Default + Send + Sync + 'static> DataSourceLifeCycle for SqlDataSource<MockTypes, P> {
         type Storage = TmpDb;
 
         async fn create(_node_id: usize) -> Self::Storage {
@@ -346,24 +351,14 @@ pub mod testing {
         }
 
         async fn connect(tmp_db: &Self::Storage) -> Self {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .port(tmp_db.port())
-                .tls()
-                .connect()
-                .await
-                .unwrap()
+            tmp_db.config().connect(Default::default()).await.unwrap()
         }
 
         async fn reset(tmp_db: &Self::Storage) -> Self {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .port(tmp_db.port())
-                .tls()
+            tmp_db
+                .config()
                 .reset_schema()
-                .connect()
+                .connect(Default::default())
                 .await
                 .unwrap()
         }
@@ -380,11 +375,11 @@ pub mod testing {
 mod generic_test {
     use super::super::{availability_tests, status_tests};
     use super::SqlDataSource;
-    use crate::testing::mocks::MockTypes;
+    use crate::{fetching::provider::NoFetching, testing::mocks::MockTypes};
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(SqlDataSource<MockTypes>);
+    instantiate_data_source_tests!(SqlDataSource<MockTypes, NoFetching>);
 }

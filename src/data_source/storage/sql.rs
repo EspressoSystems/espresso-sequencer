@@ -15,7 +15,7 @@
 use super::AvailabilityStorage;
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload, ResourceId,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
@@ -457,8 +457,8 @@ where
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            ResourceId::Number(n) => ("height = $1", Box::new(n as i64)),
-            ResourceId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
+            LeafId::Number(n) => ("height = $1", Box::new(n as i64)),
+            LeafId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
         };
         let query = format!("SELECT leaf, qc FROM leaf WHERE {where_clause}");
         let row = self.query_one(&query, [param]).await?;
@@ -466,19 +466,50 @@ where
     }
 
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),
-            ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
-        };
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
         let query = format!(
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               WHERE {where_clause}
+              ORDER BY h.height ASC
               LIMIT 1"
         );
         let row = self.query_one(&query, [param]).await?;
         parse_block(row)
+    }
+
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_header::<Types>(row)
+    }
+
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {PAYLOAD_COLUMNS}
+               FROM header AS h
+               JOIN payload AS p ON h.height = p.height
+               WHERE {where_clause}
+               ORDER BY h.height ASC
+               LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_payload(row)
     }
 
     async fn get_leaf_range<R>(
@@ -515,11 +546,31 @@ where
         Ok(rows.map(|res| parse_block(res?)).collect().await)
     }
 
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
+        let query = format!(
+            "SELECT {PAYLOAD_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        let rows = self.query(&query, params).await?;
+
+        Ok(rows.map(|res| parse_payload(res?)).collect().await)
+    }
+
     async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        // ORDER BY t.id ASC ensures that if there are duplicate transactions, we return the first
+        // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
         let query = format!(
             "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
@@ -527,7 +578,7 @@ where
                 JOIN payload AS p ON h.height = p.height
                 JOIN transaction AS t ON t.block_height = h.height
                 WHERE t.hash = $1
-                ORDER BY t.id ASC
+                ORDER BY (t.block_height, t.index) ASC
                 LIMIT 1"
         );
         let row = self.query_one(&query, &[&hash.to_string()]).await?;
@@ -565,24 +616,24 @@ where
             serde_json::to_value(&leaf.leaf().block_header).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize header: {err}"),
             })?;
-        tx.execute_one_with_retries(
-            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3)",
-            [
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "data"],
+            ["height"],
+            [[
                 sql_param(&(leaf.height() as i64)),
-                sql_param(&(leaf.block_hash().to_string())),
+                sql_param(&leaf.block_hash().to_string()),
+                sql_param(&leaf.leaf().block_header.payload_commitment().to_string()),
                 sql_param(&header_json),
-            ],
+            ]],
         )
         .await?;
 
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        tx.execute_one_with_retries(
-            "INSERT INTO payload (height) VALUES ($1)",
-            [leaf.height() as i64],
-        )
-        .await?;
+        tx.upsert("payload", ["height"], ["height"], [[leaf.height() as i64]])
+            .await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.
@@ -592,21 +643,18 @@ where
         let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
             message: format!("failed to serialize QC: {err}"),
         })?;
-        let proposer_json =
-            serde_json::to_value(&leaf.proposer()).map_err(|err| QueryError::Error {
-                message: format!("failed to serialize proposer ID: {err}"),
-            })?;
-        tx.execute_one_with_retries(
-            "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
-             VALUES ($1, $2, $3, $4, $5, $6)",
-            [
+        tx.upsert(
+            "leaf",
+            ["height", "hash", "proposer", "block_hash", "leaf", "qc"],
+            ["height"],
+            [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.hash().to_string()),
-                sql_param(&proposer_json),
+                sql_param(&leaf.proposer().to_string()),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf_json),
                 sql_param(&qc_json),
-            ],
+            ]],
         )
         .await?;
 
@@ -625,38 +673,37 @@ where
                 message: format!("failed to serialize block: {err}"),
             })?
             .collect::<Vec<_>>();
-        tx.execute_one_with_retries(
-            "UPDATE payload SET (data, size) = ($1, $2) WHERE height = $3",
-            [
+        tx.upsert(
+            "payload",
+            ["height", "data", "size"],
+            ["height"],
+            [[
+                sql_param(&(block.height() as i64)),
                 sql_param(&payload),
                 sql_param(&(block.size() as i32)),
-                sql_param(&(block.height() as i64)),
-            ],
+            ]],
         )
         .await?;
 
-        // Index the transactions in the block.
-        let mut values = vec![];
-        // For each transaction, collect, separately, its hash, height, and index. These items all
-        // have different types, so we collect them into different vecs.
+        // Index the transactions in the block. For each transaction, collect, separately, its hash,
+        // height, and index. These items all have different types, so we collect them into
+        // different vecs.
         let mut tx_hashes = vec![];
         let mut tx_block_heights = vec![];
         let mut tx_indexes = vec![];
-        for (i, (txn_ix, txn)) in block.enumerate().enumerate() {
+        for (txn_ix, txn) in block.enumerate() {
             let txn_ix = serde_json::to_value(&txn_ix).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize transaction index: {err}"),
             })?;
-            values.push(format!("(${},${},${})", 3 * i + 1, 3 * i + 2, 3 * i + 3));
             tx_hashes.push(txn.commit().to_string());
             tx_block_heights.push(block.height() as i64);
             tx_indexes.push(txn_ix);
         }
-        if !values.is_empty() {
-            tx.execute_many_with_retries(
-                &format!(
-                    "INSERT INTO transaction (hash, block_height, index) VALUES {}",
-                    values.join(",")
-                ),
+        if !tx_hashes.is_empty() {
+            tx.upsert(
+                "transaction",
+                ["hash", "block_height", "index"],
+                ["block_height", "index"],
                 // Now that we have the transaction hashes, block heights, and indexes collected in
                 // memory, we can combine them all into a single vec using type erasure: all the
                 // values get converted to `&dyn ToSql`. The references all borrow from one of
@@ -667,10 +714,7 @@ where
                     tx_block_heights.iter().map(sql_param),
                     tx_indexes.iter().map(sql_param),
                 )
-                // Interleave the three parameters for each transaction, so we have a list of
-                // (hash, height, index) triples, repeated for each transaction.
-                .flat_map(|(hash, height, index)| [hash, height, index])
-                .collect::<Vec<_>>(),
+                .map(|(hash, height, index)| [hash, height, index]),
             )
             .await?;
         }
@@ -712,10 +756,7 @@ where
             // recent leaves, so order by descending height.
             query = format!("{query} ORDER BY height DESC limit {limit}");
         }
-        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
-            message: format!("failed to serialize proposer ID: {err}"),
-        })?;
-        let rows = self.query(&query, &[&proposer_json]).await?;
+        let rows = self.query(&query, &[&proposer.to_string()]).await?;
         let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
 
         if limit.is_some() {
@@ -729,10 +770,7 @@ where
 
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let proposer_json = serde_json::to_value(proposer).map_err(|err| QueryError::Error {
-            message: format!("failed to serialize proposer ID: {err}"),
-        })?;
-        let row = self.query_one(query, &[&proposer_json]).await?;
+        let row = self.query_one(query, &[&proposer.to_string()]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
     }
@@ -915,6 +953,43 @@ impl<'a> Transaction<'a> {
             }
         }
     }
+
+    pub async fn upsert<const N: usize, P>(
+        &mut self,
+        table: &str,
+        columns: [&str; N],
+        pk: impl IntoIterator<Item = &str>,
+        rows: impl IntoIterator<Item = [P; N]>,
+    ) -> QueryResult<()>
+    where
+        P: BorrowToSql + Clone,
+    {
+        let set_columns = columns
+            .iter()
+            .map(|col| format!("{col} = excluded.{col}"))
+            .join(",");
+        let columns = columns.into_iter().join(",");
+        let pk = pk.into_iter().join(",");
+
+        let mut values = vec![];
+        let mut params = vec![];
+        for (row, entries) in rows.into_iter().enumerate() {
+            let start = row * N;
+            let end = (row + 1) * N;
+            let row_params = (start..end).map(|i| format!("${}", i + 1)).join(",");
+
+            values.push(format!("({row_params})"));
+            params.extend(entries);
+        }
+        let values = values.into_iter().join(",");
+
+        let stmt = format!(
+            "INSERT INTO {table} ({columns})
+                  VALUES {values}
+             ON CONFLICT ({pk}) DO UPDATE SET {set_columns}"
+        );
+        self.execute_one_with_retries(&stmt, params).await
+    }
 }
 
 /// Query the underlying SQL database.
@@ -1030,6 +1105,16 @@ where
     Ok(LeafQueryData { leaf, qc })
 }
 
+fn header_where_clause<Types: NodeType>(
+    id: BlockId<Types>,
+) -> (&'static str, Box<dyn ToSql + Send + Sync>) {
+    match id {
+        BlockId::Number(n) => ("h.height = $1", Box::new(n as i64)),
+        BlockId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
+        BlockId::PayloadHash(h) => ("h.payload_hash = $1", Box::new(h.to_string())),
+    }
+}
+
 const BLOCK_COLUMNS: &str =
     "h.hash AS hash, h.data AS header_data, p.size AS payload_size, p.data AS payload_data";
 
@@ -1078,6 +1163,30 @@ where
         payload,
         size,
         hash,
+    })
+}
+
+const PAYLOAD_COLUMNS: &str = BLOCK_COLUMNS;
+
+fn parse_payload<Types>(row: Row) -> QueryResult<PayloadQueryData<Types>>
+where
+    Types: NodeType,
+{
+    parse_block(row).map(PayloadQueryData::from)
+}
+
+const HEADER_COLUMNS: &str = "h.data AS data";
+
+fn parse_header<Types>(row: Row) -> QueryResult<Header<Types>>
+where
+    Types: NodeType,
+{
+    // Reconstruct the full header.
+    let data = row.try_get("data").map_err(|err| QueryError::Error {
+        message: format!("error extracting header data from query results: {err}"),
+    })?;
+    serde_json::from_value(data).map_err(|err| QueryError::Error {
+        message: format!("malformed header: {err}"),
     })
 }
 
@@ -1230,6 +1339,7 @@ impl tokio::io::AsyncWrite for TcpStream {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    use super::Config;
     use crate::testing::sleep;
     use portpicker::pick_unused_port;
     use std::{
@@ -1290,6 +1400,14 @@ pub mod testing {
 
         pub fn port(&self) -> u16 {
             self.port
+        }
+
+        pub fn config(&self) -> Config {
+            Config::default()
+                .user("postgres")
+                .password("password")
+                .port(self.port())
+                .tls()
         }
     }
 
