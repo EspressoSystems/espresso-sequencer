@@ -16,9 +16,13 @@ use super::Provider;
 use crate::fetching::Request;
 use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
 use async_std::sync::{Arc, RwLock};
+use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 /// Adaptor to add test-only functionality to an existing [`Provider`].
 ///
@@ -29,6 +33,7 @@ use std::fmt::Debug;
 pub struct TestProvider<P> {
     inner: Arc<P>,
     unblock: Arc<RwLock<Option<BroadcastSender<()>>>>,
+    fail: Arc<AtomicBool>,
 }
 
 impl<P> TestProvider<P> {
@@ -36,6 +41,7 @@ impl<P> TestProvider<P> {
         Self {
             inner: Arc::new(inner),
             unblock: Default::default(),
+            fail: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -62,15 +68,34 @@ impl<P> TestProvider<P> {
             unblock.send_async(()).await.ok();
         }
     }
+
+    /// Cause subsequent requests to fail.
+    ///
+    /// All requests to the provider after this function is called will fail, until
+    /// [`unfail`](Self::unfail) is called.
+    pub fn fail(&self) {
+        self.fail.store(true, Ordering::SeqCst);
+    }
+
+    /// Stop requests from failing as a result of a previous call to [`fail`](Self::fail).
+    pub fn unfail(&self) {
+        self.fail.store(false, Ordering::SeqCst);
+    }
 }
 
+#[async_trait]
 impl<Types, P, T> Provider<Types, T> for TestProvider<P>
 where
     Types: NodeType,
-    T: Request<Types>,
+    T: Request<Types> + 'static,
     P: Provider<Types, T> + Sync,
 {
     async fn fetch(&self, req: T) -> Option<T::Response> {
+        // Fail the request if the user has called `fail`.
+        if self.fail.load(Ordering::SeqCst) {
+            return None;
+        }
+
         // Block the request if the user has called `block`.
         let handle = {
             match self.unblock.read().await.as_ref() {

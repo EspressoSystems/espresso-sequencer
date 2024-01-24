@@ -16,6 +16,7 @@ use crate::{
     fetching::request::{LeafRequest, PayloadRequest},
     Error, Payload,
 };
+use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::{Client, Url};
 
@@ -29,13 +30,14 @@ pub struct QueryServiceProvider {
 }
 
 impl QueryServiceProvider {
-    pub async fn new(url: Url) -> Self {
-        let client = Client::new(url);
-        client.connect(None).await;
-        Self { client }
+    pub fn new(url: Url) -> Self {
+        Self {
+            client: Client::new(url),
+        }
     }
 }
 
+#[async_trait]
 impl<Types> Provider<Types, PayloadRequest> for QueryServiceProvider
 where
     Types: NodeType,
@@ -60,6 +62,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Types> Provider<Types, LeafRequest> for QueryServiceProvider
 where
     Types: NodeType,
@@ -93,7 +96,10 @@ mod test {
     use super::*;
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
-        data_source::{storage::sql::testing::TmpDb, VersionedDataSource},
+        data_source::{
+            storage::sql::{testing::TmpDb, SqlStorage},
+            FetchingDataSource, VersionedDataSource,
+        },
         fetching::provider::{NoFetching, TestProvider},
         testing::{
             consensus::{MockDataSource, MockNetwork},
@@ -128,9 +134,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -317,9 +323,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -369,9 +375,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -425,9 +431,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -523,6 +529,72 @@ mod test {
                 .get_block_with_transaction(tx.commit())
                 .await
                 .await
+        );
+    }
+
+    #[async_std::test]
+    async fn test_retry() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
+        let mut data_source = FetchingDataSource::with_retry_delay(
+            SqlStorage::connect(db.config()).await.unwrap(),
+            provider.clone(),
+            Some(Duration::from_secs(1)),
+        )
+        .await
+        .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until the block height reaches 3. This gives us the genesis block, one additional
+        // block at the end, and one block to try fetching.
+        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = leaves.take(2).collect::<Vec<_>>().await;
+        let test_leaf = &leaves[0];
+
+        // Give the node a leaf after the range of interest so it learns about the correct block
+        // height.
+        data_source
+            .insert_leaf(leaves.last().cloned().unwrap())
+            .await
+            .unwrap();
+        data_source.commit().await.unwrap();
+
+        // Cause requests to fail temporarily, so we can test retries.
+        provider.fail();
+
+        tracing::info!("requesting leaf from failing providers");
+        let fut = data_source.get_leaf(test_leaf.height() as usize).await;
+
+        // Wait a few retries and check that the request has not completed, since the provider is
+        // failing.
+        sleep(Duration::from_secs(5)).await;
+        fut.try_resolve().unwrap_err();
+
+        // As soon as the provider recovers, the request can complete.
+        provider.unfail();
+        assert_eq!(
+            data_source
+                .get_leaf(test_leaf.height() as usize)
+                .await
+                .await,
+            *test_leaf
         );
     }
 }
