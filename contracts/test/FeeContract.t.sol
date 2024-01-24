@@ -5,10 +5,11 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } /*, console2 }*/ from "forge-std/Test.sol";
 
 // Target contract
 import { FeeContract } from "../src/FeeContract.sol";
+import { DeployFeeContract } from "../script/DeployFeeContract.s.sol";
 
 /// @title FeeContract Test
 contract FeeContractTest is Test {
@@ -98,5 +99,31 @@ contract FeeContractTest is Test {
 
         //assert that the balance of the fee contract is still zero
         assertEq(address(feeContract).balance, 0);
+    }
+}
+
+contract FeeContractUpgradabilityTest is Test {
+    address payable public proxy;
+    FeeContract public feeContractProxy;
+    DeployFeeContract public deployer = new DeployFeeContract();
+
+    function setUp() public {
+        proxy = deployer.run();
+        feeContractProxy = FeeContract(proxy);
+    }
+
+    //test deposits work with a proxy
+    function testFuzz_deposit(address user, uint256 amount) public payable {
+        vm.assume(user != address(0));
+        vm.assume(amount > 0 && amount <= feeContractProxy.MAX_DEPOSIT_AMOUNT());
+
+        uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfter = feeContractProxy.getBalance(user);
+        assertEq(balanceAfter, balanceBefore + amount);
     }
 }

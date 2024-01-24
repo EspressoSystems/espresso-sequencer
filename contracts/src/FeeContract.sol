@@ -3,12 +3,21 @@
 pragma solidity ^0.8.0;
 // import { console } from "forge-std/console.sol";
 
-contract FeeContract {
+import { OwnableUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
     /// @notice Notify a new deposit
     event Deposit(address, uint256);
     event Log(string func, uint256 gas);
+
+    /// @notice upgrade event when the proxy updates the implementation it's pointing to
+    event Upgrade(address implementation);
     // === Constants ===
     //
     /// @notice max amount allowed to be deposited to prevent fat finger errors
@@ -28,6 +37,18 @@ contract FeeContract {
 
     /// @notice store user balances in a mapping
     mapping(address user => uint256 amount) public balances;
+
+    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @notice This contract is called by the proxy when you deploy this contract
+    function initialize() public initializer {
+        __Ownable_init(msg.sender); //sets owner to msg.sender
+        __UUPSUpgradeable_init();
+    }
 
     /// @notice Revert if a method name does not exist
     fallback() external payable {
@@ -63,5 +84,10 @@ contract FeeContract {
             revert InvalidUserAddress();
         }
         return balances[user];
+    }
+
+    /// @notice only the owner can authorize an upgrade
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        emit Upgrade(newImplementation);
     }
 }
