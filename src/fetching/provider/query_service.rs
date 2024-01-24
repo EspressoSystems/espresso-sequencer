@@ -30,10 +30,10 @@ pub struct QueryServiceProvider {
 }
 
 impl QueryServiceProvider {
-    pub async fn new(url: Url) -> Self {
-        let client = Client::new(url);
-        client.connect(None).await;
-        Self { client }
+    pub fn new(url: Url) -> Self {
+        Self {
+            client: Client::new(url),
+        }
     }
 }
 
@@ -134,9 +134,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -323,9 +323,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -375,9 +375,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -431,9 +431,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
@@ -548,9 +548,9 @@ mod test {
 
         // Start a data source which is not receiving events from consensus.
         let db = TmpDb::init().await;
-        let provider = Provider::new(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
         let mut data_source = FetchingDataSource::with_retry_delay(
             SqlStorage::connect(db.config()).await.unwrap(),
             provider.clone(),

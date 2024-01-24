@@ -71,8 +71,8 @@ type LeafProvider<Types> = Arc<dyn DebugProvider<Types, LeafRequest>>;
 /// # {
 /// use hotshot_query_service::fetching::provider::{AnyProvider, QueryServiceProvider};
 ///
-/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?).await;
-/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?).await;
+/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?);
+/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?);
 /// let provider = AnyProvider::<Types>::default()
 ///     .with_provider(qs1)
 ///     .with_provider(qs2);
@@ -209,9 +209,12 @@ mod test {
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
-        let provider = Provider::default().with_provider(NoFetching).with_provider(
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap()).await,
-        );
+        let provider =
+            Provider::default()
+                .with_provider(NoFetching)
+                .with_provider(QueryServiceProvider::new(
+                    format!("http://localhost:{port}").parse().unwrap(),
+                ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
