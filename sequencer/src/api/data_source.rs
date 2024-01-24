@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     network, persistence,
-    state_signature::{LightClientState, StateSignature},
+    state_signature::{LightClientState, StateSignature, StateSignatureRequestBody},
     Node, SeqTypes,
 };
 use async_trait::async_trait;
@@ -77,10 +77,11 @@ pub(crate) trait SubmitDataSource<N: network::Type> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
+#[async_trait]
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
-    fn get_state_signature(&self, height: u64) -> Option<StateSignature>;
+    async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 
-    fn sign_new_state(&self, state: &LightClientState);
+    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature;
 }
 
 #[cfg(test)]

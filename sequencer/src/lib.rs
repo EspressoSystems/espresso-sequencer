@@ -265,6 +265,7 @@ pub struct NetworkParams {
     pub da_server_url: Url,
     pub consensus_server_url: Url,
     pub orchestrator_url: Url,
+    pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
 }
 
@@ -361,6 +362,7 @@ pub async fn init_node(
             &state_ver_keys,
             STAKE_TABLE_CAPACITY,
         ),
+        Some(network_params.state_relay_server_url),
     ))
 }
 

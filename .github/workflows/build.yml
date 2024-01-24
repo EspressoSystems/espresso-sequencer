@@ -60,6 +60,7 @@ jobs:
           path: |
             target/release/orchestrator
             target/release/web-server
+            target/release/state-relay-server
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -97,6 +98,7 @@ jobs:
           path: |
             target/release/orchestrator
             target/release/web-server
+            target/release/state-relay-server
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -145,6 +147,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/web-server
 
+      - name: Generate state-relay-server docker metadata
+        uses: docker/metadata-action@v5
+        id: state-relay-server
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/state-relay-server
+
       - name: Generate orchestrator docker metadata
         uses: docker/metadata-action@v5
         id: orchestrator
@@ -188,6 +196,16 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.web-server.outputs.tags }}
           labels: ${{ steps.web-server.outputs.labels }}
+
+      - name: Build and push state-relay-server docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/state-relay-server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.state-relay-server.outputs.tags }}
+          labels: ${{ steps.state-relay-server.outputs.labels }}
 
       - name: Build and push orchestrator docker
         uses: docker/build-push-action@v5
