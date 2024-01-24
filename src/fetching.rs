@@ -23,10 +23,13 @@
 
 use async_std::{
     sync::{Arc, Mutex},
-    task::spawn,
+    task::{sleep, spawn},
 };
 use derivative::Derivative;
-use std::collections::{hash_map::Entry, BTreeSet, HashMap};
+use std::{
+    collections::{hash_map::Entry, BTreeSet, HashMap},
+    time::Duration,
+};
 
 pub mod provider;
 pub mod request;
@@ -53,10 +56,31 @@ pub trait LocalCallback<T>: Ord {
 
 /// Management of concurrent requests to fetch resources.
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""), Debug(bound = ""), Default(bound = ""))]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct Fetcher<T, C> {
     #[derivative(Debug = "ignore")]
     in_progress: Arc<Mutex<HashMap<T, BTreeSet<C>>>>,
+    retry_delay: Duration,
+}
+
+impl<T, C> Default for Fetcher<T, C> {
+    fn default() -> Self {
+        Self {
+            in_progress: Default::default(),
+            // Since many of the issues we might encounter when fetching from a peer are of the kind
+            // that won't recover immediately, and since we may have many parallel requests for
+            // resources and don't want to spam our peers, we can wait a long while before retrying
+            // failed requests.
+            retry_delay: Duration::from_secs(60),
+        }
+    }
+}
+
+impl<T, C> Fetcher<T, C> {
+    pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
+        self.retry_delay = retry_delay;
+        self
+    }
 }
 
 impl<T, C> Fetcher<T, C> {
@@ -74,6 +98,10 @@ impl<T, C> Fetcher<T, C> {
     ///
     /// Note that while callbacks are allowed to be async, they are executed sequentially while an
     /// exclusive lock is held, and thus they should not take too long to run or block indefinitely.
+    ///
+    /// The spawned task will continue trying to fetch the object until it succeeds, so it is the
+    /// caller's responsibility only to use this method for resources which are known to exist and
+    /// be fetchable by `provider`.
     pub fn spawn_fetch<Types>(
         &self,
         req: T,
@@ -84,6 +112,7 @@ impl<T, C> Fetcher<T, C> {
         C: Callback<T::Response> + 'static,
     {
         let in_progress = self.in_progress.clone();
+        let retry_delay = self.retry_delay;
 
         spawn(async move {
             tracing::info!("spawned active fetch for {req:?}");
@@ -109,7 +138,25 @@ impl<T, C> Fetcher<T, C> {
             }
 
             // Now we are responsible for fetching the object, reach out to the provider.
-            let res = provider.fetch(req).await;
+            let res = loop {
+                if let Some(res) = provider.fetch(req).await {
+                    break res;
+                }
+
+                // We only fetch objects which are known to exist, so we should eventually succeed
+                // in fetching if we retry enough. For example, we may be fetching a block from a
+                // peer who hasn't received the block yet.
+                //
+                // To understand why it is ok to retry indefinitely, think about manual
+                // intervention: if we don't retry, or retry with a limit, we may require manual
+                // intervention whenever a query service fails to fetch a resource that should exist
+                // and stops retrying, since it now may never receive that resource. With indefinite
+                // fetching, we require manual intervention only when active fetches are
+                // accumulating because a peer which _should_ have the resource isn't providing it.
+                // In this case, we would require manual intervention on the peer anyways.
+                tracing::warn!("failed to fetch {req:?}, will retry in {retry_delay:?}");
+                sleep(retry_delay).await;
+            };
 
             // Done fetching, remove our lock on the object and execute all callbacks.
             //
@@ -125,10 +172,8 @@ impl<T, C> Fetcher<T, C> {
             // `in_progress`, and so it is safe to acquire any lock _after_ acquiring `in_progress`.
             let mut in_progress = in_progress.lock().await;
             let callbacks = in_progress.remove(&req).unwrap_or_default();
-            if let Some(res) = res {
-                for callback in callbacks {
-                    callback.run(res.clone()).await;
-                }
+            for callback in callbacks {
+                callback.run(res.clone()).await;
             }
         });
     }

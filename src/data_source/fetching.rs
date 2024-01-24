@@ -44,6 +44,7 @@ use std::{
     future::IntoFuture,
     iter::once,
     ops::{Bound, Deref, DerefMut, Range, RangeBounds},
+    time::Duration,
 };
 
 /// The number of items to process at a time when loading a range or stream.
@@ -97,8 +98,16 @@ where
 {
     /// Create a data source with local storage and a remote data availability provider.
     pub async fn new(storage: S, provider: P) -> anyhow::Result<Self> {
+        Self::with_retry_delay(storage, provider, None).await
+    }
+
+    pub async fn with_retry_delay(
+        storage: S,
+        provider: P,
+        delay: Option<Duration>,
+    ) -> anyhow::Result<Self> {
         let mut ds = Self {
-            fetcher: Arc::new(Fetcher::new(storage, provider).await),
+            fetcher: Arc::new(Fetcher::new(storage, provider, delay).await),
             metrics: Default::default(),
         };
 
@@ -407,13 +416,20 @@ where
     Types: NodeType,
     S: NodeDataSource<Types>,
 {
-    async fn new(storage: S, provider: P) -> Self {
+    async fn new(storage: S, provider: P, retry_delay: Option<Duration>) -> Self {
         // Get the height from storage if possible. If not, it's fine: we'll update this as soon as
         // we see a new block or leaf anyways.
         let height = storage.block_height().await.unwrap_or_else(|err| {
             tracing::error!("unable to load block height, defaulting to 0: {err}");
             0
         }) as u64;
+
+        let mut payload_fetcher = fetching::Fetcher::default();
+        let mut leaf_fetcher = fetching::Fetcher::default();
+        if let Some(delay) = retry_delay {
+            payload_fetcher = payload_fetcher.with_retry_delay(delay);
+            leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
+        }
 
         Self {
             storage: RwLock::new(NotifyStorage {
@@ -423,8 +439,8 @@ where
                 leaf_notifier: Notifier::new(),
             }),
             provider: Arc::new(provider),
-            payload_fetcher: Default::default(),
-            leaf_fetcher: Default::default(),
+            payload_fetcher: Arc::new(payload_fetcher),
+            leaf_fetcher: Arc::new(leaf_fetcher),
         }
     }
 }
