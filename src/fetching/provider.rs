@@ -37,17 +37,23 @@
 
 use super::Request;
 use async_std::sync::Arc;
+use async_trait::async_trait;
 
+mod any;
 mod query_service;
 mod testing;
 
+pub use any::AnyProvider;
 pub use query_service::QueryServiceProvider;
 #[cfg(any(test, feature = "testing"))]
 pub use testing::TestProvider;
 
 /// A provider which is able to satisfy requests for data of type `T`.
-#[trait_variant::make(Provider: Send)]
-pub trait LocalProvider<Types, T: Request<Types>> {
+///
+/// This trait use boxed future return types (`#[async_trait]`) instead of `impl Future` return
+/// types, so that it can be object safe.
+#[async_trait]
+pub trait Provider<Types, T: Request<Types>>: Send + Sync {
     /// Fetch a resource.
     async fn fetch(&self, req: T) -> Option<T::Response>;
 }
@@ -58,15 +64,17 @@ pub trait LocalProvider<Types, T: Request<Types>> {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoFetching;
 
-impl<Types, T: Send + Request<Types>> Provider<Types, T> for NoFetching {
+#[async_trait]
+impl<Types, T: Send + Request<Types> + 'static> Provider<Types, T> for NoFetching {
     async fn fetch(&self, _req: T) -> Option<T::Response> {
         None
     }
 }
 
+#[async_trait]
 impl<Types, T, P> Provider<Types, T> for Arc<P>
 where
-    T: Request<Types>,
+    T: Request<Types> + 'static,
     P: Provider<Types, T> + Sync,
 {
     async fn fetch(&self, req: T) -> Option<T::Response> {

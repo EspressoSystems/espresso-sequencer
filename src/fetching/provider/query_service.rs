@@ -16,6 +16,7 @@ use crate::{
     fetching::request::{LeafRequest, PayloadRequest},
     Error, Payload,
 };
+use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::{Client, Url};
 
@@ -36,6 +37,7 @@ impl QueryServiceProvider {
     }
 }
 
+#[async_trait]
 impl<Types> Provider<Types, PayloadRequest> for QueryServiceProvider
 where
     Types: NodeType,
@@ -60,6 +62,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Types> Provider<Types, LeafRequest> for QueryServiceProvider
 where
     Types: NodeType,

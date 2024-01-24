@@ -16,6 +16,7 @@ use super::Provider;
 use crate::fetching::Request;
 use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
 use async_std::sync::{Arc, RwLock};
+use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::fmt::Debug;
@@ -64,10 +65,11 @@ impl<P> TestProvider<P> {
     }
 }
 
+#[async_trait]
 impl<Types, P, T> Provider<Types, T> for TestProvider<P>
 where
     Types: NodeType,
-    T: Request<Types>,
+    T: Request<Types> + 'static,
     P: Provider<Types, T> + Sync,
 {
     async fn fetch(&self, req: T) -> Option<T::Response> {
