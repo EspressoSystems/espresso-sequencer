@@ -5,8 +5,10 @@ use contract_bindings::hot_shot::HotShot;
 use ethers::{prelude::*, providers::Provider, signers::coins_bip39::English};
 use futures::FutureExt;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use sequencer::options::parse_duration;
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 use tide_disco::error::ServerError;
 use tide_disco::Api;
 use url::Url;
@@ -65,6 +67,10 @@ pub struct Options {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     pub port: Option<u16>,
+
+    /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
+    #[clap(long, name = "DELAY", value_parser = parse_duration, default_value = "0s", env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
+    pub delay: Duration,
 }
 #[async_std::main]
 async fn main() {
@@ -120,6 +126,7 @@ async fn main() {
         hotshot_address,
         l1_chain_id: None,
         l1_provider: opt.l1_provider.clone(),
+        delay: opt.delay,
         sequencer_mnemonic: opt.eth_mnemonic,
         sequencer_account_index: opt.hotshot_account_index,
         query_service_url: Some(opt.sequencer_url),
