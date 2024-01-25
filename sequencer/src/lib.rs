@@ -265,6 +265,7 @@ pub struct NetworkParams {
     pub da_server_url: Url,
     pub consensus_server_url: Url,
     pub orchestrator_url: Url,
+    pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
 }
 
@@ -281,7 +282,7 @@ pub async fn init_node(
     };
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string()).await;
+    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
     let mut config = match persistence.load_config().await? {
         Some(config) => {
@@ -361,6 +362,7 @@ pub async fn init_node(
             &state_ver_keys,
             STAKE_TABLE_CAPACITY,
         ),
+        Some(network_params.state_relay_server_url),
     ))
 }
 

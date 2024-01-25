@@ -71,7 +71,7 @@ cleanup(){
 }
 
 mkdir -p ${WORKDIR}/target/$ARCH/release
-for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "reset-storage"; do
+for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server"; do
   cp -v "${CARGO_TARGET_DIR}/release/$binary" ${WORKDIR}/target/$ARCH/release
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
@@ -82,5 +82,7 @@ done
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main -f docker/state-relay-server.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}

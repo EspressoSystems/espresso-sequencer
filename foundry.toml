@@ -11,7 +11,7 @@ broadcast = "contracts/broadcast"
 cache_path = "contracts/cache"
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
-solc = "0.8.20"
+solc = "0.8.23"
 # The bytecode hash is no longer deterministic and prevents us from generating
 # deterministic bindings. The "none" setting prevents solc from appending the
 # IPFS hash to the bytecode.
@@ -22,10 +22,7 @@ ffi = true
 
 [rpc_endpoints]
 local = "http://localhost:8545"
-sepolia = "${SEPOLIA_RPC_URL}"
 
-[etherscan]
-# sepolia = { key = "${ETHERSCAN_API_KEY}" }
 
 [fmt]
 line_length=100
@@ -34,3 +31,4 @@ wrap_comments=true
 
 [profile.ci]
 fuzz = { runs = 1000 }
+verbosity = 1

@@ -60,6 +60,15 @@ pub struct Options {
     )]
     pub consensus_server_url: Url,
 
+    /// URL of the Light Client State Relay Server
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_STATE_RELAY_SERVER_URL",
+        default_value = "http://localhost:8083"
+    )]
+    pub state_relay_server_url: Url,
+
     /// The amount of time to wait between each request to the HotShot
     /// consensus or DA web servers during polling.
     #[clap(
