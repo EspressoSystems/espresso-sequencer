@@ -1035,16 +1035,26 @@ mod test {
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
+                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+
                 // test ns iterator
                 let ns_iter_idx = ns_iter.next().unwrap();
                 assert_eq!(ns_iter_idx, ns_idx);
 
+                // test ns payload
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
                 let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+                assert_eq!(
+                    actual_ns_payload_flat, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes",
+                    ns_id.0,
+                );
+
+                // test ns proof
+                // let foo = block.namespace_with_proof(meta, ns_index);
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -1073,16 +1083,6 @@ mod test {
                     "namespace {} incorrect tx table for",
                     ns_id.0
                 );
-
-                // test entire namespace payload flat
-                assert_eq!(
-                    actual_ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes",
-                    ns_id.0,
-                );
-
-                // tests for individual txs in this namespace
-                // TODO(746) rework this part
 
                 // testing tx iterator
                 // TODO(746) incorporate this test into the following commented code when it's fixed
