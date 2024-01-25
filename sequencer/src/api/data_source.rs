@@ -4,11 +4,7 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{
-    network, persistence,
-    state_signature::{LightClientState, StateSignature, StateSignatureRequestBody},
-    Node, SeqTypes,
-};
+use crate::{network, persistence, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -17,6 +13,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
+use hotshot_state_prover::state::{LightClientState, StateSignature, StateSignatureRequestBody};
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;

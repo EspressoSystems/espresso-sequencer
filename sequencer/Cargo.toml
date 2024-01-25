@@ -20,9 +20,9 @@ tempfile = "3.9.0"
 [dependencies]
 anyhow = "1.0"
 ark-bls12-381 = "0.4"
-ark-ed-on-bn254 = "0.4"
-ark-serialize = { version = "0.4", features = ["derive"] }
-ark-std = "0.4"
+ark-ed-on-bn254 = { workspace = true }
+ark-serialize = { workspace = true, features = ["derive"] }
+ark-std = { workspace = true }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
 ] }
@@ -36,7 +36,7 @@ commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = "0.99.17"
-ethers = { version = "2.0", features = ["ws"] }
+ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"
 include_dir = "0.7"
@@ -60,11 +60,13 @@ hotshot-web-server = { workspace = true }
 
 hotshot-query-service = { workspace = true }
 
+hotshot-state-prover = { path = "../hotshot-state-prover" }
+
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
-serde = { version = "1.0.195", features = ["derive"] }
+serde = { workspace = true }
 snafu = "0.7.4"
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }

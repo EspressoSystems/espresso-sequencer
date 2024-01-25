@@ -1,5 +1,3 @@
-use crate::state_signature::StateSignatureScheme;
-
 use super::{LightClientState, StateSignatureRequestBody};
 use async_compatibility_layer::channel::OneShotReceiver;
 use async_std::sync::RwLock;
@@ -7,7 +5,7 @@ use clap::Args;
 use ethers::types::U256;
 use futures::FutureExt;
 use hotshot_stake_table::vec_based::config::FieldType;
-use hotshot_types::light_client::{StateSignature, StateVerKey};
+use hotshot_state_prover::state::{StateSignature, StateSignatureScheme, StateVerKey};
 use jf_primitives::signatures::SignatureScheme;
 use serde::{Deserialize, Serialize};
 use std::{

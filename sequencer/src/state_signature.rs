@@ -2,25 +2,16 @@
 
 use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::light_client::StateVerKey;
+use hotshot_state_prover::state::{LightClientState, StateSignatureRequestBody, StateVerKey};
+use hotshot_state_prover::BaseField;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
 use hotshot_types::traits::state::ConsensusTime;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-
-/// Types related to the underlying signature schemes.
-pub type StateSignatureScheme =
-    jf_primitives::signatures::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;
-pub use hotshot_stake_table::vec_based::config::FieldType;
-pub use hotshot_types::light_client::StateKeyPair;
-pub use hotshot_types::light_client::StateSignature;
-pub type LightClientState = hotshot_types::light_client::LightClientState<FieldType>;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -83,18 +74,10 @@ fn form_light_client_state(
     LightClientState {
         view_number: leaf.get_view_number().get_u64() as usize,
         block_height: leaf.get_height() as usize,
-        block_comm_root: FieldType::default(),
-        fee_ledger_comm: FieldType::default(),
+        block_comm_root: BaseField::default(),
+        fee_ledger_comm: BaseField::default(),
         stake_table_comm: *stake_table_comm,
     }
-}
-
-/// Request body to send to the state relay server
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize)]
-pub struct StateSignatureRequestBody {
-    pub key: StateVerKey,
-    pub state: LightClientState,
-    pub signature: StateSignature,
 }
 
 /// A rolling in-memory storage for the most recent light client state signatures.
@@ -119,15 +102,15 @@ impl StateSignatureMemStorage {
 }
 
 /// Type for stake table commitment
-pub type StakeTableCommitmentType = (FieldType, FieldType, FieldType);
+pub type StakeTableCommitmentType = (BaseField, BaseField, BaseField);
 
 /// Helper function for stake table commitment
 pub(crate) fn static_stake_table_commitment(
     known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
     state_ver_keys: &[StateVerKey],
     capacity: usize,
-) -> (FieldType, FieldType, FieldType) {
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, FieldType>::new(capacity);
+) -> (BaseField, BaseField, BaseField) {
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, BaseField>::new(capacity);
     known_nodes_with_stakes
         .iter()
         .zip(state_ver_keys)

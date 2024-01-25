@@ -1,16 +1,11 @@
 use self::data_source::StateSignatureDataSource;
-use crate::{
-    context::SequencerContext,
-    network,
-    state_signature::{self, LightClientState, StateSignatureRequestBody},
-    Node, SeqTypes,
-};
+use crate::{context::SequencerContext, network, state_signature, Node, SeqTypes};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::light_client::StateSignature;
+use hotshot_state_prover::state::{LightClientState, StateSignature, StateSignatureRequestBody};
 
 pub mod data_source;
 pub mod endpoints;

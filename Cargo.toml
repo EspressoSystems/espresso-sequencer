@@ -1,10 +1,23 @@
+[workspace.package]
+version = "0.1.0"
+authors = ["Espresso Systems <hello@espressosys.com>"]
+edition = "2021"
+
 [workspace]
 
 resolver = "2"
 
-members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
+members = ["contract-bindings", "contracts/rust", "hotshot-state-prover", "sequencer", "utils"]
 
 [workspace.dependencies]
+ark-std = "0.4"
+ark-bn254 = "0.4"
+ark-ec = "0.4"
+ark-ed-on-bn254 = "0.4"
+ark-ff = "0.4"
+ark-serialize = "0.4"
+ethers = { version = "2.0", features = ["ws"] }
+
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
@@ -33,3 +46,4 @@ bytesize = "1.3"
 itertools = "0.12"
 rand_chacha = "0.3"
 rand_distr = "0.4"
+serde = { version = "1.0.195", features = ["derive"] }
