@@ -238,7 +238,13 @@ async fn build_quorum_proposal_and_signature(
             .quorum_membership
             .total_nodes(),
     );
-    let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
+    let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
+    let block_header = TestBlockHeader::new(
+        payload_commitment,
+        (),
+        &parent_leaf.block_header,
+        &parent_state,
+    );
     // current leaf that can be re-assigned everytime when entering a new view
     let mut leaf = Leaf {
         view_number: ViewNumber::new(1),
@@ -249,8 +255,6 @@ async fn build_quorum_proposal_and_signature(
         rejected: vec![],
         proposer_id: *api.public_key(),
     };
-    let mut parent_state =
-        <TestValidatedState as ValidatedState>::from_header(&parent_leaf.block_header);
 
     let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
         .expect("Failed to sign leaf commitment!");

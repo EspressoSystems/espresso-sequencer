@@ -1176,7 +1176,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             return false;
         };
         // Leaf hash in view inner does not match high qc hash - Why?
-        let Some(leaf_commitment) = parent_view.get_leaf_commitment() else {
+        let Some((leaf_commitment, state)) = parent_view.get_leaf() else {
             error!(
                 ?parent_view_number,
                 ?parent_view,
@@ -1225,6 +1225,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 commit_and_metadata.commitment,
                 commit_and_metadata.metadata.clone(),
                 &parent_header,
+                state,
             );
             let leaf = Leaf {
                 view_number: view,

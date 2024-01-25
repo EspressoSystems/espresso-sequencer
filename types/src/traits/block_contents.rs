@@ -3,7 +3,10 @@
 //! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
 //! describe the behaviors that a block is expected to have.
 
-use crate::data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait};
+use crate::{
+    data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait},
+    traits::State,
+};
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -109,11 +112,15 @@ pub trait BlockHeader:
     /// Block payload associated with the commitment.
     type Payload: BlockPayload;
 
-    /// Build a header with the payload commitment, metadata, and parent header.
+    /// Validated state.
+    type State: State<BlockHeader = Self>;
+
+    /// Build a header with the payload commitment, metadata, parent header, and parent state.
     fn new(
         payload_commitment: VidCommitment,
         metadata: <Self::Payload as BlockPayload>::Metadata,
         parent_header: &Self,
+        parent_state: &Self::State,
     ) -> Self;
 
     /// Build the genesis header, payload, and metadata.
