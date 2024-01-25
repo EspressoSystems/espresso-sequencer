@@ -884,7 +884,10 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use jf_primitives::vid::{
+        payload_prover::{PayloadProver, Statement},
+        VidScheme,
+    };
     use rand::RngCore;
     use std::{collections::HashMap, ops::Range};
 
@@ -929,7 +932,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        // let vid = test_vid_factory();
+        let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -1006,14 +1009,14 @@ mod test {
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
             let (block, actual_ns_table) = BlockPayload::from_txs(txs).unwrap();
-            // let disperse_data = vid.disperse(&block.payload).unwrap();
+            let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
             // test total ns length
             assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
 
             // test total tx length
-            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            // tracing::info!("actual_ns_table {:?}", actual_ns_table);
             assert_eq!(block.len(&actual_ns_table), total_num_txs);
             // TODO assert the final ns table entry offset == self.payload.len()
 
@@ -1046,7 +1049,8 @@ mod test {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
-                let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
+                let actual_ns_payload_flat =
+                    block.payload.get(actual_ns_payload_range.clone()).unwrap();
                 assert_eq!(
                     actual_ns_payload_flat, derived_ns.payload_flat,
                     "namespace {} incorrect payload bytes",
@@ -1054,7 +1058,7 @@ mod test {
                 );
 
                 // test ns proof
-                let (ns_payload_flat_from_proof, _ns_proof) = block
+                let (ns_payload_flat_from_proof, ns_proof) = block
                     .namespace_with_proof(&actual_ns_table, ns_idx)
                     .unwrap();
                 assert_eq!(
@@ -1062,6 +1066,20 @@ mod test {
                     "namespace {} incorrect payload bytes returned from namespace_with_proof",
                     ns_id.0,
                 );
+                // NOTE: There is no NamespaceProof::verify method because it's quite simple.
+                // compare: there is a TxInclusionProof::verify method for txs because that's complex.
+                // TODO make a NamespaceProof::verify method?
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: &ns_payload_flat_from_proof,
+                        range: actual_ns_payload_range,
+                        commit: &disperse_data.commit,
+                        common: &disperse_data.common,
+                    },
+                    &ns_proof,
+                )
+                .unwrap()
+                .unwrap_or_else(|_| panic!("namespace {} proof verification failure", ns_id.0));
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
