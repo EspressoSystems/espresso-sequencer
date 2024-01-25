@@ -9,21 +9,13 @@ import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientTest is LC {
-    constructor(LC.LightClientState memory genesis, uint64 numBlockPerEpoch)
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch)
         LC(genesis, numBlockPerEpoch)
-    {
-        setNumBlocksPerEpoch(numBlockPerEpoch);
-    }
+    { }
 
     /// @dev Directly mutate `currentEpoch` variable for test
     function setCurrentEpoch(uint64 newEpoch) public {
         currentEpoch = newEpoch;
-    }
-
-    // TODO remove once we can use epochs. See
-    // https://github.com/EspressoSystems/espresso-sequencer/issues/940
-    function setNumBlocksPerEpoch(uint64 numBlockPerEpoch) public {
-        blocksPerEpoch = numBlockPerEpoch;
     }
 
     /// @dev Directly mutate `finalizedState` variable for test

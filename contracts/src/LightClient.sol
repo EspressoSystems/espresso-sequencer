@@ -18,10 +18,7 @@ contract LightClient {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    // TODO make the variable immutable and format it as using  as BLOCKS_PER_EPOCH once we can use
-    // epochs. See
-    // https://github.com/EspressoSystems/espresso-sequencer/issues/940
-    uint64 public blocksPerEpoch;
+    uint32 public immutable BLOCKS_PER_EPOCH;
 
     // === Storage ===
     //
@@ -81,7 +78,7 @@ contract LightClient {
 
     /// @dev Note that numBlockPerEpoch is ignore for now. See
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/940
-    constructor(LightClientState memory genesis, uint64 numBlockPerEpoch) {
+    constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -100,9 +97,7 @@ contract LightClient {
         finalizedState = genesis;
         currentEpoch = 0;
 
-        // TODO replace with an assignment to numBlockPerEpoch once we can use epochs. See
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/940
-        blocksPerEpoch = type(uint64).max;
+        BLOCKS_PER_EPOCH = numBlockPerEpoch;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
@@ -127,7 +122,7 @@ contract LightClient {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
+        uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
