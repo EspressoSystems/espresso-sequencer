@@ -18,7 +18,10 @@ contract LightClient {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    uint32 public immutable BLOCKS_PER_EPOCH;
+    // TODO make the variable immutable and format it as using  as BLOCKS_PER_EPOCH once we can use
+    // epochs. See
+    // https://github.com/EspressoSystems/espresso-sequencer/issues/940
+    uint64 public blocksPerEpoch;
 
     // === Storage ===
     //
@@ -76,7 +79,9 @@ contract LightClient {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
-    constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
+    /// @dev Note that numBlockPerEpoch is ignore for now. See
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/940
+    constructor(LightClientState memory genesis, uint64 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -94,7 +99,11 @@ contract LightClient {
         genesisState = genesis;
         finalizedState = genesis;
         currentEpoch = 0;
-        BLOCKS_PER_EPOCH = numBlockPerEpoch;
+
+        // TODO replace with an assignment to numBlockPerEpoch once we can use epochs. See
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/940
+        blocksPerEpoch = type(uint64).max;
+
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
         votingThreshold = genesis.threshold;
@@ -118,7 +127,7 @@ contract LightClient {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
+        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);

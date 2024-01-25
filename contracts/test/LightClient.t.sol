@@ -16,7 +16,7 @@ import { BN254 } from "bn254/BN254.sol";
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
     LCTest lc;
-    uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
+    uint64 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
@@ -103,7 +103,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     /// @dev Test the constructor has initialized the contract state properly, espeically genesis
     /// block.
     function test_CorrectInitialization() external {
-        assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);
+        assert(lc.blocksPerEpoch() == BLOCKS_PER_EPOCH_TEST);
         assertEq(abi.encode(getGenesisState()), abi.encode(genesis));
         assertEq(abi.encode(getFinalizedState()), abi.encode(genesis));
         assert(lc.currentEpoch() == 0);

@@ -34,24 +34,24 @@ pub mod light_client {
                     },
                     ::ethers::core::abi::ethabi::Param {
                         name: ::std::borrow::ToOwned::to_owned("numBlockPerEpoch"),
-                        kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                        kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                         internal_type: ::core::option::Option::Some(
-                            ::std::borrow::ToOwned::to_owned("uint32"),
+                            ::std::borrow::ToOwned::to_owned("uint64"),
                         ),
                     },
                 ],
             }),
             functions: ::core::convert::From::from([
                 (
-                    ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
+                    ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
+                        name: ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
                         inputs: ::std::vec![],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                             name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint32"),
+                                ::std::borrow::ToOwned::to_owned("uint64"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -525,10 +525,10 @@ pub mod light_client {
                 client,
             ))
         }
-        ///Calls the contract's `BLOCKS_PER_EPOCH` (0x1f3adc0f) function
-        pub fn blocks_per_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u32> {
+        ///Calls the contract's `blocksPerEpoch` (0xf0682054) function
+        pub fn blocks_per_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([31, 58, 220, 15], ())
+                .method_hash([240, 104, 32, 84], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `computeStakeTableComm` (0xaa922732) function
@@ -918,7 +918,7 @@ pub mod light_client {
             Self::NewStateFilter(value)
         }
     }
-    ///Container type for all input parameters for the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
+    ///Container type for all input parameters for the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -931,7 +931,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "BLOCKS_PER_EPOCH", abi = "BLOCKS_PER_EPOCH()")]
+    #[ethcall(name = "blocksPerEpoch", abi = "blocksPerEpoch()")]
     pub struct BlocksPerEpochCall;
     ///Container type for all input parameters for the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
     #[derive(
@@ -1238,7 +1238,7 @@ pub mod light_client {
             Self::VotingThreshold(value)
         }
     }
-    ///Container type for all return fields from the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
+    ///Container type for all return fields from the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1251,7 +1251,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub struct BlocksPerEpochReturn(pub u32);
+    pub struct BlocksPerEpochReturn(pub u64);
     ///Container type for all return fields from the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
     #[derive(
         Clone,
