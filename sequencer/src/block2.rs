@@ -867,7 +867,7 @@ mod boilerplate {
     ///
     /// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
     /// If it were public then we could instead use
-    /// ```rust
+    /// ```compile_fail
     /// LargeRangeProof<KzgEval<Bls12_281>>
     /// ```
     /// but that's still pretty crufty.
