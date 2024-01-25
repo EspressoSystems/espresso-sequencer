@@ -90,8 +90,6 @@ impl State for TestState {
     }
 
     fn on_commit(&self) {}
-
-    fn metadata(&self) -> Self::Metadata {}
 }
 
 impl TestableState for TestState {

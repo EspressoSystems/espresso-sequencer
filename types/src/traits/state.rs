@@ -75,9 +75,6 @@ pub trait State:
 
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
-
-    /// Get the application-specific data.
-    fn metadata(&self) -> Self::Metadata;
 }
 
 // TODO Seuqnecing here means involving DA in consensus
