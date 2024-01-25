@@ -7,7 +7,7 @@ use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
     network::{CommunicationChannel, NetworkReliability, TestableNetworkingImplementation},
-    states::{ConsensusTime, TestableBlock, TestableState},
+    states::{ConsensusTime, TestableState},
     storage::{StorageError, StorageState, TestableStorage},
     ValidatedState,
 };
@@ -16,7 +16,7 @@ use crate::{
     message::ProcessedSequencingMessage,
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
-        storage::Storage, BlockPayload,
+        states::InstanceState, storage::Storage, BlockPayload,
     },
 };
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver, UnboundedSender};

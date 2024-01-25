@@ -319,25 +319,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .retain(|view_number, _| *view_number >= old_anchor_view);
         self.validated_state_map
             .range(old_anchor_view..new_anchor_view)
-<<<<<<< HEAD
-            .filter_map(|(_view_number, view)| view.get_payload_commitment())
-            .for_each(|payload_commitment| {
-                self.saved_payloads.remove(payload_commitment);
-            });
-        self.validated_state_map
-            .range(old_anchor_view..new_anchor_view)
-=======
->>>>>>> keyao-store-data
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 self.saved_leaves.remove(&leaf);
             });
-<<<<<<< HEAD
         self.validated_state_map = self.validated_state_map.split_off(&new_anchor_view);
-=======
-        self.state_map = self.state_map.split_off(&new_anchor_view);
         self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);
->>>>>>> keyao-store-data
     }
 
     /// Gets the last decided leaf.
@@ -357,8 +344,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
     /// Gets the validated state with the given view number, if in the state map.
     #[must_use]
-    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&TYPES::StateType> {
-        match self.state_map.get(&view_number) {
+    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&TYPES::ValidatedState> {
+        match self.validated_state_map.get(&view_number) {
             Some(view) => view.get_state(),
             None => None,
         }
@@ -372,12 +359,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     #[must_use]
     pub fn get_decided_state(&self) -> &TYPES::ValidatedState {
         let decided_view_num = self.last_decided_view;
-<<<<<<< HEAD
-        let view = self.validated_state_map.get(&decided_view_num).unwrap();
-        view.get_state()
-=======
         self.get_state(decided_view_num)
->>>>>>> keyao-store-data
             .expect("Decided state not found! Consensus internally inconsistent")
     }
 }
