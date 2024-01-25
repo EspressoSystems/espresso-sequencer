@@ -3599,7 +3599,12 @@ dependencies = [
  "ark-ff",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
+ "async-compatibility-layer",
+ "async-std",
+ "async-trait",
  "blake3",
+ "clap",
+ "cld",
  "ethers",
  "hotshot-stake-table",
  "hotshot-types",
@@ -3609,7 +3614,13 @@ dependencies = [
  "jf-utils",
  "rand_chacha 0.3.1",
  "serde",
+ "snafu",
+ "surf-disco",
  "tagged-base64",
+ "tide-disco",
+ "time 0.3.31",
+ "tracing",
+ "url",
 ]
 
 [[package]]

@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::too_many_lines)]
-    fn crypto_test_circuit_building() {
+    fn test_circuit_building() {
         let num_validators = 10;
         let mut prng = test_rng();
 

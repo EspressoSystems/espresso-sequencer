@@ -5,9 +5,10 @@ use clap::Args;
 use ethers::types::U256;
 use futures::FutureExt;
 use hotshot_stake_table::vec_based::config::FieldType;
-use hotshot_state_prover::state::{StateSignature, StateSignatureScheme, StateVerKey};
+use hotshot_state_prover::state::{
+    StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
+};
 use jf_primitives::signatures::SignatureScheme;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,
@@ -19,18 +20,6 @@ use tide_disco::{
     Api, App, Error as _, StatusCode,
 };
 use url::Url;
-
-/// The state signatures bundle is a light client state and its signatures collected
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StateSignaturesBundle {
-    /// The state for this signatures bundle
-    state: LightClientState,
-    /// The collected signatures
-    signatures: HashMap<StateVerKey, StateSignature>,
-
-    /// Total stakes associated with the signer
-    accumulated_weight: U256,
-}
 
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]

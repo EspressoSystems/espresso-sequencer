@@ -1,12 +1,13 @@
 //! Types and structs associated with light client state
-
 use ark_ed_on_bn254::EdwardsConfig as Config;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::SeedableRng;
+use ethers::types::U256;
 use jf_primitives::signatures::schnorr;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tagged_base64::tagged;
 
 /// A light client state that is generic over a prime field
@@ -122,4 +123,16 @@ pub struct StateSignatureRequestBody {
     pub key: StateVerKey,
     pub state: LightClientState,
     pub signature: StateSignature,
+}
+
+/// The state signatures bundle is a light client state and its signatures collected
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateSignaturesBundle {
+    /// The state for this signatures bundle
+    pub state: LightClientState,
+    /// The collected signatures
+    pub signatures: HashMap<StateVerKey, StateSignature>,
+
+    /// Total stakes associated with the signer
+    pub accumulated_weight: U256,
 }

@@ -12,7 +12,12 @@ ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+async-trait = { workspace = true }
 blake3 = "1.5"
+clap = { workspace = true }
+cld = { workspace = true }
 ethers = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
@@ -22,7 +27,13 @@ jf-relation = { workspace = true }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
+snafu = { workspace = true }
+surf-disco = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+tide-disco = { workspace = true }
+time = "0.3"
+tracing = { workspace = true }
+url = { workspace = true }
 
 [features]
 default = ["parallel"]
