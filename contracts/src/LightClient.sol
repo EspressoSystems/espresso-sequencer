@@ -76,8 +76,6 @@ contract LightClient {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
-    /// @dev Note that numBlockPerEpoch is ignore for now. See
-    /// https://github.com/EspressoSystems/espresso-sequencer/issues/940
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
