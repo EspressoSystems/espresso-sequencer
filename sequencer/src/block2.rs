@@ -1054,7 +1054,14 @@ mod test {
                 );
 
                 // test ns proof
-                // let foo = block.namespace_with_proof(meta, ns_index);
+                let (ns_payload_flat_from_proof, _ns_proof) = block
+                    .namespace_with_proof(&actual_ns_table, ns_idx)
+                    .unwrap();
+                assert_eq!(
+                    ns_payload_flat_from_proof, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                    ns_id.0,
+                );
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
