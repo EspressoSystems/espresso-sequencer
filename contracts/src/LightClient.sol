@@ -121,6 +121,8 @@ contract LightClient {
             revert OutdatedState();
         }
         uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
+
+        // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
