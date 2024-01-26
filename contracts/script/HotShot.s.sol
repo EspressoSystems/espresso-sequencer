@@ -15,16 +15,12 @@ contract DeployHotShot is Script {
         // For Decaf there will be only one epoch
         uint32 blocksPerEpoch = type(uint32).max;
 
-        // TODO change when we start using epochs. See
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/940
-        uint256 stakeTableCapacity = 10;
-
         // TODO for a production deployment provide the right genesis state
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
         cmds[2] = vm.toString(blocksPerEpoch);
-        cmds[3] = vm.toString(stakeTableCapacity / 2);
+        cmds[3] = vm.toString(uint256(5));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
