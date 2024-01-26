@@ -1,6 +1,6 @@
 use crate::circuit::PublicInput;
 use crate::state::{LightClientState, StateVerKey};
-use crate::BaseField;
+use crate::CircuitField;
 use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_std::{
@@ -33,9 +33,11 @@ pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
     srs: &UniversalSrs,
 ) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
-    let (circuit, _) =
-        crate::circuit::build_for_preprocessing::<BaseField, EdwardsConfig, STAKE_TABLE_CAPACITY>(
-        )?;
+    let (circuit, _) = crate::circuit::build_for_preprocessing::<
+        CircuitField,
+        EdwardsConfig,
+        STAKE_TABLE_CAPACITY,
+    >()?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 
@@ -61,7 +63,7 @@ pub fn generate_state_update_proof<STIter, R, BitIter, SigIter, const STAKE_TABL
     signatures: SigIter,
     lightclient_state: &LightClientState,
     threshold: &U256,
-) -> Result<(Proof, PublicInput<BaseField>), PlonkError>
+) -> Result<(Proof, PublicInput<CircuitField>), PlonkError>
 where
     STIter: IntoIterator,
     STIter::Item: Borrow<(StateVerKey, U256)>,
@@ -87,7 +89,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_state_update_proof, preprocess, BaseField, UniversalSrs};
+    use super::{generate_state_update_proof, preprocess, CircuitField, UniversalSrs};
     use crate::{
         circuit::build_for_preprocessing,
         state::LightClientState,
@@ -185,14 +187,14 @@ mod tests {
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
 
-        let block_comm_root = VariableLengthRescueCRHF::<BaseField, 1>::evaluate(vec![
-            BaseField::from(1u32),
-            BaseField::from(2u32),
+        let block_comm_root = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
+            CircuitField::from(1u32),
+            CircuitField::from(2u32),
         ])
         .unwrap()[0];
-        let fee_ledger_comm = VariableLengthRescueCRHF::<BaseField, 1>::evaluate(vec![
-            BaseField::from(3u32),
-            BaseField::from(5u32),
+        let fee_ledger_comm = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
+            CircuitField::from(3u32),
+            CircuitField::from(5u32),
         ])
         .unwrap()[0];
 
@@ -203,7 +205,7 @@ mod tests {
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg: [BaseField; 7] = lightclient_state.clone().into();
+        let state_msg: [CircuitField; 7] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()
@@ -229,7 +231,7 @@ mod tests {
 
         // good path
         let num_gates =
-            build_for_preprocessing::<BaseField, ark_ed_on_bn254::EdwardsConfig, ST_CAPACITY>()
+            build_for_preprocessing::<CircuitField, ark_ed_on_bn254::EdwardsConfig, ST_CAPACITY>()
                 .unwrap()
                 .0
                 .num_gates();

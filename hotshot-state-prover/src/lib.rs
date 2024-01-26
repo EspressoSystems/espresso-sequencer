@@ -2,10 +2,10 @@
 
 /// State verifier circuit builder
 pub mod circuit;
-/// State proof generation
-pub mod proof;
 /// Prover service related functionalities
 pub mod service;
+/// SNARK proof generation
+pub mod snark;
 /// Light client state related structs
 pub mod state;
 /// Utilities for test
@@ -13,4 +13,4 @@ pub mod state;
 mod utils;
 
 /// Base field
-pub type BaseField = ark_ed_on_bn254::Fq;
+pub type CircuitField = ark_ed_on_bn254::Fq;

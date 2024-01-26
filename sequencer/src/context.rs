@@ -7,7 +7,7 @@ use hotshot_state_prover::{
         LightClientState, StateKeyPair, StateSignature, StateSignatureRequestBody,
         StateSignatureScheme,
     },
-    BaseField,
+    CircuitField,
 };
 use jf_primitives::signatures::SignatureScheme;
 use surf_disco::Client;
@@ -84,7 +84,7 @@ impl<N: network::Type> SequencerContext<N> {
 
     /// Sign the light client state at given height and store it.
     pub async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        let msg: [BaseField; 7] = state.into();
+        let msg: [CircuitField; 7] = state.into();
         let signature = StateSignatureScheme::sign(
             &(),
             self.state_key_pair.sign_key_ref(),

@@ -18,6 +18,8 @@ async-trait = { workspace = true }
 blake3 = "1.5"
 clap = { workspace = true }
 cld = { workspace = true }
+crs = { git = "https://github.com/alxiong/crs" }
+displaydoc = { version = "0.2.3", default-features = false }
 ethers = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }

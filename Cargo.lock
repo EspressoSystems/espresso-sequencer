@@ -3605,6 +3605,8 @@ dependencies = [
  "blake3",
  "clap",
  "cld",
+ "crs",
+ "displaydoc",
  "ethers",
  "hotshot-stake-table",
  "hotshot-types",

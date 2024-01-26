@@ -1,10 +1,10 @@
 //! Circuit implementation for verifying light client state update
 
-use crate::state::GenericLightClientState;
 use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
+use hotshot_types::light_client::LightClientState;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
     circuit::{
@@ -134,7 +134,7 @@ impl LightClientStateVar {
     /// if unable to create any of the public variables
     pub fn new<F: PrimeField>(
         circuit: &mut PlonkCircuit<F>,
-        state: &GenericLightClientState<F>,
+        state: &LightClientState<F>,
     ) -> Result<Self, CircuitError> {
         let view_number_f = F::from(state.view_number as u64);
         let block_height_f = F::from(state.block_height as u64);
@@ -213,7 +213,7 @@ pub(crate) fn build<F, P, STIter, BitIter, SigIter, const STAKE_TABLE_CAPACITY: 
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
     signatures: SigIter,
-    lightclient_state: &GenericLightClientState<F>,
+    lightclient_state: &LightClientState<F>,
     threshold: &U256,
 ) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
 where
@@ -420,7 +420,7 @@ where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
 {
-    let lightclient_state = GenericLightClientState {
+    let lightclient_state = LightClientState {
         view_number: 0,
         block_height: 0,
         block_comm_root: F::default(),

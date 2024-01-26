@@ -1,28 +1,38 @@
 //! A light client prover service
 
 use crate::circuit::PublicInput;
-use crate::proof::{generate_state_update_proof, Proof, ProvingKey};
+use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 use crate::state::{LightClientState, StateSignaturesBundle, StateVerKey};
-use crate::BaseField;
+use crate::CircuitField;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use async_std::task::{sleep, spawn};
+use displaydoc::Display;
 use ethers::types::U256;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use jf_plonk::errors::PlonkError;
+use jf_primitives::pcs::prelude::UnivariateUniversalParams;
+use jf_relation::Circuit as _;
+use std::fs::File;
+use std::path::PathBuf;
+use std::time::Duration;
 use surf_disco::Client;
 use tide_disco::error::ServerError;
+use time::Instant;
 use url::Url;
 
 const STAKE_TABLE_CAPACITY: usize = 200;
 
-pub async fn sync_stake_table() -> StakeTable<BLSPubKey, StateVerKey, BaseField> {
+pub async fn sync_stake_table() -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     // TODO(Chengyu): initialize a stake table
     Default::default()
 }
 
-pub fn load_proving_key() -> ProvingKey {
-    // TODO(Chengyu): get a proving key
-    todo!()
+pub fn load_proving_key(path: PathBuf) -> ProvingKey {
+    let f = File::open(path).unwrap_or_else(|err| panic!("{err}"));
+    <ProvingKey as CanonicalDeserialize>::deserialize_compressed(f)
+        .unwrap_or_else(|err| panic!("{err}"))
 }
 
 pub async fn fetch_latest_state(
@@ -40,15 +50,14 @@ pub async fn read_contract_state() -> Result<LightClientState, ProverError> {
 }
 
 pub async fn submit_state_and_proof(
-    _state: LightClientState,
     _proof: Proof,
-    _public_input: PublicInput<BaseField>,
+    _public_input: PublicInput<CircuitField>,
 ) -> Result<(), ProverError> {
     todo!()
 }
 
 pub async fn sync_state(
-    st: &StakeTable<BLSPubKey, StateVerKey, BaseField>,
+    st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     proving_key: &ProvingKey,
     relay_server_client: &Client<ServerError>,
 ) -> Result<(), ProverError> {
@@ -79,7 +88,7 @@ pub async fn sync_state(
     });
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let now = time::Instant::now();
+    let proof_gen_start = time::Instant::now();
     let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
@@ -89,28 +98,91 @@ pub async fn sync_state(
         &bundle.state,
         &threshold,
     )?;
-    let elapsed = now.elapsed();
-    tracing::info!("Proof generation completed. Elapsed: {elapsed:.2}");
+    let proof_gen_elapsed = proof_gen_start.elapsed();
+    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
-    submit_state_and_proof(bundle.state, proof, public_input).await
+    submit_state_and_proof(proof, public_input).await?;
+
+    tracing::info!("Successfully synced light client state.");
+    Ok(())
 }
 
-pub async fn run_prover_service(_relay_server_url: Url) {
-    todo!()
+pub fn key_gen(path: PathBuf) {
+    let srs = {
+        let num_gates = crate::circuit::build_for_preprocessing::<
+            CircuitField,
+            ark_ed_on_bn254::EdwardsConfig,
+            STAKE_TABLE_CAPACITY,
+        >()
+        .unwrap()
+        .0
+        .num_gates();
+
+        std::println!("Loading SRS from Aztec's ceremony...");
+        let srs_timer = Instant::now();
+        let srs = crs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs_elapsed = srs_timer.elapsed();
+        std::println!("Done in {srs_elapsed:.3}");
+
+        // convert to Jellyfish type
+        // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
+        UnivariateUniversalParams {
+            powers_of_g: srs.powers_of_g,
+            h: srs.h,
+            beta_h: srs.beta_h,
+            powers_of_h: vec![srs.h, srs.beta_h],
+        }
+    };
+
+    std::println!("Generating proving key and verification key.");
+    let key_gen_timer = Instant::now();
+    let (pk, vk) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        .expect("Fail to preprocess state prover circuit");
+    let key_gen_elapsed = key_gen_timer.elapsed();
+    std::println!("Done in {key_gen_elapsed:.3}");
+
+    let mut vk_path = path.clone();
+    pk.serialize_compressed(File::create(&path).expect("Error creating file {path}."))
+        .expect("Error serializing the proving key");
+    vk_path.set_extension("pub");
+    vk.serialize_compressed(File::create(&vk_path).expect("Error creating file {vk_path}."))
+        .expect("Error serializing the verification key");
+    std::println!(
+        "Proving key: {}\nVerification key: {}",
+        path.into_os_string().into_string().unwrap(),
+        vk_path.into_os_string().into_string().unwrap()
+    );
+}
+
+pub async fn run_prover_service(key_path: PathBuf, relay_server_url: Url, freq: Duration) {
+    // TODO(#1022): maintain the following stake table
+    let st = sync_stake_table().await;
+    let proving_key = load_proving_key(key_path);
+    let relay_server_client = Client::<ServerError>::new(relay_server_url);
+
+    spawn(async move {
+        loop {
+            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client).await {
+                tracing::error!("Cannot sync the light client state: {}", err);
+            }
+            sleep(freq).await;
+        }
+    })
+    .await;
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once(relay_server_url: Url) {
+pub async fn run_prover_once(key_path: PathBuf, relay_server_url: Url) {
     let st = sync_stake_table().await;
-    let proving_key = load_proving_key();
-    let client = Client::<ServerError>::new(relay_server_url);
+    let proving_key = load_proving_key(key_path);
+    let relay_server_client = Client::<ServerError>::new(relay_server_url);
 
-    sync_state(&st, &proving_key, &client)
+    sync_state(&st, &proving_key, &relay_server_client)
         .await
         .expect("Error syncing the light client state.");
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum ProverError {
     /// Invalid light client state or signatures
     InvalidState,
@@ -122,6 +194,8 @@ pub enum ProverError {
     StakeTableError(StakeTableError),
     /// Internal error when generating the SNARK proof
     PlonkError(PlonkError),
+    /// Internal error
+    Internal(String),
 }
 
 impl From<ServerError> for ProverError {
@@ -141,3 +215,5 @@ impl From<StakeTableError> for ProverError {
         Self::StakeTableError(err)
     }
 }
+
+impl std::error::Error for ProverError {}

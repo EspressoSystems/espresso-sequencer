@@ -1,6 +1,5 @@
 //! Types and structs associated with light client state
 use ark_ed_on_bn254::EdwardsConfig as Config;
-use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::SeedableRng;
 use ethers::types::U256;
@@ -8,64 +7,9 @@ use jf_primitives::signatures::schnorr;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tagged_base64::tagged;
-
-/// A light client state that is generic over a prime field
-#[tagged("LIGHT_CLIENT_STATE")]
-#[derive(
-    Clone,
-    Debug,
-    CanonicalSerialize,
-    CanonicalDeserialize,
-    Default,
-    Eq,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Hash,
-)]
-pub struct GenericLightClientState<F: PrimeField> {
-    /// Current view number
-    pub view_number: usize,
-    /// Current block height
-    pub block_height: usize,
-    /// Root of the block commitment tree
-    pub block_comm_root: F,
-    /// Commitment for fee ledger
-    pub fee_ledger_comm: F,
-    /// Commitment for the stake table
-    pub stake_table_comm: (F, F, F),
-}
-
-impl<F: PrimeField> From<GenericLightClientState<F>> for [F; 7] {
-    fn from(state: GenericLightClientState<F>) -> Self {
-        [
-            F::from(state.view_number as u64),
-            F::from(state.block_height as u64),
-            state.block_comm_root,
-            state.fee_ledger_comm,
-            state.stake_table_comm.0,
-            state.stake_table_comm.1,
-            state.stake_table_comm.2,
-        ]
-    }
-}
-impl<F: PrimeField> From<&GenericLightClientState<F>> for [F; 7] {
-    fn from(state: &GenericLightClientState<F>) -> Self {
-        [
-            F::from(state.view_number as u64),
-            F::from(state.block_height as u64),
-            state.block_comm_root,
-            state.fee_ledger_comm,
-            state.stake_table_comm.0,
-            state.stake_table_comm.1,
-            state.stake_table_comm.2,
-        ]
-    }
-}
 
 /// Concrete type for light client state
-pub type LightClientState = GenericLightClientState<ark_ed_on_bn254::Fq>;
+pub type LightClientState = hotshot_types::light_client::LightClientState<ark_ed_on_bn254::Fq>;
 /// Signature scheme
 pub type StateSignatureScheme =
     jf_primitives::signatures::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;

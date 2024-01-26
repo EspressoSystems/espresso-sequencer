@@ -6,7 +6,7 @@ use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_state_prover::state::{LightClientState, StateSignatureRequestBody, StateVerKey};
-use hotshot_state_prover::BaseField;
+use hotshot_state_prover::CircuitField;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
@@ -74,8 +74,8 @@ fn form_light_client_state(
     LightClientState {
         view_number: leaf.get_view_number().get_u64() as usize,
         block_height: leaf.get_height() as usize,
-        block_comm_root: BaseField::default(),
-        fee_ledger_comm: BaseField::default(),
+        block_comm_root: CircuitField::default(),
+        fee_ledger_comm: CircuitField::default(),
         stake_table_comm: *stake_table_comm,
     }
 }
@@ -102,15 +102,15 @@ impl StateSignatureMemStorage {
 }
 
 /// Type for stake table commitment
-pub type StakeTableCommitmentType = (BaseField, BaseField, BaseField);
+pub type StakeTableCommitmentType = (CircuitField, CircuitField, CircuitField);
 
 /// Helper function for stake table commitment
 pub(crate) fn static_stake_table_commitment(
     known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
     state_ver_keys: &[StateVerKey],
     capacity: usize,
-) -> (BaseField, BaseField, BaseField) {
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, BaseField>::new(capacity);
+) -> (CircuitField, CircuitField, CircuitField) {
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(capacity);
     known_nodes_with_stakes
         .iter()
         .zip(state_ver_keys)
