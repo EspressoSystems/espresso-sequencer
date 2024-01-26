@@ -45,8 +45,6 @@ pub trait State:
     type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
-    /// Application-specific data.
-    type Metadata: Debug + Send + Sync;
 
     /// Check if the proposed block header is valid and apply it to the state if so.
     ///

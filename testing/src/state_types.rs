@@ -60,8 +60,6 @@ impl State for TestState {
 
     type Time = ViewNumber;
 
-    type Metadata = ();
-
     fn validate_and_apply_header(
         &self,
         _proposed_header: &Self::BlockHeader,
