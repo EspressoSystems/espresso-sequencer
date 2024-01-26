@@ -803,7 +803,7 @@ mod tx_table_entry {
     }
 }
 
-type NsTable = <Payload as hotshot::traits::BlockPayload>::Metadata;
+type NsTable = <Payload as BlockPayload>::Metadata;
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
