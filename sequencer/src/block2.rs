@@ -1,21 +1,28 @@
-use self::{
-    boilerplate::{NamespaceProof, RangeProof},
-    tx_table_entry::TxTableEntry,
-};
-use crate::{Transaction, VmId};
+use self::tx_table_entry::TxTableEntry;
+use crate::{BlockBuildingSnafu, Transaction, VmId};
+use ark_bls12_381::Bls12_381;
+use commit::{Commitment, Committable};
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::traits::BlockPayload;
 use jf_primitives::{
-    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::payload_prover::{PayloadProver, Statement},
+    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::{
+        advz::{
+            payload_prover::{LargeRangeProof, SmallRangeProof},
+            Advz,
+        },
+        payload_prover::{PayloadProver, Statement},
+    },
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ops::Range, sync::OnceLock};
+use snafu::OptionExt;
+use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct BlockPayload {
+pub struct Payload {
     payload: Vec<u8>,
 
     // cache frequently used items
@@ -27,99 +34,7 @@ pub struct BlockPayload {
     tx_table_len_proof: OnceLock<Option<RangeProof>>,
 }
 
-impl BlockPayload {
-    /// Returns (Self, metadata).
-    ///
-    /// `metadata` is a bytes representation of the namespace table.
-    /// Why bytes? To make it easy to move metdata into payload in the future.
-    ///
-    /// Namespace table defined as follows for j>0:
-    /// word[0]:    [number of entries in namespace table]
-    /// word[2j-1]: [id for the jth namespace]
-    /// word[2j]:   [end byte index of the jth namespace in the payload]
-    ///
-    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
-    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
-    ///
-    /// Word type is `TxTableEntry`.
-    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
-    ///
-    /// TODO final entry should be implicit:
-    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
-    ///
-    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
-    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<(Self, Vec<u8>)> {
-        struct NamespaceInfo {
-            // `tx_table` is a bytes representation of the following table:
-            // word[0]: [number n of entries in tx table]
-            // word[j>0]: [end byte index of the (j-1)th tx in the payload]
-            //
-            // Thus, the ith tx payload bytes range is word[i-1]..word[i].
-            // Edge case: tx_table[-1] is implicitly 0.
-            //
-            // Word type is `TxTableEntry`.
-            //
-            // TODO final entry should be implicit:
-            // https://github.com/EspressoSystems/espresso-sequencer/issues/757
-            tx_table: Vec<u8>,
-            tx_bodies: Vec<u8>, // concatenation of all tx payloads
-            tx_bytes_end: TxTableEntry,
-            tx_table_len: TxTableEntry,
-        }
-
-        let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
-        for tx in txs.into_iter() {
-            let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
-
-            let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
-                tx_table: Vec::new(),
-                tx_bodies: Vec::new(),
-                tx_bytes_end: TxTableEntry::zero(),
-                tx_table_len: TxTableEntry::zero(),
-            });
-
-            namespace.tx_bytes_end.checked_add_mut(tx_bytes_len)?;
-            namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
-            namespace.tx_bodies.extend(tx.payload());
-            namespace
-                .tx_table_len
-                .checked_add_mut(TxTableEntry::one())?;
-        }
-
-        // first word of namespace table is its length
-        let namespace_table_len = namespaces.len();
-        let mut namespace_table =
-            Vec::from(TxTableEntry::try_from(namespace_table_len).ok()?.to_bytes());
-
-        // fill payload and namespace table
-        let mut payload = Vec::new();
-        for (id, namespace) in namespaces {
-            payload.extend(namespace.tx_table_len.to_bytes());
-            payload.extend(namespace.tx_table);
-            payload.extend(namespace.tx_bodies);
-            namespace_table.extend(TxTableEntry::try_from(id).ok()?.to_bytes());
-            namespace_table.extend(TxTableEntry::try_from(payload.len()).ok()?.to_bytes());
-        }
-
-        Some((
-            Self {
-                payload,
-                tx_table_len_proof: Default::default(),
-            },
-            namespace_table,
-        ))
-    }
-
-    fn from_bytes<B>(bytes: B) -> Self
-    where
-        B: IntoIterator<Item = u8>,
-    {
-        Self {
-            payload: bytes.into_iter().collect(),
-            tx_table_len_proof: Default::default(),
-        }
-    }
-
+impl Payload {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
@@ -146,7 +61,7 @@ impl BlockPayload {
 
         let ns_payload_range = get_ns_payload_range(meta, ns_index, self.payload.len());
 
-        let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
+        let vid = test_vid_factory(); // TODO temporary VID construction
 
         // TODO log output for each `?`
         // fix this when we settle on an error handling pattern
@@ -193,6 +108,199 @@ impl BlockPayload {
             .as_ref()
     }
 }
+
+impl BlockPayload for Payload {
+    type Error = crate::Error;
+    type Transaction = Transaction;
+    type Metadata = Vec<u8>;
+    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+
+    /// Returns (Self, metadata).
+    ///
+    /// `metadata` is a bytes representation of the namespace table.
+    /// Why bytes? To make it easy to move metdata into payload in the future.
+    ///
+    /// Namespace table defined as follows for j>0:
+    /// word[0]:    [number of entries in namespace table]
+    /// word[2j-1]: [id for the jth namespace]
+    /// word[2j]:   [end byte index of the jth namespace in the payload]
+    ///
+    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
+    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
+    ///
+    /// Word type is `TxTableEntry`.
+    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
+    ///
+    /// TODO final entry should be implicit:
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
+    ///
+    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
+    fn from_transactions(
+        txs: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        struct NamespaceInfo {
+            // `tx_table` is a bytes representation of the following table:
+            // word[0]: [number n of entries in tx table]
+            // word[j>0]: [end byte index of the (j-1)th tx in the payload]
+            //
+            // Thus, the ith tx payload bytes range is word[i-1]..word[i].
+            // Edge case: tx_table[-1] is implicitly 0.
+            //
+            // Word type is `TxTableEntry`.
+            //
+            // TODO final entry should be implicit:
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/757
+            tx_table: Vec<u8>,
+            tx_bodies: Vec<u8>, // concatenation of all tx payloads
+            tx_bytes_end: TxTableEntry,
+            tx_table_len: TxTableEntry,
+        }
+
+        let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
+        for tx in txs.into_iter() {
+            let tx_bytes_len: TxTableEntry = tx
+                .payload()
+                .len()
+                .try_into()
+                .ok()
+                .context(BlockBuildingSnafu)?;
+
+            let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
+                tx_table: Vec::new(),
+                tx_bodies: Vec::new(),
+                tx_bytes_end: TxTableEntry::zero(),
+                tx_table_len: TxTableEntry::zero(),
+            });
+
+            namespace
+                .tx_bytes_end
+                .checked_add_mut(tx_bytes_len)
+                .context(BlockBuildingSnafu)?;
+            namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
+            namespace.tx_bodies.extend(tx.payload());
+            namespace
+                .tx_table_len
+                .checked_add_mut(TxTableEntry::one())
+                .context(BlockBuildingSnafu)?;
+        }
+
+        // first word of namespace table is its length
+        let namespace_table_len = namespaces.len();
+        let mut namespace_table = Vec::from(
+            TxTableEntry::try_from(namespace_table_len)
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
+
+        // fill payload and namespace table
+        let mut payload = Vec::new();
+        for (id, namespace) in namespaces {
+            payload.extend(namespace.tx_table_len.to_bytes());
+            payload.extend(namespace.tx_table);
+            payload.extend(namespace.tx_bodies);
+            namespace_table.extend(
+                TxTableEntry::try_from(id)
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+            namespace_table.extend(
+                TxTableEntry::try_from(payload.len())
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+        }
+
+        Some((
+            Self {
+                payload,
+                tx_table_len_proof: Default::default(),
+            },
+            namespace_table,
+        ))
+        .context(BlockBuildingSnafu)
+    }
+
+    // TODO(746) from_bytes doesn't need `metadata`!
+    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        Self {
+            payload: encoded_transactions.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
+        }
+    }
+
+    fn genesis() -> (Self, Self::Metadata) {
+        Self::from_transactions([]).unwrap()
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(self.payload.iter().cloned())
+    }
+
+    fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
+    }
+}
+impl Display for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
+    }
+}
+
+impl Committable for Payload {
+    fn commit(&self) -> commit::Commitment<Self> {
+        todo!()
+    }
+}
+
+/// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
+///
+/// Unfortunately, [`PayloadProver`] has a generic type param.
+/// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
+/// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
+/// TODO Workaround using generic params, which is allows the caller to influence the return type:
+/// https://stackoverflow.com/a/52886787
+///
+/// TODO temporary VID constructor.
+pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+    // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
+    let (payload_chunk_size, num_storage_nodes) = (8, 10);
+
+    let mut rng = jf_utils::test_rng();
+    let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(payload_chunk_size - 1).unwrap(),
+    )
+    .unwrap();
+    Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+}
+
+// TODO type alias needed only because nested impl Trait is not allowed
+// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+pub(super) type RangeProof =
+    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
+/// Namespace proof type
+///
+/// # Type complexity
+///
+/// Jellyfish's `LargeRangeProof` type has a prime field generic parameter `F`.
+/// This `F` is determined by the pairing parameter for `Advz` currently returned by `test_vid_factory()`.
+/// Jellyfish needs a more ergonomic way for downstream users to refer to this type.
+///
+/// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
+/// If it were public then we could instead use
+/// ```compile_fail
+/// LargeRangeProof<KzgEval<Bls12_281>>
+/// ```
+/// but that's still pretty crufty.
+pub type NamespaceProof =
+    LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 
 // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
 // if `table_bytes` has too few bytes at this `offset` then pad with zero.
@@ -281,7 +389,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
 // TODO currently unused but contains code that might get re-used in the near future.
 fn _get_tx_table_entry(
     ns_offset: usize,
-    block_payload: &BlockPayload,
+    block_payload: &Payload,
     block_payload_len: usize,
     tx_index: usize,
 ) -> TxTableEntry {
@@ -349,7 +457,7 @@ pub fn get_ns_payload_range(
     start..end
 }
 
-impl QueryablePayload for BlockPayload {
+impl QueryablePayload for Payload {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
@@ -406,7 +514,7 @@ impl QueryablePayload for BlockPayload {
             return None; // error: index out of bounds
         }
 
-        let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
+        let vid = test_vid_factory(); // TODO temporary VID construction
 
         // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
         //
@@ -688,7 +796,7 @@ mod tx_table_entry {
     }
 }
 
-type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
+type NsTable = <Payload as BlockPayload>::Metadata;
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
@@ -702,12 +810,12 @@ pub struct TxIterator<'a> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
-    block_payload: &'a BlockPayload,
+    block_payload: &'a Payload,
     ns_table: &'a NsTable,
 }
 
 impl<'a> TxIterator<'a> {
-    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
+    fn new(ns_table: &'a NsTable, block_payload: &'a Payload) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..get_ns_table_len(ns_table),
@@ -761,129 +869,13 @@ impl<'a> Iterator for TxIterator<'a> {
     }
 }
 
-// TODO remove this `boilerplate` module, tidy what's in here.
-// - Skeleton impl of `BlockPayload` for now so as to enable `QueryablePayload`.
-//   https://github.com/EspressoSystems/espresso-sequencer/issues/856
-// - Opaque (not really though) constructor to return an abstract [`PayloadProver`].
-mod boilerplate {
-    use super::{
-        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
-    };
-    use crate::BlockBuildingSnafu;
-    use ark_bls12_381::Bls12_381;
-    use commit::{Commitment, Committable};
-    use jf_primitives::{
-        pcs::checked_fft_size,
-        vid::advz::{
-            payload_prover::{LargeRangeProof, SmallRangeProof},
-            Advz,
-        },
-    };
-    use snafu::OptionExt;
-    use std::fmt::Display;
-
-    impl hotshot::traits::BlockPayload for BlockPayload {
-        type Error = crate::Error;
-        type Transaction = Transaction;
-        type Metadata = Vec<u8>;
-        type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
-
-        fn from_transactions(
-            transactions: impl IntoIterator<Item = Self::Transaction>,
-        ) -> Result<(Self, Self::Metadata), Self::Error> {
-            Self::from_txs(transactions).context(BlockBuildingSnafu)
-        }
-
-        // TODO(746) from_bytes doesn't need `metadata`!
-        fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
-        where
-            I: Iterator<Item = u8>,
-        {
-            Self::from_bytes(encoded_transactions)
-        }
-
-        fn genesis() -> (Self, Self::Metadata) {
-            Self::from_transactions([]).unwrap()
-        }
-
-        fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-            Ok(self.payload.iter().cloned())
-        }
-
-        fn transaction_commitments(
-            &self,
-            meta: &Self::Metadata,
-        ) -> Vec<Commitment<Self::Transaction>> {
-            self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
-        }
-    }
-
-    impl Display for BlockPayload {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{self:#?}")
-        }
-    }
-
-    impl Committable for BlockPayload {
-        fn commit(&self) -> commit::Commitment<Self> {
-            todo!()
-        }
-    }
-
-    /// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
-    ///
-    /// Unfortunately, [`PayloadProver`] has a generic type param.
-    /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
-    /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
-    /// TODO Workaround using generic params, which is allows the caller to influence the return type:
-    /// https://stackoverflow.com/a/52886787
-    ///
-    /// TODO temporary VID constructor.
-    pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
-        // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-        let (payload_chunk_size, num_storage_nodes) = (8, 10);
-
-        let mut rng = jf_utils::test_rng();
-        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
-            &mut rng,
-            checked_fft_size(payload_chunk_size - 1).unwrap(),
-        )
-        .unwrap();
-        Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
-    }
-
-    // TODO type alias needed only because nested impl Trait is not allowed
-    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-    pub(super) type RangeProof =
-        SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
-
-    /// Namespace proof type
-    ///
-    /// # Type complexity
-    ///
-    /// Jellyfish's `LargeRangeProof` type has a prime field generic parameter `F`.
-    /// This `F` is determined by the pairing parameter for `Advz` currently returned by `test_vid_factory()`.
-    /// Jellyfish needs a more ergonomic way for downstream users to refer to this type.
-    ///
-    /// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
-    /// If it were public then we could instead use
-    /// ```compile_fail
-    /// LargeRangeProof<KzgEval<Bls12_281>>
-    /// ```
-    /// but that's still pretty crufty.
-    pub type NamespaceProof =
-        LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
-}
-
 #[cfg(test)]
 mod test {
-    use super::{
-        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex,
-        TxTableEntry,
-    };
+    use super::{test_vid_factory, Payload, Transaction, TxInclusionProof, TxIndex, TxTableEntry};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
+    use hotshot_types::traits::BlockPayload;
     use jf_primitives::vid::{
         payload_prover::{PayloadProver, Statement},
         VidScheme,
@@ -1008,7 +1000,7 @@ mod test {
             assert_eq!(derived_nss.len(), test_case.len());
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
-            let (block, actual_ns_table) = BlockPayload::from_txs(txs).unwrap();
+            let (block, actual_ns_table) = Payload::from_transactions(txs).unwrap();
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
@@ -1221,7 +1213,7 @@ mod test {
                 payload_byte_len
             );
 
-            let block = BlockPayload::from_bytes(test_case.payload);
+            let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.payload.len(), payload_byte_len);
 
@@ -1257,7 +1249,7 @@ mod test {
 
         let mut rng = jf_utils::test_rng();
         let test_case = TestCase::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
-        let block = BlockPayload::from_bytes(test_case.payload.iter().cloned());
+        let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
         assert_eq!(block.payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
