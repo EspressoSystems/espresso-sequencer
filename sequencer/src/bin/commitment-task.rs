@@ -69,8 +69,8 @@ pub struct Options {
     pub port: Option<u16>,
 
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
-    #[clap(long, name = "DELAY", value_parser = parse_duration, default_value = "0s", env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
-    pub delay: Duration,
+    #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
+    pub delay: Option<Duration>,
 }
 #[async_std::main]
 async fn main() {

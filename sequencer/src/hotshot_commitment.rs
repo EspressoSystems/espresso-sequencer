@@ -61,8 +61,8 @@ pub struct CommitmentTaskOptions {
     pub query_service_url: Option<Url>,
 
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
-    #[clap(long, name = "DELAY", value_parser = parse_duration, default_value = "0s", env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
-    pub delay: Duration,
+    #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
+    pub delay: Option<Duration>,
 }
 
 pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
@@ -95,7 +95,7 @@ async fn sequence(
     hard_block_limit: usize,
     hotshot: HotShotClient,
     contract: HotShot<Signer>,
-    delay: Duration,
+    delay: Option<Duration>,
 ) {
     // This is the number of blocks we attempt to sequence
     // If we fail to submit soft_block_limit leaves, we assume we have hit
@@ -120,11 +120,14 @@ async fn sequence(
         } else {
             // If we succeed, increase the limit
             soft_block_limit = std::cmp::min(soft_block_limit * 2, hard_block_limit);
-            // Create an exponential distribution for sampling delay times. The distribution should have
-            // mean `delay`, or parameter `\lambda = 1 / delay`.
-            let delay_distr = rand_distr::Exp::<f64>::new(1f64 / delay.as_millis() as f64).unwrap();
-            let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
-            sleep(delay).await;
+            if let Some(delay) = delay {
+                // Create an exponential distribution for sampling delay times. The distribution should have
+                // mean `delay`, or parameter `\lambda = 1 / delay`.
+                let delay_distr =
+                    rand_distr::Exp::<f64>::new(1f64 / delay.as_millis() as f64).unwrap();
+                let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
+                sleep(delay).await;
+            }
         }
     }
 }
