@@ -1,4 +1,4 @@
-use self::tx_table_entry::TxTableEntry;
+use crate::block2::iterator::TxIndex;
 use crate::{BlockBuildingSnafu, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use commit::{Commitment, Committable};
@@ -18,6 +18,12 @@ use jf_primitives::{
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
+
+use self::entry::TxTableEntry;
+
+pub mod entry;
+pub mod iterator;
+pub mod queryable;
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
@@ -457,132 +463,6 @@ pub fn get_ns_payload_range(
     start..end
 }
 
-impl QueryablePayload for Payload {
-    type TransactionIndex = TxIndex;
-    type Iter<'a> = TxIterator<'a>;
-    type InclusionProof = TxInclusionProof;
-
-    fn len(&self, meta: &Self::Metadata) -> usize {
-        let entry_len = TxTableEntry::byte_len();
-
-        // The number of nss in a block is defined as the minimum of:
-        // (1) the number of nss indicated in the ns table
-        // (2) the number of ns table entries that could fit inside the ns table byte len
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
-        // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = get_ns_table_len(meta);
-
-        // First, collect the offsets of all the nss
-        // (Range starts at 1 to conveniently skip the ns table prefix.)
-        let mut ns_end_offsets = vec![0usize];
-        for i in 1..=ns_table_len {
-            let ns_offset_bytes = meta
-                .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
-                .unwrap();
-
-            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
-                .map(|tx| usize::try_from(tx).unwrap())
-                .unwrap();
-            ns_end_offsets.push(ns_offset);
-        }
-
-        // for each entry in the ns table:
-        // read the tx table len for that ns
-        // that tx table len is the number of txs in that namespace
-        // sum over these tx table lens
-        let mut result = 0;
-        for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
-            // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
-            result += tx_table_len;
-        }
-        result
-    }
-
-    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
-        TxIterator::new(meta, self)
-    }
-
-    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-    fn transaction_with_proof(
-        &self,
-        meta: &Self::Metadata,
-        index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        if index_usize >= self.len(meta) {
-            return None; // error: index out of bounds
-        }
-
-        let vid = test_vid_factory(); // TODO temporary VID construction
-
-        // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
-        //
-        // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
-        //
-        // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
-        //
-        // TODO why isn't cargo fmt wrapping these comments?
-
-        // start
-        let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
-            (TxTableEntry::byte_len(), None)
-        } else {
-            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
-            (
-                range_proof_start,
-                Some(TxTableEntry::from_bytes(self.payload.get(
-                    range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
-                )?)?),
-            )
-        };
-
-        // end
-        let tx_table_range_proof_end = index_usize
-            .checked_add(2)?
-            .checked_mul(TxTableEntry::byte_len())?;
-        let tx_table_range_end = TxTableEntry::from_bytes(self.payload.get(
-            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
-                ..tx_table_range_proof_end,
-        )?)?;
-
-        // correctness proof for the tx payload range
-        let tx_table_range_proof = vid
-            .payload_proof(
-                &self.payload,
-                tx_table_range_proof_start..tx_table_range_proof_end,
-            )
-            .ok()?;
-
-        let tx_payload_range = tx_payload_range(
-            &tx_table_range_start,
-            &tx_table_range_end,
-            &self.get_tx_table_len(),
-            self.payload.len(),
-        )?;
-        Some((
-            // TODO don't copy the tx bytes into the return value
-            // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-            Transaction::new(
-                crate::VmId(0),
-                self.payload.get(tx_payload_range.clone())?.to_vec(),
-            ),
-            TxInclusionProof {
-                tx_table_len: self.get_tx_table_len(),
-                tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
-                tx_table_range_start,
-                tx_table_range_end,
-                tx_table_range_proof,
-                tx_payload_proof: if tx_payload_range.is_empty() {
-                    None
-                } else {
-                    vid.payload_proof(&self.payload, tx_payload_range).ok()
-                },
-            },
-        ))
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
@@ -706,166 +586,6 @@ impl TxInclusionProof {
         }
 
         Some(Ok(()))
-    }
-}
-
-mod tx_table_entry {
-    use super::{Deserialize, Serialize};
-    use crate::VmId;
-    use core::fmt;
-    use std::mem::size_of;
-
-    // Use newtype pattern so that tx table entires cannot be confused with other types.
-    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-    pub struct TxTableEntry(TxTableEntryWord);
-    type TxTableEntryWord = u32;
-
-    impl TxTableEntry {
-        pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
-
-        /// Adds `rhs` to `self` in place. Returns `None` on overflow.
-        pub fn checked_add_mut(&mut self, rhs: Self) -> Option<()> {
-            self.0 = self.0.checked_add(rhs.0)?;
-            Some(())
-        }
-        pub const fn zero() -> Self {
-            Self(0)
-        }
-        pub const fn one() -> Self {
-            Self(1)
-        }
-        pub const fn to_bytes(&self) -> [u8; size_of::<TxTableEntryWord>()] {
-            self.0.to_le_bytes()
-        }
-        pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-            Some(Self(TxTableEntryWord::from_le_bytes(
-                bytes.try_into().ok()?,
-            )))
-        }
-        /// Infallible constructor.
-        pub fn from_bytes_array(bytes: [u8; TxTableEntry::byte_len()]) -> Self {
-            Self(TxTableEntryWord::from_le_bytes(bytes))
-        }
-        pub const fn byte_len() -> usize {
-            size_of::<TxTableEntryWord>()
-        }
-
-        #[cfg(test)]
-        pub fn from_usize(val: usize) -> Self {
-            Self(
-                val.try_into()
-                    .expect("usize -> TxTableEntry should succeed"),
-            )
-        }
-    }
-
-    impl fmt::Display for TxTableEntry {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0)
-        }
-    }
-
-    impl TryFrom<usize> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<usize>>::Error;
-
-        fn try_from(value: usize) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for usize {
-        type Error = <usize as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            usize::try_from(value.0)
-        }
-    }
-
-    impl TryFrom<VmId> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
-
-        fn try_from(value: VmId) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value.0).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for VmId {
-        type Error = <u64 as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            Ok(Self(From::from(value.0)))
-        }
-    }
-}
-
-type NsTable = <Payload as BlockPayload>::Metadata;
-
-/// TODO do we really need `PartialOrd`, `Ord` here?
-/// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct TxIndex {
-    ns_idx: usize,
-    tx_idx: usize,
-}
-
-pub struct TxIterator<'a> {
-    ns_idx: usize, // simpler than using `Peekable`
-    ns_iter: Range<usize>,
-    tx_iter: Range<usize>,
-    block_payload: &'a Payload,
-    ns_table: &'a NsTable,
-}
-
-impl<'a> TxIterator<'a> {
-    fn new(ns_table: &'a NsTable, block_payload: &'a Payload) -> Self {
-        Self {
-            ns_idx: 0, // arbitrary value, changed in first call to next()
-            ns_iter: 0..get_ns_table_len(ns_table),
-            tx_iter: 0..0, // empty range
-            block_payload,
-            ns_table,
-        }
-    }
-}
-
-impl<'a> Iterator for TxIterator<'a> {
-    type Item = TxIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(tx_idx) = self.tx_iter.next() {
-            // we still have txs left to consume in current ns
-            Some(TxIndex {
-                ns_idx: self.ns_idx,
-                tx_idx,
-            })
-        } else {
-            // move to the next name space
-            let payload_len = self.block_payload.payload.len();
-            for ns_idx in self.ns_iter.by_ref() {
-                self.ns_idx = ns_idx;
-                let start = if self.ns_idx == 0 {
-                    0
-                } else {
-                    get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
-                };
-                let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
-
-                // TODO refactor range-checking code
-                let end = std::cmp::min(end, payload_len);
-                let start = std::cmp::min(start, end);
-
-                let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
-
-                self.tx_iter = 0..tx_table_len;
-                if let Some(tx_idx) = self.tx_iter.next() {
-                    return Some(TxIndex {
-                        ns_idx: self.ns_idx,
-                        tx_idx,
-                    });
-                } else {
-                    continue;
-                }
-            }
-            None // all namespaces consumed
-        }
     }
 }
 
@@ -1408,7 +1128,7 @@ mod test {
     }
 
     mod helpers {
-        use crate::{block2::tx_table_entry::TxTableEntry, VmId};
+        use crate::{block2::entry::TxTableEntry, VmId};
         use rand::RngCore;
 
         pub fn tx_table(entries: &[usize]) -> Vec<u8> {

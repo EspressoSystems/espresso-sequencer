@@ -1,6 +1,6 @@
 pub mod api;
 mod block;
-mod block2;
+pub mod block2;
 mod chain_variables;
 pub mod context;
 pub mod hotshot_commitment;
