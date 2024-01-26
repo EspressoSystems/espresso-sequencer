@@ -7,7 +7,13 @@ use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use jf_primitives::{
     pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{advz::{payload_prover::{LargeRangeProof, SmallRangeProof}, Advz}, payload_prover::{PayloadProver, Statement}},
+    vid::{
+        advz::{
+            payload_prover::{LargeRangeProof, SmallRangeProof},
+            Advz,
+        },
+        payload_prover::{PayloadProver, Statement},
+    },
 };
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -111,7 +117,6 @@ impl Payload {
             })
             .as_ref()
     }
-
 }
 
 impl BlockPayload for Payload {
@@ -163,7 +168,12 @@ impl BlockPayload for Payload {
 
         let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
         for tx in txs.into_iter() {
-            let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok().context(BlockBuildingSnafu)?;
+            let tx_bytes_len: TxTableEntry = tx
+                .payload()
+                .len()
+                .try_into()
+                .ok()
+                .context(BlockBuildingSnafu)?;
 
             let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
                 tx_table: Vec::new(),
@@ -172,18 +182,26 @@ impl BlockPayload for Payload {
                 tx_table_len: TxTableEntry::zero(),
             });
 
-            namespace.tx_bytes_end.checked_add_mut(tx_bytes_len).context(BlockBuildingSnafu)?;
+            namespace
+                .tx_bytes_end
+                .checked_add_mut(tx_bytes_len)
+                .context(BlockBuildingSnafu)?;
             namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
             namespace.tx_bodies.extend(tx.payload());
             namespace
                 .tx_table_len
-                .checked_add_mut(TxTableEntry::one()).context(BlockBuildingSnafu)?;
+                .checked_add_mut(TxTableEntry::one())
+                .context(BlockBuildingSnafu)?;
         }
 
         // first word of namespace table is its length
         let namespace_table_len = namespaces.len();
-        let mut namespace_table =
-            Vec::from(TxTableEntry::try_from(namespace_table_len).ok().context(BlockBuildingSnafu)?.to_bytes());
+        let mut namespace_table = Vec::from(
+            TxTableEntry::try_from(namespace_table_len)
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
 
         // fill payload and namespace table
         let mut payload = Vec::new();
@@ -191,8 +209,18 @@ impl BlockPayload for Payload {
             payload.extend(namespace.tx_table_len.to_bytes());
             payload.extend(namespace.tx_table);
             payload.extend(namespace.tx_bodies);
-            namespace_table.extend(TxTableEntry::try_from(id).ok().context(BlockBuildingSnafu)?.to_bytes());
-            namespace_table.extend(TxTableEntry::try_from(payload.len()).ok().context(BlockBuildingSnafu)?.to_bytes());
+            namespace_table.extend(
+                TxTableEntry::try_from(id)
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+            namespace_table.extend(
+                TxTableEntry::try_from(payload.len())
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
         }
 
         Some((
@@ -201,7 +229,8 @@ impl BlockPayload for Payload {
                 tx_table_len_proof: Default::default(),
             },
             namespace_table,
-        )).context(BlockBuildingSnafu)
+        ))
+        .context(BlockBuildingSnafu)
     }
 
     // TODO(746) from_bytes doesn't need `metadata`!
@@ -220,14 +249,10 @@ impl BlockPayload for Payload {
         Ok(self.payload.iter().cloned())
     }
 
-    fn transaction_commitments(
-        &self,
-        meta: &Self::Metadata,
-    ) -> Vec<Commitment<Self::Transaction>> {
+    fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
-}    
-
+}
 impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
@@ -853,13 +878,10 @@ impl<'a> Iterator for TxIterator<'a> {
 
 #[cfg(test)]
 mod test {
-    use hotshot_query_service::availability::QueryablePayload;
-    use super::{
-        test_vid_factory, Payload, Transaction, TxInclusionProof, TxIndex,
-        TxTableEntry,
-    };
+    use super::{test_vid_factory, Payload, Transaction, TxInclusionProof, TxIndex, TxTableEntry};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
+    use hotshot_query_service::availability::QueryablePayload;
     use hotshot_types::traits::BlockPayload;
     use jf_primitives::vid::{
         payload_prover::{PayloadProver, Statement},
