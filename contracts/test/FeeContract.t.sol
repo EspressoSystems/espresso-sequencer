@@ -20,21 +20,8 @@ contract FeeContractTest is Test {
     }
 
     //test deposits work
-    function testFuzz_deposit(address user) public payable {
-        if (msg.value == 0) return;
-        uint256 balanceBefore = feeContract.getBalance(user);
-
-        //deposit for the user
-        feeContract.deposit(user);
-
-        //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContract.getBalance(user);
-        assertEq(balanceAfter, balanceBefore + msg.value);
-    }
-
-    //test deposits work
     function testFuzz_deposit(address user1, address user2) public payable {
-        if (msg.value == 0) return;
+        if (msg.value <= feeContract.MIN_DEPOSIT_AMOUNT()) return;
         uint256 balanceBeforeUser1 = feeContract.getBalance(user1);
         uint256 balanceBeforeUser2 = feeContract.getBalance(user2);
 
@@ -58,7 +45,7 @@ contract FeeContractTest is Test {
 
     //test that depositing twice increases the user's baalance
     function testFuzz_depositTwice(address user) public payable {
-        if (msg.value == 0) return;
+        if (msg.value <= feeContract.MIN_DEPOSIT_AMOUNT()) return;
         vm.prank(user);
         uint256 balanceBefore = feeContract.getBalance(user);
 
@@ -115,7 +102,10 @@ contract FeeContractUpgradabilityTest is Test {
     //test deposits work with a proxy
     function testFuzz_deposit(address user, uint256 amount) public payable {
         vm.assume(user != address(0));
-        vm.assume(amount > 0 && amount <= feeContractProxy.MAX_DEPOSIT_AMOUNT());
+        vm.assume(
+            amount > feeContractProxy.MIN_DEPOSIT_AMOUNT()
+                && amount <= feeContractProxy.MAX_DEPOSIT_AMOUNT()
+        );
 
         uint256 balanceBefore = feeContractProxy.getBalance(user);
 
@@ -125,5 +115,91 @@ contract FeeContractUpgradabilityTest is Test {
         //get the balance for that user after the deposit
         uint256 balanceAfter = feeContractProxy.getBalance(user);
         assertEq(balanceAfter, balanceBefore + amount);
+    }
+
+    //test that depositing twice increases the user's baalance
+    function testFuzz_depositTwice(address user) public payable {
+        if (msg.value == 0) return;
+        vm.prank(user);
+        uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+        uint256 depositAmount = msg.value / 2;
+        //deposit for the user
+        feeContractProxy.deposit{ value: depositAmount }(user);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfter = feeContractProxy.getBalance(user);
+        assertEq(balanceAfter, balanceBefore + depositAmount);
+
+        //deposit the remainder for the user
+        feeContractProxy.deposit{ value: depositAmount }(user);
+
+        //get the balance for that user after the 2nd deposit
+        uint256 balanceAfter2 = feeContractProxy.getBalance(user);
+        assertEq(balanceAfter2, balanceAfter + depositAmount);
+    }
+
+    function testFuzz_noFunction() public payable {
+        address fcAddress = address(feeContractProxy);
+        (bool success,) = fcAddress.call{ value: msg.value }("");
+
+        //assert that the transaction was not successful
+        assertFalse(success);
+
+        //assert that the balance of the fee contract is still zero
+        assertEq(address(feeContractProxy).balance, 0);
+    }
+
+    function testFuzz_nonExistentFunction() public payable {
+        address fcAddress = address(feeContractProxy);
+        (bool success,) =
+            fcAddress.call{ value: msg.value }(abi.encodeWithSignature("withdraw(address)", "0x"));
+
+        //assert that the transaction was not successful
+        assertFalse(success);
+
+        //assert that the balance of the fee contract is still zero
+        assertEq(address(feeContractProxy).balance, 0);
+    }
+
+    //test deposits with a large amount fails
+    function testFail_depositMaxAmount(address user, uint256 amount) public payable {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.MAX_DEPOSIT_AMOUNT() + 1;
+
+        uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfter = feeContractProxy.getBalance(user);
+        assertEq(balanceAfter, balanceBefore + amount);
+    }
+
+    //test deposits with a large amount fails
+    function testFail_depositMinAmount(address user, uint256 amount) public payable {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.MIN_DEPOSIT_AMOUNT() - 0.01 ether;
+
+        uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfter = feeContractProxy.getBalance(user);
+        assertEq(balanceAfter, balanceBefore + amount);
+    }
+
+    //test deposits with a large amount fails
+    function testFail_invalidUserAddress(address user, uint256 amount) public payable {
+        address user = address(0);
+        uint256 amount = 0.5 ether;
+
+        feeContractProxy.getBalance(user);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
     }
 }
