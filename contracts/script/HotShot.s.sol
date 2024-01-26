@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
+import { HotShot } from "../src/HotShot.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
 contract DeployHotShot is Script {
@@ -28,6 +29,9 @@ contract DeployHotShot is Script {
 
         LC.LightClientState memory genesis = state;
         new LC(genesis, blocksPerEpoch);
+
+        //// Legacy HotShot contract deployment
+        new HotShot();
 
         vm.stopBroadcast();
     }
