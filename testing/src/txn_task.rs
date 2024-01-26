@@ -1,5 +1,5 @@
 use crate::test_runner::Node;
-use async_compatibility_layer::art::async_sleep;
+use async_compatibility_layer::art::{async_sleep, async_timeout};
 use futures::FutureExt;
 use hotshot::traits::TestableNodeImplementation;
 use hotshot_task::{
@@ -13,6 +13,7 @@ use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use rand::thread_rng;
 use snafu::Snafu;
 use std::{sync::Arc, time::Duration};
+use tracing::error;
 
 use super::{test_launcher::TaskGenerator, GlobalTestEvent};
 
@@ -107,16 +108,28 @@ impl TxnTaskDescription {
                                         // we're assuming all nodes have the same leaf.
                                         // If they don't match, this is probably fine since
                                         // it should be caught by an assertion (and the txn will be rejected anyway)
-                                        let leaf = node.handle.get_decided_leaf().await;
-                                        let txn = I::leaf_create_random_transaction(
-                                            &leaf,
-                                            &mut thread_rng(),
-                                            0,
-                                        );
-                                        node.handle
-                                            .submit_transaction(txn.clone())
+
+                                        // Attempts to grab the most recently decided leaf. On failure, we don't
+                                        // send a transaction. This is to prevent deadlock.
+                                        if let Some(leaf) = node.handle.try_get_decided_leaf() {
+                                            let txn = I::leaf_create_random_transaction(
+                                                &leaf,
+                                                &mut thread_rng(),
+                                                0,
+                                            );
+
+                                            // Time out if we can't get a lock on consensus in a reasonable time. This is to
+                                            // prevent deadlock.
+                                            if let Err(err) = async_timeout(
+                                                Duration::from_secs(1),
+                                                node.handle.submit_transaction(txn.clone()),
+                                            )
                                             .await
-                                            .expect("Could not send transaction");
+                                            {
+                                                error!("Failed to send test transaction: {err}");
+                                            };
+                                        }
+
                                         (None, state)
                                     }
                                 }

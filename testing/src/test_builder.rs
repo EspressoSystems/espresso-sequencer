@@ -84,7 +84,7 @@ impl TestMetadata {
     pub fn default_stress() -> Self {
         let num_nodes = 100;
         TestMetadata {
-            num_bootstrap_nodes: 15,
+            num_bootstrap_nodes: num_nodes,
             total_nodes: num_nodes,
             start_nodes: num_nodes,
             overall_safety_properties: OverallSafetyPropertiesDescription {
@@ -112,6 +112,9 @@ impl TestMetadata {
     pub fn default_multiple_rounds() -> TestMetadata {
         let num_nodes = 10;
         TestMetadata {
+            // TODO: remove once we have fixed the DHT timeout issue
+            // https://github.com/EspressoSystems/HotShot/issues/2088
+            num_bootstrap_nodes: num_nodes,
             total_nodes: num_nodes,
             start_nodes: num_nodes,
             overall_safety_properties: OverallSafetyPropertiesDescription {
@@ -139,7 +142,7 @@ impl TestMetadata {
         TestMetadata {
             total_nodes: num_nodes,
             start_nodes: num_nodes,
-            num_bootstrap_nodes: 20,
+            num_bootstrap_nodes: num_nodes,
             // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
             // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
             // following issue.
@@ -174,8 +177,8 @@ impl Default for TestMetadata {
             min_transactions: 0,
             total_nodes: num_nodes,
             start_nodes: num_nodes,
-            num_bootstrap_nodes: 5,
-            da_committee_size: 5,
+            num_bootstrap_nodes: num_nodes,
+            da_committee_size: num_nodes,
             spinning_properties: SpinningTaskDescription {
                 node_changes: vec![],
             },
