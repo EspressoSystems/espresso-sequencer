@@ -14,7 +14,7 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
-use crate::state_types::TestState;
+use crate::state_types::TestValidatedState;
 
 /// The transaction in a [`TestBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -182,7 +182,7 @@ pub struct TestBlockHeader {
 
 impl BlockHeader for TestBlockHeader {
     type Payload = TestBlockPayload;
-    type State = TestState;
+    type State = TestValidatedState;
 
     fn new(
         payload_commitment: VidCommitment,

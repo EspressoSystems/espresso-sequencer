@@ -5,7 +5,7 @@
 
 use crate::{
     data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait},
-    traits::State,
+    traits::ValidatedState,
 };
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
@@ -113,7 +113,7 @@ pub trait BlockHeader:
     type Payload: BlockPayload;
 
     /// Validated state.
-    type State: State<BlockHeader = Self>;
+    type State: ValidatedState<BlockHeader = Self>;
 
     /// Build a header with the payload commitment, metadata, parent header, and parent state.
     fn new(

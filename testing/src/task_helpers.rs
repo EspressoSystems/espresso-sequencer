@@ -238,7 +238,8 @@ async fn build_quorum_proposal_and_signature(
             .quorum_membership
             .total_nodes(),
     );
-    let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
+    let mut parent_state =
+        <TestValidatedState as ValidatedState>::from_header(&parent_leaf.block_header);
     let block_header = TestBlockHeader::new(
         payload_commitment,
         (),

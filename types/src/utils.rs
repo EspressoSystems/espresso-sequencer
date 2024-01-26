@@ -32,7 +32,7 @@ pub enum ViewInner<TYPES: NodeType> {
 
 impl<TYPES: NodeType> ViewInner<TYPES> {
     /// Return the underlying undecide leaf view if it exists.
-    pub fn get_leaf(&self) -> Option<(Commitment<Leaf<TYPES>>, &TYPES::StateType)> {
+    pub fn get_leaf(&self) -> Option<(Commitment<Leaf<TYPES>>, &TYPES::ValidatedState)> {
         if let Self::Leaf { leaf, state } = self {
             Some((*leaf, state))
         } else {
