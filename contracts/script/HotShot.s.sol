@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClient } from "../src/LightClient.sol";
 
 contract DeployHotShot is Script {
     function run() external {
