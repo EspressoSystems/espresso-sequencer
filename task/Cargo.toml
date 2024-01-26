@@ -15,7 +15,7 @@ snafu = { workspace = true }
 async-lock = { workspace = true }
 tracing = { workspace = true }
 atomic_enum = "0.2.0"
-pin-project = "1.1.3"
+pin-project = "1.1.4"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
