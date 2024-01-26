@@ -737,7 +737,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             true
                         },
                     ) {
-                        error!("publishing view error");
+                        error!("view publish error {e}");
                         self.output_event_stream
                             .publish(Event {
                                 view_number: view,
