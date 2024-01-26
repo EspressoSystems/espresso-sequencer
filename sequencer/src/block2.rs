@@ -1,4 +1,7 @@
-use self::{boilerplate::RangeProof, tx_table_entry::TxTableEntry};
+use self::{
+    boilerplate::{NamespaceProof, RangeProof},
+    tx_table_entry::TxTableEntry,
+};
 use crate::{Transaction, VmId};
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
@@ -127,6 +130,30 @@ impl BlockPayload {
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
         0..get_ns_table_len(ns_table_bytes)
+    }
+
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    /// Returns (ns_payload, ns_proof) where ns_payload is raw bytes.
+    pub fn namespace_with_proof(
+        &self,
+        meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
+        ns_index: usize,
+    ) -> Option<(Vec<u8>, NamespaceProof)> {
+        if ns_index >= get_ns_table_len(meta) {
+            return None; // error: index out of bounds
+        }
+
+        let ns_payload_range = get_ns_payload_range(meta, ns_index, self.payload.len());
+
+        let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
+
+        // TODO log output for each `?`
+        // fix this when we settle on an error handling pattern
+        Some((
+            self.payload.get(ns_payload_range.clone())?.to_vec(),
+            vid.payload_proof(&self.payload, ns_payload_range).ok()?,
+        ))
     }
 
     /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
@@ -298,6 +325,28 @@ fn tx_payload_range(
     let start = std::cmp::min(start, block_payload_byte_len);
     let end = std::cmp::min(end, block_payload_byte_len);
     Some(start..end)
+}
+
+/// Like `tx_payload_range` except for namespaces.
+/// Returns the byte range for a ns in the block payload bytes.
+///
+/// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
+/// TODO make fns such as this methods of a new `NsTable` struct?
+pub fn get_ns_payload_range(
+    ns_table_bytes: &[u8],
+    ns_index: usize,
+    block_payload_byte_len: usize,
+) -> Range<usize> {
+    let end = std::cmp::min(
+        get_ns_table_entry(ns_table_bytes, ns_index).1,
+        block_payload_byte_len,
+    );
+    let start = if ns_index == 0 {
+        0
+    } else {
+        std::cmp::min(get_ns_table_entry(ns_table_bytes, ns_index - 1).1, end)
+    };
+    start..end
 }
 
 impl QueryablePayload for BlockPayload {
@@ -725,7 +774,10 @@ mod boilerplate {
     use commit::{Commitment, Committable};
     use jf_primitives::{
         pcs::checked_fft_size,
-        vid::advz::{payload_prover::SmallRangeProof, Advz},
+        vid::advz::{
+            payload_prover::{LargeRangeProof, SmallRangeProof},
+            Advz,
+        },
     };
     use snafu::OptionExt;
     use std::fmt::Display;
@@ -783,6 +835,8 @@ mod boilerplate {
     /// Unfortunately, [`PayloadProver`] has a generic type param.
     /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
     /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
+    /// TODO Workaround using generic params, which is allows the caller to influence the return type:
+    /// https://stackoverflow.com/a/52886787
     ///
     /// TODO temporary VID constructor.
     pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
@@ -802,6 +856,23 @@ mod boilerplate {
     // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
     pub(super) type RangeProof =
         SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
+    /// Namespace proof type
+    ///
+    /// # Type complexity
+    ///
+    /// Jellyfish's `LargeRangeProof` type has a prime field generic parameter `F`.
+    /// This `F` is determined by the pairing parameter for `Advz` currently returned by `test_vid_factory()`.
+    /// Jellyfish needs a more ergonomic way for downstream users to refer to this type.
+    ///
+    /// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
+    /// If it were public then we could instead use
+    /// ```compile_fail
+    /// LargeRangeProof<KzgEval<Bls12_281>>
+    /// ```
+    /// but that's still pretty crufty.
+    pub type NamespaceProof =
+        LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 }
 
 #[cfg(test)]
@@ -813,7 +884,10 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use jf_primitives::vid::{
+        payload_prover::{PayloadProver, Statement},
+        VidScheme,
+    };
     use rand::RngCore;
     use std::{collections::HashMap, ops::Range};
 
@@ -858,7 +932,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        // let vid = test_vid_factory();
+        let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -935,14 +1009,14 @@ mod test {
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
             let (block, actual_ns_table) = BlockPayload::from_txs(txs).unwrap();
-            // let disperse_data = vid.disperse(&block.payload).unwrap();
+            let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
             // test total ns length
             assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
 
             // test total tx length
-            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            // tracing::info!("actual_ns_table {:?}", actual_ns_table);
             assert_eq!(block.len(&actual_ns_table), total_num_txs);
             // TODO assert the final ns table entry offset == self.payload.len()
 
@@ -964,16 +1038,48 @@ mod test {
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
+                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+
                 // test ns iterator
                 let ns_iter_idx = ns_iter.next().unwrap();
                 assert_eq!(ns_iter_idx, ns_idx);
 
+                // test ns payload
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
-                let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+                let actual_ns_payload_flat =
+                    block.payload.get(actual_ns_payload_range.clone()).unwrap();
+                assert_eq!(
+                    actual_ns_payload_flat, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes",
+                    ns_id.0,
+                );
+
+                // test ns proof
+                let (ns_payload_flat_from_proof, ns_proof) = block
+                    .namespace_with_proof(&actual_ns_table, ns_idx)
+                    .unwrap();
+                assert_eq!(
+                    ns_payload_flat_from_proof, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                    ns_id.0,
+                );
+                // NOTE: There is no NamespaceProof::verify method because it's quite simple.
+                // compare: there is a TxInclusionProof::verify method for txs because that's complex.
+                // TODO make a NamespaceProof::verify method?
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: &ns_payload_flat_from_proof,
+                        range: actual_ns_payload_range,
+                        commit: &disperse_data.commit,
+                        common: &disperse_data.common,
+                    },
+                    &ns_proof,
+                )
+                .unwrap()
+                .unwrap_or_else(|_| panic!("namespace {} proof verification failure", ns_id.0));
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -1002,16 +1108,6 @@ mod test {
                     "namespace {} incorrect tx table for",
                     ns_id.0
                 );
-
-                // test entire namespace payload flat
-                assert_eq!(
-                    actual_ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes",
-                    ns_id.0,
-                );
-
-                // tests for individual txs in this namespace
-                // TODO(746) rework this part
 
                 // testing tx iterator
                 // TODO(746) incorporate this test into the following commented code when it's fixed
