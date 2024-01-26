@@ -35,16 +35,6 @@ pub struct Payload {
 }
 
 impl Payload {
-    fn from_bytes<B>(bytes: B) -> Self
-    where
-        B: IntoIterator<Item = u8>,
-    {
-        Self {
-            payload: bytes.into_iter().collect(),
-            tx_table_len_proof: Default::default(),
-        }
-    }
-
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
@@ -238,7 +228,10 @@ impl BlockPayload for Payload {
     where
         I: Iterator<Item = u8>,
     {
-        Self::from_bytes(encoded_transactions)
+        Self {
+            payload: encoded_transactions.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
+        }
     }
 
     fn genesis() -> (Self, Self::Metadata) {
@@ -1220,7 +1213,7 @@ mod test {
                 payload_byte_len
             );
 
-            let block = Payload::from_bytes(test_case.payload);
+            let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.payload.len(), payload_byte_len);
 
@@ -1256,7 +1249,7 @@ mod test {
 
         let mut rng = jf_utils::test_rng();
         let test_case = TestCase::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
-        let block = Payload::from_bytes(test_case.payload.iter().cloned());
+        let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
         assert_eq!(block.payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
