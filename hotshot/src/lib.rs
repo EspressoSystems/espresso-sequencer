@@ -388,6 +388,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.inner.consensus.read().await.get_decided_leaf()
     }
 
+    /// [Non-blocking] instantly returns a copy of the last decided leaf if
+    /// it is available to be read. If not, we return `None`.
+    ///
+    /// # Panics
+    /// Panics if internal state for consensus is inconsistent
+    #[must_use]
+    pub fn try_get_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+        self.inner
+            .consensus
+            .try_read()
+            .map(|guard| guard.get_decided_leaf())
+    }
+
     /// Returns a copy of the last decided validated state.
     ///
     /// # Panics

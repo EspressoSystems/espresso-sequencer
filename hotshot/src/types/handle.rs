@@ -113,6 +113,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.get_decided_leaf().await
     }
 
+    /// Tries to get the most recent decided leaf, returning instantly
+    /// if we can't acquire the lock.
+    ///
+    /// # Panics
+    /// Panics if internal consensus is in an inconsistent state.
+    pub fn try_get_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+        self.hotshot.try_get_decided_leaf()
+    }
+
     /// Submits a transaction to the backing [`SystemContext`] instance.
     ///
     /// The current node broadcasts the transaction to all nodes on the network.

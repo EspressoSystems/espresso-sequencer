@@ -71,8 +71,6 @@ impl ValidatedState for TestValidatedState {
 
     type Time = ViewNumber;
 
-    type Metadata = ();
-
     fn validate_and_apply_header(
         &self,
         _instance: &Self::Instance,
