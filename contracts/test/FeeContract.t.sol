@@ -6,6 +6,11 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import { Test } /*, console2 }*/ from "forge-std/Test.sol";
+import { OwnableUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 // Target contract
 import { FeeContract } from "../src/FeeContract.sol";
@@ -20,49 +25,53 @@ contract FeeContractTest is Test {
     }
 
     //test deposits work
-    function testFuzz_deposit(address user1, address user2) public payable {
-        if (msg.value <= feeContract.MIN_DEPOSIT_AMOUNT()) return;
-        uint256 balanceBeforeUser1 = feeContract.getBalance(user1);
-        uint256 balanceBeforeUser2 = feeContract.getBalance(user2);
+    function testFuzz_deposit(address user, uint256 amount) public payable {
+        vm.assume(user != address(0));
+        amount = bound(amount, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
 
-        uint256 depositAmount = msg.value / 2;
+        uint256 balanceBeforeUser = feeContract.getBalance(user);
 
         //deposit for the two users
-        feeContract.deposit{ value: depositAmount }(user1);
-        feeContract.deposit{ value: depositAmount }(user2);
+        feeContract.deposit{ value: amount }(user);
 
         //get the balance for that user after the deposit
-        uint256 balanceAfterUser1 = feeContract.getBalance(user1);
-        uint256 balanceAfterUser2 = feeContract.getBalance(user2);
+        uint256 balanceAfterUser = feeContract.getBalance(user);
 
         //test that the users' balances have been incremented accurately
-        assertEq(balanceAfterUser1, balanceBeforeUser1 + depositAmount);
-        assertEq(balanceAfterUser2, balanceBeforeUser2 + depositAmount);
+        assertEq(balanceAfterUser, balanceBeforeUser + amount);
 
         //test that the smart contract has the accumulative balance for both users
-        assertEq(address(feeContract).balance, msg.value);
+        assertEq(address(feeContract).balance, amount);
     }
 
     //test that depositing twice increases the user's baalance
-    function testFuzz_depositTwice(address user) public payable {
-        if (msg.value <= feeContract.MIN_DEPOSIT_AMOUNT()) return;
-        vm.prank(user);
-        uint256 balanceBefore = feeContract.getBalance(user);
+    function testFuzz_depositTwice(address user1, address user2, uint256 amount1, uint256 amount2)
+        public
+        payable
+    {
+        vm.assume(user1 != address(0) && user2 != address(0));
+        amount1 = bound(amount1, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
+        amount2 = bound(amount2, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
 
-        uint256 depositAmount = msg.value / 2;
+        vm.prank(user1);
+        uint256 balanceBefore1 = feeContract.getBalance(user1);
+
         //deposit for the user
-        feeContract.deposit{ value: depositAmount }(user);
+        feeContract.deposit{ value: amount1 }(user1);
 
         //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContract.getBalance(user);
-        assertEq(balanceAfter, balanceBefore + depositAmount);
+        uint256 balanceAfter1 = feeContract.getBalance(user1);
+        assertEq(balanceAfter1, balanceBefore1 + amount1);
 
-        //deposit the remainder for the user
-        feeContract.deposit{ value: depositAmount }(user);
+        vm.prank(user2);
+        uint256 balanceBefore2 = feeContract.getBalance(user2);
 
-        //get the balance for that user after the 2nd deposit
-        uint256 balanceAfter2 = feeContract.getBalance(user);
-        assertEq(balanceAfter2, balanceAfter + depositAmount);
+        //deposit for the user
+        feeContract.deposit{ value: amount2 }(user2);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfter2 = feeContract.getBalance(user2);
+        assertEq(balanceAfter2, balanceBefore2 + amount2);
     }
 
     function testFuzz_noFunction() public payable {
@@ -87,6 +96,70 @@ contract FeeContractTest is Test {
         //assert that the balance of the fee contract is still zero
         assertEq(address(feeContract).balance, 0);
     }
+
+    //test deposits with a large amount reverts
+    function test_depositMaxAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContract.MAX_DEPOSIT_AMOUNT() + 1;
+
+        vm.expectRevert(FeeContract.DepositTooLarge.selector);
+
+        //deposit for the user
+        feeContract.deposit{ value: amount }(user);
+    }
+
+    //test deposits with a less than the min amount reverts
+    function test_depositMinAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContract.MIN_DEPOSIT_AMOUNT() - 0.01 ether;
+
+        vm.expectRevert(FeeContract.DepositTooSmall.selector);
+
+        //deposit for the user
+        feeContract.deposit{ value: amount }(user);
+    }
+
+    //test deposits with invalid user address reverts
+    function test_invalidUserAddress() public {
+        address user = address(0);
+        uint256 amount = 0.5 ether;
+
+        vm.expectRevert(FeeContract.InvalidUserAddress.selector);
+
+        //deposit for the user
+        feeContract.deposit{ value: amount }(user);
+    }
+
+    function testFuzz_depositEvent(address user, uint256 amount) public payable {
+        vm.assume(user != address(0));
+        amount = bound(amount, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
+
+        uint256 balanceBeforeUser = feeContract.getBalance(user);
+
+        vm.expectEmit(true, false, false, true);
+        // We emit the event we expect to see.
+        emit FeeContract.Deposit(user, amount);
+
+        //deposit for the two users
+        feeContract.deposit{ value: amount }(user);
+
+        //get the balance for that user after the deposit
+        uint256 balanceAfterUser = feeContract.getBalance(user);
+
+        //test that the users' balances have been incremented accurately
+        assertEq(balanceAfterUser, balanceBeforeUser + amount);
+
+        //test that the smart contract has the accumulative balance for both users
+        assertEq(address(feeContract).balance, amount);
+    }
+
+    function testFuzz_newUserHasZeroBalance(address user) public {
+        vm.assume(user != address(0));
+
+        uint256 balance = feeContract.getBalance(user);
+
+        assertEq(balance, 0);
+    }
 }
 
 contract FeeContractUpgradabilityTest is Test {
@@ -102,9 +175,8 @@ contract FeeContractUpgradabilityTest is Test {
     //test deposits work with a proxy
     function testFuzz_deposit(address user, uint256 amount) public payable {
         vm.assume(user != address(0));
-        vm.assume(
-            amount > feeContractProxy.MIN_DEPOSIT_AMOUNT()
-                && amount <= feeContractProxy.MAX_DEPOSIT_AMOUNT()
+        amount = bound(
+            amount, feeContractProxy.MIN_DEPOSIT_AMOUNT(), feeContractProxy.MAX_DEPOSIT_AMOUNT()
         );
 
         uint256 balanceBefore = feeContractProxy.getBalance(user);
@@ -162,44 +234,45 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(address(feeContractProxy).balance, 0);
     }
 
-    //test deposits with a large amount fails
-    function testFail_depositMaxAmount(address user, uint256 amount) public payable {
-        address user = makeAddr("user");
-        uint256 amount = feeContractProxy.MAX_DEPOSIT_AMOUNT() + 1;
+    function testUpgradeTo() public {
+        FeeContractV2 feeContractV2 = new FeeContractV2();
 
-        uint256 balanceBefore = feeContractProxy.getBalance(user);
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        (address admin,) = deriveRememberKey(seedPhrase, 0);
+        vm.prank(admin);
+        vm.expectEmit(false, false, false, true);
+        // We emit the event we expect to see.
+        emit FeeContract.Upgrade(address(feeContractV2));
 
-        //deposit for the user
-        feeContractProxy.deposit{ value: amount }(user);
-
-        //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContractProxy.getBalance(user);
-        assertEq(balanceAfter, balanceBefore + amount);
+        feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 
-    //test deposits with a large amount fails
-    function testFail_depositMinAmount(address user, uint256 amount) public payable {
-        address user = makeAddr("user");
-        uint256 amount = feeContractProxy.MIN_DEPOSIT_AMOUNT() - 0.01 ether;
+    function testFailUpgradeToWithWrongAdmin() public {
+        FeeContractV2 feeContractV2 = new FeeContractV2();
 
-        uint256 balanceBefore = feeContractProxy.getBalance(user);
+        //start the upgrade with this contract as the sender which isn't the admin
+        feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
+    }
+}
 
-        //deposit for the user
-        feeContractProxy.deposit{ value: amount }(user);
+contract FeeContractV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+    /// @notice upgrade event when the proxy updates the implementation it's pointing to
+    event Upgrade(address implementation);
 
-        //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContractProxy.getBalance(user);
-        assertEq(balanceAfter, balanceBefore + amount);
+    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    constructor() {
+        _disableInitializers();
     }
 
-    //test deposits with a large amount fails
-    function testFail_invalidUserAddress(address user, uint256 amount) public payable {
-        address user = address(0);
-        uint256 amount = 0.5 ether;
+    /// @notice This contract is called by the proxy when you deploy this contract
+    function initialize() public initializer {
+        __Ownable_init(msg.sender); //sets owner to msg.sender
+        __UUPSUpgradeable_init();
+    }
 
-        feeContractProxy.getBalance(user);
-
-        //deposit for the user
-        feeContractProxy.deposit{ value: amount }(user);
+    /// @notice only the owner can authorize an upgrade
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        emit Upgrade(newImplementation);
     }
 }
