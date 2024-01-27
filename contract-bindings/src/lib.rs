@@ -17,6 +17,7 @@ pub mod erc1967_utils;
 pub mod erc20;
 pub mod example_token;
 pub mod fee_contract;
+pub mod fee_contract_v2;
 pub mod hot_shot;
 pub mod i_beacon;
 pub mod i_plonk_verifier;
