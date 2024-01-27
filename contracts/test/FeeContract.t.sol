@@ -235,7 +235,7 @@ contract FeeContractUpgradabilityTest is Test {
     }
 
     function testUpgradeTo() public {
-        FeeContractV2 feeContractV2 = new FeeContractV2();
+        FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
         string memory seedPhrase = vm.envString("MNEMONIC");
         (address admin,) = deriveRememberKey(seedPhrase, 0);
@@ -248,14 +248,14 @@ contract FeeContractUpgradabilityTest is Test {
     }
 
     function testFailUpgradeToWithWrongAdmin() public {
-        FeeContractV2 feeContractV2 = new FeeContractV2();
+        FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
         //start the upgrade with this contract as the sender which isn't the admin
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 }
 
-contract FeeContractV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract FeeContractV2Test is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 

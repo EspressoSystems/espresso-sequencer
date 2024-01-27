@@ -145,3 +145,158 @@ pub struct VerifyingKey {
     pub q_h4: G1Point,
     pub q_ecc: G1Point,
 }
+///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct LightClientState {
+    pub view_num: u64,
+    pub block_height: u64,
+    pub block_comm_root: ::ethers::core::types::U256,
+    pub fee_ledger_comm: ::ethers::core::types::U256,
+    pub stake_table_bls_key_comm: ::ethers::core::types::U256,
+    pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
+    pub stake_table_amount_comm: ::ethers::core::types::U256,
+    pub threshold: ::ethers::core::types::U256,
+}
+///`Challenges(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct Challenges {
+    pub alpha: ::ethers::core::types::U256,
+    pub alpha_2: ::ethers::core::types::U256,
+    pub alpha_3: ::ethers::core::types::U256,
+    pub beta: ::ethers::core::types::U256,
+    pub gamma: ::ethers::core::types::U256,
+    pub zeta: ::ethers::core::types::U256,
+    pub v: ::ethers::core::types::U256,
+    pub u: ::ethers::core::types::U256,
+}
+///`EvalData(uint256,uint256,uint256)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct EvalData {
+    pub vanish_eval: ::ethers::core::types::U256,
+    pub lagrange_one: ::ethers::core::types::U256,
+    pub pi_eval: ::ethers::core::types::U256,
+}
+///`FuzzSelector(address,bytes4[])`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct FuzzSelector {
+    pub addr: ::ethers::core::types::Address,
+    pub selectors: ::std::vec::Vec<[u8; 4]>,
+}
+///`TranscriptData(bytes,bytes32[2])`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct TranscriptData {
+    pub transcript: ::ethers::core::types::Bytes,
+    pub state: [[u8; 32]; 2],
+}
+///`FsMetadata(bool,bool,uint256,bool,uint256,uint256,uint256)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct FsMetadata {
+    pub is_dir: bool,
+    pub is_symlink: bool,
+    pub length: ::ethers::core::types::U256,
+    pub read_only: bool,
+    pub modified: ::ethers::core::types::U256,
+    pub accessed: ::ethers::core::types::U256,
+    pub created: ::ethers::core::types::U256,
+}
+///`Log(bytes32[],bytes,address)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct Log {
+    pub topics: ::std::vec::Vec<[u8; 32]>,
+    pub data: ::ethers::core::types::Bytes,
+    pub emitter: ::ethers::core::types::Address,
+}
+///`Rpc(string,string)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct Rpc {
+    pub key: ::std::string::String,
+    pub url: ::std::string::String,
+}
