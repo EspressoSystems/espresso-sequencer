@@ -179,8 +179,11 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
-    /// Creates a new hotshot with the given configuration options and sets it up with the given
+    /// Creates a new [`SystemContext`] with the given configuration options and sets it up with the given
     /// genesis block
+    ///
+    /// To do a full initialization, use `fn init` instead, which will set up background tasks as
+    /// well.
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(private_key, storage, memberships, networks, initializer, metrics))]
     pub async fn new(
@@ -192,6 +195,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
+        instance_state: TYPES::InstanceState,
         metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
@@ -207,7 +211,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         // insert genesis (or latest block) to state map
         let mut validated_state_map = BTreeMap::default();
-        let (validated_state, instance_state) = TYPES::ValidatedState::genesis();
+        let validated_state = TYPES::ValidatedState::genesis();
         validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
@@ -414,7 +418,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .clone()
     }
 
-    /// Initializes a new hotshot and does the work of setting up all the background tasks
+    /// Initializes a new [`SystemContext`] and does the work of setting up all the background tasks
     ///
     /// Assumes networking implementation is already primed.
     ///
@@ -422,6 +426,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// Upon encountering an unrecoverable error, such as a failure to send to a broadcast channel,
     /// the `HotShot` instance will log the error and shut down.
+    ///
+    /// To construct a [`SystemContext`] without setting up tasks, use `fn new` instead.
     ///
     /// # Errors
     ///
@@ -436,6 +442,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
+        instance_state: TYPES::InstanceState,
         metrics: ConsensusMetricsValue,
     ) -> Result<
         (
@@ -454,6 +461,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             memberships,
             networks,
             initializer,
+            instance_state,
             metrics,
         )
         .await?;

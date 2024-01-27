@@ -24,7 +24,10 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_testing::block_types::{TestBlockHeader, TestBlockPayload, TestTransaction};
+use hotshot_testing::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestInstanceState,
+};
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::ValidatorConfig;
@@ -297,7 +300,7 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
 pub trait RunDA<
-    TYPES: NodeType,
+    TYPES: NodeType<InstanceState = TestInstanceState>,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
     VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
@@ -380,6 +383,7 @@ pub trait RunDA<
             memberships,
             networks_bundle,
             initializer,
+            TestInstanceState {},
             ConsensusMetricsValue::default(),
         )
         .await
@@ -520,6 +524,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -627,6 +632,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -725,6 +731,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -838,6 +845,7 @@ pub async fn main_entry_point<
         Transaction = TestTransaction,
         BlockPayload = TestBlockPayload,
         BlockHeader = TestBlockHeader,
+        InstanceState = TestInstanceState,
     >,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,

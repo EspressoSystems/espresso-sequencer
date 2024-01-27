@@ -18,11 +18,7 @@ use std::{
 use super::block_contents::{BlockHeader, TestableBlock};
 
 /// Instance-level state, which allows us to fetch missing validated state.
-pub trait InstanceState: Send + Sync {
-    /// Construct the state.
-    #[must_use]
-    fn new() -> Self;
-}
+pub trait InstanceState: Debug + Send + Sync {}
 
 /// Abstraction over the state that blocks modify
 ///
@@ -79,13 +75,10 @@ pub trait ValidatedState:
     /// This can also be used to rebuild the state for catchup.
     fn from_header(block_header: &Self::BlockHeader) -> Self;
 
-    /// Construct a genesis validated state and the instance-level state.
+    /// Construct a genesis validated state.
     #[must_use]
-    fn genesis() -> (Self, Self::Instance) {
-        (
-            Self::from_header(&Self::BlockHeader::genesis().0),
-            <Self::Instance as InstanceState>::new(),
-        )
+    fn genesis() -> Self {
+        Self::from_header(&Self::BlockHeader::genesis().0)
     }
 
     /// Gets called to notify the persistence backend that this state has been committed

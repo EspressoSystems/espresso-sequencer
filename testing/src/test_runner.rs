@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
     spinning_task::{ChangeNode, UpDown},
+    state_types::TestInstanceState,
     test_launcher::{Networks, TestLauncher},
     view_sync_task::ViewSyncTask,
 };
@@ -64,7 +65,8 @@ pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) task_runner: TaskRunner,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
+impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplementation<TYPES>>
+    TestRunner<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
@@ -315,6 +317,7 @@ where
             memberships,
             network_bundle,
             initializer,
+            TestInstanceState {},
             ConsensusMetricsValue::default(),
         )
         .await

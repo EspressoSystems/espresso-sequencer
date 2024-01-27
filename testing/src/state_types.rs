@@ -17,13 +17,10 @@ use crate::block_types::{TestBlockHeader, TestBlockPayload};
 pub use crate::node_types::TestTypes;
 
 /// Instance-level state implementation for testing purposes.
+#[derive(Debug)]
 pub struct TestInstanceState {}
 
-impl InstanceState for TestInstanceState {
-    fn new() -> Self {
-        TestInstanceState {}
-    }
-}
+impl InstanceState for TestInstanceState {}
 
 /// Validated state implementation for testing purposes.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]

@@ -113,6 +113,7 @@ pub async fn build_system_handle(
         memberships,
         networks_bundle,
         initializer,
+        TestInstanceState {},
         ConsensusMetricsValue::default(),
     )
     .await
