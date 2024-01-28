@@ -247,7 +247,6 @@ async fn build_quorum_proposal_and_signature(
         parent_commitment: parent_leaf.commit(),
         block_header: block_header.clone(),
         block_payload: None,
-        rejected: vec![],
         proposer_id: *api.public_key(),
     };
     let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
@@ -304,7 +303,6 @@ async fn build_quorum_proposal_and_signature(
             parent_commitment: parent_leaf.commit(),
             block_header: block_header.clone(),
             block_payload: None,
-            rejected: vec![],
             proposer_id: quorum_membership.get_leader(ViewNumber::new(cur_view)),
         };
         let signature_new_view =

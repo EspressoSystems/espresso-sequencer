@@ -219,7 +219,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
-                    rejected: Vec::new(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
                 let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
@@ -305,7 +304,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
-                    rejected: Vec::new(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
 
@@ -538,7 +536,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         parent_commitment: justify_qc.get_data().leaf_commit,
                         block_header: proposal.data.block_header.clone(),
                         block_payload: None,
-                        rejected: Vec::new(),
                         proposer_id: sender,
                     };
                     let state =
@@ -609,7 +606,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.data.block_header.clone(),
                     block_payload: None,
-                    rejected: Vec::new(),
                     proposer_id: sender.clone(),
                 };
                 let leaf_commitment = leaf.commit();
@@ -1230,7 +1226,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 parent_commitment: parent_leaf.commit(),
                 block_header: block_header.clone(),
                 block_payload: None,
-                rejected: vec![],
                 proposer_id: self.api.public_key().clone(),
             };
 
