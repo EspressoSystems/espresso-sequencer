@@ -108,20 +108,19 @@ impl TestData {
             quote! {}
         };
         quote! {
-
-                #slow_attribute
-                #[cfg_attr(
-                    feature = "tokio-executor",
-                    tokio::test(flavor = "multi_thread", worker_threads = 2)
-                    )]
-                    #[cfg_attr(feature = "async-std-executor", async_std::test)]
-                    #[tracing::instrument]
-                    async fn #test_name() {
-                        async_compatibility_layer::logging::setup_logging();
-                        async_compatibility_layer::logging::setup_backtrace();
-                        // TODO this should be zero, right? I can also provide this as input
-                        (#metadata).gen_launcher::<#ty, #imply>(0).launch().run_test().await;
-                    }
+            #[cfg(test)]
+            #slow_attribute
+            #[cfg_attr(
+                async_executor_impl = "tokio",
+                tokio::test(flavor = "multi_thread", worker_threads = 2)
+            )]
+            #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+            #[tracing::instrument]
+            async fn #test_name() {
+                async_compatibility_layer::logging::setup_logging();
+                async_compatibility_layer::logging::setup_backtrace();
+                (#metadata).gen_launcher::<#ty, #imply>(0).launch().run_test().await;
+            }
         }
     }
 }
