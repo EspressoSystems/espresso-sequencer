@@ -6,7 +6,7 @@ use std::{
 };
 
 use bincode::Options;
-use bitvec::vec::BitVec;
+use bitvec::{bitvec, vec::BitVec};
 use commit::Commitment;
 use either::Either;
 use ethereum_types::U256;
@@ -85,9 +85,12 @@ pub struct VoteAccumulator<
     /// Map of all signatures accumlated so far
     pub vote_outcomes: VoteMap2<Commitment<VOTE::Commitment>>,
     /// A list of valid signatures for certificate aggregation
-    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
+    pub sig_lists: HashMap<
+        Commitment<VOTE::Commitment>,
+        Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
+    >,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
-    pub signers: BitVec,
+    pub signers: HashMap<Commitment<VOTE::Commitment>, BitVec>,
     /// Phantom data to specify the types this accumulator is for
     pub phantom: PhantomData<(TYPES, VOTE, CERT)>,
 }
@@ -138,13 +141,17 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
         if total_vote_map.contains_key(&encoded_key) {
             return Either::Left(self);
         }
-
-        if self.signers.get(vote_node_id).as_deref() == Some(&true) {
+        let signers = self
+            .signers
+            .entry(vote_commitment)
+            .or_insert(bitvec![0; membership.total_nodes()]);
+        let sig_list = self.sig_lists.entry(vote_commitment).or_default();
+        if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(self);
         }
-        self.signers.set(vote_node_id, true);
-        self.sig_lists.push(original_signature);
+        signers.set(vote_node_id, true);
+        sig_list.push(original_signature);
 
         // TODO: Get the stake from the stake table entry.
         *total_stake_casted += stake_table_entry.get_stake();
@@ -163,8 +170,8 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
 
             let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
                 &real_qc_pp,
-                self.signers.as_bitslice(),
-                &self.sig_lists[..],
+                signers.as_bitslice(),
+                &sig_list[..],
             );
 
             let cert = CERT::create_signed_certificate(
