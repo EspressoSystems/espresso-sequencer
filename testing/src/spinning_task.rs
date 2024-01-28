@@ -1,8 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use async_compatibility_layer::channel::UnboundedStream;
 use futures::FutureExt;
-use hotshot::{traits::TestableNodeImplementation, SystemContext};
+use hotshot::traits::TestableNodeImplementation;
 use hotshot_task::{
     event_stream::ChannelStream,
     task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
@@ -10,22 +13,32 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::state::ConsensusTime;
 use hotshot_types::{event::Event, traits::node_implementation::NodeType};
 use snafu::Snafu;
 
-use crate::{test_launcher::TaskGenerator, test_runner::Node};
+use crate::{
+    test_launcher::TaskGenerator,
+    test_runner::{LateStartNode, Node},
+};
+/// convience type for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 
 use super::GlobalTestEvent;
 
+/// error for the spinning task
 #[derive(Snafu, Debug)]
 pub struct SpinningTaskErr {}
 
 /// Spinning task state
 pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// handle to the nodes
     pub(crate) handles: Vec<Node<TYPES, I>>,
-    pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
-    pub(crate) changes: HashMap<TYPES::Time, Vec<ChangeNode>>,
+    /// late start nodes
+    pub(crate) late_start: HashMap<u64, LateStartNode<TYPES, I>>,
+    /// time based changes
+    pub(crate) changes: BTreeMap<TYPES::Time, Vec<ChangeNode>>,
+    /// most recent view seen by spinning task
     pub(crate) latest_view: Option<TYPES::Time>,
 }
 
@@ -53,13 +66,21 @@ pub struct ChangeNode {
     pub updown: UpDown,
 }
 
+/// description of the spinning task
+/// (used to build a spinning task)
 #[derive(Clone, Debug)]
 pub struct SpinningTaskDescription {
+    /// the changes in node status, time -> changes
     pub node_changes: Vec<(u64, Vec<ChangeNode>)>,
 }
 
 impl SpinningTaskDescription {
     /// build a task
+    /// # Panics
+    /// If there is no latest view
+    /// or if the node id is over `u32::MAX`
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<SpinningTask<TYPES, I>> {
@@ -70,6 +91,12 @@ impl SpinningTaskDescription {
                         async move {
                             match event {
                                 GlobalTestEvent::ShutDown => {
+                                    // We do this here as well as in the completion task
+                                    // because that task has no knowledge of our late start handles.
+                                    for node in &state.handles {
+                                        node.handle.clone().shut_down().await;
+                                    }
+
                                     (Some(HotShotTaskCompleted::ShutDown), state)
                                 }
                             }
@@ -90,46 +117,71 @@ impl SpinningTaskDescription {
                                 || view_number > state.latest_view.unwrap()
                             {
                                 // perform operations on the nodes
-                                if let Some(operations) = state.changes.remove(&view_number) {
-                                    for ChangeNode { idx, updown } in operations {
-                                        match updown {
-                                            UpDown::Up => {
-                                                if let Some(node) = state
-                                                    .late_start
-                                                    .remove(&idx.try_into().unwrap())
-                                                {
-                                                    tracing::error!(
-                                                        "Node {} spinning up late",
-                                                        idx
-                                                    );
-                                                    let handle = node.run_tasks().await;
-                                                    handle.hotshot.start_consensus().await;
+
+                                // We want to make sure we didn't miss any views (for example, there is no decide event
+                                // if we get a timeout)
+                                let views_with_relevant_changes: Vec<_> = state
+                                    .changes
+                                    .range(TYPES::Time::new(0)..view_number)
+                                    .map(|(k, _v)| *k)
+                                    .collect();
+
+                                for view in views_with_relevant_changes {
+                                    if let Some(operations) = state.changes.remove(&view) {
+                                        for ChangeNode { idx, updown } in operations {
+                                            match updown {
+                                                UpDown::Up => {
+                                                    if let Some(node) = state
+                                                        .late_start
+                                                        .remove(&idx.try_into().unwrap())
+                                                    {
+                                                        tracing::error!(
+                                                            "Node {} spinning up late",
+                                                            idx
+                                                        );
+
+                                                        // create node and add to state, so we can shut them down properly later
+                                                        let node = Node {
+                                                            node_id: idx.try_into().unwrap(),
+                                                            networks: node.networks,
+                                                            handle: node.context.run_tasks().await,
+                                                        };
+
+                                                        // bootstrap consensus by sending the event
+                                                        node.handle.hotshot.start_consensus().await;
+
+                                                        // add nodes to our state
+                                                        state.handles.push(node);
+                                                    }
                                                 }
-                                            }
-                                            UpDown::Down => {
-                                                if let Some(node) = state.handles.get_mut(idx) {
-                                                    tracing::error!("Node {} shutting down", idx);
-                                                    node.handle.shut_down().await;
+                                                UpDown::Down => {
+                                                    if let Some(node) = state.handles.get_mut(idx) {
+                                                        tracing::error!(
+                                                            "Node {} shutting down",
+                                                            idx
+                                                        );
+                                                        node.handle.shut_down().await;
+                                                    }
                                                 }
-                                            }
-                                            UpDown::NetworkUp => {
-                                                if let Some(handle) = state.handles.get(idx) {
-                                                    tracing::error!(
-                                                        "Node {} networks resuming",
-                                                        idx
-                                                    );
-                                                    handle.networks.0.resume();
-                                                    handle.networks.1.resume();
+                                                UpDown::NetworkUp => {
+                                                    if let Some(handle) = state.handles.get(idx) {
+                                                        tracing::error!(
+                                                            "Node {} networks resuming",
+                                                            idx
+                                                        );
+                                                        handle.networks.0.resume();
+                                                        handle.networks.1.resume();
+                                                    }
                                                 }
-                                            }
-                                            UpDown::NetworkDown => {
-                                                if let Some(handle) = state.handles.get(idx) {
-                                                    tracing::error!(
-                                                        "Node {} networks pausing",
-                                                        idx
-                                                    );
-                                                    handle.networks.0.pause();
-                                                    handle.networks.1.pause();
+                                                UpDown::NetworkDown => {
+                                                    if let Some(handle) = state.handles.get(idx) {
+                                                        tracing::error!(
+                                                            "Node {} networks pausing",
+                                                            idx
+                                                        );
+                                                        handle.networks.0.pause();
+                                                        handle.networks.1.pause();
+                                                    }
                                                 }
                                             }
                                         }

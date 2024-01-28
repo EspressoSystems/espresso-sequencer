@@ -579,7 +579,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.relay = certificate.get_data().relay;
                 }
 
-                let vote = ViewSyncCommitVote::<TYPES>::create_signed_vote(
+                let Ok(vote) = ViewSyncCommitVote::<TYPES>::create_signed_vote(
                     ViewSyncCommitData {
                         relay: certificate.get_data().relay,
                         round: self.next_view,
@@ -587,7 +587,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.next_view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign ViewSyncCommitData!");
+                    return (None, self);
+                };
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
@@ -644,7 +647,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.relay = certificate.get_data().relay;
                 }
 
-                let vote = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
+                let Ok(vote) = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
                     ViewSyncFinalizeData {
                         relay: certificate.get_data().relay,
                         round: self.next_view,
@@ -652,7 +655,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.next_view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign view sync finalized vote!");
+                    return (None, self);
+                };
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncFinalizeVote(vote) = message {
@@ -759,7 +765,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return (None, self);
                 }
 
-                let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
+                let Ok(vote) = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
                     ViewSyncPreCommitData {
                         relay: 0,
                         round: view_number,
@@ -767,7 +773,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_number,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign pre commit vote!");
+                    return (None, self);
+                };
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
@@ -807,7 +816,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.relay += 1;
                     match last_seen_certificate {
                         ViewSyncPhase::None | ViewSyncPhase::PreCommit | ViewSyncPhase::Commit => {
-                            let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
+                            let Ok(vote) = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
                                 ViewSyncPreCommitData {
                                     relay: self.relay,
                                     round: self.next_view,
@@ -815,7 +824,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 self.next_view,
                                 &self.public_key,
                                 &self.private_key,
-                            );
+                            ) else {
+                                error!("Failed to sign ViewSyncPreCommitData!");
+                                return (None, self);
+                            };
                             let message =
                                 GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 

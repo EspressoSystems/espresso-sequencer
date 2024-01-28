@@ -1,4 +1,4 @@
-//! Provides an event-streaming handle for a [`HotShot`] running in the background
+//! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
 use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
@@ -13,17 +13,21 @@ use hotshot_task::{
     BoxSyncFuture,
 };
 use hotshot_task_impls::events::HotShotEvent;
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::{
+    message::{MessageKind, SequencingMessage},
+    traits::election::Membership,
+};
+
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::Consensus,
+    data::Leaf,
     error::HotShotError,
     event::EventType,
-    message::{MessageKind, SequencingMessage},
-    traits::{
-        election::Membership, node_implementation::NodeType, state::ConsensusTime, storage::Storage,
-    },
+    simple_certificate::QuorumCertificate,
+    traits::{node_implementation::NodeType, state::ConsensusTime, storage::Storage},
 };
-use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
 use std::sync::Arc;
 use tracing::error;
 
@@ -33,17 +37,14 @@ use tracing::error;
 /// allowing the ability to receive [`Event`]s from it, send transactions to it, and interact with
 /// the underlying storage.
 pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// The [sender](BroadcastSender) for the output stream from the background process
-    ///
-    /// This is kept around as an implementation detail, as the [`BroadcastSender::handle_async`]
-    /// method is needed to generate new receivers to expose to the user
+    /// The [sender](ChannelStream) for the output stream from the background process
     pub(crate) output_event_stream: ChannelStream<Event<TYPES>>,
     /// access to the internal ev ent stream, in case we need to, say, shut something down
     pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// registry for controlling tasks
     pub(crate) registry: GlobalRegistry,
 
-    /// Internal reference to the underlying [`HotShot`]
+    /// Internal reference to the underlying [`SystemContext`]
     pub hotshot: SystemContext<TYPES, I>,
 
     /// Our copy of the `Storage` view for a hotshot
@@ -96,24 +97,32 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.internal_event_stream.subscribe(filter).await
     }
 
-    /// Gets the current committed state of the [`HotShot`] instance
+    /// Get the last decided validated state of the [`SystemContext`] instance.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying `Storage` returns an error
-    pub async fn get_state(&self) {
-        self.hotshot.get_state().await;
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
+    pub async fn get_decided_state(&self) -> TYPES::StateType {
+        self.hotshot.get_decided_state().await
     }
 
-    /// Gets most recent decided leaf
-    /// # Panics
+    /// Get the last decided leaf of the [`SystemContext`] instance.
     ///
-    /// Panics if internal consensus is in an inconsistent state.
+    /// # Panics
+    /// If the internal consensus is in an inconsistent state.
     pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.hotshot.get_decided_leaf().await
     }
 
-    /// Submits a transaction to the backing [`HotShot`] instance.
+    /// Tries to get the most recent decided leaf, returning instantly
+    /// if we can't acquire the lock.
+    ///
+    /// # Panics
+    /// Panics if internal consensus is in an inconsistent state.
+    pub fn try_get_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+        self.hotshot.try_get_decided_leaf()
+    }
+
+    /// Submits a transaction to the backing [`SystemContext`] instance.
     ///
     /// The current node broadcasts the transaction to all nodes on the network.
     ///

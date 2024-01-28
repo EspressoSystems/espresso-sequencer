@@ -1,38 +1,14 @@
 //! Minimal compatibility over public key signatures
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bitvec::prelude::*;
-use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;
+use jf_primitives::errors::PrimitivesError;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, hash::Hash};
-use tagged_base64::tagged;
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
+use tagged_base64::TaggedBase64;
 
-/// Type saftey wrapper for byte encoded keys
-#[tagged(tag::ENCODED_PUB_KEY)]
-#[derive(
-    Clone,
-    custom_debug::Debug,
-    Hash,
-    CanonicalSerialize,
-    CanonicalDeserialize,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-)]
-pub struct EncodedPublicKey(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
-
-/// Type saftey wrapper for byte encoded signature
-#[derive(
-    Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub struct EncodedSignature(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
-
-impl AsRef<[u8]> for EncodedSignature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType {
     /// Get the stake value
@@ -40,6 +16,7 @@ pub trait StakeTableEntryType {
 }
 
 /// Trait for abstracting public key signatures
+/// Self is the public key type
 pub trait SignatureKey:
     Send
     + Sync
@@ -53,6 +30,9 @@ pub trait SignatureKey:
     + Eq
     + PartialOrd
     + Ord
+    + Display
+    + for<'a> TryFrom<&'a TaggedBase64>
+    + Into<TaggedBase64>
 {
     /// The private key type for this signature algorithm
     type PrivateKey: Send
@@ -100,18 +80,29 @@ pub trait SignatureKey:
         + Serialize
         + for<'a> Deserialize<'a>;
 
+    /// Type of error that can occur when signing data
+    type SignError: std::error::Error + Send + Sync;
+
     // Signature type represented as a vec/slice of bytes to let the implementer handle the nuances
     // of serialization, to avoid Cryptographic pitfalls
     /// Validate a signature
-    fn validate(&self, signature: &EncodedSignature, data: &[u8]) -> bool;
+    fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool;
     /// Produce a signature
-    fn sign(private_key: &Self::PrivateKey, data: &[u8]) -> EncodedSignature;
+    /// # Errors
+    /// If unable to sign the data with the key
+    fn sign(
+        private_key: &Self::PrivateKey,
+        data: &[u8],
+    ) -> Result<Self::PureAssembledSignatureType, Self::SignError>;
     /// Produce a public key from a private key
     fn from_private(private_key: &Self::PrivateKey) -> Self;
     /// Serialize a public key to bytes
-    fn to_bytes(&self) -> EncodedPublicKey;
+    fn to_bytes(&self) -> Vec<u8>;
     /// Deserialize a public key from bytes
-    fn from_bytes(bytes: &EncodedPublicKey) -> Option<Self>;
+    /// # Errors
+    ///
+    /// Will return `Err` if deserialization fails
+    fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError>;
 
     /// Generate a new key pair
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey);
@@ -140,4 +131,8 @@ pub trait SignatureKey:
         signers: &BitSlice,
         sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType;
+
+    /// generates the genesis public key. Meant to be dummy/filler
+    #[must_use]
+    fn genesis_proposer_pk() -> Self;
 }

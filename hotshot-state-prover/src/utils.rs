@@ -31,6 +31,7 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 }
 
 /// Helper function for test
+#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn stake_table_for_testing(
     capacity: usize,
     bls_keys: &[BLSVerKey],
@@ -44,7 +45,7 @@ pub(crate) fn stake_table_for_testing(
         .zip(schnorr_keys)
         .for_each(|((i, bls_key), (_, schnorr_key))| {
             st.register(*bls_key, U256::from((i + 1) as u32), schnorr_key.clone())
-                .unwrap()
+                .unwrap();
         });
     // Freeze the stake table
     st.advance();

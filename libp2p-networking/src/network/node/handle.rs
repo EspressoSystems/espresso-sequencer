@@ -37,21 +37,26 @@ use tracing::{debug, info, instrument};
 pub struct NetworkNodeHandle<S> {
     /// network configuration
     network_config: NetworkNodeConfig,
+
     /// the state of the replica
     state: Arc<SubscribableMutex<S>>,
+
     /// send an action to the networkbehaviour
     send_network: UnboundedSender<ClientRequest>,
 
     /// the local address we're listening on
     listen_addr: Multiaddr,
+
     /// the peer id of the networkbehaviour
     peer_id: PeerId,
+
     /// human readable id
     id: usize,
 
     /// A list of webui listeners that are listening for changes on this node
     webui_listeners: Arc<Mutex<Vec<Sender<()>>>>,
 
+    /// network node receiver
     receiver: NetworkNodeReceiver,
 }
 
@@ -75,6 +80,7 @@ pub struct NetworkNodeReceiver {
 }
 
 impl NetworkNodeReceiver {
+    /// recv a network event
     pub async fn recv(&self) -> Result<NetworkEvent, NetworkNodeHandleError> {
         if self.killed.load(Ordering::Relaxed) {
             return Err(NetworkNodeHandleError::Killed);
@@ -452,9 +458,21 @@ impl<S> NetworkNodeHandle<S> {
         msg: &impl Serialize,
     ) -> Result<(), NetworkNodeHandleError> {
         let serialized_msg = bincode_opts().serialize(msg).context(SerializationSnafu)?;
+        self.direct_request_no_serialize(pid, serialized_msg).await
+    }
+
+    /// Make a direct request to `peer_id` containing `msg` without serializing
+    /// # Errors
+    /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
+    /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize `msg`
+    pub async fn direct_request_no_serialize(
+        &self,
+        pid: PeerId,
+        contents: Vec<u8>,
+    ) -> Result<(), NetworkNodeHandleError> {
         let req = ClientRequest::DirectRequest {
             pid,
-            contents: serialized_msg,
+            contents,
             retry_count: 1,
         };
         self.send_request(req).await
@@ -474,7 +492,7 @@ impl<S> NetworkNodeHandle<S> {
         self.send_request(req).await
     }
 
-    /// Forcefully disconnet from a peer
+    /// Forcefully disconnect from a peer
     /// # Errors
     /// If the channel is closed somehow
     /// Shouldnt' happen.
@@ -496,7 +514,19 @@ impl<S> NetworkNodeHandle<S> {
         msg: &impl Serialize,
     ) -> Result<(), NetworkNodeHandleError> {
         let serialized_msg = bincode_opts().serialize(msg).context(SerializationSnafu)?;
-        let req = ClientRequest::GossipMsg(topic, serialized_msg);
+        self.gossip_no_serialize(topic, serialized_msg).await
+    }
+
+    /// Gossip a message to peers without serializing
+    /// # Errors
+    /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
+    /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize `msg`
+    pub async fn gossip_no_serialize(
+        &self,
+        topic: String,
+        msg: Vec<u8>,
+    ) -> Result<(), NetworkNodeHandleError> {
+        let req = ClientRequest::GossipMsg(topic, msg);
         self.send_request(req).await
     }
 

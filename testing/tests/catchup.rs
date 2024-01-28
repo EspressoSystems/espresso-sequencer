@@ -22,24 +22,21 @@ async fn test_catchup() {
         ..Default::default()
     };
     let mut metadata = TestMetadata::default();
-    let catchup_nodes = vec![
-        ChangeNode {
-            idx: 18,
-            updown: UpDown::Up,
-        },
-        ChangeNode {
-            idx: 19,
-            updown: UpDown::Up,
-        },
-    ];
+    let catchup_node = vec![ChangeNode {
+        idx: 19,
+        updown: UpDown::Up,
+    }];
 
     metadata.timing_data = timing_data;
-    metadata.start_nodes = 18;
+    metadata.start_nodes = 19;
     metadata.total_nodes = 20;
+
+    metadata.view_sync_properties =
+        hotshot_testing::view_sync_task::ViewSyncTaskDescription::Threshold(0, 20);
 
     metadata.spinning_properties = SpinningTaskDescription {
         // Start the nodes before their leadership.
-        node_changes: vec![(15, catchup_nodes)],
+        node_changes: vec![(13, catchup_node)],
     };
 
     metadata.completion_task_description =
@@ -91,19 +88,19 @@ async fn test_catchup_web() {
         idx: 18,
         updown: UpDown::Up,
     }];
-
     metadata.timing_data = timing_data;
     metadata.start_nodes = 19;
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(25, catchup_nodes)],
+        // Start the nodes before their leadership.
+        node_changes: vec![(10, catchup_nodes)],
     };
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(100000),
+                duration: Duration::from_millis(100_000),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
@@ -148,14 +145,13 @@ async fn test_catchup_one_node() {
         idx: 18,
         updown: UpDown::Up,
     }];
-
     metadata.timing_data = timing_data;
     metadata.start_nodes = 19;
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        // Start the node before its leadership.
-        node_changes: vec![(15, catchup_nodes)],
+        // Start the nodes before their leadership.
+        node_changes: vec![(10, catchup_nodes)],
     };
 
     metadata.completion_task_description =
@@ -218,9 +214,11 @@ async fn test_catchup_in_view_sync() {
     metadata.timing_data = timing_data;
     metadata.start_nodes = 18;
     metadata.total_nodes = 20;
+    metadata.view_sync_properties =
+        hotshot_testing::view_sync_task::ViewSyncTaskDescription::Threshold(0, 20);
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(25, catchup_nodes)],
+        node_changes: vec![(10, catchup_nodes)],
     };
 
     metadata.completion_task_description =

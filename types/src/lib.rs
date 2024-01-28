@@ -1,14 +1,4 @@
 //! Types and Traits for the `HotShot` consensus module
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
-#![allow(clippy::module_name_repetitions)]
-
 use displaydoc::Display;
 use std::{num::NonZeroUsize, time::Duration};
 use traits::{election::ElectionConfig, signature_key::SignatureKey};
@@ -18,8 +8,11 @@ pub mod error;
 pub mod event;
 pub mod light_client;
 pub mod message;
+pub mod qc;
+pub mod signature_key;
 pub mod simple_certificate;
 pub mod simple_vote;
+pub mod stake_table;
 pub mod traits;
 pub mod utils;
 pub mod vote;

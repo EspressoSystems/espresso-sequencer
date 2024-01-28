@@ -36,14 +36,15 @@ async fn test_vid_task() {
     // quorum membership for VID share distribution
     let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
 
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(0));
+    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(0));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
+            .expect("Failed to sign block payload!");
     let proposal: DAProposal<TestTypes> = DAProposal {
         encoded_transactions: encoded_transactions.clone(),
         metadata: (),

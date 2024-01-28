@@ -60,29 +60,21 @@ impl State for TestState {
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
-        if view_number == &ViewNumber::genesis() {
-            &self.view_number == view_number
-        } else {
-            self.view_number < *view_number
-        }
-    }
+    type Metadata = ();
 
-    fn initialize() -> Self {
-        let mut state = Self::default();
-        state.block_height += 1;
-        state
-    }
-
-    fn append(
+    fn validate_and_apply_header(
         &self,
-        block_header: &Self::BlockHeader,
+        _proposed_header: &Self::BlockHeader,
+        _parent_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if !self.validate_block(block_header, view_number) {
+        if view_number == &ViewNumber::genesis() {
+            if &self.view_number != view_number {
+                return Err(BlockError::InvalidBlockHeader);
+            }
+        } else if self.view_number >= *view_number {
             return Err(BlockError::InvalidBlockHeader);
         }
-
         Ok(TestState {
             block_height: self.block_height + 1,
             view_number: *view_number,
@@ -90,7 +82,16 @@ impl State for TestState {
         })
     }
 
+    fn from_header(block_header: &Self::BlockHeader) -> Self {
+        Self {
+            block_height: block_header.block_number,
+            ..Default::default()
+        }
+    }
+
     fn on_commit(&self) {}
+
+    fn metadata(&self) -> Self::Metadata {}
 }
 
 impl TestableState for TestState {
@@ -101,6 +102,9 @@ impl TestableState for TestState {
     ) -> <Self::BlockPayload as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
-        TestTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
+        TestTransaction(vec![
+            0;
+            RANDOM_TX_BASE_SIZE + usize::try_from(padding).unwrap()
+        ])
     }
 }

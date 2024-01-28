@@ -54,6 +54,7 @@ impl TaskRunner /* <N> */ {
     }
 
     /// returns a `Vec` because type isn't known
+    #[must_use]
     pub async fn launch(self) -> Vec<(String, HotShotTaskCompleted)> {
         let names = self
             .tasks

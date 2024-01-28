@@ -29,7 +29,8 @@ async fn libp2p_network() {
             },
         ),
         timing_data: TimingData {
-            round_start_delay: 100,
+            next_view_timeout: 4000,
+            propose_max_round_time: Duration::from_millis(300),
             ..Default::default()
         },
         ..TestMetadata::default_multiple_rounds()
@@ -39,7 +40,7 @@ async fn libp2p_network() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }
 
 /// stress test for libp2p
@@ -58,5 +59,5 @@ async fn test_stress_libp2p_network() {
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
-        .await
+        .await;
 }

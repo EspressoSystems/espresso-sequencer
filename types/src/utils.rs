@@ -23,6 +23,8 @@ pub enum ViewInner<TYPES: NodeType> {
     Leaf {
         /// Proposed leaf
         leaf: Commitment<Leaf<TYPES>>,
+        /// Validated state.
+        state: TYPES::StateType,
     },
     /// Leaf has failed
     Failed,
@@ -32,8 +34,18 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     /// return the underlying leaf hash if it exists
     #[must_use]
     pub fn get_leaf_commitment(&self) -> Option<Commitment<Leaf<TYPES>>> {
-        if let Self::Leaf { leaf } = self {
+        if let Self::Leaf { leaf, .. } = self {
             Some(*leaf)
+        } else {
+            None
+        }
+    }
+
+    /// return the underlying validated state if it exists
+    #[must_use]
+    pub fn get_state(&self) -> Option<&TYPES::StateType> {
+        if let Self::Leaf { state, .. } = self {
+            Some(state)
         } else {
             None
         }

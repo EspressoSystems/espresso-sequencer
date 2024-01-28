@@ -1,5 +1,6 @@
-mod common;
+#![allow(clippy::panic)]
 
+mod common;
 use crate::common::print_connections;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
@@ -94,7 +95,7 @@ pub async fn counter_handle_network_event(
                         handle
                             .modify_state(|s| {
                                 if *s == from {
-                                    *s = to
+                                    *s = to;
                                 }
                             })
                             .await;
@@ -120,6 +121,9 @@ pub async fn counter_handle_network_event(
 
 /// `requester_handle` asks for `requestee_handle`'s state,
 /// and then `requester_handle` updates its state to equal `requestee_handle`.
+/// # Panics
+/// on error
+#[allow(clippy::similar_names)]
 async fn run_request_response_increment<'a>(
     requester_handle: Arc<NetworkNodeHandle<CounterState>>,
     requestee_handle: Arc<NetworkNodeHandle<CounterState>>,
@@ -144,7 +148,8 @@ async fn run_request_response_increment<'a>(
 
         match stream.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+            Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
+            std::process::exit(-1)},
         }
         requester_handle
             .direct_request(requestee_pid, &CounterMessage::AskForCounter)
@@ -152,20 +157,20 @@ async fn run_request_response_increment<'a>(
             .context(HandleSnafu)?;
         match stream.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
-        }
+            Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
+            std::process::exit(-1)},        }
 
         let s1 = requester_handle.state().await;
 
         // sanity check
-        if s1 != new_state {
+        if s1 == new_state {
+            Ok(())
+        } else {
             Err(TestError::State {
                 id: requester_handle.id(),
                 expected: new_state,
                 actual: s1,
             })
-        } else {
-            Ok(())
         }
     }
     .await
@@ -208,7 +213,10 @@ async fn run_gossip_round(
         // unwrap is okay because stream must have 2 * (len - 1) elements
         match merged_streams.next().await.unwrap() {
             Ok(()) => {}
-            Err(e) => panic!("timeout : {e:?} waiting handle {i:?} to subscribe to state events"),
+            Err(e) => {
+                error!("timed out waiting for handle {i:?} to subscribe to state events: {e}");
+                std::process::exit(-1)
+            }
         }
     }
 
@@ -224,7 +232,7 @@ async fn run_gossip_round(
     }
 
     let mut failing = Vec::new();
-    for handle in handles.iter() {
+    for handle in handles {
         let handle_state = handle.state().await;
         if handle_state != new_state {
             failing.push(handle.id());
@@ -243,15 +251,15 @@ async fn run_intersperse_many_rounds(
     handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
     timeout: Duration,
 ) {
-    for i in 0..NUM_ROUNDS as u32 {
+    for i in 0..u32::try_from(NUM_ROUNDS).unwrap() {
         if i % 2 == 0 {
             run_request_response_increment_all(&handles, timeout).await;
         } else {
-            run_gossip_rounds(&handles, 1, i, timeout).await
+            run_gossip_rounds(&handles, 1, i, timeout).await;
         }
     }
-    for h in handles.into_iter() {
-        assert_eq!(h.state().await, NUM_ROUNDS as u32);
+    for h in handles {
+        assert_eq!(h.state().await, u32::try_from(NUM_ROUNDS).unwrap());
     }
 }
 
@@ -273,35 +281,47 @@ async fn run_request_response_many_rounds(
     for _i in 0..NUM_ROUNDS {
         run_request_response_increment_all(&handles, timeout).await;
     }
-    for h in handles.into_iter() {
-        assert_eq!(h.state().await, NUM_ROUNDS as u32);
+    for h in handles {
+        assert_eq!(h.state().await, u32::try_from(NUM_ROUNDS).unwrap());
     }
 }
 
+/// runs one round of request response
+/// # Panics
+/// on error
 pub async fn run_request_response_one_round(
     handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
     timeout: Duration,
 ) {
     run_request_response_increment_all(&handles, timeout).await;
-    for h in handles.into_iter() {
+    for h in handles {
         assert_eq!(h.state().await, 1);
     }
 }
 
+/// runs multiple rounds of gossip
+/// # Panics
+/// on error
 pub async fn run_gossip_many_rounds(
     handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
     timeout: Duration,
 ) {
-    run_gossip_rounds(&handles, NUM_ROUNDS, 0, timeout).await
+    run_gossip_rounds(&handles, NUM_ROUNDS, 0, timeout).await;
 }
 
+/// runs one round of gossip
+/// # Panics
+/// on error
 async fn run_gossip_one_round(
     handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
     timeout: Duration,
 ) {
-    run_gossip_rounds(&handles, 1, 0, timeout).await
+    run_gossip_rounds(&handles, 1, 0, timeout).await;
 }
 
+/// runs many rounds of dht
+/// # Panics
+/// on error
 async fn run_dht_rounds(
     handles: &[Arc<NetworkNodeHandle<CounterState>>],
     timeout: Duration,
@@ -313,20 +333,22 @@ async fn run_dht_rounds(
         debug!("begin round {}", i);
         let msg_handle = get_random_handle(handles, &mut rng);
         let mut key = vec![0; DHT_KV_PADDING];
-        key.push((starting_val + i) as u8);
+        let inc_val = u8::try_from(starting_val + i).unwrap();
+        key.push(inc_val);
         let mut value = vec![0; DHT_KV_PADDING];
-        value.push((starting_val + i) as u8);
+        value.push(inc_val);
 
         // put the key
         msg_handle.put_record(&key, &value).await.unwrap();
 
         // get the key from the other nodes
-        for handle in handles.iter() {
+        for handle in handles {
             let result: Result<Vec<u8>, NetworkNodeHandleError> =
                 handle.get_record_timeout(&key, timeout).await;
             match result {
                 Err(e) => {
-                    panic!("DHT error {e:?} during GET");
+                    error!("DHT error {e:?} during GET");
+                    std::process::exit(-1);
                 }
                 Ok(v) => {
                     assert_eq!(v, value);
@@ -362,6 +384,7 @@ async fn run_gossip_rounds(
 /// increments its state by 1,
 /// then has all other peers request its state
 /// and update their state to the recv'ed state
+#[allow(clippy::similar_names)]
 async fn run_request_response_increment_all(
     handles: &[Arc<NetworkNodeHandle<CounterState>>],
     timeout: Duration,
@@ -371,16 +394,15 @@ async fn run_request_response_increment_all(
     requestee_handle.modify_state(|s| *s += 1).await;
     info!("RR REQUESTEE IS {:?}", requestee_handle.peer_id());
     let mut futs = Vec::new();
-    #[allow(clippy::unused_enumerate_index)]
-    for (_i, h) in handles.iter().enumerate() {
-        if h.lookup_pid(requestee_handle.peer_id()).await.is_err() {
+    for handle in handles {
+        if handle.lookup_pid(requestee_handle.peer_id()).await.is_err() {
             error!("ERROR LOOKING UP REQUESTEE ADDRS");
         }
         // NOTE uncomment if debugging
         // let _ = h.print_routing_table().await;
         // skip `requestee_handle`
-        if h.peer_id() != requestee_handle.peer_id() {
-            let requester_handle = h.clone();
+        if handle.peer_id() != requestee_handle.peer_id() {
+            let requester_handle = handle.clone();
             futs.push(run_request_response_increment(
                 requester_handle,
                 requestee_handle.clone(),
@@ -412,13 +434,14 @@ async fn run_request_response_increment_all(
         async_sleep(Duration::from_secs(1)).await;
     }
 
-    if results.read().await.iter().any(|x| x.is_err()) {
+    if results.read().await.iter().any(Result::is_err) {
         print_connections(handles).await;
         let mut states = vec![];
         for handle in handles {
             states.push(handle.state().await);
         }
-        panic!("states: {states:?}");
+        error!("states: {states:?}");
+        std::process::exit(-1);
     }
 }
 
@@ -430,14 +453,14 @@ async fn run_request_response_increment_all(
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_request_response_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_request_response_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress test of direct messsage
@@ -448,14 +471,14 @@ async fn test_coverage_request_response_one_round() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_request_response_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_request_response_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress test of broadcast + direct message
@@ -466,14 +489,14 @@ async fn test_coverage_request_response_many_rounds() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_intersperse_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_intersperse_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress teset that we can broadcast a message out and get counter increments
@@ -484,13 +507,13 @@ async fn test_coverage_intersperse_many_rounds() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_gossip_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_gossip_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
+    ))
     .await;
 }
 
@@ -502,13 +525,13 @@ async fn test_coverage_gossip_many_rounds() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_gossip_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_gossip_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
+    ))
     .await;
 }
 
@@ -521,14 +544,14 @@ async fn test_coverage_gossip_one_round() {
 #[instrument]
 #[ignore]
 async fn test_stress_request_response_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_request_response_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress test of direct messsage
@@ -540,14 +563,14 @@ async fn test_stress_request_response_one_round() {
 #[instrument]
 #[ignore]
 async fn test_stress_request_response_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_request_response_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress test of broadcast + direct message
@@ -559,14 +582,14 @@ async fn test_stress_request_response_many_rounds() {
 #[instrument]
 #[ignore]
 async fn test_stress_intersperse_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_intersperse_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
-    .await
+    ))
+    .await;
 }
 
 /// stress teset that we can broadcast a message out and get counter increments
@@ -578,13 +601,13 @@ async fn test_stress_intersperse_many_rounds() {
 #[instrument]
 #[ignore]
 async fn test_stress_gossip_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_gossip_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
+    ))
     .await;
 }
 
@@ -597,13 +620,13 @@ async fn test_stress_gossip_many_rounds() {
 #[instrument]
 #[ignore]
 async fn test_stress_gossip_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_gossip_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
+    ))
     .await;
 }
 
@@ -616,13 +639,13 @@ async fn test_stress_gossip_one_round() {
 #[instrument]
 #[ignore]
 async fn test_stress_dht_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_dht_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
+    ))
     .await;
 }
 
@@ -635,13 +658,13 @@ async fn test_stress_dht_one_round() {
 #[instrument]
 #[ignore]
 async fn test_stress_dht_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_dht_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
-    )
+    ))
     .await;
 }
 
@@ -653,13 +676,13 @@ async fn test_stress_dht_many_rounds() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_dht_one_round() {
-    test_bed(
+    Box::pin(test_bed(
         run_dht_one_round,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
+    ))
     .await;
 }
 
@@ -671,12 +694,12 @@ async fn test_coverage_dht_one_round() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_coverage_dht_many_rounds() {
-    test_bed(
+    Box::pin(test_bed(
         run_dht_many_rounds,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
-    )
+    ))
     .await;
 }

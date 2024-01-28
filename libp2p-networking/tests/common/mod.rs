@@ -82,7 +82,7 @@ fn gen_peerid_map<S>(handles: &[Arc<NetworkNodeHandle<S>>]) -> HashMap<PeerId, u
 pub async fn print_connections<S>(handles: &[Arc<NetworkNodeHandle<S>>]) {
     let m = gen_peerid_map(handles);
     warn!("PRINTING CONNECTION STATES");
-    for handle in handles.iter() {
+    for handle in handles {
         warn!(
             "peer {}, connected to {:?}",
             handle.id(),
@@ -130,13 +130,13 @@ pub async fn spin_up_swarms<S: Debug + Default>(
             .bound_addr(Some(addr))
             .ttl(None)
             .republication_interval(None);
-        let node = NetworkNodeHandle::new(
+        let node = Box::pin(NetworkNodeHandle::new(
             config
                 .build()
                 .context(NodeConfigSnafu)
                 .context(HandleSnafu)?,
             i,
-        )
+        ))
         .await
         .context(HandleSnafu)?;
         let node = Arc::new(node);
@@ -165,9 +165,12 @@ pub async fn spin_up_swarms<S: Debug + Default>(
             .build()
             .context(NodeConfigSnafu)
             .context(HandleSnafu)?;
-        let node = NetworkNodeHandle::new(regular_node_config.clone(), j + num_bootstrap)
-            .await
-            .context(HandleSnafu)?;
+        let node = Box::pin(NetworkNodeHandle::new(
+            regular_node_config.clone(),
+            j + num_bootstrap,
+        ))
+        .await
+        .context(HandleSnafu)?;
         let node = Arc::new(node);
         connecting_futs.push({
             let node = node.clone();
@@ -189,8 +192,8 @@ pub async fn spin_up_swarms<S: Debug + Default>(
             .map(|(a, b)| (Some(*a), b.clone()))
             .collect::<Vec<_>>()
     );
-    #[allow(clippy::unused_enumerate_index)]
-    for (_idx, handle) in handles[0..num_of_nodes].iter().enumerate() {
+
+    for handle in &handles[0..num_of_nodes] {
         let to_share = bootstrap_addrs.clone();
         handle
             .add_known_peers(

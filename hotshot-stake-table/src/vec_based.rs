@@ -16,10 +16,14 @@ use serde::{Deserialize, Serialize};
 
 pub mod config;
 
+/// a snapshot of the stake table
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StakeTableSnapshot<K1, K2> {
+    /// bls keys
     pub bls_keys: Vec<K1>,
+    /// schnorr
     pub schnorr_keys: Vec<K2>,
+    /// amount of stake
     pub stake_amount: Vec<U256>,
 }
 
@@ -53,17 +57,22 @@ where
     /// The stake table used for leader election.
     last_epoch_start: StakeTableSnapshot<K1, K2>,
 
-    /// Total stakes for different versions
+    /// Total stakes in the most update-to-date stake table
     head_total_stake: U256,
+    /// Total stakes in the snapshot version `EpochStart`
     epoch_start_total_stake: U256,
+    /// Total stakes in the snapshot version `LastEpochStart`
     last_epoch_start_total_stake: U256,
 
+    /// Commitment of the stake table snapshot version `EpochStart`
     /// We only support committing the finalized versions.
     /// Commitment for a finalized version is a triple where
     ///  - First item is the rescue hash of the bls keys
     ///  - Second item is the rescue hash of the Schnorr keys
     ///  - Third item is the rescue hash of all the stake amounts
     epoch_start_comm: (F, F, F),
+
+    /// Commitment of the stake table snapshot version `LastEpochStart`
     last_epoch_start_comm: (F, F, F),
 
     /// The mapping from public keys to their location in the Merkle tree.
@@ -93,17 +102,16 @@ where
         amount: Self::Amount,
         aux: Self::Aux,
     ) -> Result<(), StakeTableError> {
-        match self.bls_mapping.get(&new_key) {
-            Some(_) => Err(StakeTableError::ExistingKey),
-            None => {
-                let pos = self.bls_mapping.len();
-                self.head.bls_keys.push(new_key.clone());
-                self.head.schnorr_keys.push(aux);
-                self.head.stake_amount.push(amount);
-                self.head_total_stake += amount;
-                self.bls_mapping.insert(new_key, pos);
-                Ok(())
-            }
+        if self.bls_mapping.get(&new_key).is_some() {
+            Err(StakeTableError::ExistingKey)
+        } else {
+            let pos = self.bls_mapping.len();
+            self.head.bls_keys.push(new_key.clone());
+            self.head.schnorr_keys.push(aux);
+            self.head.stake_amount.push(amount);
+            self.head_total_stake += amount;
+            self.bls_mapping.insert(new_key, pos);
+            Ok(())
         }
     }
 
@@ -137,7 +145,7 @@ where
     }
 
     fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
-        Ok(self.get_version(version)?.bls_keys.len())
+        Ok(self.get_version(&version)?.bls_keys.len())
     }
 
     fn contains_key(&self, key: &Self::Key) -> bool {
@@ -149,7 +157,7 @@ where
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<Self::Amount, StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let pos = self.lookup_pos(key)?;
         if pos >= table.bls_keys.len() {
             Err(StakeTableError::KeyNotFound)
@@ -172,7 +180,7 @@ where
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<(Self::Amount, Self::Aux, Self::LookupProof), StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let pos = self.lookup_pos(key)?;
         if pos >= table.bls_keys.len() {
             Err(StakeTableError::KeyNotFound)
@@ -221,7 +229,7 @@ where
     }
 
     fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
-        let table = self.get_version(version)?;
+        let table = self.get_version(&version)?;
         let owned = (0..table.bls_keys.len())
             .map(|i| {
                 (
@@ -242,6 +250,9 @@ where
     F: RescueParameter,
 {
     /// Initiating an empty stake table.
+    /// # Panics
+    /// If unable to evaluate a preimage
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let bls_comm_preimage = vec![F::default(); capacity * <K1 as ToFields<F>>::SIZE];
         let default_bls_comm =
@@ -280,6 +291,8 @@ where
 
     /// Set the stake withheld by `key` to be `value`.
     /// Return the previous stake if succeed.
+    /// # Errors
+    /// Errors if key is not in the stake table
     pub fn set_value(&mut self, key: &K1, value: U256) -> Result<U256, StakeTableError> {
         match self.bls_mapping.get(key) {
             Some(pos) => {
@@ -294,7 +307,7 @@ where
     }
 
     /// Helper function to recompute the stake table commitment for head version
-    /// Commitment of a stake table is a triple (bls_keys_comm, schnorr_keys_comm, stake_amount_comm)
+    /// Commitment of a stake table is a triple `(bls_keys_comm, schnorr_keys_comm, stake_amount_comm)`
     /// TODO(Chengyu): The BLS verification keys doesn't implement Default. Thus we directly pad with `F::default()`.
     fn compute_head_comm(&mut self) -> (F, F, F) {
         let padding_len = self.capacity - self.head.bls_keys.len();
@@ -303,7 +316,7 @@ where
             .head
             .bls_keys
             .iter()
-            .flat_map(|key| key.to_fields())
+            .flat_map(ToFields::to_fields)
             .collect::<Vec<_>>();
         bls_comm_preimage.resize(self.capacity * <K1 as ToFields<F>>::SIZE, F::default());
         let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(bls_comm_preimage).unwrap()[0];
@@ -314,7 +327,7 @@ where
             .schnorr_keys
             .iter()
             .chain(ark_std::iter::repeat(&K2::default()).take(padding_len))
-            .flat_map(|key| key.to_fields())
+            .flat_map(ToFields::to_fields)
             .collect::<Vec<_>>();
         let schnorr_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(schnorr_comm_preimage).unwrap()[0];
@@ -341,9 +354,10 @@ where
         }
     }
 
+    /// returns the snapshot version
     fn get_version(
         &self,
-        version: SnapshotVersion,
+        version: &SnapshotVersion,
     ) -> Result<&StakeTableSnapshot<K1, K2>, StakeTableError> {
         match version {
             SnapshotVersion::Head => Ok(&self.head),
@@ -378,14 +392,16 @@ mod tests {
     #[test]
     fn crypto_test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::<QCVerKey, StateVerKey, F>::default();
-        let mut prng = jf_utils::test_rng();
+        let mut pseudo_rng = jf_utils::test_rng();
         let keys = (0..10)
             .map(|_| {
                 (
-                    BLSOverBN254CurveSignatureScheme::key_gen(&(), &mut prng)
+                    BLSOverBN254CurveSignatureScheme::key_gen(&(), &mut pseudo_rng)
                         .unwrap()
                         .1,
-                    SchnorrSignatureScheme::key_gen(&(), &mut prng).unwrap().1,
+                    SchnorrSignatureScheme::key_gen(&(), &mut pseudo_rng)
+                        .unwrap()
+                        .1,
                 )
             })
             .collect::<Vec<_>>();

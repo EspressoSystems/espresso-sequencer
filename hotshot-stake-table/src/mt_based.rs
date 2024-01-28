@@ -42,21 +42,20 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         &mut self,
         new_key: Self::Key,
         amount: Self::Amount,
-        _: Self::Aux,
+        (): Self::Aux,
     ) -> Result<(), StakeTableError> {
-        match self.mapping.get(&new_key) {
-            Some(_) => Err(StakeTableError::ExistingKey),
-            None => {
-                let pos = self.mapping.len();
-                self.head = self.head.register(
-                    self.height,
-                    &to_merkle_path(pos, self.height),
-                    &new_key,
-                    amount,
-                )?;
-                self.mapping.insert(new_key, pos);
-                Ok(())
-            }
+        if self.mapping.get(&new_key).is_some() {
+            Err(StakeTableError::ExistingKey)
+        } else {
+            let pos = self.mapping.len();
+            self.head = self.head.register(
+                self.height,
+                &to_merkle_path(pos, self.height),
+                &new_key,
+                amount,
+            )?;
+            self.mapping.insert(new_key, pos);
+            Ok(())
         }
     }
 
@@ -66,7 +65,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
         Ok(MerkleCommitment::new(
             root.commitment(),
             self.height,
@@ -75,12 +74,12 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
         Ok(root.total_stakes())
     }
 
     fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
         Ok(root.num_keys())
     }
 
@@ -89,7 +88,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn lookup(&self, version: SnapshotVersion, key: &K) -> Result<Self::Amount, StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
         match self.mapping.get(key) {
             Some(index) => {
                 let branches = to_merkle_path(*index, self.height);
@@ -104,7 +103,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
 
         let proof = match self.mapping.get(key) {
             Some(index) => {
@@ -149,7 +148,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     /// Almost uniformly samples a key weighted by its stake from the
-    /// last_epoch_start stake table
+    /// `last_epoch_start` stake table
     fn sample(
         &self,
         rng: &mut (impl SeedableRng + CryptoRngCore),
@@ -163,7 +162,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
-        let root = Self::get_root(self, version)?;
+        let root = Self::get_root(self, &version)?;
         Ok(internal::IntoIter::new(root))
     }
 }
@@ -181,10 +180,10 @@ impl<K: Key> StakeTable<K> {
         }
     }
 
-    // returns the root of stake table at `version`
+    /// returns the root of stake table at `version`
     fn get_root(
         &self,
-        version: SnapshotVersion,
+        version: &SnapshotVersion,
     ) -> Result<Arc<PersistentMerkleNode<K>>, StakeTableError> {
         match version {
             SnapshotVersion::Head => Ok(Arc::clone(&self.head)),
@@ -202,6 +201,8 @@ impl<K: Key> StakeTable<K> {
 
     /// Set the stake withheld by `key` to be `value`.
     /// Return the previous stake if succeed.
+    /// # Errors
+    /// Errors if the key is not found in the staketable
     pub fn set_value(&mut self, key: &K, value: U256) -> Result<U256, StakeTableError> {
         match self.mapping.get(key) {
             Some(pos) => {

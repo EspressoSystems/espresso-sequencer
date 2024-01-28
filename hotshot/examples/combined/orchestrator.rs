@@ -1,3 +1,5 @@
+//! Orchestrator using the web server
+/// types used for this example
 pub mod types;
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -10,6 +12,7 @@ use crate::infra::run_orchestrator;
 use crate::infra::OrchestratorArgs;
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork};
 
+/// general infra used for this example
 #[path = "../infra/mod.rs"]
 pub mod infra;
 

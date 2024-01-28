@@ -2,6 +2,7 @@ use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
+use serde_inline_default::serde_inline_default;
 use std::{
     env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -17,87 +18,148 @@ use tracing::error;
 
 use crate::client::OrchestratorClient;
 
+/// Configuration describing a libp2p node
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
+    /// bootstrap nodes (socket, serialized public key)
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
+    /// number of bootstrap nodes
     pub num_bootstrap_nodes: usize,
+    /// public ip of this node
     pub public_ip: IpAddr,
+    /// port to run libp2p on
     pub base_port: u16,
+    /// global index of node (for testing purposes a uid)
     pub node_index: u64,
+    /// whether or not to index ports
     pub index_ports: bool,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_high: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_low: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_outbound_min: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n_high: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n_low: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_outbound_min: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n: usize,
+    /// timeout before starting the next view
     pub next_view_timeout: u64,
+    /// minimum time to wait for a view
     pub propose_min_round_time: Duration,
+    /// maximum time to wait for a view
     pub propose_max_round_time: Duration,
+    /// time node has been running
     pub online_time: u64,
+    /// number of transactions per view
     pub num_txn_per_round: usize,
 }
 
+/// configuration serialized into a file
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfigFile {
+    /// whether or not to index ports
     pub index_ports: bool,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_high: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_low: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_outbound_min: usize,
+    /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n_high: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n_low: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_outbound_min: usize,
+    /// corresponds to libp2p DHT parameter of the same name
     pub mesh_n: usize,
+    /// time node has been running
     pub online_time: u64,
+    /// port to run libp2p on
     pub base_port: u16,
 }
 
+/// configuration for a web server
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct WebServerConfig {
+    /// the url to run on
     pub url: Url,
+    /// the time to wait between polls
     pub wait_between_polls: Duration,
 }
 
+/// a network configuration error
 #[derive(Error, Debug)]
 pub enum NetworkConfigError {
+    /// Failed to read NetworkConfig from file
     #[error("Failed to read NetworkConfig from file")]
     ReadFromFileError(std::io::Error),
+    /// Failed to deserialize loaded NetworkConfig
     #[error("Failed to deserialize loaded NetworkConfig")]
     DeserializeError(serde_json::Error),
+    /// Failed to write NetworkConfig to file
     #[error("Failed to write NetworkConfig to file")]
     WriteToFileError(std::io::Error),
+    /// Failed to serialize NetworkConfig
     #[error("Failed to serialize NetworkConfig")]
     SerializeError(serde_json::Error),
+    /// Failed to recursively create path to NetworkConfig
     #[error("Failed to recursively create path to NetworkConfig")]
     FailedToCreatePath(std::io::Error),
 }
 
+/// a network configuration
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound(deserialize = ""))]
 pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
+    /// number of views to run
     pub rounds: usize,
+    /// number of transactions per view
     pub transactions_per_round: usize,
+    /// number of bootstrap nodes
     pub num_bootrap: usize,
+    /// timeout before starting the next view
     pub next_view_timeout: u64,
+    /// minimum time to wait for a view
     pub propose_min_round_time: Duration,
+    /// maximum time to wait for a view
     pub propose_max_round_time: Duration,
+    /// global index of node (for testing purposes a uid)
     pub node_index: u64,
+    /// unique seed (for randomness? TODO)
     pub seed: [u8; 32],
+    /// size of transactions
     pub transaction_size: usize,
+    /// delay before beginning consensus
     pub start_delay_seconds: u64,
+    /// name of the key type (for debugging)
     pub key_type_name: String,
+    /// election config type (for debugging)
     pub election_config_type_name: String,
+    /// the libp2p config
     pub libp2p_config: Option<Libp2pConfig>,
+    /// the hotshot config
     pub config: HotShotConfig<KEY, ELECTIONCONFIG>,
+    /// the webserver config
     pub web_server_config: Option<WebServerConfig>,
+    /// the data availability web server config
     pub da_web_server_config: Option<WebServerConfig>,
 }
 
+/// the source of the network config
 pub enum NetworkConfigSource {
+    /// we source the network configuration from the orchestrator
     Orchestrator,
+    /// we source the network configuration from a config file on disk
     File,
 }
 
@@ -125,11 +187,13 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_orchestrator::client::OrchestratorClient;
     /// let client = OrchestratorClient::new();
     /// let identity = "my_identity".to_string();
     /// let file = Some("/path/to/my/config".to_string());
-    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file).await;
+    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file);
     /// ```
     pub async fn from_file_or_orchestrator(
         client: &OrchestratorClient,
@@ -182,9 +246,16 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
+    /// # use hotshot_types::signature_key::BLSPubKey;
+    /// // # use hotshot::traits::election::static_committee::StaticElectionConfig;
     /// let file = "/path/to/my/config".to_string();
-    /// let config = NetworkConfig::from_file(file).unwrap();
+    /// // NOTE: broken due to staticelectionconfig not being importable
+    /// // cannot import staticelectionconfig from hotshot without creating circular dependency
+    /// // making this work probably involves the `types` crate implementing a dummy
+    /// // electionconfigtype just ot make this example work
+    /// let config = NetworkConfig::<BLSPubKey, StaticElectionConfig>::from_file(file).unwrap();
     /// ```
     pub fn from_file(file: String) -> Result<Self, NetworkConfigError> {
         // read from file
@@ -220,7 +291,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// # use hotshot_orchestrator::config::NetworkConfig;
     /// let file = "/path/to/my/config".to_string();
     /// let config = NetworkConfig::from_file(file);
     /// config.to_file(file).unwrap();
@@ -252,11 +324,11 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
 impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
     fn default() -> Self {
         Self {
-            rounds: default_rounds(),
-            transactions_per_round: default_transactions_per_round(),
+            rounds: ORCHESTRATOR_DEFAULT_NUM_ROUNDS,
+            transactions_per_round: ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND,
             node_index: 0,
             seed: [0u8; 32],
-            transaction_size: default_transaction_size(),
+            transaction_size: ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE,
             libp2p_config: None,
             config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
@@ -272,33 +344,41 @@ impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
     }
 }
 
+/// a network config stored in a file
+#[serde_inline_default]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(bound(deserialize = ""))]
 pub struct NetworkConfigFile<KEY: SignatureKey> {
-    #[serde(default = "default_rounds")]
+    /// number of views to run
+    #[serde_inline_default(ORCHESTRATOR_DEFAULT_NUM_ROUNDS)]
     pub rounds: usize,
-    #[serde(default = "default_transactions_per_round")]
+    /// number of transactions per view
+    #[serde_inline_default(ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND)]
     pub transactions_per_round: usize,
+    /// global index of node (for testing purposes a uid)
     #[serde(default)]
     pub node_index: u64,
+    /// unique seed (for randomness? TODO)
     #[serde(default)]
     pub seed: [u8; 32],
-    #[serde(default = "default_transaction_size")]
+    /// size of transactions
+    #[serde_inline_default(ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE)]
     pub transaction_size: usize,
-    #[serde(default = "default_start_delay_seconds")]
+    /// delay before beginning consensus
+    #[serde_inline_default(ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS)]
     pub start_delay_seconds: u64,
+    /// the libp2p config
     #[serde(default)]
     pub libp2p_config: Option<Libp2pConfigFile>,
+    /// the hotshot config file
     #[serde(default)]
     pub config: HotShotConfigFile<KEY>,
-    #[serde(default = "default_web_server_config")]
+    /// the webserver config
+    #[serde(default)]
     pub web_server_config: Option<WebServerConfig>,
-    #[serde(default = "default_web_server_config")]
+    /// the data availability web server config
+    #[serde(default)]
     pub da_web_server_config: Option<WebServerConfig>,
-}
-
-fn default_web_server_config() -> Option<WebServerConfig> {
-    None
 }
 
 impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkConfig<K, E> {
@@ -391,6 +471,9 @@ pub struct ValidatorConfigFile {
 }
 
 impl ValidatorConfigFile {
+    /// read the validator config from a file
+    /// # Panics
+    /// Panics if unable to get the current working directory
     pub fn from_file(dir_str: &str) -> Self {
         let current_working_dir = match env::current_dir() {
             Ok(dir) => dir,
@@ -448,17 +531,14 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
         }
     }
 }
-
-// This is hacky, blame serde for not having something like `default_value = "10"`
-fn default_rounds() -> usize {
-    10
-}
-fn default_transactions_per_round() -> usize {
-    10
-}
-fn default_transaction_size() -> usize {
-    100
-}
+/// default number of rounds to run
+pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 10;
+/// default number of transactions per round
+pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND: usize = 10;
+/// default size of transactions
+pub const ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE: usize = 100;
+/// default delay before beginning consensus
+pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS: u64 = 60;
 
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {
@@ -502,8 +582,4 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             num_bootstrap: 5,
         }
     }
-}
-
-fn default_start_delay_seconds() -> u64 {
-    60
 }

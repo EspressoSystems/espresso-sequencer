@@ -20,6 +20,8 @@ use futures::join;
 
 use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
     data::ViewNumber,
     message::Message,
@@ -27,8 +29,7 @@ use hotshot_types::{
         election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent,
-            TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
-            ViewMessage,
+            TestableChannelImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
     },
@@ -44,8 +45,7 @@ struct Cache {
     /// The maximum number of items to store in the cache
     capacity: usize,
     /// The cache itself
-    #[allow(clippy::struct_field_names)]
-    cache: HashSet<u64>,
+    inner: HashSet<u64>,
     /// The hashes of the messages in the cache, in order of insertion
     hashes: Vec<u64>,
 }
@@ -55,14 +55,14 @@ impl Cache {
     fn new(capacity: usize) -> Self {
         Self {
             capacity,
-            cache: HashSet::with_capacity(capacity),
+            inner: HashSet::with_capacity(capacity),
             hashes: Vec::with_capacity(capacity),
         }
     }
 
     /// Insert a hash into the cache
     fn insert(&mut self, hash: u64) {
-        if self.cache.contains(&hash) {
+        if self.inner.contains(&hash) {
             return;
         }
 
@@ -71,23 +71,23 @@ impl Cache {
         if over > 0 {
             for _ in 0..over {
                 let hash = self.hashes.remove(0);
-                self.cache.remove(&hash);
+                self.inner.remove(&hash);
             }
         }
 
-        self.cache.insert(hash);
+        self.inner.insert(hash);
         self.hashes.push(hash);
     }
 
     /// Check if the cache contains a hash
     fn contains(&self, hash: u64) -> bool {
-        self.cache.contains(&hash)
+        self.inner.contains(&hash)
     }
 
     /// Get the number of items in the cache
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.cache.len()
+        self.inner.len()
     }
 }
 
@@ -145,6 +145,7 @@ pub struct CombinedNetworks<TYPES: NodeType>(
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
 );
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetworks<TYPES> {
     fn generator(
         expected_node_count: usize,
@@ -152,6 +153,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generators = (
             <WebServerNetwork<
@@ -161,14 +163,16 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da
+                is_da,
+                None,
             ),
             <Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> as TestableNetworkingImplementation<_>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da
+                is_da,
+                reliability_config,
             )
         );
         Box::new(move |node_id| CombinedNetworks(generators.0(node_id), generators.1(node_id)))
@@ -182,6 +186,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
     }
 }
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommChannel<TYPES> {
     fn generator(
         expected_node_count: usize,
@@ -189,6 +194,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <CombinedNetworks<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
@@ -196,6 +202,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
             network_id,
             da_committee_size,
             is_da,
+            reliability_config,
         );
         Box::new(move |node_id| Self {
             networks: generator(node_id).into(),
@@ -394,12 +401,12 @@ mod test {
         cache.insert(2);
         cache.insert(3);
         cache.insert(4);
-        assert_eq!(cache.cache.len(), 3);
+        assert_eq!(cache.inner.len(), 3);
         assert_eq!(cache.hashes.len(), 3);
-        assert!(!cache.cache.contains(&1));
-        assert!(cache.cache.contains(&2));
-        assert!(cache.cache.contains(&3));
-        assert!(cache.cache.contains(&4));
+        assert!(!cache.inner.contains(&1));
+        assert!(cache.inner.contains(&2));
+        assert!(cache.inner.contains(&3));
+        assert!(cache.inner.contains(&4));
         assert!(!cache.hashes.contains(&1));
         assert!(cache.hashes.contains(&2));
         assert!(cache.hashes.contains(&3));

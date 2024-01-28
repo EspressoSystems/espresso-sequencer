@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use super::{
     completion_task::CompletionTask,
     overall_safety_task::{OverallSafetyTask, RoundCtx},
@@ -6,6 +7,7 @@ use super::{
 use crate::{
     spinning_task::{ChangeNode, UpDown},
     test_launcher::{Networks, TestLauncher},
+    view_sync_task::ViewSyncTask,
 };
 use hotshot::{types::SystemContextHandle, Memberships};
 
@@ -20,27 +22,45 @@ use hotshot_types::{
     HotShotConfig, ValidatorConfig,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     marker::PhantomData,
 };
 
 #[allow(deprecated)]
 use tracing::info;
 
+/// a node participating in a test
 #[derive(Clone)]
 pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// The node's unique identifier
     pub node_id: u64,
+    /// The underlying networks belonging to the node
     pub networks: Networks<TYPES, I>,
+    /// The handle to the node's internals
     pub handle: SystemContextHandle<TYPES, I>,
+}
+
+/// A yet-to-be-started node that participates in tests
+#[derive(Clone)]
+pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// The underlying networks belonging to the node
+    pub networks: Networks<TYPES, I>,
+    /// The context to which we will use to launch HotShot when it's time
+    pub context: SystemContext<TYPES, I>,
 }
 
 /// The runner of a test network
 /// spin up and down nodes, execute rounds
 pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+    /// test launcher, contains a bunch of useful metadata and closures
     pub(crate) launcher: TestLauncher<TYPES, I>,
+    /// nodes in the test
     pub(crate) nodes: Vec<Node<TYPES, I>>,
-    pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
+    /// nodes with a late start
+    pub(crate) late_start: HashMap<u64, LateStartNode<TYPES, I>>,
+    /// the next node unique identifier
     pub(crate) next_node_id: u64,
+    /// overarching test task
     pub(crate) task_runner: TaskRunner,
 }
 
@@ -49,6 +69,9 @@ where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
     /// excecute test
+    /// # Panics
+    /// if the test fails
+    #[allow(clippy::too_many_lines)]
     pub async fn run_test(mut self) {
         let spinning_changes = self
             .launcher
@@ -109,7 +132,7 @@ where
 
         // add spinning task
         // map spinning to view
-        let mut changes: HashMap<TYPES::Time, Vec<ChangeNode>> = HashMap::new();
+        let mut changes: BTreeMap<TYPES::Time, Vec<ChangeNode>> = BTreeMap::new();
         for (view, mut change) in spinning_changes {
             changes
                 .entry(TYPES::Time::new(view))
@@ -146,6 +169,20 @@ where
         .await;
         task_runner = task_runner.add_task(id, "Test Overall Safety Task".to_string(), task);
 
+        // add view sync task
+        let view_sync_task_state = ViewSyncTask {
+            handles: nodes.clone(),
+            hit_view_sync: HashSet::new(),
+        };
+
+        let (id, task) = (launcher.view_sync_task_generator)(
+            view_sync_task_state,
+            registry.clone(),
+            test_event_stream.clone(),
+        )
+        .await;
+        task_runner = task_runner.add_task(id, "View Sync Task".to_string(), task);
+
         // wait for networks to be ready
         for node in &nodes {
             node.networks.0.wait_for_ready().await;
@@ -164,7 +201,7 @@ where
         for (name, result) in results {
             match result {
                 hotshot_task::task::HotShotTaskCompleted::ShutDown => {
-                    info!("Task {} shut down successfully", name)
+                    info!("Task {} shut down successfully", name);
                 }
                 hotshot_task::task::HotShotTaskCompleted::Error(e) => error_list.push((name, e)),
                 _ => {
@@ -172,12 +209,15 @@ where
                 }
             }
         }
-        if !error_list.is_empty() {
-            panic!("TEST FAILED! Results: {:?}", error_list);
-        }
+        assert!(
+            error_list.is_empty(),
+            "TEST FAILED! Results: {error_list:?}"
+        );
     }
 
     /// add nodes
+    /// # Panics
+    /// Panics if unable to create a [`HotShotInitializer`]
     pub async fn add_nodes(&mut self, total: usize, late_start: &HashSet<u64>) -> Vec<u64> {
         let mut results = vec![];
         for i in 0..total {
@@ -200,7 +240,13 @@ where
                 )
                 .await;
             if late_start.contains(&node_id) {
-                self.late_start.insert(node_id, hotshot);
+                self.late_start.insert(
+                    node_id,
+                    LateStartNode {
+                        networks,
+                        context: hotshot,
+                    },
+                );
             } else {
                 self.nodes.push(Node {
                     node_id,
@@ -215,6 +261,8 @@ where
     }
 
     /// add a specific node with a config
+    /// # Panics
+    /// if unable to initialize the node's `SystemContext` based on the config
     pub async fn add_node_with_config(
         &mut self,
         networks: Networks<TYPES, I>,

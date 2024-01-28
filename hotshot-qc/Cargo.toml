@@ -8,13 +8,9 @@ rust-version = { workspace = true }
 
 [dependencies]
 ark-bls12-377 = "0.4.0"
-ark-bls12-381 = { workspace = true }
 ark-bn254 = "0.4.0"
 ark-ec = { workspace = true }
 ark-ff = "0.4.0"
-ark-pallas = "0.4.0"
-ark-poly = "0.4.0"
-ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
@@ -34,3 +30,6 @@ hotshot-stake-table = { path = "../hotshot-stake-table" }
 default = ["parallel"]
 std = ["ark-std/std"]
 parallel = ["jf-primitives/parallel", "jf-utils/parallel"]
+
+[lints]
+workspace = true

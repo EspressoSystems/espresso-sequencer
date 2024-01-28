@@ -1,4 +1,4 @@
-use hotshot::types::SignatureKey;
+use hotshot::{traits::NetworkReliability, types::SignatureKey};
 use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
@@ -13,6 +13,7 @@ use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskD
 use crate::{
     spinning_task::SpinningTaskDescription,
     test_launcher::{ResourceGenerators, TestLauncher},
+    view_sync_task::ViewSyncTaskDescription,
 };
 
 use super::{
@@ -46,18 +47,22 @@ pub struct TestMetadata {
     pub num_bootstrap_nodes: usize,
     /// Size of the DA committee for the test
     pub da_committee_size: usize,
-    // overall safety property description
+    /// overall safety property description
     pub overall_safety_properties: OverallSafetyPropertiesDescription,
     /// spinning properties
     pub spinning_properties: SpinningTaskDescription,
-    // txns timing
+    /// txns timing
     pub txn_description: TxnTaskDescription,
-    // completion task
+    /// completion task
     pub completion_task_description: CompletionTaskDescription,
     /// Minimum transactions required for a block
     pub min_transactions: usize,
     /// timing data
     pub timing_data: TimingData,
+    /// unrelabile networking metadata
+    pub unreliable_network: Option<Box<dyn NetworkReliability>>,
+    /// view sync check task
+    pub view_sync_properties: ViewSyncTaskDescription,
 }
 
 impl Default for TimingData {
@@ -74,15 +79,17 @@ impl Default for TimingData {
 }
 
 impl TestMetadata {
+    /// the default metadata for a stress test
+    #[must_use]
     pub fn default_stress() -> Self {
+        let num_nodes = 100;
         TestMetadata {
-            num_bootstrap_nodes: 15,
-            total_nodes: 100,
-            start_nodes: 100,
+            num_bootstrap_nodes: num_nodes,
+            total_nodes: num_nodes,
+            start_nodes: num_nodes,
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 50,
                 check_leaf: true,
-                check_state: true,
                 check_block: true,
                 num_failed_views: 15,
                 transaction_threshold: 0,
@@ -95,38 +102,47 @@ impl TestMetadata {
                 round_start_delay: 25,
                 ..TimingData::default()
             },
+            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
             ..TestMetadata::default()
         }
     }
 
+    /// the default metadata for multiple rounds
+    #[must_use]
     pub fn default_multiple_rounds() -> TestMetadata {
+        let num_nodes = 10;
         TestMetadata {
-            total_nodes: 10,
-            start_nodes: 10,
+            // TODO: remove once we have fixed the DHT timeout issue
+            // https://github.com/EspressoSystems/HotShot/issues/2088
+            num_bootstrap_nodes: num_nodes,
+            total_nodes: num_nodes,
+            start_nodes: num_nodes,
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 20,
                 check_leaf: true,
-                check_state: true,
                 check_block: true,
                 num_failed_views: 8,
                 transaction_threshold: 0,
                 threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
             },
             timing_data: TimingData {
-                start_delay: 120000,
+                start_delay: 120_000,
                 round_start_delay: 25,
                 ..TimingData::default()
             },
+            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
             ..TestMetadata::default()
         }
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
+    #[must_use]
     pub fn default_more_nodes() -> TestMetadata {
+        let num_nodes = 20;
         TestMetadata {
-            total_nodes: 20,
-            start_nodes: 20,
-            num_bootstrap_nodes: 20,
+            total_nodes: num_nodes,
+            start_nodes: num_nodes,
+            num_bootstrap_nodes: num_nodes,
             // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
             // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
             // following issue.
@@ -146,6 +162,7 @@ impl TestMetadata {
                 next_view_timeout: 5000,
                 ..TimingData::default()
             },
+            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
             ..TestMetadata::default()
         }
     }
@@ -154,13 +171,14 @@ impl TestMetadata {
 impl Default for TestMetadata {
     /// by default, just a single round
     fn default() -> Self {
+        let num_nodes = 5;
         Self {
             timing_data: TimingData::default(),
             min_transactions: 0,
-            total_nodes: 5,
-            start_nodes: 5,
-            num_bootstrap_nodes: 5,
-            da_committee_size: 5,
+            total_nodes: num_nodes,
+            start_nodes: num_nodes,
+            num_bootstrap_nodes: num_nodes,
+            da_committee_size: num_nodes,
             spinning_properties: SpinningTaskDescription {
                 node_changes: vec![],
             },
@@ -173,11 +191,18 @@ impl Default for TestMetadata {
                     duration: Duration::from_millis(10000),
                 },
             ),
+            unreliable_network: None,
+            view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes),
         }
     }
 }
 
 impl TestMetadata {
+    /// turn a description of a test (e.g. a [`TestMetadata`]) into
+    /// a [`TestLauncher`] that can be used to launch the test.
+    /// # Panics
+    /// if some of the the configuration values are zero
+    #[must_use]
     pub fn gen_launcher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
         node_id: u64,
@@ -195,6 +220,8 @@ impl TestMetadata {
             completion_task_description,
             overall_safety_properties,
             spinning_properties,
+            unreliable_network,
+            view_sync_properties,
             ..
         } = self.clone();
 
@@ -263,12 +290,14 @@ impl TestMetadata {
         let completion_task_generator = completion_task_description.build_and_launch();
         let overall_safety_task_generator = overall_safety_properties.build();
         let spinning_task_generator = spinning_properties.build();
+        let view_sync_task_generator = view_sync_properties.build();
         TestLauncher {
             resource_generator: ResourceGenerators {
                 channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
                     total_nodes,
                     num_bootstrap_nodes,
                     da_committee_size,
+                    unreliable_network,
                 ),
                 storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
                 config,
@@ -278,6 +307,7 @@ impl TestMetadata {
             overall_safety_task_generator,
             completion_task_generator,
             spinning_task_generator,
+            view_sync_task_generator,
             hooks: vec![],
         }
         .modify_default_config(mod_config)

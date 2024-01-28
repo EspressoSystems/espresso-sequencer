@@ -1,3 +1,4 @@
+//! A validator using the web server
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_testing::state_types::TestTypes;
@@ -8,8 +9,10 @@ use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork}
 
 use hotshot_orchestrator::client::ValidatorArgs;
 
+/// types used for this example
 pub mod types;
 
+/// general infra used for this example
 #[path = "../infra/mod.rs"]
 pub mod infra;
 

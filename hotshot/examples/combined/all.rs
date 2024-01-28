@@ -1,3 +1,5 @@
+//! A example program using both the web server and libp2p
+/// types used for this example
 pub mod types;
 
 use crate::infra::load_config_from_file;
@@ -21,6 +23,7 @@ use crate::{
     types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork},
 };
 
+/// general infra used for this example
 #[path = "../infra/mod.rs"]
 pub mod infra;
 
@@ -88,7 +91,7 @@ async fn main() {
     let config: NetworkConfig<
         <TestTypes as NodeType>::SignatureKey,
         <TestTypes as NodeType>::ElectionConfigType,
-    > = load_config_from_file::<TestTypes>(args.config_file);
+    > = load_config_from_file::<TestTypes>(&args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..config.config.total_nodes.into() {
         let orchestrator_url = orchestrator_url.clone();
@@ -106,7 +109,7 @@ async fn main() {
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
                 network_config_file: None,
             })
-            .await
+            .await;
         });
         nodes.push(node);
     }

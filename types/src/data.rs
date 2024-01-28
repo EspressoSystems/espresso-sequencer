@@ -5,12 +5,13 @@
 
 use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_vote::UpgradeProposalData,
     traits::{
         block_contents::vid_commitment,
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, SignatureKey},
+        signature_key::SignatureKey,
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
         BlockPayload, State,
@@ -22,7 +23,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
-use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::{
     pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
@@ -106,12 +106,6 @@ impl std::ops::Sub<u64> for ViewNumber {
     }
 }
 
-/// Generate the genesis block proposer ID from the defined constant
-#[must_use]
-pub fn genesis_proposer_id() -> EncodedPublicKey {
-    EncodedPublicKey(GENESIS_PROPOSER_ID.to_vec())
-}
-
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type Transaction<STATE> = <<STATE as State>::BlockPayload as BlockPayload>::Transaction;
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
@@ -124,6 +118,19 @@ pub struct DAProposal<TYPES: NodeType> {
     pub encoded_transactions: Vec<u8>,
     /// Metadata of the block to be applied.
     pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+    /// View this proposal applies to
+    pub view_number: TYPES::Time,
+}
+
+/// A proposal to upgrade the network
+#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[serde(bound = "TYPES: NodeType")]
+pub struct UpgradeProposal<TYPES>
+where
+    TYPES: NodeType,
+{
+    /// The information about which version we are upgrading to.
+    pub upgrade_proposal: UpgradeProposalData<TYPES>,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
 }
@@ -209,7 +216,7 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
 
     /// the propser id
-    pub proposer_id: EncodedPublicKey,
+    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
@@ -225,6 +232,12 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for VidDisperse<TYPES> {
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
+        self.view_number
+    }
+}
+
+impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
     fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
@@ -316,12 +329,8 @@ pub struct Leaf<TYPES: NodeType> {
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
-    // TODO (Keyao) Remove.
-    /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
-    pub timestamp: i128,
-
     /// the proposer id of the leaf
-    pub proposer_id: EncodedPublicKey,
+    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
@@ -365,11 +374,10 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),
             parent_commitment: fake_commitment(),
-            block_header,
+            block_header: block_header.clone(),
             block_payload: Some(block_payload),
             rejected: Vec::new(),
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: genesis_proposer_id(),
+            proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }
 
@@ -435,19 +443,13 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_payload_commitment(&self) -> VidCommitment {
         self.get_block_header().payload_commitment()
     }
-    /// The blockchain state after appending this leaf.
-    // The Sequencing Leaf doesn't have a state.
-    pub fn get_state(&self) {}
+
     /// Transactions rejected or invalidated by the application of this leaf.
     pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
-    /// Real-world time when this leaf was created.
-    pub fn get_timestamp(&self) -> i128 {
-        self.timestamp
-    }
     /// Identity of the network participant who proposed this leaf.
-    pub fn get_proposer_id(&self) -> EncodedPublicKey {
+    pub fn get_proposer_id(&self) -> TYPES::SignatureKey {
         self.proposer_id.clone()
     }
     /// Create a leaf from information stored about a view.
@@ -459,7 +461,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_header: stored_view.block_header,
             block_payload: stored_view.block_payload,
             rejected: stored_view.rejected,
-            timestamp: stored_view.timestamp,
             proposer_id: stored_view.proposer_id,
         }
     }
@@ -521,7 +522,6 @@ pub fn serialize_signature2<TYPES: NodeType>(
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
-        let payload_commitment_bytes: [u8; 32] = self.get_payload_commitment().into();
         let signatures_bytes = if self.justify_qc.is_genesis {
             let mut bytes = vec![];
             bytes.extend("genesis".as_bytes());
@@ -536,7 +536,7 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
             .u64_field("block number", self.get_height())
             .field("parent Leaf commitment", self.parent_commitment)
             .constant_str("block payload commitment")
-            .fixed_size_bytes(&payload_commitment_bytes)
+            .fixed_size_bytes(self.get_payload_commitment().as_ref().as_ref())
             .constant_str("justify_qc view number")
             .u64(*self.justify_qc.view_number)
             .field(
@@ -561,7 +561,6 @@ where
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
             rejected: leaf.get_rejected(),
-            timestamp: leaf.get_timestamp(),
             proposer_id: leaf.get_proposer_id(),
         }
     }

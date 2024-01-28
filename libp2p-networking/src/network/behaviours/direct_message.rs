@@ -51,6 +51,7 @@ pub enum DMEvent {
 }
 
 impl DMBehaviour {
+    /// handle a direct message event
     fn handle_dm_event(&mut self, event: Event<DirectMessageRequest, DirectMessageResponse>) {
         match event {
             Event::InboundFailure {
@@ -69,7 +70,7 @@ impl DMBehaviour {
             }
             Event::OutboundFailure {
                 peer,
-                request_id: _,
+                request_id,
                 error,
             } => {
                 error!(
@@ -78,10 +79,10 @@ impl DMBehaviour {
                 );
                 // RM TODO: make direct messages have n (and not infinite) retries
                 // issue: https://github.com/EspressoSystems/HotShot/issues/2003
-                // if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
-                //     req.backoff.start_next(false);
-                //     self.failed_rr.push_back(req);
-                // }
+                if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
+                    req.backoff.start_next(false);
+                    self.failed_rr.push_back(req);
+                }
             }
             Event::Message { message, peer, .. } => match message {
                 Message::Request {

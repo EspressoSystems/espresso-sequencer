@@ -36,6 +36,7 @@ pub enum GossipEvent {
 }
 
 impl GossipBehaviour {
+    /// handle a gossip event
     fn gossip_handle_event(&mut self, event: Event) {
         match event {
             Event::Message { message, .. } => {

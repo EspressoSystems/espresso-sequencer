@@ -22,8 +22,10 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
 };
+use tracing::error;
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node};
+/// convenience type alias for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 
 use super::GlobalTestEvent;
@@ -45,7 +47,10 @@ pub enum ViewStatus<TYPES: NodeType> {
 #[derive(Snafu, Debug, Clone)]
 pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     /// inconsistent txn nums
-    InconsistentTxnsNum { map: HashMap<u64, usize> },
+    InconsistentTxnsNum {
+        /// node idx -> number transactions
+        map: HashMap<u64, usize>,
+    },
     /// too many failed  views
     TooManyFailures {
         /// vec of failed views
@@ -104,21 +109,18 @@ pub struct RoundResult<TYPES: NodeType> {
     /// block -> # entries decided on that block
     pub block_map: HashMap<VidCommitment, usize>,
 
-    /// state -> # entries decided on that state
-    pub state_map: HashMap<(), usize>,
-
+    /// node idx -> number transactions
     pub num_txns_map: HashMap<u64, usize>,
 }
 
 impl<TYPES: NodeType> Default for RoundResult<TYPES> {
     fn default() -> Self {
         Self {
-            success_nodes: Default::default(),
-            failed_nodes: Default::default(),
-            leaf_map: Default::default(),
-            block_map: Default::default(),
-            state_map: Default::default(),
-            num_txns_map: Default::default(),
+            success_nodes: HashMap::default(),
+            failed_nodes: HashMap::default(),
+            leaf_map: HashMap::default(),
+            block_map: HashMap::default(),
+            num_txns_map: HashMap::default(),
             status: ViewStatus::InProgress,
         }
     }
@@ -129,9 +131,9 @@ impl<TYPES: NodeType> Default for RoundResult<TYPES> {
 impl<TYPES: NodeType> Default for RoundCtx<TYPES> {
     fn default() -> Self {
         Self {
-            round_results: Default::default(),
-            failed_views: Default::default(),
-            successful_views: Default::default(),
+            round_results: HashMap::default(),
+            failed_views: HashSet::default(),
+            successful_views: HashSet::default(),
         }
     }
 }
@@ -199,16 +201,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                 }
             }
 
-            let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
+            let payload_commitment = leaf.get_payload_commitment();
 
-            match self.state_map.entry(state) {
-                std::collections::hash_map::Entry::Occupied(mut o) => {
-                    *o.get_mut() += 1;
-                }
-                std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(1);
-                }
-            }
             match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
@@ -232,20 +226,23 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         maybe_leaf
     }
 
+    /// check if the test failed due to not enough nodes getting through enough views
     pub fn check_if_failed(&mut self, threshold: usize, total_num_nodes: usize) -> bool {
         let num_failed = self.failed_nodes.len();
         total_num_nodes - num_failed >= threshold
     }
     /// determines whether or not the round passes
     /// also do a safety check
+    /// # Panics
+    /// if the `num_txns_map` is somehow empty
+    /// This should never happen because this function should never be called in that case
     #[allow(clippy::too_many_arguments, clippy::let_unit_value)]
     pub fn update_status(
         &mut self,
         threshold: usize,
         total_num_nodes: usize,
-        key: Leaf<TYPES>,
+        key: &Leaf<TYPES>,
         check_leaf: bool,
-        check_state: bool,
         check_block: bool,
         transaction_threshold: u64,
     ) {
@@ -254,12 +251,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         let remaining_nodes = total_num_nodes - (num_decided + num_failed);
 
         if check_leaf && self.leaf_map.len() != 1 {
+            error!("LEAF MAP (that is mismatched) IS: {:?}", self.leaf_map);
             self.status = ViewStatus::Err(OverallSafetyTaskErr::MismatchedLeaf);
-            return;
-        }
-
-        if check_state && self.state_map.len() != 1 {
-            self.status = ViewStatus::Err(OverallSafetyTaskErr::InconsistentStates);
             return;
         }
 
@@ -288,12 +281,10 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             // if not, return error
             // if neither, continue through
 
-            let state_key = key.get_state();
             let block_key = key.get_payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
-                && *self.state_map.get(&state_key).unwrap() == threshold
-                && *self.leaf_map.get(&key).unwrap() == threshold
+                && *self.leaf_map.get(key).unwrap() == threshold
             {
                 self.status = ViewStatus::Ok;
                 return;
@@ -307,6 +298,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     }
 
     /// generate leaves
+    #[must_use]
     pub fn gen_leaves(&self) -> HashMap<Leaf<TYPES>, usize> {
         let mut leaves = HashMap::<Leaf<TYPES>, usize>::new();
 
@@ -334,8 +326,6 @@ pub struct OverallSafetyPropertiesDescription {
     pub num_successful_views: usize,
     /// whether or not to check the leaf
     pub check_leaf: bool,
-    /// whether or not to check the state
-    pub check_state: bool,
     /// whether or not to check the block
     pub check_block: bool,
     /// whether or not to check that we have threshold amounts of transactions each block
@@ -355,10 +345,10 @@ impl std::fmt::Debug for OverallSafetyPropertiesDescription {
         f.debug_struct("OverallSafetyPropertiesDescription")
             .field("num successful views", &self.num_successful_views)
             .field("check leaf", &self.check_leaf)
-            .field("check_state", &self.check_state)
             .field("check_block", &self.check_block)
             .field("num_failed_rounds_total", &self.num_failed_views)
-            .finish()
+            .field("transaction_threshold", &self.transaction_threshold)
+            .finish_non_exhaustive()
     }
 }
 
@@ -367,7 +357,6 @@ impl Default for OverallSafetyPropertiesDescription {
         Self {
             num_successful_views: 50,
             check_leaf: false,
-            check_state: true,
             check_block: true,
             num_failed_views: 0,
             transaction_threshold: 0,
@@ -379,12 +368,15 @@ impl Default for OverallSafetyPropertiesDescription {
 
 impl OverallSafetyPropertiesDescription {
     /// build a task
+    /// # Panics
+    /// if an internal variant that the prior views are filled is violated
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
     ) -> TaskGenerator<OverallSafetyTask<TYPES, I>> {
         let Self {
             check_leaf,
-            check_state,
             check_block,
             num_failed_views: num_failed_rounds_total,
             num_successful_views,
@@ -493,9 +485,8 @@ impl OverallSafetyPropertiesDescription {
                                     view.update_status(
                                         threshold,
                                         state.handles.len(),
-                                        key,
+                                        &key,
                                         check_leaf,
-                                        check_state,
                                         check_block,
                                         transaction_threshold,
                                         );

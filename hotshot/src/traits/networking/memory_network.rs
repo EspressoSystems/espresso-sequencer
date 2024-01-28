@@ -92,7 +92,7 @@ struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
     metrics: NetworkingMetricsValue,
 
     /// config to introduce unreliability to the network
-    reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
+    reliability_config: Option<Box<dyn NetworkReliability>>,
 }
 
 /// In memory only network simulator.
@@ -123,7 +123,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
         pub_key: K,
         metrics: NetworkingMetricsValue,
         master_map: Arc<MasterMap<M, K>>,
-        reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> MemoryNetwork<M, K> {
         info!("Attaching new MemoryNetwork");
         let (broadcast_input, broadcast_task_recv) = bounded(128);
@@ -249,6 +249,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _network_id: usize,
         _da_committee_size: usize,
         _is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let master: Arc<_> = MasterMap::new();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
@@ -259,7 +260,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                 pubkey,
                 NetworkingMetricsValue::default(),
                 master.clone(),
-                None,
+                reliability_config.clone(),
             )
         })
     }
@@ -312,8 +313,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                 continue;
             }
             trace!(?key, "Sending message to node");
-            if let Some(r) = &self.inner.reliability_config {
-                let config = r.read().await;
+            if let Some(ref config) = &self.inner.reliability_config {
                 {
                     let node2 = node.clone();
                     let fut = config.chaos_send_msg(
@@ -356,15 +356,14 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
         trace!("Message bincoded, finding recipient");
         if let Some(node) = self.inner.master_map.map.get(&recipient) {
             let node = node.value().clone();
-            if let Some(r) = &self.inner.reliability_config {
-                let config = r.read().await;
+            if let Some(ref config) = &self.inner.reliability_config {
                 {
                     let fut = config.chaos_send_msg(
                         vec.clone(),
                         Arc::new(move |msg: Vec<u8>| {
                             let node2 = node.clone();
                             boxed_sync(async move {
-                                let _res = node2.broadcast_input(msg).await;
+                                let _res = node2.direct_input(msg).await;
                                 // NOTE we're dropping metrics here but this is only for testing
                                 // purposes. I think that should be okay
                             })
@@ -475,6 +474,7 @@ where
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <MemoryNetwork<
             Message<TYPES>,
@@ -484,7 +484,8 @@ where
             num_bootstrap,
             network_id,
             da_committee_size,
-            is_da
+            is_da,
+            reliability_config,
         );
         Box::new(move |node_id| Self(generator(node_id).into()))
     }

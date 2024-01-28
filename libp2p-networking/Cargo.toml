@@ -11,38 +11,23 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 default = ["webui"]
 webui = []
 
-# # this only has effect on linux
-# lossy_network = [
-#     "nix",
-#     "netlink-packet-route",
-#     "netlink-packet-utils",
-#     "netlink-packet-core",
-#     "netlink-proto",
-#     "netlink-sys",
-#     "netlink-packet-generic",
-#     "rtnetlink",
-# ]
-
 [dependencies]
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 blake3 = { workspace = true }
-color-eyre = "0.6.2"
 custom_debug = { workspace = true }
-derive_builder = "0.12.0"
+derive_builder = "0.13.0"
 either = { workspace = true }
 futures = { workspace = true }
 hotshot-constants = { path = "../constants" }
 hotshot-utils = { path = "../utils" }
 libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
-libp2p-noise = { version = "0.44.0", default-features = false }
-parking_lot = "0.12.1"
 rand = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0.108"
+serde_json = "1.0.111"
 snafu = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
     "h1-server",
@@ -59,19 +44,5 @@ tokio-stream = "0.1.14"
 libp2p = { workspace = true, features = ["async-std"] }
 async-std = { workspace = true }
 
-
-[target.'cfg(target_os = "linux")'.dependencies]
-## lossy_network dependencies
-nix = { version = "0.27.1", optional = true }
-rtnetlink = { git = "https://github.com/espressosystems/netlink.git", version = "0.9.1", features = [
-    "smol_socket",
-], default-features = false, optional = true }
-netlink-packet-route = { git = "https://github.com/espressosystems/netlink.git", version = "0.11.0", optional = true }
-netlink-packet-utils = { git = "https://github.com/espressosystems/netlink.git", version = "0.5.1", optional = true }
-netlink-packet-core = { git = "https://github.com/espressosystems/netlink.git", version = "0.4.2", optional = true }
-netlink-proto = { git = "https://github.com/espressosystems/netlink.git", version = "0.9.2", optional = true }
-netlink-sys = { git = "https://github.com/espressosystems/netlink.git", version = "0.8.2", features = [
-    "smol_socket",
-], optional = true }
-netlink-packet-generic = { git = "https://github.com/espressosystems/netlink.git", version = "0.2.0", optional = true }
-
+[lints]
+workspace = true

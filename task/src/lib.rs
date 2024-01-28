@@ -1,13 +1,5 @@
 //! Abstractions meant for usage with long running consensus tasks
 //! and testing harness
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::panic
-)]
 
 use crate::task::PassType;
 use either::Either;
@@ -143,7 +135,7 @@ impl<T: Stream> Stream for MergeN<T> {
 // for usage with `MessageStream`
 // TODO move this to async-compatibility-layer
 #[pin_project]
-/// Stream returned by the [`merge`](super::StreamExt::merge) method.
+/// Stream type that merges two underlying streams
 pub struct Merge<T, U> {
     /// first stream to merge
     #[pin]

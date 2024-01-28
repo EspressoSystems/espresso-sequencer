@@ -1,11 +1,3 @@
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    rust_2018_idioms,
-    missing_docs,
-    clippy::panic
-)]
-#![allow(clippy::module_name_repetitions)]
 //! Library for p2p communication
 
 /// Example message used by the UI library

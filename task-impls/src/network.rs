@@ -1,5 +1,6 @@
 use crate::events::HotShotEvent;
 use either::Either::{self, Left, Right};
+use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task::{FilterEvent, HotShotTaskCompleted, TS},
@@ -84,6 +85,15 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 
                             GeneralConsensusMessage::TimeoutVote(message) => {
                                 HotShotEvent::TimeoutVoteRecv(message)
+                            }
+                            GeneralConsensusMessage::UpgradeCertificate(message) => {
+                                HotShotEvent::UpgradeCertificateRecv(message)
+                            }
+                            GeneralConsensusMessage::UpgradeProposal(message) => {
+                                HotShotEvent::UpgradeProposalRecv(message)
+                            }
+                            GeneralConsensusMessage::UpgradeVote(message) => {
+                                HotShotEvent::UpgradeVoteRecv(message)
                             }
                             GeneralConsensusMessage::InternalTrigger(_) => {
                                 error!("Got unexpected message type in network task!");
@@ -279,8 +289,8 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
                 return None;
             }
         };
-
         let message = Message {
+            version: PROGRAM_PROTOCOL_VERSION,
             sender,
             kind: message_kind,
         };

@@ -33,7 +33,7 @@ use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use surf_disco::Url;
 
-use hotshot_types::traits::network::ViewMessage;
+use hotshot_types::traits::network::{NetworkReliability, ViewMessage};
 use std::collections::BTreeMap;
 use std::{
     collections::{btree_map::Entry, BTreeSet},
@@ -45,6 +45,10 @@ use std::{
 };
 use surf_disco::error::ClientError;
 use tracing::{debug, error, info, warn};
+
+/// convenience alias alias for the result of getting transactions from the web server
+pub type TxnResult<TYPES> = Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError>;
+
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
 pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
@@ -114,7 +118,7 @@ impl<TYPES: NodeType> WebServerNetwork<TYPES> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// let (tx, _rx): (TaskChannel<MyKey>, _) = tokio::sync::mpsc::unbounded_channel();
 /// ```
 ///
@@ -130,9 +134,9 @@ type TaskChannel<K> = UnboundedSender<ConsensusIntentEvent<K>>;
 ///
 /// # Examples
 ///
-/// ```
-/// use your_crate::TaskMap;
-/// let mut map: TaskMap<MyKey> = TaskMap::default();
+/// ```ignore
+/// # use crate::TaskMap;
+/// let mut map: TaskMap<u64> = TaskMap::default();
 /// ```
 ///
 /// # Note
@@ -160,9 +164,10 @@ impl<K: SignatureKey> TaskMap<K> {
     ///
     /// # Examples
     ///
-    /// ```
-    /// let mut map: TaskMap<MyKey> = TaskMap::default();
-    /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal).await;
+    /// ```ignore
+    /// # use crate::TaskMap;
+    /// let mut map: TaskMap<u64> = TaskMap::default();
+    /// map.prune_tasks(10, ConsensusIntentEvent::CancelPollForProposal(5)).await;
     /// ```
     async fn prune_tasks(
         &mut self,
@@ -260,6 +265,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
                 MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
+                MessagePurpose::Upgrade => config::get_upgrade_route(view_number),
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -416,6 +422,15 @@ impl<TYPES: NodeType> Inner<TYPES> {
                             MessagePurpose::Internal => {
                                 error!("Received internal message in web server network");
                             }
+
+                            MessagePurpose::Upgrade => {
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
+                            }
                         }
                     }
                     Ok(None) => {
@@ -474,12 +489,8 @@ impl<TYPES: NodeType> Inner<TYPES> {
     }
 
     /// Fetches transactions from web server
-    async fn get_txs_from_web_server(
-        &self,
-        endpoint: String,
-    ) -> Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError> {
-        let result: Result<Option<(u64, Vec<Vec<u8>>)>, ClientError> =
-            self.client.get(&endpoint).send().await;
+    async fn get_txs_from_web_server(&self, endpoint: String) -> TxnResult<TYPES> {
+        let result: Result<Option<(_, Vec<Vec<u8>>)>, _> = self.client.get(&endpoint).send().await;
         match result {
             Err(_error) => Err(NetworkError::WebServer {
                 source: WebServerNetworkError::ClientError,
@@ -645,6 +656,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             MessagePurpose::ViewSyncVote => config::post_view_sync_vote_route(*view_number),
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
             MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
+            MessagePurpose::Upgrade => config::post_upgrade_route(*view_number),
         };
 
         let network_msg: SendMsg<Message<TYPES>> = SendMsg {
@@ -1247,6 +1259,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         _network_id: usize,
         _da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
@@ -1285,7 +1298,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
             let mut network = WebServerNetwork::create(
                 url,
                 Duration::from_millis(100),
-                known_nodes[id as usize].clone(),
+                known_nodes[usize::try_from(id).unwrap()].clone(),
                 is_da,
             );
             network.server_shutdown_signal = Some(sender);
@@ -1305,6 +1318,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <WebServerNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
@@ -1312,6 +1326,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel
             network_id,
             da_committee_size,
             is_da,
+            // network reliability is a testing feature
+            // not yet implemented for webcommchannel
+            None,
         );
         Box::new(move |node_id| Self(generator(node_id).into()))
     }

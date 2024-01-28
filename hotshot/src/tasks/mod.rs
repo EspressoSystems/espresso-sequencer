@@ -1,4 +1,4 @@
-//! Provides a number of tasks that run continuously on a [`HotShot`]
+//! Provides a number of tasks that run continuously
 
 use crate::{types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
@@ -44,6 +44,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tracing::error;
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -67,12 +68,16 @@ pub async fn add_network_message_task<TYPES: NodeType, NET: CommunicationChannel
         let network = net.clone();
         let closure = async move {
             loop {
-                let msgs = Messages(
-                    network
-                        .recv_msgs(TransmitType::Broadcast)
-                        .await
-                        .expect("Failed to receive broadcast messages"),
-                );
+                let msgs = match network.recv_msgs(TransmitType::Broadcast).await {
+                    Ok(msgs) => Messages(msgs),
+                    Err(err) => {
+                        error!("failed to receive broadcast messages: {err}");
+
+                        // return zero messages so we sleep and try again
+                        Messages(vec![])
+                    }
+                };
+
                 if msgs.0.is_empty() {
                     async_sleep(Duration::from_millis(100)).await;
                 } else {
@@ -87,12 +92,15 @@ pub async fn add_network_message_task<TYPES: NodeType, NET: CommunicationChannel
         let network = net.clone();
         let closure = async move {
             loop {
-                let msgs = Messages(
-                    network
-                        .recv_msgs(TransmitType::Direct)
-                        .await
-                        .expect("Failed to receive direct messages"),
-                );
+                let msgs = match network.recv_msgs(TransmitType::Direct).await {
+                    Ok(msgs) => Messages(msgs),
+                    Err(err) => {
+                        error!("failed to receive direct messages: {err}");
+
+                        // return zero messages so we sleep and try again
+                        Messages(vec![])
+                    }
+                };
                 if msgs.0.is_empty() {
                     async_sleep(Duration::from_millis(100)).await;
                 } else {

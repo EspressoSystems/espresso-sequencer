@@ -34,7 +34,8 @@ async fn test_view_sync_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(4),
         hotshot_types::traits::consensus_api::ConsensusApi::public_key(&api),
         hotshot_types::traits::consensus_api::ConsensusApi::private_key(&api),
-    );
+    )
+    .expect("Failed to create a ViewSyncPreCommitVote!");
 
     tracing::error!("Vote in test is {:?}", vote.clone());
 

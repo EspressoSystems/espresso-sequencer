@@ -11,7 +11,9 @@ use tide_disco::Url;
 
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
+    /// the client
     client: surf_disco::Client<ClientError>,
+    /// the identity
     pub identity: String,
 }
 
@@ -35,6 +37,7 @@ pub struct ValidatorArgs {
     pub network_config_file: Option<String>,
 }
 
+/// arguments to run multiple validators
 #[derive(Parser, Debug, Clone)]
 pub struct MultiValidatorArgs {
     /// Number of validators to run
@@ -66,33 +69,41 @@ impl ValidatorArgs {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
+    /// // NOTE this is a toy example,
+    /// // the user will need to construct a multivalidatorargs since `new` does not exist
+    /// # use hotshot_orchestrator::client::MultiValidatorArgs;
     /// let multi_args = MultiValidatorArgs::new();
     /// let node_index = 1;
     /// let instance = Self::from_multi_args(multi_args, node_index);
     /// ```
+    #[must_use]
     pub fn from_multi_args(multi_args: MultiValidatorArgs, node_index: u16) -> Self {
         Self {
             url: multi_args.url,
             public_ip: multi_args.public_ip,
             network_config_file: multi_args
                 .network_config_file
-                .map(|s| format!("{}-{}", s, node_index)),
+                .map(|s| format!("{s}-{node_index}")),
         }
     }
 }
 
 impl OrchestratorClient {
     /// Creates the client that will connect to the orchestrator
-    pub async fn new(args: ValidatorArgs, identity: String) -> Self {
+    #[must_use]
+    pub fn new(args: ValidatorArgs, identity: String) -> Self {
         let client = surf_disco::Client::<ClientError>::new(args.url);
         // TODO ED: Add healthcheck wait here
         OrchestratorClient { client, identity }
     }
 
     /// Sends an identify message to the orchestrator and attempts to get its config
-    /// Returns both the node_index and the run configuration from the orchestrator
+    /// Returns both the `node_index` and the run configuration from the orchestrator
     /// Will block until both are returned
+    /// # Panics
+    /// if unable to convert the node index from usize into u64
+    /// (only applicable on 32 bit systems)
     #[allow(clippy::type_complexity)]
     pub async fn get_config<K: SignatureKey, E: ElectionConfig>(
         &self,
@@ -126,13 +137,15 @@ impl OrchestratorClient {
 
         let mut config = self.wait_for_fn_from_orchestrator(f).await;
 
-        config.node_index = node_index as u64;
+        config.node_index = From::<u16>::from(node_index);
 
         config
     }
 
     /// Tells the orchestrator this validator is ready to start
     /// Blocks until the orchestrator indicates all nodes are ready to start
+    /// # Panics
+    /// Panics if unable to post.
     pub async fn wait_for_all_nodes_ready(&self, node_index: u64) -> bool {
         let send_ready_f = |client: Client<ClientError>| {
             async move {
