@@ -83,6 +83,7 @@ processes:
     command: sequencer -- http -- query -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
     depends_on:
       orchestrator:
@@ -103,6 +104,7 @@ processes:
     command: sequencer -- http -- query -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
     depends_on:
       orchestrator:

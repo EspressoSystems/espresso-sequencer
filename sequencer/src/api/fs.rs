@@ -1,9 +1,12 @@
-use super::{data_source::SequencerDataSource, endpoints::TimeWindowQueryData};
+use super::{
+    data_source::{Provider, SequencerDataSource},
+    endpoints::TimeWindowQueryData,
+};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{
-    availability::{AvailabilityDataSource, BlockId, BlockQueryData, ResourceId},
+    availability::{AvailabilityDataSource, BlockId, BlockQueryData},
     data_source::{ExtensibleDataSource, FileSystemDataSource},
     node::NodeDataSource,
     NotFoundSnafu, QueryError, QueryResult,
@@ -16,19 +19,19 @@ pub struct Index {
     blocks_by_time: BTreeMap<u64, Vec<u64>>,
 }
 
-pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes>, Index>;
+pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes, Provider>, Index>;
 
 #[async_trait]
 impl SequencerDataSource for DataSource {
     type Options = Options;
 
-    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self> {
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
         let path = Path::new(&opt.path);
         let data_source = {
             if reset {
-                FileSystemDataSource::create(path).await?
+                FileSystemDataSource::create(path, provider).await?
             } else {
-                FileSystemDataSource::open(path).await?
+                FileSystemDataSource::open(path, provider).await?
             }
         };
         let mut index = Index::default();
@@ -93,9 +96,9 @@ impl SequencerDataSource for DataSource {
         ID: Into<BlockId<SeqTypes>> + Send + Sync,
     {
         let first_block = match from.into() {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self
-                .get_block(h)
+            BlockId::Number(n) => n,
+            id => self
+                .get_block(id)
                 .await
                 .try_resolve()
                 .map_err(|_| QueryError::Missing)?
