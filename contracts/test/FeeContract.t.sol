@@ -164,11 +164,12 @@ contract FeeContractTest is Test {
 
 contract FeeContractUpgradabilityTest is Test {
     address payable public proxy;
+    address public admin;
     FeeContract public feeContractProxy;
     DeployFeeContract public deployer = new DeployFeeContract();
 
     function setUp() public {
-        proxy = deployer.run();
+        (proxy, admin) = deployer.run();
         feeContractProxy = FeeContract(proxy);
     }
 
@@ -237,8 +238,6 @@ contract FeeContractUpgradabilityTest is Test {
     function testUpgradeTo() public {
         FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        (address admin,) = deriveRememberKey(seedPhrase, 0);
         vm.prank(admin);
         vm.expectEmit(false, false, false, true);
         // We emit the event we expect to see.
@@ -250,7 +249,8 @@ contract FeeContractUpgradabilityTest is Test {
     function testFailUpgradeToWithWrongAdmin() public {
         FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
-        //start the upgrade with this contract as the sender which isn't the admin
+        //start the upgrade with another address which isn't the admin
+        vm.prank(makeAddr("otherUser"));
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 }
