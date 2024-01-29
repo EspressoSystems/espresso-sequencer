@@ -207,7 +207,7 @@ impl Committable for Header {
             .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
         let mut fmt_bytes = vec![];
-        self.block_merkle_tree_root
+        self.fee_merkle_tree_root
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
@@ -712,7 +712,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~VoJoDVEa8stIa-XZgL4hYsJzUAb9UlAAZBUgmWhCScoo",
+            "BLOCK~1F_cwBMF2HLjz71KagS4CZTlUhOdLwu9FHnK1Ni4uwAB",
             |header| header.commit(),
         );
     }

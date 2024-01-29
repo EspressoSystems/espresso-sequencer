@@ -1,13 +1,16 @@
 //! Sequencer-specific API options and initialization.
 
 use super::{
-    data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState,
-    SequencerNode,
+    data_source::{provider, SequencerDataSource},
+    endpoints, fs, sql,
+    update::update_loop,
+    AppState, SequencerNode,
 };
 use crate::{
     api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
     Event,
 };
+use anyhow::bail;
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -21,7 +24,7 @@ use hotshot_query_service::{
 };
 use hotshot_task::task::FilterEvent;
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
-use tide_disco::App;
+use tide_disco::{App, Url};
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -90,10 +93,16 @@ impl Options {
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
-        let node = if let Some(opt) = self.storage_sql.take() {
-            init_with_query_module::<N, sql::DataSource>(self, opt, init_context).await?
-        } else if let Some(opt) = self.storage_fs.take() {
-            init_with_query_module::<N, fs::DataSource>(self, opt, init_context).await?
+        let node = if let Some(query_opt) = self.query.take() {
+            if let Some(opt) = self.storage_sql.take() {
+                init_with_query_module::<N, sql::DataSource>(self, query_opt, opt, init_context)
+                    .await?
+            } else if let Some(opt) = self.storage_fs.take() {
+                init_with_query_module::<N, fs::DataSource>(self, query_opt, opt, init_context)
+                    .await?
+            } else {
+                bail!("query module requested but not storage provided");
+            }
         } else if self.status.is_some() {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
             // which allows us to run the status API with no persistent storage.
@@ -205,11 +214,16 @@ pub struct Submit;
 pub struct Status;
 
 /// Options for the query API module.
-#[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct Query;
+#[derive(Parser, Clone, Debug, Default)]
+pub struct Query {
+    /// Peers for fetching missing data for the query service.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
+    pub peers: Vec<Url>,
+}
 
 async fn init_with_query_module<N, D>(
     opt: Options,
+    query_opt: Query,
     mod_opt: D::Options,
     init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
 ) -> anyhow::Result<SequencerNode<N>>
@@ -219,7 +233,7 @@ where
 {
     type State<N, D> = Arc<RwLock<AppState<N, D>>>;
 
-    let ds = D::create(mod_opt, false).await?;
+    let ds = D::create(mod_opt, provider(query_opt.peers), false).await?;
     let metrics = ds.populate_metrics();
 
     // Start up handle
