@@ -65,7 +65,7 @@ use jf_primitives::merkle_tree::{
 };
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
-pub use state::State;
+pub use state::ValidatedState;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
@@ -199,7 +199,7 @@ impl NodeType for SeqTypes {
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;
-    type StateType = State;
+    type StateType = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
 }
 

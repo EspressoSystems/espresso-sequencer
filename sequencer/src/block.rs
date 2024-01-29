@@ -313,7 +313,7 @@ impl Header {
     }
 }
 
-fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<BlockMerkleTree> {
+pub fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<BlockMerkleTree> {
     anyhow::ensure!(
         proposal.height == parent.height + 1,
         anyhow::anyhow!(
