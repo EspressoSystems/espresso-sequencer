@@ -11,7 +11,7 @@ hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag 
 hotshot-state-prover = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.9" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
