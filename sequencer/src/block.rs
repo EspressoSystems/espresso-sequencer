@@ -198,6 +198,9 @@ pub struct Header {
     pub fee_merkle_tree_root: FeeMerkleCommitment,
     // TODO remove from `Header` when real `ValidatedState` becomes available
     pub validated_state: ValidatedState,
+    pub builder_address: Address,
+    pub builder_signature: String,
+    pub builder_fee_amount: String
 }
 
 impl Committable for Header {
