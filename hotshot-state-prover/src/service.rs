@@ -5,7 +5,10 @@ use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 use crate::state::{LightClientState, StateSignaturesBundle, StateVerKey};
 use crate::CircuitField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use async_std::task::{sleep, spawn};
+use async_std::{
+    sync::Arc,
+    task::{sleep, spawn},
+};
 use displaydoc::Display;
 use ethers::types::U256;
 use hotshot_stake_table::vec_based::StakeTable;
@@ -156,19 +159,21 @@ pub fn key_gen(path: PathBuf) {
 
 pub async fn run_prover_service(key_path: PathBuf, relay_server_url: Url, freq: Duration) {
     // TODO(#1022): maintain the following stake table
-    let st = sync_stake_table().await;
-    let proving_key = load_proving_key(key_path);
-    let relay_server_client = Client::<ServerError>::new(relay_server_url);
+    let st = Arc::new(sync_stake_table().await);
+    let proving_key = Arc::new(load_proving_key(key_path));
+    let relay_server_client = Arc::new(Client::<ServerError>::new(relay_server_url));
 
-    spawn(async move {
-        loop {
+    loop {
+        let st = st.clone();
+        let proving_key = proving_key.clone();
+        let relay_server_client = relay_server_client.clone();
+        spawn(async move {
             if let Err(err) = sync_state(&st, &proving_key, &relay_server_client).await {
                 tracing::error!("Cannot sync the light client state: {}", err);
             }
-            sleep(freq).await;
-        }
-    })
-    .await;
+        });
+        sleep(freq).await;
+    }
 }
 
 /// Run light client state prover once
