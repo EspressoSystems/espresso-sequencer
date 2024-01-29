@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
 
+use self::entry::TableEntry;
 use self::entry::TxTableEntry;
 
 pub mod entry;
@@ -89,10 +90,10 @@ impl Payload {
     /// This quantity equals number of txs in the payload.
     fn get_tx_table_len(&self) -> TxTableEntry {
         let tx_table_len_range = self.tx_table_len_range();
-        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+        let mut entry_bytes = vec![0u8; TxTableEntry::byte_len()];
         entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.payload[tx_table_len_range]);
 
-        TxTableEntry::from_bytes_array(entry_bytes)
+        TxTableEntry::from_bytes(&entry_bytes).unwrap() // TODO (Philippe) not safe
     }
     fn _get_tx_table_len_as<T>(&self) -> Option<T>
     where
@@ -191,12 +192,10 @@ impl BlockPayload for Payload {
 
         // first word of namespace table is its length
         let namespace_table_len = namespaces.len();
-        let mut namespace_table = Vec::from(
-            TxTableEntry::try_from(namespace_table_len)
-                .ok()
-                .context(BlockBuildingSnafu)?
-                .to_bytes(),
-        );
+        let mut namespace_table = TxTableEntry::try_from(namespace_table_len)
+            .ok()
+            .context(BlockBuildingSnafu)?
+            .to_bytes();
 
         // fill payload and namespace table
         let mut payload = Vec::new();
@@ -318,9 +317,9 @@ fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
     );
     let start = std::cmp::min(offset, end);
     let tx_table_len_range = start..end;
-    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+    let mut entry_bytes = vec![0u8; TxTableEntry::byte_len()];
     entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
-    TxTableEntry::from_bytes_array(entry_bytes)
+    TxTableEntry::from_bytes(&entry_bytes).unwrap() // TODO (Philippe) unsafe
 }
 
 // Parse the table length from the beginning of the namespace table.
@@ -363,7 +362,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
 
     // parse ns_id bytes from ns table
     // any failure -> VmId(0)
-    let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
+    let mut ns_id_bytes = vec![0u8; TxTableEntry::byte_len()];
     ns_id_bytes[..ns_id_range.len()].copy_from_slice(&ns_table_bytes[ns_id_range]);
     let ns_id =
         VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
@@ -382,7 +381,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
     // parse ns_offset bytes from ns table
     // any failure -> 0 offset (?)
     // TODO refactor parsing code?
-    let mut ns_offset_bytes = [0u8; TxTableEntry::byte_len()];
+    let mut ns_offset_bytes = vec![0u8; TxTableEntry::byte_len()];
     ns_offset_bytes[..ns_offset_range.len()].copy_from_slice(&ns_table_bytes[ns_offset_range]);
     let ns_offset =
         usize::try_from(TxTableEntry::from_bytes(&ns_offset_bytes).unwrap_or(TxTableEntry::zero()))
@@ -406,7 +405,7 @@ fn _get_tx_table_entry(
     );
     // todo: clamp offsets
     let tx_id_range = start..end;
-    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
+    let mut tx_id_bytes = vec![0u8; TxTableEntry::byte_len()];
     tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.payload[tx_id_range]);
 
     TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
@@ -465,6 +464,7 @@ pub fn get_ns_payload_range(
 #[cfg(test)]
 mod test {
     use super::{test_vid_factory, Payload, Transaction, TxTableEntry};
+    use crate::block2::entry::TableEntry;
     use crate::block2::{
         queryable::{self},
         tx_iterator::TxIndex,
@@ -776,11 +776,7 @@ mod test {
             TestCase::from_tx_table_len(25, 1000, &mut rng),
             // tx table too large for payload
             TestCase::from_tx_table_len_unchecked(100, 40, &mut rng),
-            TestCase::from_tx_table_len_unchecked(
-                TxTableEntry::MAX.try_into().unwrap(),
-                100,
-                &mut rng,
-            ), // huge tx table length
+            TestCase::from_tx_table_len_unchecked(TxTableEntry::max(), 100, &mut rng), // huge tx table length
             // extra payload bytes
             TestCase::with_total_len(&[10, 20, 30], 1000, &mut rng),
             TestCase::with_total_len(&[], 1000, &mut rng), // 0 txs
@@ -1002,6 +998,7 @@ mod test {
     }
 
     mod helpers {
+        use crate::block2::entry::TableEntry;
         use crate::{block2::entry::TxTableEntry, VmId};
         use rand::RngCore;
 
