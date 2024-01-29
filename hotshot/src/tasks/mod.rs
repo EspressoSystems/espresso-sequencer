@@ -256,10 +256,18 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
         committee_membership: c_api.inner.memberships.da_membership.clone().into(),
     };
+    // Poll (forever) for the latest quorum proposal
     consensus_state
         .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForLatestQuorumProposal)
         .await;
+
+    // Poll (forever) for the latest view sync certificate
+    consensus_state
+        .quorum_network
+        .inject_consensus_info(ConsensusIntentEvent::PollForLatestViewSyncCertificate)
+        .await;
+
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";
     let consensus_event_handler = HandleEvent(Arc::new(

@@ -32,8 +32,8 @@ pub fn get_latest_quorum_proposal_route() -> String {
 
 /// get latest view sync proposal
 #[must_use]
-pub fn get_latest_view_sync_proposal_route() -> String {
-    "api/view_sync_proposal/latest".to_string()
+pub fn get_latest_view_sync_certificate_route() -> String {
+    "api/view_sync_certificate/latest".to_string()
 }
 
 /// get latest certificate
@@ -128,14 +128,14 @@ pub fn post_staketable_route() -> String {
 
 /// post view sync proposal
 #[must_use]
-pub fn post_view_sync_proposal_route(view_number: u64) -> String {
-    format!("api/view_sync_proposal/{view_number}")
+pub fn post_view_sync_certificate_route(view_number: u64) -> String {
+    format!("api/view_sync_certificate/{view_number}")
 }
 
 /// get view sync proposal
 #[must_use]
-pub fn get_view_sync_proposal_route(view_number: u64, index: u64) -> String {
-    format!("api/view_sync_proposal/{view_number}/{index}")
+pub fn get_view_sync_certificate_route(view_number: u64, index: u64) -> String {
+    format!("api/view_sync_certificate/{view_number}/{index}")
 }
 
 /// post view sync vote
