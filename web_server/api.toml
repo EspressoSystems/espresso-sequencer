@@ -27,8 +27,8 @@ Return the proposal for the most recent view the server has
 """
 
 # GET the latest quorum proposal
-[route.get_latest_view_sync_proposal]
-PATH = ["view_sync_proposal/latest"]
+[route.get_latest_view_sync_certificate]
+PATH = ["view_sync_certificate/latest"]
 DOC = """
 Return the proposal for the most recent view the server has
 """
@@ -155,8 +155,8 @@ GET a view sync vote
 """
 
 # POST a view sync proposal, where the view number is passed as an argument
-[route.postviewsyncproposal]
-PATH = ["view_sync_proposal/:view_number"]
+[route.postviewsynccertificate]
+PATH = ["view_sync_certificate/:view_number"]
 ":view_number" = "Integer"
 METHOD = "POST"
 DOC = """
@@ -164,8 +164,8 @@ Send a view sync vote
 """
 
 # GET a view sync certificate, where the view number is passed as an argument
-[route.getviewsyncproposal]
-PATH = ["view_sync_proposal/:view_number/:index"]
+[route.getviewsynccertificate]
+PATH = ["view_sync_certificate/:view_number/:index"]
 ":view_number" = "Integer"
 ":index" = "Integer"
 METHOD = "GET"
