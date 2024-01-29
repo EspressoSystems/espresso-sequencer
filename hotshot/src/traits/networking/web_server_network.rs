@@ -411,10 +411,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 // TODO ED Need to add vote indexing to web server for view sync certs
                                 for cert in &deserialized_messages {
                                     vote_index += 1;
-                                    let hash = hash(cert);
-                                    if seen_view_sync_certificates.put(hash, ()).is_none() {
-                                        broadcast_poll_queue.push(cert.clone());
-                                    }
+                                    broadcast_poll_queue.push(cert.clone());
                                 }
                             }
 
@@ -433,13 +430,14 @@ impl<TYPES: NodeType> Inner<TYPES> {
                         }
                     }
                     Ok(None) => {
-                        async_sleep(self.wait_between_polls + additional_wait).await;
+                        async_sleep(self.wait_between_polls).await;
                     }
                     Err(_e) => {
                         // error!("error is {:?}", _e);
-                        async_sleep(self.wait_between_polls + additional_wait).await;
+                        async_sleep(self.wait_between_polls).await;
                     }
                 }
+                async_sleep(additional_wait).await;
             }
             let maybe_event = receiver.try_recv();
             match maybe_event {
