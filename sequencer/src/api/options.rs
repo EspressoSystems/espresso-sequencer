@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
-    Event,
+    Event, Leaf, SavedLeaf,
 };
 use async_std::{
     sync::{Arc, RwLock},
@@ -31,6 +31,7 @@ pub struct Options {
     pub status: Option<Status>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
+    pub saved_leaf: SavedLeaf,
 }
 
 impl From<Http> for Options {
@@ -42,6 +43,7 @@ impl From<Http> for Options {
             status: None,
             storage_fs: None,
             storage_sql: None,
+            saved_leaf: SavedLeaf::None,
         }
     }
 }
@@ -73,6 +75,12 @@ impl Options {
         self
     }
 
+    /// Add a saved leaf or leaf commitment to load consensus state from.
+    pub fn with_saved_leaf(mut self, leaf: SavedLeaf) -> Self {
+        self.saved_leaf = leaf;
+        self
+    }
+
     /// Whether these options will run the query API.
     pub fn has_query_module(&self) -> bool {
         self.query.is_some() && (self.storage_fs.is_some() || self.storage_sql.is_some())
@@ -80,13 +88,13 @@ impl Options {
 
     /// Start the server.
     ///
-    /// The function `init_context` is used to create a sequencer context from a metrics object. The
-    /// metrics object is created from the API data source, so that consensus will populuate metrics
-    /// that can then be read and served by the API.
+    /// The function `init_context` is used to create a sequencer context from a metrics object and
+    /// optional saved consensus state. The metrics object is created from the API data source, so
+    /// that consensus will populuate metrics that can then be read and served by the API.
     pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerNode<N>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
+        F: FnOnce(Option<Leaf>, Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
@@ -98,7 +106,12 @@ impl Options {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
-            let mut context = init_context(ds.populate_metrics()).await;
+
+            // If we have no availability API, we cannot load a saved leaf from local storage, so we
+            // better have been provided the leaf ahead of time if we want it at all.
+            let saved_leaf = self.saved_leaf.assert_resolved()?;
+
+            let mut context = init_context(saved_leaf, ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, context.clone()),
             )));
@@ -129,20 +142,24 @@ impl Options {
 
             SequencerNode {
                 context: context.clone(),
-                update_task: spawn(async move {
+                update_task: Some(spawn(async move {
                     futures::join!(
                         app.serve(format!("0.0.0.0:{}", self.http.port))
                             .map_err(anyhow::Error::from),
                         state_signature_loop(context, events),
                     )
                     .0
-                }),
+                })),
             }
         } else {
             // If no status or availability API is requested, we don't need metrics or a query
             // service data source. The only app state is the HotShot handle, which we use to submit
             // transactions.
-            let mut context = init_context(Box::new(NoMetrics)).await;
+            //
+            // If we have no availability API, we cannot load a saved leaf from local storage, so we
+            // better have been provided the leaf ahead of time if we want it at all.
+            let saved_leaf = self.saved_leaf.assert_resolved()?;
+            let mut context = init_context(saved_leaf, Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(context.clone()));
 
             // Get an event stream from the handle to use for populating the query data with
@@ -168,14 +185,14 @@ impl Options {
 
             SequencerNode {
                 context: context.clone(),
-                update_task: spawn(async move {
+                update_task: Some(spawn(async move {
                     futures::join!(
                         app.serve(format!("0.0.0.0:{}", self.http.port))
                             .map_err(anyhow::Error::from),
                         state_signature_loop(context, events),
                     )
                     .0
-                }),
+                })),
             }
         };
 
@@ -211,7 +228,7 @@ pub struct Query;
 async fn init_with_query_module<N, D>(
     opt: Options,
     mod_opt: D::Options,
-    init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
+    init_context: impl FnOnce(Option<Leaf>, Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
 ) -> anyhow::Result<SequencerNode<N>>
 where
     N: network::Type,
@@ -222,8 +239,17 @@ where
     let ds = D::create(mod_opt, false).await?;
     let metrics = ds.populate_metrics();
 
+    // Load the saved leaf from storage, if required.
+    let saved_leaf = opt
+        .saved_leaf
+        .resolve(|h| {
+            let ds = &ds;
+            async move { ds.get_leaf(h).await.await.leaf().clone() }
+        })
+        .await;
+
     // Start up handle
-    let mut context = init_context(metrics).await;
+    let mut context = init_context(saved_leaf, metrics).await;
 
     // Get an event stream from the handle to use for populating the query data with
     // consensus events.
@@ -276,7 +302,7 @@ where
 
     Ok(SequencerNode {
         context: context.clone(),
-        update_task: spawn(async move {
+        update_task: Some(spawn(async move {
             futures::join!(
                 app.serve(format!("0.0.0.0:{}", opt.http.port))
                     .map_err(anyhow::Error::from),
@@ -284,6 +310,6 @@ where
                 state_signature_loop(context, events_for_state_signature),
             )
             .0
-        }),
+        })),
     })
 }

@@ -22,8 +22,50 @@ mod update;
 pub use options::Options;
 
 pub struct SequencerNode<N: network::Type> {
-    pub context: SequencerContext<N>,
-    pub update_task: JoinHandle<anyhow::Result<()>>,
+    context: SequencerContext<N>,
+    update_task: Option<JoinHandle<anyhow::Result<()>>>,
+}
+
+impl<N: network::Type> From<SequencerContext<N>> for SequencerNode<N> {
+    fn from(context: SequencerContext<N>) -> Self {
+        Self {
+            context,
+            update_task: None,
+        }
+    }
+}
+
+impl<N: network::Type> SequencerNode<N> {
+    pub async fn start_consensus(&self) {
+        self.context.start_consensus().await;
+    }
+
+    pub async fn shut_down(&mut self) {
+        self.context.shut_down().await;
+        if let Some(task) = self.update_task.take() {
+            task.cancel().await;
+        }
+    }
+
+    pub fn detach(&mut self) {
+        self.context.detach();
+    }
+
+    pub fn context(&self) -> &SequencerContext<N> {
+        &self.context
+    }
+
+    pub fn context_mut(&mut self) -> &mut SequencerContext<N> {
+        &mut self.context
+    }
+}
+
+impl<N: network::Type> Drop for SequencerNode<N> {
+    fn drop(&mut self) {
+        if let Some(task) = self.update_task.take() {
+            async_std::task::block_on(task.cancel());
+        }
+    }
 }
 
 type AppState<N, D> = ExtensibleDataSource<D, SequencerContext<N>>;
@@ -67,18 +109,37 @@ mod test_helpers {
     use super::*;
     use crate::{
         testing::{
-            init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
+            init_hotshot_handles, init_hotshot_handles_with_state, wait_for_decide_on_handle,
         },
-        Transaction, VmId,
+        Leaf, Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
-    use futures::FutureExt;
+    use futures::future::{BoxFuture, FutureExt};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    pub fn init_handle(
+        leaf: Option<Leaf>,
+        metrics: Box<dyn crate::Metrics>,
+    ) -> BoxFuture<'static, SequencerContext<network::Memory>> {
+        async move {
+            let mut handles = init_hotshot_handles_with_state(leaf, &*metrics).await;
+            for handle in &mut handles {
+                handle.hotshot.start_consensus().await;
+            }
+            SequencerContext::new(
+                handles[0].clone(),
+                0,
+                Default::default(),
+                Default::default(),
+            )
+        }
+        .boxed()
+    }
 
     /// Test the status API with custom options.
     ///
@@ -95,24 +156,8 @@ mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
 
-        let init_handle = |metrics: Box<dyn crate::Metrics>| {
-            async move {
-                let handles = init_hotshot_handles_with_metrics(&*metrics).await;
-                for handle in &handles {
-                    handle.hotshot.start_consensus().await;
-                }
-                SequencerContext::new(
-                    handles[0].clone(),
-                    0,
-                    Default::default(),
-                    Default::default(),
-                )
-            }
-            .boxed()
-        };
-
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        options.serve(init_handle).await.unwrap();
+        let _server = options.serve(init_handle).await.unwrap();
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -157,28 +202,10 @@ mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
 
-        // Get list of HotShot handles, take the first one, and submit a transaction to it
-        let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let SequencerNode { mut context, .. } = options
-            .serve(|_| {
-                async move {
-                    SequencerContext::new(
-                        handles[0].clone(),
-                        0,
-                        Default::default(),
-                        Default::default(),
-                    )
-                }
-                .boxed()
-            })
-            .await
-            .unwrap();
-        let mut events = context
+        let mut node = options.serve(init_handle).await.unwrap();
+        let mut events = node
+            .context
             .consensus_mut()
             .get_event_stream(Default::default())
             .await
@@ -216,26 +243,18 @@ mod test_helpers {
         }
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let SequencerNode { context, .. } = options
-            .serve(|_| {
-                async move {
-                    SequencerContext::new(
-                        handles[0].clone(),
-                        0,
-                        Default::default(),
-                        Default::default(),
-                    )
-                }
-                .boxed()
-            })
-            .await
-            .unwrap();
+        let node = options.serve(init_handle).await.unwrap();
 
         let mut height: u64;
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = context.consensus().get_decided_leaf().await.get_height();
+            height = node
+                .context
+                .consensus()
+                .get_decided_leaf()
+                .await
+                .get_height();
             sleep(std::time::Duration::from_secs(1)).await;
             if height >= 2 {
                 break;
@@ -253,19 +272,25 @@ mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod generic_tests {
-    use super::{test_helpers::state_signature_test_helper, *};
-    use crate::{testing::init_hotshot_handles, Header};
+    use super::*;
+    use crate::{testing::init_hotshot_handles_with_state, Header};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::TimeWindowQueryData;
-    use futures::FutureExt;
-    use hotshot_query_service::availability::BlockQueryData;
+    use futures::{
+        future::{self, join_all, FutureExt},
+        stream::StreamExt,
+    };
+    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_types::traits::metrics::NoMetrics;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
-    use test_helpers::{status_test_helper, submit_test_helper};
+    use test_helpers::{
+        init_handle, state_signature_test_helper, status_test_helper, submit_test_helper,
+    };
     use tide_disco::error::ServerError;
 
     #[async_std::test]
@@ -287,32 +312,164 @@ mod generic_tests {
     }
 
     #[async_std::test]
+    pub(crate) async fn test_restart<D: TestableSequencerDataSource>() {
+        setup_logging();
+        setup_backtrace();
+
+        // Initialize nodes.
+        let mut nodes = init_hotshot_handles_with_state(None, &NoMetrics).await;
+        let storage = join_all(nodes.iter().map(|_| D::create_storage())).await;
+        let ports = nodes
+            .iter()
+            .map(|_| pick_unused_port().unwrap())
+            .collect::<Vec<_>>();
+        let servers = join_all(nodes.iter().enumerate().map(|(i, node)| {
+            let storage = &storage[i];
+            let port = ports[i];
+            async move {
+                D::options(storage, options::Http { port }.into())
+                    .status(Default::default())
+                    .serve(|_, _| {
+                        future::ready(SequencerContext::new(
+                            node.clone(),
+                            0,
+                            Default::default(),
+                            Default::default(),
+                        ))
+                        .boxed()
+                    })
+                    .await
+                    .unwrap()
+            }
+        }))
+        .await;
+
+        for node in &nodes {
+            node.hotshot.start_consensus().await;
+        }
+
+        // Connect clients.
+        let clients = join_all(ports.iter().map(|port| async move {
+            let client: Client<ServerError> =
+                Client::new(format!("http://localhost:{port}").parse().unwrap());
+            client.connect(None).await;
+            client
+        }))
+        .await;
+
+        // Wait until some blocks have been decided on all nodes.
+        join_all(clients.iter().map(|client| async move {
+            client
+                .socket("availability/stream/blocks/0")
+                .subscribe::<BlockQueryData<SeqTypes>>()
+                .await
+                .unwrap()
+                .take(3)
+                .collect::<Vec<_>>()
+                .await;
+        }))
+        .await;
+
+        // Shut down the consensus nodes.
+        tracing::info!("shutting down nodes");
+        for node in &mut nodes {
+            node.shut_down().await;
+        }
+
+        // Get the longest chain decided by any node.
+        let chains = join_all(clients.iter().map(|client| async move {
+            let height = client.get("status/block-height").send().await.unwrap();
+            join_all((0..height).map(|i| async move {
+                let leaf: LeafQueryData<SeqTypes> = client
+                    .get(&format!("availability/leaf/{i}"))
+                    .send()
+                    .await
+                    .unwrap();
+                let block: BlockQueryData<SeqTypes> = client
+                    .get(&format!("availability/block/{i}"))
+                    .send()
+                    .await
+                    .unwrap();
+                (leaf, block)
+            }))
+            .await
+        }))
+        .await;
+
+        // Fully shut down the API servers.
+        drop(servers);
+
+        let longest_chain = chains.into_iter().max_by_key(|chain| chain.len()).unwrap();
+        let saved_leaf = &longest_chain.last().unwrap().0;
+        tracing::info!(
+            "longest chain has {} blocks, ending in {:?}",
+            longest_chain.len(),
+            saved_leaf
+        );
+
+        // Start up again, resuming from the last decided leaf.
+        let port = pick_unused_port().expect("No ports free");
+        let _node = D::options(&storage[0], options::Http { port }.into())
+            .with_saved_leaf(saved_leaf.hash().into())
+            .status(Default::default())
+            .serve(init_handle)
+            .await
+            .unwrap();
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+
+        // Make sure we can decide new blocks after the restart.
+        tracing::info!("waiting for decide, height {}", saved_leaf.height() + 1);
+        let new_leaf: LeafQueryData<SeqTypes> = client
+            .socket(&format!(
+                "availability/stream/leaves/{}",
+                saved_leaf.height() + 1
+            ))
+            .subscribe()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(new_leaf.height(), saved_leaf.height() + 1);
+        assert_eq!(new_leaf.leaf().parent_commitment, saved_leaf.hash());
+
+        // Ensure the new chain is consistent with the old chain.
+        let new_chain = join_all((0..=saved_leaf.height()).map(|i| {
+            let client = &client;
+            async move {
+                let leaf: LeafQueryData<SeqTypes> = client
+                    .get(&format!("availability/leaf/{i}"))
+                    .send()
+                    .await
+                    .unwrap();
+                let block: BlockQueryData<SeqTypes> = client
+                    .get(&format!("availability/block/{i}"))
+                    .send()
+                    .await
+                    .unwrap();
+                (leaf, block)
+            }
+        }))
+        .await;
+        assert_eq!(longest_chain, new_chain);
+    }
+
+    #[async_std::test]
     pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
         setup_logging();
         setup_backtrace();
 
-        // Create sequencer network.
-        let handles = init_hotshot_handles().await;
-
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
-        let handle = handles[0].clone();
-        D::options(&storage, options::Http { port }.into())
+        let _server = D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| {
-                async move {
-                    SequencerContext::new(handle, 0, Default::default(), Default::default())
-                }
-                .boxed()
-            })
+            .serve(init_handle)
             .await
             .unwrap();
-
-        // Start consensus.
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
 
         // Connect client.
         let client: Client<ServerError> =
@@ -481,13 +638,13 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use super::{test_helpers::state_signature_test_helper, *};
-    use crate::testing::init_hotshot_handles;
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use futures::FutureExt;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
-    use test_helpers::{status_test_helper, submit_test_helper};
+    use test_helpers::{
+        init_handle, state_signature_test_helper, status_test_helper, submit_test_helper,
+    };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
     #[async_std::test]
@@ -498,27 +655,8 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
-
-        let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-
         let options = Options::from(options::Http { port });
-        options
-            .serve(|_| {
-                async move {
-                    SequencerContext::new(
-                        handles[0].clone(),
-                        0,
-                        Default::default(),
-                        Default::default(),
-                    )
-                }
-                .boxed()
-            })
-            .await
-            .unwrap();
+        let _server = options.serve(init_handle).await.unwrap();
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();

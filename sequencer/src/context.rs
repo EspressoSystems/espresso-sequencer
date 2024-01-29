@@ -46,6 +46,8 @@ pub struct SequencerContext<N: network::Type> {
 
     /// An orchestrator to wait for before starting consensus.
     wait_for_orchestrator: Option<Arc<OrchestratorClient>>,
+
+    detached: bool,
 }
 
 impl<N: network::Type> SequencerContext<N> {
@@ -64,6 +66,7 @@ impl<N: network::Type> SequencerContext<N> {
             stake_table_comm: Arc::new(stake_table_comm),
             state_relay_server_client: None,
             wait_for_orchestrator: None,
+            detached: false,
         }
     }
 
@@ -145,5 +148,24 @@ impl<N: network::Type> SequencerContext<N> {
                 .await;
         }
         self.handle.hotshot.start_consensus().await;
+    }
+
+    /// Stop participating in consensus.
+    pub async fn shut_down(&mut self) {
+        self.handle.shut_down().await;
+    }
+
+    /// Allow this node to continue participating in consensus even after it is dropped.
+    pub fn detach(&mut self) {
+        // Set `detached` so the drop handler doesn't call `shut_down`.
+        self.detached = true;
+    }
+}
+
+impl<N: network::Type> Drop for SequencerContext<N> {
+    fn drop(&mut self) {
+        if !self.detached {
+            async_std::task::block_on(self.shut_down());
+        }
     }
 }

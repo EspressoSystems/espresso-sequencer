@@ -17,8 +17,12 @@ mod state;
 pub mod transaction;
 mod vm;
 
+use anyhow::bail;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+use commit::Commitment;
 use derivative::Derivative;
+use derive_more::From;
+use futures::future::Future;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
@@ -118,6 +122,59 @@ mod nmt_root_serializer {
 impl NMTRoot {
     pub fn root(&self) -> <TransactionNMT as MerkleTreeScheme>::NodeValue {
         self.root
+    }
+}
+
+/// A saved leaf to start consensus from.
+///
+/// A saved leaf may be an entire leaf, a commitment to a leaf, to be fetched from an external
+/// source, or no leaf at all, in which case consensus starts from the genesis state.
+#[derive(Clone, Debug, Default, From)]
+pub enum SavedLeaf {
+    Leaf(Box<Leaf>),
+    Hash(Commitment<Leaf>),
+    #[default]
+    None,
+}
+
+impl From<Leaf> for SavedLeaf {
+    fn from(leaf: Leaf) -> Self {
+        Self::Leaf(Box::new(leaf))
+    }
+}
+
+impl SavedLeaf {
+    /// Resolve the [`SavedLeaf`] to an optional [`Leaf`] by fetching it if not already present.
+    pub async fn resolve<Fut>(self, f: impl FnOnce(Commitment<Leaf>) -> Fut) -> Option<Leaf>
+    where
+        Fut: Future<Output = Leaf>,
+    {
+        match self {
+            Self::Hash(h) => {
+                tracing::info!("fetching saved leaf {h}");
+                Some(f(h).await)
+            }
+            Self::Leaf(l) => Some(*l),
+            Self::None => None,
+        }
+    }
+
+    /// Enforce that a [`SavedLeaf`] has enough information to start consensus.
+    ///
+    /// At this point, we may have either [`SavedLeaf::Leaf`] or [`SavedLeaf::None`], but
+    /// [`SavedLeaf::Hash`] is not acceptable -- we should have already fetched the full leaf if
+    /// necessary.
+    ///
+    /// Returns `Some(leaf)` if consensus should start from `leaf` or `None` if consensus should
+    /// start from genesis.
+    pub fn assert_resolved(self) -> anyhow::Result<Option<Leaf>> {
+        match self {
+            Self::Leaf(leaf) => Ok(Some(*leaf)),
+            Self::Hash(_) => {
+                bail!("saved leaf requested, but not query service or storage provided")
+            }
+            Self::None => Ok(None),
+        }
     }
 }
 
@@ -230,19 +287,24 @@ pub enum Error {
 
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
-    known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
     node_id: usize,
     priv_key: PrivKey,
     networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
+    saved_leaf: Option<Leaf>,
     metrics: &dyn Metrics,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
+    let membership =
+        GeneralStaticCommittee::new(&nodes_pub_keys, config.known_nodes_with_stake.clone());
     let memberships = Memberships {
         quorum_membership: membership.clone(),
         da_membership: membership.clone(),
         vid_membership: membership.clone(),
         view_sync_membership: membership,
+    };
+    let initializer = match saved_leaf {
+        Some(leaf) => HotShotInitializer::from_reload(leaf),
+        None => HotShotInitializer::from_genesis().unwrap(),
     };
 
     SystemContext::init(
@@ -253,7 +315,7 @@ async fn init_hotshot<N: network::Type>(
         Storage::empty(),
         memberships,
         networks,
-        HotShotInitializer::from_genesis().unwrap(),
+        initializer,
         ConsensusMetricsValue::new(metrics),
     )
     .await
@@ -271,6 +333,7 @@ pub struct NetworkParams {
 
 pub async fn init_node(
     network_params: NetworkParams,
+    saved_leaf: Option<Leaf>,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
@@ -309,7 +372,7 @@ pub async fn init_node(
     let pub_keys = (0..num_nodes)
         .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64).0)
         .collect::<Vec<_>>();
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
+    config.config.known_nodes_with_stake = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
     let state_ver_keys = (0..num_nodes)
@@ -340,27 +403,23 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
+    let stake_table_commit = static_stake_table_commitment(
+        &config.config.known_nodes_with_stake,
+        &state_ver_keys,
+        STAKE_TABLE_CAPACITY,
+    );
     let hotshot = init_hotshot(
         pub_keys.clone(),
-        known_nodes_with_stake.clone(),
         node_index as usize,
         priv_key,
         networks,
         config.config,
+        saved_leaf,
         metrics,
     )
     .await;
-    let mut ctx = SequencerContext::new(
-        hotshot,
-        node_index,
-        state_key_pair,
-        static_stake_table_commitment(
-            &known_nodes_with_stake,
-            &state_ver_keys,
-            STAKE_TABLE_CAPACITY,
-        ),
-    )
-    .with_state_relay_server(network_params.state_relay_server_url);
+    let mut ctx = SequencerContext::new(hotshot, node_index, state_key_pair, stake_table_commit)
+        .with_state_relay_server(network_params.state_relay_server_url);
     if wait_for_orchestrator {
         ctx = ctx.wait_for_orchestrator(orchestrator_client);
     }
@@ -387,10 +446,11 @@ pub mod testing {
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
     {
-        init_hotshot_handles_with_metrics(&NoMetrics).await
+        init_hotshot_handles_with_state(None, &NoMetrics).await
     }
 
-    pub async fn init_hotshot_handles_with_metrics(
+    pub async fn init_hotshot_handles_with_state(
+        saved_leaf: Option<Leaf>,
         metrics: &dyn Metrics,
     ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
@@ -458,11 +518,11 @@ pub mod testing {
 
             let handle = init_hotshot(
                 pub_keys.clone(),
-                known_nodes_with_stake.clone(),
                 node_id,
                 priv_keys[node_id].clone(),
                 networks,
                 config,
+                saved_leaf.clone(),
                 metrics,
             )
             .await;
