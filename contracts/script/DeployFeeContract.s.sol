@@ -7,22 +7,21 @@ import { FeeContract } from "../src/FeeContract.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployFeeContract is Script {
-    function run() external returns (address payable) {
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        (address admin,) = deriveRememberKey(seedPhrase, 0);
-        address payable proxy = deployFeeContract(admin);
+    function run() external returns (address payable proxy, address admin) {
+        // string memory seedPhrase = vm.envString("MNEMONIC");
+        // (address admin,) = deriveRememberKey(seedPhrase, 0);
+        (proxy, admin) = deployFeeContract();
 
-        return payable(proxy);
+        return (proxy, admin);
     }
 
-    /// @notice deploys the implementation contract and the proxy with the address of implementation
-    /// @return address of the proxy
-    function deployFeeContract(address admin) public returns (address payable) {
-        vm.startBroadcast(admin);
+    /// @notice deploys the impl, proxy & initializes the impl
+    // @return address of proxy and admin
+    function deployFeeContract() public returns (address payable proxyAddress, address admin) {
+        vm.startBroadcast();
 
         FeeContract feeContract = new FeeContract(); //Our implementation(logic).Proxy will point
             // here to delegate
-            // call/borrow the functions
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSelector(
@@ -32,6 +31,9 @@ contract DeployFeeContract is Script {
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(feeContract), data);
         vm.stopBroadcast();
-        return payable(address(proxy));
+
+        proxyAddress = payable(address(proxy));
+        admin = FeeContract(proxyAddress).owner();
+        return (proxyAddress, admin);
     }
 }
