@@ -1,4 +1,4 @@
-use crate::block2::iterator::TxIndex;
+use crate::block2::tx_iterator::TxIndex;
 use crate::{BlockBuildingSnafu, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use commit::{Commitment, Committable};
@@ -22,8 +22,8 @@ use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
 use self::entry::TxTableEntry;
 
 pub mod entry;
-pub mod iterator;
 pub mod queryable;
+pub mod tx_iterator;
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]

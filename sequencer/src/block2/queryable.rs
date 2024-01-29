@@ -5,9 +5,9 @@ use crate::Transaction;
 
 use super::{
     entry::TxTableEntry,
-    get_ns_table_len, get_table_len,
-    iterator::{TxIndex, TxIterator},
-    test_vid_factory, tx_payload_range, Payload, TxInclusionProof,
+    get_ns_table_len, get_table_len, test_vid_factory,
+    tx_iterator::{TxIndex, TxIterator},
+    tx_payload_range, Payload, TxInclusionProof,
 };
 
 impl QueryablePayload for Payload {
