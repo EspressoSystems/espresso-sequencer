@@ -286,7 +286,7 @@ pub trait NodeType:
     /// This should be the same `Time` that `StateType::Time` is using.
     type Time: ConsensusTime;
     /// The block header type that this hotshot setup is using.
-    type BlockHeader: BlockHeader<Payload = Self::BlockPayload>;
+    type BlockHeader: BlockHeader<Payload = Self::BlockPayload, State = Self::StateType>;
     /// The block type that this hotshot setup is using.
     ///
     /// This should be the same block that `StateType::BlockPayload` is using.

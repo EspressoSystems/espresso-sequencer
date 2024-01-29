@@ -45,8 +45,6 @@ pub trait State:
     type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
-    /// Application-specific data.
-    type Metadata: Debug + Send + Sync;
 
     /// Check if the proposed block header is valid and apply it to the state if so.
     ///
@@ -75,9 +73,6 @@ pub trait State:
 
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
-
-    /// Get the application-specific data.
-    fn metadata(&self) -> Self::Metadata;
 }
 
 // TODO Seuqnecing here means involving DA in consensus

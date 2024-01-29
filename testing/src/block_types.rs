@@ -15,6 +15,8 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
+use crate::state_types::TestState;
+
 /// The transaction in a [`TestBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct TestTransaction(pub Vec<u8>);
@@ -181,11 +183,13 @@ pub struct TestBlockHeader {
 
 impl BlockHeader for TestBlockHeader {
     type Payload = TestBlockPayload;
+    type State = TestState;
 
     fn new(
         payload_commitment: VidCommitment,
         _metadata: <Self::Payload as BlockPayload>::Metadata,
         parent_header: &Self,
+        _parent_state: &Self::State,
     ) -> Self {
         Self {
             block_number: parent_header.block_number + 1,
