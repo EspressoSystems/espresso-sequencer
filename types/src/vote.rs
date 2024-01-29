@@ -73,7 +73,14 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// Get the vote commitment which the votes commit to
     fn get_data_commitment(&self) -> Commitment<Self::Voteable>;
 }
-
+/// Mapping of vote commitment to sigatures and bitvec
+type SignersMap<COMMITMENT, KEY> = HashMap<
+    COMMITMENT,
+    (
+        BitVec,
+        Vec<<KEY as SignatureKey>::PureAssembledSignatureType>,
+    ),
+>;
 /// Accumulates votes until a certificate is formed.  This implementation works for all simple vote and certificate pairs
 pub struct VoteAccumulator<
     TYPES: NodeType,
@@ -86,13 +93,9 @@ pub struct VoteAccumulator<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     >,
-    /// A list of valid signatures for certificate aggregation
-    pub sig_lists: HashMap<
-        Commitment<VOTE::Commitment>,
-        Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
-    >,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
-    pub signers: HashMap<Commitment<VOTE::Commitment>, BitVec>,
+    /// And a list of valid signatures for certificate aggregation
+    pub signers: SignersMap<Commitment<VOTE::Commitment>, TYPES::SignatureKey>,
     /// Phantom data to specify the types this accumulator is for
     pub phantom: PhantomData<(TYPES, VOTE, CERT)>,
 }
@@ -135,11 +138,10 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
         if total_vote_map.contains_key(&key) {
             return Either::Left(self);
         }
-        let signers = self
+        let (signers, sig_list) = self
             .signers
             .entry(vote_commitment)
-            .or_insert(bitvec![0; membership.total_nodes()]);
-        let sig_list = self.sig_lists.entry(vote_commitment).or_default();
+            .or_insert((bitvec![0; membership.total_nodes()], Vec::new()));
         if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(self);

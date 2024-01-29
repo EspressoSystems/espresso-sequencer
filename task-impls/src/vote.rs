@@ -201,7 +201,6 @@ where
     }
     let new_accumulator = VoteAccumulator {
         vote_outcomes: HashMap::new(),
-        sig_lists: HashMap::new(),
         signers: HashMap::new(),
         phantom: PhantomData,
     };
