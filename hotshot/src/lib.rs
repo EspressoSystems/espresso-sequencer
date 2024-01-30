@@ -1,6 +1,5 @@
 //! Provides a generic rust implementation of the `HotShot` BFT protocol
 //!
-//! See the [protocol documentation](https://github.com/EspressoSystems/hotshot-spec) for a protocol description.
 
 // Documentation module
 #[cfg(feature = "docs")]
