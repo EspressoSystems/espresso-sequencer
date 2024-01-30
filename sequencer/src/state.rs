@@ -20,24 +20,16 @@ impl HotShotState for State {
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _header: &Self::BlockHeader, _view_number: &Self::Time) -> bool {
-        unimplemented!("Using sequencing consensus, no validation")
-    }
+    fn on_commit(&self) {}
 
-    fn initialize() -> Self {
-        Default::default()
-    }
-
-    // This function is called exactly once, with the first block.
-    fn append(
+    fn validate_and_apply_header(
         &self,
-        _header: &Self::BlockHeader,
+        _proposed_header: &Self::BlockHeader,
+        _parent_header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        Ok(self.clone())
+        todo!("Tracking issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/968]")
     }
-
-    fn on_commit(&self) {}
 }
 
 // Required for TestableState

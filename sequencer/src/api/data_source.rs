@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     network, persistence,
-    state_signature::{LightClientState, StateSignature},
+    state_signature::{LightClientState, StateSignature, StateSignatureRequestBody},
     Node, SeqTypes,
 };
 use async_trait::async_trait;
@@ -14,9 +14,11 @@ use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId},
     data_source::{UpdateDataSource, VersionedDataSource},
+    fetching::provider::{AnyProvider, QueryServiceProvider},
     status::StatusDataSource,
     QueryResult,
 };
+use tide_disco::Url;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -55,7 +57,7 @@ pub trait SequencerDataSource:
     type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
-    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self>;
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
 
     /// Update sequencer-specific indices when a new block is added.
     ///
@@ -73,14 +75,28 @@ pub trait SequencerDataSource:
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
+/// Provider for fetching missing data for the query service.
+pub type Provider = AnyProvider<SeqTypes>;
+
+/// Create a provider for fetching missing data from a list of peer query services.
+pub fn provider(peers: impl IntoIterator<Item = Url>) -> Provider {
+    let mut provider = Provider::default();
+    for peer in peers {
+        tracing::info!("will fetch missing data from {peer}");
+        provider = provider.with_provider(QueryServiceProvider::new(peer));
+    }
+    provider
+}
+
 pub(crate) trait SubmitDataSource<N: network::Type> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
+#[async_trait]
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
-    fn get_state_signature(&self, height: u64) -> Option<StateSignature>;
+    async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 
-    fn sign_new_state(&self, state: &LightClientState);
+    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature;
 }
 
 #[cfg(test)]

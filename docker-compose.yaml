@@ -53,6 +53,16 @@ services:
       orchestrator:
         condition: service_healthy
 
+  state-relay-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
+    ports:
+      - "$ESPRESSO_STATE_RELAY_SERVER_PORT:$ESPRESSO_STATE_RELAY_SERVER_PORT"
+    environment:
+      - ESPRESSO_STATE_RELAY_SERVER_PORT
+      - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -67,6 +77,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
+      - ESPRESSO_STATE_RELAY_SERVER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -75,6 +86,8 @@ services:
       demo-l1-network:
         condition: service_healthy
       sequencer-db:
+        condition: service_healthy
+      state-relay-server:
         condition: service_healthy
 
   sequencer1:
@@ -88,17 +101,21 @@ services:
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db
       - ESPRESSO_SEQUENCER_POSTGRES_USER=postgres
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
       - ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
+      - ESPRESSO_STATE_RELAY_SERVER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+      state-relay-server:
         condition: service_healthy
 
   sequencer2:
@@ -112,14 +129,18 @@ services:
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
+      - ESPRESSO_STATE_RELAY_SERVER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+      state-relay-server:
         condition: service_healthy
 
   sequencer3:
@@ -135,12 +156,15 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
+      - ESPRESSO_STATE_RELAY_SERVER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+      state-relay-server:
         condition: service_healthy
 
   sequencer4:
@@ -156,12 +180,15 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
+      - ESPRESSO_STATE_RELAY_SERVER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+      state-relay-server:
         condition: service_healthy
 
   commitment-task:
@@ -182,6 +209,16 @@ services:
       sequencer0:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+
+  submit-transactions:
+    image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+    depends_on:
+      sequencer0:
         condition: service_healthy
 
   sequencer-db:

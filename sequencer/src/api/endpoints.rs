@@ -143,6 +143,7 @@ where
                 .map_err(Error::from_request_error)?;
             state
                 .get_state_signature(height)
+                .await
                 .ok_or(tide_disco::Error::catch_all(
                     StatusCode::NotFound,
                     "Signature not found.".to_owned(),

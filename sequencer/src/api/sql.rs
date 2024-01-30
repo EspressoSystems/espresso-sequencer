@@ -1,50 +1,30 @@
-use super::{data_source::SequencerDataSource, endpoints::TimeWindowQueryData};
+use super::{
+    data_source::{Provider, SequencerDataSource},
+    endpoints::TimeWindowQueryData,
+};
 use crate::{persistence::sql::Options, Header, SeqTypes};
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 use hotshot_query_service::{
-    availability::{AvailabilityDataSource, BlockId, ResourceId},
-    data_source::sql::{include_migrations, Config, Query, SqlDataSource},
+    availability::{AvailabilityDataSource, BlockId},
+    data_source::sql::{Config, Query, SqlDataSource},
     QueryError, QueryResult,
 };
 use tokio_postgres::Row;
 
-pub type DataSource = SqlDataSource<SeqTypes>;
+pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 
 #[async_trait]
 impl SequencerDataSource for DataSource {
     type Options = Options;
 
-    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self> {
-        let mut cfg = match opt.uri {
-            Some(uri) => uri.parse()?,
-            None => Config::default(),
-        };
-        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
-
-        if let Some(host) = opt.host {
-            cfg = cfg.host(host);
-        }
-        if let Some(port) = opt.port {
-            cfg = cfg.port(port);
-        }
-        if let Some(database) = &opt.database {
-            cfg = cfg.database(database);
-        }
-        if let Some(user) = &opt.user {
-            cfg = cfg.user(user);
-        }
-        if let Some(password) = &opt.password {
-            cfg = cfg.password(password);
-        }
-        if opt.use_tls {
-            cfg = cfg.tls();
-        }
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        let mut cfg = Config::try_from(opt)?;
         if reset {
             cfg = cfg.reset_schema();
         }
 
-        Ok(cfg.connect().await?)
+        Ok(cfg.connect(provider).await?)
     }
 
     async fn refresh_indices(&mut self, _from_block: usize) -> anyhow::Result<()> {
@@ -127,9 +107,9 @@ impl SequencerDataSource for DataSource {
     {
         // Find the specific block that starts the requested window.
         let first_block = match from.into() {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => self
-                .get_block(h)
+            BlockId::Number(n) => n,
+            id => self
+                .get_block(id)
                 .await
                 .try_resolve()
                 .map_err(|_| QueryError::Missing)?

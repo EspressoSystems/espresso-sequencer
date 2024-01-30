@@ -2,13 +2,15 @@ use self::data_source::StateSignatureDataSource;
 use crate::{
     context::SequencerContext,
     network,
-    state_signature::{self, LightClientState},
+    state_signature::{self, LightClientState, StateSignatureRequestBody},
     Node, SeqTypes,
 };
 use async_std::task::JoinHandle;
+use async_trait::async_trait;
 use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_types::light_client::StateSignature;
 
 pub mod data_source;
 pub mod endpoints;
@@ -38,29 +40,25 @@ impl<N: network::Type> SubmitDataSource<N> for SequencerContext<N> {
     }
 }
 
-impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
-    fn get_state_signature(
-        &self,
-        height: u64,
-    ) -> Option<hotshot_types::light_client::StateSignature> {
-        self.as_ref().get_state_signature(height)
+#[async_trait]
+impl<N: network::Type, D: Sync> StateSignatureDataSource<N> for AppState<N, D> {
+    async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
+        self.as_ref().get_state_signature(height).await
     }
 
-    fn sign_new_state(&self, state: &LightClientState) {
-        self.as_ref().sign_new_state(state)
+    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
+        self.as_ref().sign_new_state(state).await
     }
 }
 
+#[async_trait]
 impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
-    fn get_state_signature(
-        &self,
-        height: u64,
-    ) -> Option<hotshot_types::light_client::StateSignature> {
-        self.get_state_signature(height)
+    async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
+        self.get_state_signature(height).await
     }
 
-    fn sign_new_state(&self, state: &LightClientState) {
-        self.sign_new_state(state)
+    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
+        self.sign_new_state(state).await
     }
 }
 
@@ -77,7 +75,6 @@ mod test_helpers {
     use async_std::task::sleep;
     use commit::Committable;
     use futures::FutureExt;
-    use hotshot_types::light_client::StateSignature;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -109,6 +106,7 @@ mod test_helpers {
                     0,
                     Default::default(),
                     Default::default(),
+                    None,
                 )
             }
             .boxed()
@@ -175,6 +173,7 @@ mod test_helpers {
                         0,
                         Default::default(),
                         Default::default(),
+                        None,
                     )
                 }
                 .boxed()
@@ -227,6 +226,7 @@ mod test_helpers {
                         0,
                         Default::default(),
                         Default::default(),
+                        None,
                     )
                 }
                 .boxed()
@@ -244,11 +244,12 @@ mod test_helpers {
                 break;
             }
         }
+        // we cannot verify the signature now, because we don't know the stake table
         assert!(client
-            .get::<StateSignature>(&format!("state-signature/block/{}", height))
+            .get::<StateSignatureRequestBody>(&format!("state-signature/block/{}", height))
             .send()
             .await
-            .is_ok())
+            .is_ok());
     }
 }
 
@@ -302,7 +303,12 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { SequencerContext::new(handle, 0, Default::default(), Default::default()) }.boxed())
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(handle, 0, Default::default(), Default::default(), None)
+                }
+                .boxed()
+            })
             .await
             .unwrap();
 
@@ -510,6 +516,7 @@ mod test {
                         0,
                         Default::default(),
                         Default::default(),
+                        None,
                     )
                 }
                 .boxed()
