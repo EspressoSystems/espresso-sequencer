@@ -9,7 +9,7 @@ use crate::{
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         election::Membership,
-        node_implementation::{ConsensusTime,NodeType},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         states::{TestableState, ValidatedState},
         storage::StoredView,
@@ -368,8 +368,8 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
     #[must_use]
-    pub fn genesis() -> Self {
-        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
+    pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
+        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis(instance_state);
         Self {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),

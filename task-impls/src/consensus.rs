@@ -28,9 +28,9 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{ConsensusTime,NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        states::{ ValidatedState},
+        states::ValidatedState,
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
@@ -1224,6 +1224,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             let block_header = TYPES::BlockHeader::new(
                 commit_and_metadata.commitment,
                 commit_and_metadata.metadata.clone(),
+                &consensus.instance_state,
                 &parent_header,
                 state,
             );

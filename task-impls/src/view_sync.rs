@@ -36,7 +36,7 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         network::CommunicationChannel,
-        node_implementation::{ConsensusTime,NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
 use snafu::Snafu;

@@ -118,7 +118,8 @@ mod test {
         data::{fake_commitment, Leaf},
         simple_certificate::QuorumCertificate,
         traits::{
-            node_implementation::{ConsensusTime,NodeType}, signature_key::SignatureKey,
+            node_implementation::{ConsensusTime, NodeType},
+            signature_key::SignatureKey,
         },
     };
     use std::marker::PhantomData;

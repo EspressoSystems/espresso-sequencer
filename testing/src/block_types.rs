@@ -8,7 +8,7 @@ use hotshot_types::{
     data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock, Transaction},
-        BlockPayload,
+        BlockPayload, ValidatedState,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -187,6 +187,7 @@ impl BlockHeader for TestBlockHeader {
     fn new(
         payload_commitment: VidCommitment,
         _metadata: <Self::Payload as BlockPayload>::Metadata,
+        _instance_state: &<Self::State as ValidatedState>::Instance,
         parent_header: &Self,
         _parent_state: &Self::State,
     ) -> Self {
@@ -196,7 +197,9 @@ impl BlockHeader for TestBlockHeader {
         }
     }
 
-    fn genesis() -> (
+    fn genesis(
+        _instance_state: &<Self::State as ValidatedState>::Instance,
+    ) -> (
         Self,
         Self::Payload,
         <Self::Payload as BlockPayload>::Metadata,

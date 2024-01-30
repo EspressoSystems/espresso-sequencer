@@ -39,8 +39,8 @@ use hotshot_types::{
         block_contents::TestableBlock,
         election::Membership,
         network::CommunicationChannel,
-        node_implementation::{ConsensusTime,NodeType},
-        states::{ TestableState},
+        node_implementation::{ConsensusTime, NodeType},
+        states::TestableState,
     },
     HotShotConfig,
 };
@@ -328,7 +328,7 @@ pub trait RunDA<
     /// get the anchored view
     /// Note: sequencing leaf does not have state, so does not return state
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
-        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis()
+        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis(&TestInstanceState {})
             .expect("Couldn't generate genesis block");
 
         let config = self.get_config();

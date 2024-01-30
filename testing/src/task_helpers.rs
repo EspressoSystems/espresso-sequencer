@@ -25,8 +25,8 @@ use hotshot_types::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         consensus_api::ConsensusApi,
         election::Membership,
-        node_implementation::{ConsensusTime,NodeType},
-        states::{ ValidatedState},
+        node_implementation::{ConsensusTime, NodeType},
+        states::ValidatedState,
         BlockPayload,
     },
     vote::HasViewNumber,
@@ -61,7 +61,7 @@ pub async fn build_system_handle(
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TestTypes>::from_genesis().unwrap();
+    let initializer = HotShotInitializer::<TestTypes>::from_genesis(&TestInstanceState {}).unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
@@ -244,6 +244,7 @@ async fn build_quorum_proposal_and_signature(
     let block_header = TestBlockHeader::new(
         payload_commitment,
         (),
+        &TestInstanceState {},
         &parent_leaf.block_header,
         &parent_state,
     );

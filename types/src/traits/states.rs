@@ -4,14 +4,10 @@
 //! compatibilities over the current network state, which is modified by the transactions contained
 //! within blocks.
 
-use crate::traits::{node_implementation::ConsensusTime,BlockPayload};
-use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    error::Error,
-    fmt::Debug,
-    hash::Hash,
-};
 use super::block_contents::{BlockHeader, TestableBlock};
+use crate::traits::{node_implementation::ConsensusTime, BlockPayload};
+use serde::{de::DeserializeOwned, Serialize};
+use std::{error::Error, fmt::Debug, hash::Hash};
 
 /// Instance-level state, which allows us to fetch missing validated state.
 pub trait InstanceState: Debug + Send + Sync {}
@@ -20,29 +16,20 @@ pub trait InstanceState: Debug + Send + Sync {}
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](ValidatedState::Error))
-///   * The type of block that modifies this type of state ([`BlockPayload`](ValidatedStates::
-/// BlockPayload))
+///   * The type of block that modifies this type of state ([`BlockPayload`](`ValidatedStates::
+/// BlockPayload`))
 ///   * The ability to validate that a block header is actually a valid extension of this state and
 /// produce a new state, with the modifications from the block applied
-/// ([`validate_and_apply_header`](ValidatedState::validate_and_apply_header))
+/// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
 pub trait ValidatedState:
-    Serialize
-    + DeserializeOwned
-    + Clone
-    + Debug
-    + Default
-    + Hash
-    + PartialEq
-    + Eq
-    + Send
-    + Sync
+    Serialize + DeserializeOwned + Clone + Debug + Default + Hash + PartialEq + Eq + Send + Sync
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
     /// The type of the instance-level state this state is assocaited with
     type Instance: InstanceState;
     /// The type of block header this state is associated with
-    type BlockHeader: BlockHeader;
+    type BlockHeader: BlockHeader<State = Self>;
     /// The type of block payload this state is associated with
     type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
@@ -73,8 +60,8 @@ pub trait ValidatedState:
 
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis() -> Self {
-        Self::from_header(&Self::BlockHeader::genesis().0)
+    fn genesis(instance: &Self::Instance) -> Self {
+        Self::from_header(&Self::BlockHeader::genesis(instance).0)
     }
 
     /// Gets called to notify the persistence backend that this state has been committed

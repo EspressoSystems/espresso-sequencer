@@ -53,9 +53,9 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{ConsensusTime,NodeType, SendToTasks},
+        node_implementation::{ConsensusTime, NodeType, SendToTasks},
         signature_key::SignatureKey,
-        states::{ ValidatedState},
+        states::ValidatedState,
         storage::StoredView,
         BlockPayload,
     },
@@ -211,7 +211,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         // insert genesis (or latest block) to state map
         let mut validated_state_map = BTreeMap::default();
-        let validated_state = TYPES::ValidatedState::genesis();
+        let validated_state = TYPES::ValidatedState::genesis(&instance_state);
         validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
@@ -755,9 +755,11 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis() -> Result<Self, HotShotError<TYPES>> {
+    pub fn from_genesis(
+        instance_state: &TYPES::InstanceState,
+    ) -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
-            inner: Leaf::genesis(),
+            inner: Leaf::genesis(instance_state),
         })
     }
 

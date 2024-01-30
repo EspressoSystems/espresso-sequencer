@@ -7,7 +7,7 @@ use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
     network::{CommunicationChannel, NetworkReliability, TestableNetworkingImplementation},
-    states::{ TestableState},
+    states::TestableState,
     storage::{StorageError, StorageState, TestableStorage},
     ValidatedState,
 };
@@ -25,10 +25,11 @@ use async_trait::async_trait;
 use commit::Committable;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,    ops,
-    ops::{Deref, Sub},
+    collections::BTreeMap,
     fmt::Debug,
     hash::Hash,
+    ops,
+    ops::{Deref, Sub},
     sync::{atomic::AtomicBool, Arc},
 };
 
