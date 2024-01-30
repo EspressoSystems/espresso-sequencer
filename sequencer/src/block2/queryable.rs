@@ -1,4 +1,3 @@
-use crate::block2::entry::TableEntry;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
