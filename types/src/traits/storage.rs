@@ -1,9 +1,7 @@
 //! Abstraction over on-disk storage of node state
 
 use super::node_implementation::NodeType;
-use crate::{
-    data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote::HasViewNumber,
-};
+use crate::{data::Leaf, simple_certificate::QuorumCertificate, vote::HasViewNumber};
 use async_trait::async_trait;
 use commit::Commitment;
 use derivative::Derivative;
@@ -130,8 +128,6 @@ pub struct StoredView<TYPES: NodeType> {
     ///
     /// It may be empty for nodes not in the DA committee.
     pub block_payload: Option<TYPES::BlockPayload>,
-    /// transactions rejected in this view
-    pub rejected: Vec<TYPES::Transaction>,
     /// the proposer id
     #[derivative(PartialEq = "ignore")]
     pub proposer_id: TYPES::SignatureKey,
@@ -150,7 +146,6 @@ where
         block_header: TYPES::BlockHeader,
         block_payload: Option<TYPES::BlockPayload>,
         parent_commitment: Commitment<Leaf<TYPES>>,
-        rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
         proposer_id: TYPES::SignatureKey,
     ) -> Self {
         Self {
@@ -159,7 +154,6 @@ where
             justify_qc: qc,
             block_header,
             block_payload,
-            rejected,
             proposer_id,
         }
     }

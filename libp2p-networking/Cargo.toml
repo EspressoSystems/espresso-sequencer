@@ -27,7 +27,7 @@ libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0.112"
+serde_json = "1.0.113"
 snafu = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
     "h1-server",

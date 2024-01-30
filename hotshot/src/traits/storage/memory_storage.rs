@@ -148,7 +148,6 @@ mod test {
             header,
             Some(payload),
             dummy_leaf_commit,
-            Vec::new(),
             <<TestTypes as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         )
     }
