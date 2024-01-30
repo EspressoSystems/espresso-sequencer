@@ -23,7 +23,7 @@ pub trait InstanceState: Debug + Send + Sync {}
 /// Abstraction over the state that blocks modify
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
-///   * A defined error type ([`Error`](State::Error))
+///   * A defined error type ([`Error`](ValidatedState::Error))
 ///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
 ///   * The ability to validate that a block header is actually a valid extension of this state and
 /// produce a new state, with the modifications from the block applied
