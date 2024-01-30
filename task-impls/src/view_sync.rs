@@ -41,7 +41,7 @@ use hotshot_types::{
     },
 };
 use snafu::Snafu;
-use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
@@ -62,9 +62,9 @@ pub enum ViewSyncPhase {
 /// Stub of a view sync error
 pub struct ViewSyncTaskError {}
 
-/// Type alias for a map from View Number to Vote Task
+/// Type alias for a map from View Number to Relay to Vote Task
 type RelayMap<TYPES, VOTE, CERT> =
-    HashMap<<TYPES as NodeType>::Time, VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+    HashMap<<TYPES as NodeType>::Time, BTreeMap<u64, VoteCollectionTaskState<TYPES, VOTE, CERT>>>;
 
 /// Main view sync task state
 pub struct ViewSyncTaskState<
@@ -198,11 +198,12 @@ impl<
     ) {
         // This certificate is old, we can throw it away
         // If next view = cert round, then that means we should already have a task running for it
-        let mut task_map = self.replica_task_map.write().await;
         if self.current_view > view {
             debug!("Already in a higher view than the view sync message");
             return;
         }
+
+        let mut task_map = self.replica_task_map.write().await;
 
         if let Some(replica_task) = task_map.remove(&view) {
             // Forward event then return
@@ -277,7 +278,9 @@ impl<
             HotShotEvent::ViewSyncPreCommitVoteRecv(ref vote) => {
                 let mut map = self.pre_commit_relay_map.write().await;
                 let vote_view = vote.get_view_number();
-                if let Some(relay_task) = map.remove(&vote_view) {
+                let relay = vote.get_data().relay;
+                let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
+                if let Some(relay_task) = relay_map.remove(&relay) {
                     debug!("Forwarding message");
                     let result = relay_task.handle_event(event.clone()).await;
 
@@ -285,17 +288,12 @@ impl<
                         // The protocol has finished
                         return;
                     }
-
-                    map.insert(vote_view, result.1);
+                    relay_map.insert(relay, result.1);
                     return;
                 }
 
                 // We do not have a relay task already running, so start one
-                if self
-                    .membership
-                    .get_leader(vote_view + vote.get_data().relay)
-                    != self.public_key
-                {
+                if self.membership.get_leader(vote_view + relay) != self.public_key {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
                     return;
@@ -311,14 +309,16 @@ impl<
                 };
                 let vote_collector = create_vote_accumulator(&info, vote.clone(), event).await;
                 if let Some(vote_task) = vote_collector {
-                    map.insert(vote_view, vote_task);
+                    relay_map.insert(relay, vote_task);
                 }
             }
 
             HotShotEvent::ViewSyncCommitVoteRecv(ref vote) => {
                 let mut map = self.commit_relay_map.write().await;
                 let vote_view = vote.get_view_number();
-                if let Some(relay_task) = map.remove(&vote_view) {
+                let relay = vote.get_data().relay;
+                let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
+                if let Some(relay_task) = relay_map.remove(&relay) {
                     debug!("Forwarding message");
                     let result = relay_task.handle_event(event.clone()).await;
 
@@ -327,16 +327,12 @@ impl<
                         return;
                     }
 
-                    map.insert(vote_view, result.1);
+                    relay_map.insert(relay, result.1);
                     return;
                 }
 
                 // We do not have a relay task already running, so start one
-                if self
-                    .membership
-                    .get_leader(vote_view + vote.get_data().relay)
-                    != self.public_key
-                {
+                if self.membership.get_leader(vote_view + relay) != self.public_key {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
                     return;
@@ -352,14 +348,16 @@ impl<
                 };
                 let vote_collector = create_vote_accumulator(&info, vote.clone(), event).await;
                 if let Some(vote_task) = vote_collector {
-                    map.insert(vote_view, vote_task);
+                    relay_map.insert(relay, vote_task);
                 }
             }
 
             HotShotEvent::ViewSyncFinalizeVoteRecv(ref vote) => {
                 let mut map = self.finalize_relay_map.write().await;
                 let vote_view = vote.get_view_number();
-                if let Some(relay_task) = map.remove(&vote_view) {
+                let relay = vote.get_data().relay;
+                let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
+                if let Some(relay_task) = relay_map.remove(&relay) {
                     debug!("Forwarding message");
                     let result = relay_task.handle_event(event.clone()).await;
 
@@ -368,16 +366,12 @@ impl<
                         return;
                     }
 
-                    map.insert(vote_view, result.1);
+                    relay_map.insert(relay, result.1);
                     return;
                 }
 
                 // We do not have a relay task already running, so start one
-                if self
-                    .membership
-                    .get_leader(vote_view + vote.get_data().relay)
-                    != self.public_key
-                {
+                if self.membership.get_leader(vote_view + relay) != self.public_key {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
                     return;
@@ -393,7 +387,7 @@ impl<
                 };
                 let vote_collector = create_vote_accumulator(&info, vote.clone(), event).await;
                 if let Some(vote_task) = vote_collector {
-                    map.insert(vote_view, vote_task);
+                    relay_map.insert(relay, vote_task);
                 }
             }
 

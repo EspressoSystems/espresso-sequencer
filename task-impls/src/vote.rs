@@ -2,7 +2,6 @@ use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use crate::events::HotShotEvent;
 use async_trait::async_trait;
-use bitvec::prelude::*;
 use either::Either::{self, Left, Right};
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
@@ -202,8 +201,7 @@ where
     }
     let new_accumulator = VoteAccumulator {
         vote_outcomes: HashMap::new(),
-        sig_lists: Vec::new(),
-        signers: bitvec![0;info. membership.total_nodes()],
+        signers: HashMap::new(),
         phantom: PhantomData,
     };
 
