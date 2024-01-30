@@ -97,6 +97,8 @@ impl AnvilOptions {
     }
 }
 
+/// Convinient interfaces for using `anvil` command which runs a local blockchain
+/// Similar to [`AnvilInstance`][https://docs.rs/ethers/latest/ethers/core/utils/struct.AnvilInstance.html], with more useful methods
 #[derive(Debug)]
 pub struct Anvil {
     child: Child,
@@ -254,12 +256,9 @@ impl Drop for Anvil {
     }
 }
 
-pub async fn connect_rpc(
-    provider: &Url,
-    mnemonic: &str,
-    index: u32,
-    chain_id: Option<u64>,
-) -> Option<Signer> {
+/// Prepare a `SignerMiddleware` by connecting to a provider and initiating a local wallet.
+/// Returns a signer/client that can sign and send transactions to network.
+pub async fn init_signer(provider: &Url, mnemonic: &str, index: u32) -> Option<Signer> {
     let provider = match Provider::try_from(provider.to_string()) {
         Ok(provider) => provider,
         Err(err) => {
@@ -267,15 +266,12 @@ pub async fn connect_rpc(
             return None;
         }
     };
-    let chain_id = match chain_id {
-        Some(id) => id,
-        None => match provider.get_chainid().await {
-            Ok(id) => id.as_u64(),
-            Err(err) => {
-                tracing::error!("error getting chain ID: {}", err);
-                return None;
-            }
-        },
+    let chain_id = match provider.get_chainid().await {
+        Ok(id) => id.as_u64(),
+        Err(err) => {
+            tracing::error!("error getting chain ID: {}", err);
+            return None;
+        }
     };
     let mnemonic = match MnemonicBuilder::<English>::default()
         .phrase(mnemonic)
@@ -283,7 +279,7 @@ pub async fn connect_rpc(
     {
         Ok(mnemonic) => mnemonic,
         Err(err) => {
-            tracing::error!("error building walletE: {}", err);
+            tracing::error!("error building wallet: {}", err);
             return None;
         }
     };
@@ -296,11 +292,6 @@ pub async fn connect_rpc(
     };
     let wallet = wallet.with_chain_id(chain_id);
     Some(SignerMiddleware::new(provider, wallet))
-}
-
-pub fn nonce_manager(signer: Signer) -> NonceManager {
-    let address = signer.address();
-    NonceManager::new(signer, address)
 }
 
 pub async fn wait_for_http(
@@ -339,6 +330,7 @@ pub async fn wait_for_rpc(
     Err(format!("No JSON-RPC at {url}"))
 }
 
+/// converting a keccak256-based structured commitment (32 bytes) into type `U256`
 pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
     let mut buf = vec![];
     comm.serialize_uncompressed(&mut buf).unwrap();
@@ -346,6 +338,7 @@ pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
     U256::from_little_endian(&state_comm)
 }
 
+/// converting a `U256` value into a keccak256-based structured commitment (32 bytes)
 pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, SerializationError> {
     let mut commit_bytes = [0; 32];
     comm.to_little_endian(&mut commit_bytes);
