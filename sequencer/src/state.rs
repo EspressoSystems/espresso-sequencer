@@ -1,11 +1,16 @@
 use crate::{
-    block::{BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleTree, _validate_proposal, ValidatedState},
+    block::{
+        BlockMerkleCommitment, BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleCommitment,
+        FeeMerkleTree, ValidatedState, _validate_proposal,
+    },
     Error, Header, Payload,
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
-use hotshot_types::data::{ViewNumber, BlockError};
-use jf_primitives::merkle_tree::{MerkleTreeScheme, UniversalMerkleTreeScheme};
+use hotshot_types::data::{BlockError, ViewNumber};
+use jf_primitives::merkle_tree::{
+    AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
+};
 
 impl Default for ValidatedState {
     fn default() -> Self {
@@ -20,6 +25,15 @@ impl Default for ValidatedState {
     }
 }
 
+impl ValidatedState {
+    fn validate_header(&self, parent_header: &Header, proposed_header: &Header) -> Option<Header> {
+        if let Err(_) = _validate_proposal(parent_header, proposed_header) {
+            return None;
+        };
+        Some(proposed_header.clone())
+    }
+}
+
 impl HotShotState for ValidatedState {
     type Error = BlockError;
 
@@ -29,20 +43,44 @@ impl HotShotState for ValidatedState {
     type Time = ViewNumber;
 
     fn on_commit(&self) {}
-
+    /// Validate parent against known values (from state) and validate
+    /// proposal descends from parent. Returns updated `ValidatedState`.
     fn validate_and_apply_header(
         &self,
         proposed_header: &Self::BlockHeader,
         parent_header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
+        // validate proposed fee merkle tree root against state
+        let fee_merkle_tree = self.fee_merkle_tree;
+        if parent_header.fee_merkle_tree_root != self.fee_merkle_tree.commitment() {
+            return Err(BlockError::InvalidBlockHeader);
+        };
+        // validate proposed block merkle tree root against state
+        if parent_header.fee_merkle_tree_root != self.fee_merkle_tree.commitment() {
+            return Err(BlockError::InvalidBlockHeader);
+        };
+        // TODO update fee_merkle_tree
+        // validate that proposed header is a descendent of parent and update
+        if let Ok(block_merkle_tree) = _validate_proposal(parent_header, proposed_header) {
+            Ok(ValidatedState {
+                block_merkle_tree,
+                fee_merkle_tree,
+            })
+        } else {
+            Err(BlockError::InvalidBlockHeader)
+        }
+    }
+}
 
-         // TODO validate fee state
-         if let Err(_) = _validate_proposal(parent_header, proposed_header) {
-             Err(BlockError::InvalidBlockHeader)
-         } else {
-             Ok(proposed_header.validated_state)
-         }
+// FIXME remove when `Commitable` is removed from the trait
+impl Committable for ValidatedState {
+    fn commit(&self) -> Commitment<Self> {
+        unimplemented!("temporary implementation");
+    }
+
+    fn tag() -> String {
+        "VALIDATED_STATE".to_string()
     }
 }
 
@@ -62,22 +100,5 @@ impl hotshot_types::traits::state::TestableState for ValidatedState {
         _padding: u64,
     ) -> crate::Transaction {
         crate::Transaction::random(rng)
-    }
-}
-
-impl Committable for ValidatedState {
-    fn commit(&self) -> Commitment<Self> {
-        let mut bmt_bytes = vec![];
-        self.block_merkle_tree
-            .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
-        let mut fmt_bytes = vec![];
-        self.fee_merkle_tree
-            .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
-        commit::RawCommitmentBuilder::new("Test State Commit")
-            .var_size_field("block_merkle_tree", &bmt_bytes)
-            .var_size_field("fee_merkle_tree", &fmt_bytes)
-            .finalize()
     }
 }
