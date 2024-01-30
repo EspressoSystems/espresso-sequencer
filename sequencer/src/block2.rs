@@ -1,118 +1,26 @@
 use crate::{BlockBuildingSnafu, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use commit::{Commitment, Committable};
-use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use jf_primitives::{
     pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{
-        advz::{
-            payload_prover::{LargeRangeProof, SmallRangeProof},
-            Advz,
-        },
-        payload_prover::PayloadProver,
+    vid::advz::{
+        payload_prover::{LargeRangeProof, SmallRangeProof},
+        Advz,
     },
 };
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
-use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use self::entry::TxTableEntry;
 
 pub mod entry;
+pub mod payload;
 pub mod queryable;
 pub mod tx_iterator;
-
-#[allow(dead_code)] // TODO temporary
-#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
-#[derivative(Hash, PartialEq)]
-pub struct Payload {
-    payload: Vec<u8>,
-
-    // cache frequently used items
-    //
-    // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
-    #[derivative(Hash = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[serde(skip)]
-    tx_table_len_proof: OnceLock<Option<RangeProof>>,
-}
-
-impl Payload {
-    // TODO dead code even with `pub` because this module is private in lib.rs
-    #[allow(dead_code)]
-    pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        get_ns_table_len(ns_table_bytes)
-    }
-
-    // TODO dead code even with `pub` because this module is private in lib.rs
-    #[allow(dead_code)]
-    pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        0..get_ns_table_len(ns_table_bytes)
-    }
-
-    // TODO dead code even with `pub` because this module is private in lib.rs
-    #[allow(dead_code)]
-    /// Returns (ns_payload, ns_proof) where ns_payload is raw bytes.
-    pub fn namespace_with_proof(
-        &self,
-        meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
-        ns_index: usize,
-    ) -> Option<(Vec<u8>, NamespaceProof)> {
-        if ns_index >= get_ns_table_len(meta) {
-            return None; // error: index out of bounds
-        }
-
-        let ns_payload_range = get_ns_payload_range(meta, ns_index, self.payload.len());
-
-        let vid = test_vid_factory(); // TODO temporary VID construction
-
-        // TODO log output for each `?`
-        // fix this when we settle on an error handling pattern
-        Some((
-            self.payload.get(ns_payload_range.clone())?.to_vec(),
-            vid.payload_proof(&self.payload, ns_payload_range).ok()?,
-        ))
-    }
-
-    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
-    ///
-    /// Typically `r` is `0..TxTableEntry::byte_len()`.
-    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
-    fn tx_table_len_range(&self) -> Range<usize> {
-        0..std::cmp::min(TxTableEntry::byte_len(), self.payload.len())
-    }
-
-    /// Return length of the tx table, read from the payload bytes.
-    ///
-    /// This quantity equals number of txs in the payload.
-    fn get_tx_table_len(&self) -> TxTableEntry {
-        let tx_table_len_range = self.tx_table_len_range();
-        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-        entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.payload[tx_table_len_range]);
-
-        TxTableEntry::from_bytes_array(entry_bytes)
-    }
-    fn _get_tx_table_len_as<T>(&self) -> Option<T>
-    where
-        TxTableEntry: TryInto<T>,
-    {
-        self.get_tx_table_len().try_into().ok()
-    }
-
-    // Fetch the tx table length range proof from cache.
-    // Build the proof if missing from cache.
-    // Returns `None` if an error occurred.
-    fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
-        self.tx_table_len_proof
-            .get_or_init(|| {
-                vid.payload_proof(&self.payload, self.tx_table_len_range())
-                    .ok()
-            })
-            .as_ref()
-    }
-}
+use payload::Payload;
 
 impl BlockPayload for Payload {
     type Error = crate::Error;
@@ -464,7 +372,8 @@ pub fn get_ns_payload_range(
 
 #[cfg(test)]
 mod test {
-    use super::{test_vid_factory, Payload, Transaction, TxTableEntry};
+    use super::{test_vid_factory, Transaction, TxTableEntry};
+    use crate::block2::payload::Payload;
     use crate::block2::{
         queryable::{self},
         tx_iterator::TxIndex,

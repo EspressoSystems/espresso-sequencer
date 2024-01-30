@@ -1,8 +1,9 @@
 use std::ops::Range;
 
+use crate::block2::payload::Payload;
 use serde::{Deserialize, Serialize};
 
-use super::{get_ns_table_entry, get_ns_table_len, get_tx_table_len, Payload};
+use super::{get_ns_table_entry, get_ns_table_len, get_tx_table_len};
 
 type NsTable = <Payload as hotshot::traits::BlockPayload>::Metadata;
 

@@ -1,3 +1,4 @@
+use crate::block2::payload::Payload;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
@@ -8,7 +9,7 @@ use super::{
     entry::TxTableEntry,
     get_ns_table_len, get_table_len, test_vid_factory,
     tx_iterator::{TxIndex, TxIterator},
-    tx_payload_range, Payload, RangeProof,
+    tx_payload_range, RangeProof,
 };
 
 impl QueryablePayload for Payload {
