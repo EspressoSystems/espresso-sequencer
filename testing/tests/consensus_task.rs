@@ -61,7 +61,6 @@ async fn build_vote(
         parent_commitment,
         block_header: proposal.block_header,
         block_payload: None,
-        rejected: Vec::new(),
         proposer_id: membership.get_leader(view),
     };
     let vote = QuorumVote::<TestTypes>::create_signed_vote(
