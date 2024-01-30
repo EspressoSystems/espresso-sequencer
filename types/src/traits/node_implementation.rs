@@ -7,7 +7,7 @@ use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
     network::{CommunicationChannel, NetworkReliability, TestableNetworkingImplementation},
-    states::{ConsensusTime, TestableState},
+    states::{ TestableState},
     storage::{StorageError, StorageState, TestableStorage},
     ValidatedState,
 };
@@ -22,9 +22,11 @@ use crate::{
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver, UnboundedSender};
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
+use commit::Committable;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::BTreeMap,    ops,
+    ops::{Deref, Sub},
     fmt::Debug,
     hash::Hash,
     sync::{atomic::AtomicBool, Arc},
@@ -262,6 +264,36 @@ where
             (quorum_chan, committee_chan)
         })
     }
+}
+
+/// Trait for time compatibility needed for reward collection
+pub trait ConsensusTime:
+    PartialOrd
+    + Ord
+    + Send
+    + Sync
+    + Debug
+    + Clone
+    + Copy
+    + Hash
+    + Deref<Target = u64>
+    + serde::Serialize
+    + for<'de> serde::Deserialize<'de>
+    + ops::AddAssign<u64>
+    + ops::Add<u64, Output = Self>
+    + Sub<u64, Output = Self>
+    + 'static
+    + Committable
+{
+    /// Create a new instance of this time unit at time number 0
+    #[must_use]
+    fn genesis() -> Self {
+        Self::new(0)
+    }
+    /// Create a new instance of this time unit
+    fn new(val: u64) -> Self;
+    /// Get the u64 format of time
+    fn get_u64(&self) -> u64;
 }
 
 /// Trait with all the type definitions that are used in the current hotshot setup.

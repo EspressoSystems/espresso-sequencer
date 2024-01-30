@@ -33,8 +33,7 @@ use hotshot_types::{
         block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
-        node_implementation::{NodeImplementation, NodeType},
-        states::ConsensusTime,
+        node_implementation::{NodeImplementation,ConsensusTime, NodeType},
         BlockPayload,
     },
 };

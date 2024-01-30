@@ -4,17 +4,13 @@
 //! compatibilities over the current network state, which is modified by the transactions contained
 //! within blocks.
 
-use crate::traits::BlockPayload;
-use commit::Committable;
+use crate::traits::{node_implementation::ConsensusTime,BlockPayload};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     error::Error,
     fmt::Debug,
     hash::Hash,
-    ops,
-    ops::{Deref, Sub},
 };
-
 use super::block_contents::{BlockHeader, TestableBlock};
 
 /// Instance-level state, which allows us to fetch missing validated state.
@@ -24,10 +20,11 @@ pub trait InstanceState: Debug + Send + Sync {}
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](ValidatedState::Error))
-///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
+///   * The type of block that modifies this type of state ([`BlockPayload`](ValidatedStates::
+/// BlockPayload))
 ///   * The ability to validate that a block header is actually a valid extension of this state and
 /// produce a new state, with the modifications from the block applied
-/// ([`validate_and_apply_header`](State::validate_and_apply_header))
+/// ([`validate_and_apply_header`](ValidatedState::validate_and_apply_header))
 pub trait ValidatedState:
     Serialize
     + DeserializeOwned
@@ -39,7 +36,6 @@ pub trait ValidatedState:
     + Eq
     + Send
     + Sync
-    + Committable
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
@@ -98,36 +94,4 @@ where
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <Self::BlockPayload as BlockPayload>::Transaction;
-}
-
-// TODO Seuqnecing here means involving DA in consensus
-
-/// Trait for time compatibility needed for reward collection
-pub trait ConsensusTime:
-    PartialOrd
-    + Ord
-    + Send
-    + Sync
-    + Debug
-    + Clone
-    + Copy
-    + Hash
-    + Deref<Target = u64>
-    + serde::Serialize
-    + for<'de> serde::Deserialize<'de>
-    + ops::AddAssign<u64>
-    + ops::Add<u64, Output = Self>
-    + Sub<u64, Output = Self>
-    + 'static
-    + Committable
-{
-    /// Create a new instance of this time unit at time number 0
-    #[must_use]
-    fn genesis() -> Self {
-        Self::new(0)
-    }
-    /// Create a new instance of this time unit
-    fn new(val: u64) -> Self;
-    /// Get the u64 format of time
-    fn get_u64(&self) -> u64;
 }

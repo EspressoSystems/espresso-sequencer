@@ -9,9 +9,9 @@ use crate::{
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         election::Membership,
-        node_implementation::NodeType,
+        node_implementation::{ConsensusTime,NodeType},
         signature_key::SignatureKey,
-        states::{ConsensusTime, TestableState, ValidatedState},
+        states::{TestableState, ValidatedState},
         storage::StoredView,
         BlockPayload,
     },

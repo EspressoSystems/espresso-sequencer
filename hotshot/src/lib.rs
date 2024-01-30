@@ -53,9 +53,9 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{NodeType, SendToTasks},
+        node_implementation::{ConsensusTime,NodeType, SendToTasks},
         signature_key::SignatureKey,
-        states::{ConsensusTime, ValidatedState},
+        states::{ ValidatedState},
         storage::StoredView,
         BlockPayload,
     },

@@ -19,11 +19,10 @@ use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
-use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType};
+use hotshot_types::traits::node_implementation::{ConsensusTime,ChannelMaps, NodeType};
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
-    traits::states::ConsensusTime,
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};

@@ -39,8 +39,8 @@ use hotshot_types::{
         block_contents::TestableBlock,
         election::Membership,
         network::CommunicationChannel,
-        node_implementation::NodeType,
-        states::{ConsensusTime, TestableState},
+        node_implementation::{ConsensusTime,NodeType},
+        states::{ TestableState},
     },
     HotShotConfig,
 };

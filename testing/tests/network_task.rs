@@ -6,7 +6,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::{DAProposal, VidSchemeTrait, ViewNumber},
-    traits::{consensus_api::ConsensusApi, states::ConsensusTime},
+    traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
 };
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, marker::PhantomData};

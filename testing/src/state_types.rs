@@ -4,8 +4,8 @@ use commit::{Commitment, Committable};
 use hotshot_types::{
     data::{fake_commitment, BlockError, ViewNumber},
     traits::{
-        states::{ConsensusTime, InstanceState, TestableState, ValidatedState},
-        BlockPayload,
+        states::{InstanceState, TestableState, ValidatedState},
+        BlockPayload,node_implementation::ConsensusTime,
     },
 };
 

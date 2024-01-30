@@ -13,8 +13,7 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::traits::network::CommunicationChannel;
-use hotshot_types::traits::states::ConsensusTime;
-use hotshot_types::{event::Event, traits::node_implementation::NodeType};
+use hotshot_types::{event::Event, traits::node_implementation::{ConsensusTime,NodeType}};
 use snafu::Snafu;
 
 use crate::{
