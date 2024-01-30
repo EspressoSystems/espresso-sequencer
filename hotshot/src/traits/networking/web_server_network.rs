@@ -252,6 +252,8 @@ impl<TYPES: NodeType> Inner<TYPES> {
         };
 
         while self.running.load(Ordering::Relaxed) {
+            async_sleep(additional_wait).await;
+
             let endpoint = match message_purpose {
                 MessagePurpose::Proposal => config::get_proposal_route(view_number),
                 MessagePurpose::LatestQuorumProposal => config::get_latest_quorum_proposal_route(),
@@ -437,7 +439,6 @@ impl<TYPES: NodeType> Inner<TYPES> {
                         async_sleep(self.wait_between_polls).await;
                     }
                 }
-                async_sleep(additional_wait).await;
             }
             let maybe_event = receiver.try_recv();
             match maybe_event {
