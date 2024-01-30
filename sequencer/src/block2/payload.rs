@@ -2,6 +2,7 @@ use crate::block2::entry::TxTableEntry;
 use crate::block2::{
     get_ns_payload_range, get_ns_table_len, test_vid_factory, NamespaceProof, RangeProof,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use jf_primitives::vid::payload_prover::PayloadProver;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,11 @@ use std::sync::OnceLock;
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct Payload {
+pub struct Payload<
+    TableLen: CanonicalSerialize + CanonicalDeserialize + TryFrom<usize> + TryInto<usize> + std::marker::Sync,
+    Offset: CanonicalSerialize + CanonicalDeserialize + TryFrom<usize> + TryInto<usize> + std::marker::Sync,
+    NsId: CanonicalSerialize + CanonicalDeserialize + std::marker::Sync,
+> {
     pub payload: Vec<u8>,
 
     // cache frequently used items
@@ -21,9 +26,12 @@ pub struct Payload {
     #[derivative(PartialEq = "ignore")]
     #[serde(skip)]
     pub tx_table_len_proof: OnceLock<Option<RangeProof>>,
+    pub table_len: TableLen,
+    pub offset: Offset,
+    pub ns_id: NsId,
 }
 
-impl Payload {
+impl Payload<u32, u32, [u8; 32]> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {

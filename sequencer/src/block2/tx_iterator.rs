@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{get_ns_table_entry, get_ns_table_len, get_tx_table_len};
 
-type NsTable = <Payload as hotshot::traits::BlockPayload>::Metadata;
+type NsTable = <Payload<u32, u32, [u8; 32]> as hotshot::traits::BlockPayload>::Metadata;
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
@@ -19,12 +19,12 @@ pub struct TxIterator<'a> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
-    block_payload: &'a Payload,
+    block_payload: &'a Payload<u32, u32, [u8; 32]>,
     ns_table: &'a NsTable,
 }
 
 impl<'a> TxIterator<'a> {
-    pub fn new(ns_table: &'a NsTable, block_payload: &'a Payload) -> Self {
+    pub fn new(ns_table: &'a NsTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..get_ns_table_len(ns_table),

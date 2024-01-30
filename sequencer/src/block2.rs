@@ -22,7 +22,7 @@ pub mod queryable;
 pub mod tx_iterator;
 use payload::Payload;
 
-impl BlockPayload for Payload {
+impl BlockPayload for Payload<u32, u32, [u8; 32]> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = Vec<u8>;
@@ -130,6 +130,9 @@ impl BlockPayload for Payload {
             Self {
                 payload,
                 tx_table_len_proof: Default::default(),
+                table_len: 0,
+                offset: 0,
+                ns_id: [0; 32],
             },
             namespace_table,
         ))
@@ -144,6 +147,9 @@ impl BlockPayload for Payload {
         Self {
             payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
+            table_len: 0,
+            offset: 0,
+            ns_id: [0; 32],
         }
     }
 
@@ -159,13 +165,13 @@ impl BlockPayload for Payload {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
 }
-impl Display for Payload {
+impl Display for Payload<u32, u32, [u8; 32]> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl Committable for Payload {
+impl Committable for Payload<u32, u32, [u8; 32]> {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }
@@ -302,7 +308,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
 // TODO currently unused but contains code that might get re-used in the near future.
 fn _get_tx_table_entry(
     ns_offset: usize,
-    block_payload: &Payload,
+    block_payload: &Payload<u32, u32, [u8; 32]>,
     block_payload_len: usize,
     tx_index: usize,
 ) -> TxTableEntry {
