@@ -94,7 +94,9 @@ contract LightClient {
         genesisState = genesis;
         finalizedState = genesis;
         currentEpoch = 0;
+
         BLOCKS_PER_EPOCH = numBlockPerEpoch;
+
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
         votingThreshold = genesis.threshold;
@@ -119,6 +121,8 @@ contract LightClient {
             revert OutdatedState();
         }
         uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
+
+        // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);

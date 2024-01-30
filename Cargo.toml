@@ -5,14 +5,14 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-state-prover = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.7.1" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-state-prover = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.8" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [

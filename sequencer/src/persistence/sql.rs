@@ -1,8 +1,10 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::api::{data_source::SequencerDataSource, sql::DataSource};
 use async_trait::async_trait;
 use clap::Parser;
-use hotshot_query_service::data_source::{sql::Query, VersionedDataSource};
+use hotshot_query_service::data_source::{
+    storage::sql::{include_migrations, Config, Query, SqlStorage},
+    VersionedDataSource,
+};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
@@ -44,22 +46,54 @@ pub struct Options {
     pub use_tls: bool,
 }
 
+impl TryFrom<Options> for Config {
+    type Error = anyhow::Error;
+
+    fn try_from(opt: Options) -> Result<Self, Self::Error> {
+        let mut cfg = match opt.uri {
+            Some(uri) => uri.parse()?,
+            None => Self::default(),
+        };
+        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
+
+        if let Some(host) = opt.host {
+            cfg = cfg.host(host);
+        }
+        if let Some(port) = opt.port {
+            cfg = cfg.port(port);
+        }
+        if let Some(database) = &opt.database {
+            cfg = cfg.database(database);
+        }
+        if let Some(user) = &opt.user {
+            cfg = cfg.user(user);
+        }
+        if let Some(password) = &opt.password {
+            cfg = cfg.password(password);
+        }
+        if opt.use_tls {
+            cfg = cfg.tls();
+        }
+        Ok(cfg)
+    }
+}
+
 #[async_trait]
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        DataSource::create(self, false).await
+        SqlStorage::connect(self.try_into()?).await
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        DataSource::create(self, true).await?;
+        SqlStorage::connect(Config::try_from(self)?.reset_schema()).await?;
         Ok(())
     }
 }
 
 /// Postgres-backed persistence.
-pub type Persistence = DataSource;
+pub type Persistence = SqlStorage;
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
@@ -82,7 +116,7 @@ impl SequencerPersistence for Persistence {
         let json = serde_json::to_value(cfg)?;
         self.transaction()
             .await?
-            .execute("INSERT INTO network_config (config) VALUES ($1)", [&json])
+            .execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", [&json])
             .await?;
         self.commit().await?;
         Ok(())

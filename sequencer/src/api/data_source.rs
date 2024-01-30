@@ -14,9 +14,11 @@ use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId},
     data_source::{UpdateDataSource, VersionedDataSource},
+    fetching::provider::{AnyProvider, QueryServiceProvider},
     status::StatusDataSource,
     QueryResult,
 };
+use tide_disco::Url;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -55,7 +57,7 @@ pub trait SequencerDataSource:
     type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
-    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self>;
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
 
     /// Update sequencer-specific indices when a new block is added.
     ///
@@ -71,6 +73,19 @@ pub trait SequencerDataSource:
     async fn window_from<ID>(&self, from: ID, end: u64) -> QueryResult<TimeWindowQueryData>
     where
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
+}
+
+/// Provider for fetching missing data for the query service.
+pub type Provider = AnyProvider<SeqTypes>;
+
+/// Create a provider for fetching missing data from a list of peer query services.
+pub fn provider(peers: impl IntoIterator<Item = Url>) -> Provider {
+    let mut provider = Provider::default();
+    for peer in peers {
+        tracing::info!("will fetch missing data from {peer}");
+        provider = provider.with_provider(QueryServiceProvider::new(peer));
+    }
+    provider
 }
 
 pub(crate) trait SubmitDataSource<N: network::Type> {

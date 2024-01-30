@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn reset_storage<O: DataSourceOptions>(opt: O) -> anyhow::Result<()> {
     // Reset query service storage.
-    let mut ds = O::DataSource::create(opt.clone(), true).await?;
+    let mut ds = O::DataSource::create(opt.clone(), Default::default(), true).await?;
     ds.commit().await?;
 
     // Reset consensus storage.
