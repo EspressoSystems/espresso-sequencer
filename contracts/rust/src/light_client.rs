@@ -402,3 +402,41 @@ impl From<ParsedLightClientState> for PublicInput<F> {
         Self::from(fields)
     }
 }
+
+impl From<(u64, u64, U256, U256, U256, U256, U256, U256)> for ParsedLightClientState {
+    fn from(s: (u64, u64, U256, U256, U256, U256, U256, U256)) -> Self {
+        Self {
+            view_num: s.0,
+            block_height: s.1,
+            block_comm_root: s.2,
+            fee_ledger_comm: s.3,
+            bls_key_comm: s.4,
+            schnorr_key_comm: s.5,
+            amount_comm: s.6,
+            threshold: s.7,
+        }
+    }
+}
+
+impl From<ParsedLightClientState> for LightClientState<ark_bn254::Fr> {
+    fn from(s: ParsedLightClientState) -> Self {
+        Self {
+            view_number: s.view_num as usize,
+            block_height: s.block_height as usize,
+            block_comm_root: u256_to_field(s.block_comm_root),
+            fee_ledger_comm: u256_to_field(s.fee_ledger_comm),
+            stake_table_comm: (
+                u256_to_field(s.bls_key_comm),
+                u256_to_field(s.schnorr_key_comm),
+                u256_to_field(s.amount_comm),
+            ),
+        }
+    }
+}
+
+impl From<ParsedLightClientState> for contract_bindings::light_client::LightClientState {
+    fn from(s: ParsedLightClientState) -> Self {
+        // exactly the same struct with same field types, safe to transmute
+        unsafe { std::mem::transmute(s) }
+    }
+}

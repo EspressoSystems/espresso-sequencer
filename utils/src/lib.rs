@@ -345,6 +345,7 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
     Commitment::deserialize_uncompressed_unchecked(&*commit_bytes.to_vec())
 }
 
+/// send a transaction and wait for confirmation before returning the tx receipt and block included.
 pub async fn contract_send<M: Middleware, T: Detokenize>(
     call: &ContractCall<M, T>,
 ) -> Result<(TransactionReceipt, u64), anyhow::Error>

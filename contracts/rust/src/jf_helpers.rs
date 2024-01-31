@@ -350,6 +350,17 @@ impl From<ParsedPlonkProof> for Proof<Bn254> {
     }
 }
 
+// NOTE: this extra "middle-man" conversion is the unfortunate result of type in rust binding is auto-generated,
+// and are mutually oblivious of the types in Jellyfish, thus no From can be implemented at either side.
+// Since we cannot implement foreign traits on foreign types, we can only transit via our own `ParsedPlonkProof`.
+impl From<ParsedPlonkProof> for contract_bindings::i_plonk_verifier::PlonkProof {
+    fn from(p: ParsedPlonkProof) -> Self {
+        // parsed_proof is our own defined type, which share exactly the same structure and field types
+        // as the auto-generated rust binding types, thus, we can safely do mem::transmute()
+        unsafe { std::mem::transmute(p) }
+    }
+}
+
 impl ParsedPlonkProof {
     /// return a dummy proof instance with random ProofEvaluations fields.
     pub fn dummy_with_rand_proof_evals<R: Rng>(rng: &mut R) -> Self {

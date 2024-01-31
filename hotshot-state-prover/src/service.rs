@@ -10,7 +10,16 @@ use async_std::{
     task::{sleep, spawn},
 };
 use displaydoc::Display;
-use ethers::types::U256;
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    middleware::SignerMiddleware,
+    providers::Http,
+    providers::Provider,
+    signers::{LocalWallet, Wallet},
+    types::{Address, U256},
+};
+use hotshot_contract::jf_helpers::ParsedPlonkProof;
+use hotshot_contract::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
@@ -48,15 +57,53 @@ pub async fn fetch_latest_state(
         .await
 }
 
-pub async fn read_contract_state() -> Result<LightClientState, ProverError> {
-    todo!()
+/// prepare a contract interface ready to be read from or written to
+fn prepare_contract(config: &StateProverConfig) -> Result<LightClient<L1Wallet>, ProverError> {
+    let provider = Provider::try_from(config.l1_provider.to_string())
+        .expect("unable to instantiate Provider, likely wrong URL");
+    let signer = Wallet::from(config.eth_signing_key.clone());
+    let l1_wallet = Arc::new(L1Wallet::new(provider, signer));
+
+    let contract = LightClient::new(config.light_client_address, l1_wallet);
+    Ok(contract)
 }
 
+/// get the `finalizedState` from the LightClient contract storage on L1
+pub async fn read_contract_state(
+    config: &StateProverConfig,
+) -> Result<LightClientState, ProverError> {
+    let contract = prepare_contract(config)?;
+    let state: ParsedLightClientState = match contract.finalized_state().call().await {
+        Ok(s) => s.into(),
+        Err(e) => {
+            tracing::error!("unable to read finalized_state from contract: {}", e);
+            return Err(ProverError::ContractError(e.into()));
+        }
+    };
+    let state: LightClientState = state.into();
+
+    Ok(state)
+}
+
+/// submit the latest finalized state along with a proof to the L1 LightClient contract
 pub async fn submit_state_and_proof(
-    _proof: Proof,
-    _public_input: PublicInput<CircuitField>,
+    proof: Proof,
+    public_input: PublicInput<CircuitField>,
+    config: &StateProverConfig,
 ) -> Result<(), ProverError> {
-    todo!()
+    let contract = prepare_contract(config)?;
+
+    // prepare the input the contract call and the tx itself
+    let proof: ParsedPlonkProof = proof.into();
+    let new_state: ParsedLightClientState = public_input.into();
+    let tx = contract.new_finalized_state(new_state.into(), proof.into());
+
+    // send the tx
+    let (_receipt, _included_block) = sequencer_utils::contract_send(&tx)
+        .await
+        .map_err(|e| ProverError::ContractError(e))?;
+
+    Ok(())
 }
 
 pub async fn sync_state(
@@ -67,7 +114,7 @@ pub async fn sync_state(
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
-    let old_state = read_contract_state().await?;
+    let old_state = read_contract_state(&config).await?;
     if old_state.block_height >= bundle.state.block_height {
         tracing::info!("No update needed.");
         return Ok(());
@@ -104,7 +151,7 @@ pub async fn sync_state(
     let proof_gen_elapsed = proof_gen_start.elapsed();
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
-    submit_state_and_proof(proof, public_input).await?;
+    submit_state_and_proof(proof, public_input, config).await?;
 
     tracing::info!("Successfully synced light client state.");
     Ok(())
@@ -192,7 +239,7 @@ pub enum ProverError {
     /// Invalid light client state or signatures
     InvalidState,
     /// Error when communicating with the smart contract
-    ContractError,
+    ContractError(anyhow::Error),
     /// Error when communicating with the state relay server
     RelayServerError(ServerError),
     /// Internal error with the stake table
