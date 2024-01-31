@@ -52,11 +52,11 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{NodeType, SendToTasks},
+        node_implementation::{ConsensusTime, NodeType, SendToTasks},
         signature_key::SignatureKey,
-        state::ConsensusTime,
+        states::ValidatedState,
         storage::StoredView,
-        BlockPayload, State,
+        BlockPayload,
     },
     HotShotConfig,
 };
@@ -173,8 +173,11 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
-    /// Creates a new hotshot with the given configuration options and sets it up with the given
+    /// Creates a new [`SystemContext`] with the given configuration options and sets it up with the given
     /// genesis block
+    ///
+    /// To do a full initialization, use `fn init` instead, which will set up background tasks as
+    /// well.
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(private_key, storage, memberships, networks, initializer, metrics))]
     pub async fn new(
@@ -192,6 +195,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
+        let instance_state = initializer.instance_state;
 
         // insert to storage
         storage
@@ -200,13 +204,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .context(StorageSnafu)?;
 
         // insert genesis (or latest block) to state map
-        let mut state_map = BTreeMap::default();
-        state_map.insert(
+        let mut validated_state_map = BTreeMap::default();
+        let validated_state = TYPES::ValidatedState::genesis(&instance_state);
+        validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
-                    state: TYPES::StateType::genesis(),
+                    state: validated_state,
                 },
             },
         );
@@ -230,7 +235,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let start_view = anchored_leaf.get_view_number();
 
         let consensus = Consensus {
-            state_map,
+            instance_state,
+            validated_state_map,
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
@@ -391,7 +397,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_decided_state(&self) -> TYPES::StateType {
+    pub async fn get_decided_state(&self) -> TYPES::ValidatedState {
         self.inner
             .consensus
             .read()
@@ -400,7 +406,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .clone()
     }
 
-    /// Initializes a new hotshot and does the work of setting up all the background tasks
+    /// Initializes a new [`SystemContext`] and does the work of setting up all the background tasks
     ///
     /// Assumes networking implementation is already primed.
     ///
@@ -408,6 +414,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// Upon encountering an unrecoverable error, such as a failure to send to a broadcast channel,
     /// the `HotShot` instance will log the error and shut down.
+    ///
+    /// To construct a [`SystemContext`] without setting up tasks, use `fn new` instead.
     ///
     /// # Errors
     ///
@@ -721,20 +729,29 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
 pub struct HotShotInitializer<TYPES: NodeType> {
     /// the leaf specified initialization
     inner: Leaf<TYPES>,
+
+    /// Instance-level state.
+    instance_state: TYPES::InstanceState,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis() -> Result<Self, HotShotError<TYPES>> {
+    pub fn from_genesis(
+        instance_state: &TYPES::InstanceState,
+    ) -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
-            inner: Leaf::genesis(),
+            inner: Leaf::genesis(instance_state),
+            instance_state: instance_state.clone(),
         })
     }
 
-    /// reload previous state based on most recent leaf
-    pub fn from_reload(anchor_leaf: Leaf<TYPES>) -> Self {
-        Self { inner: anchor_leaf }
+    /// reload previous state based on most recent leaf and the instance-level state.
+    pub fn from_reload(anchor_leaf: Leaf<TYPES>, instance_state: TYPES::InstanceState) -> Self {
+        Self {
+            inner: anchor_leaf,
+            instance_state,
+        }
     }
 }

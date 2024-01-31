@@ -4,8 +4,8 @@ use commit::{Commitment, Committable};
 use hotshot_types::{
     data::{fake_commitment, BlockError, ViewNumber},
     traits::{
-        state::{ConsensusTime, TestableState},
-        BlockPayload, State,
+        states::{InstanceState, TestableState, ValidatedState},
+        BlockPayload,
     },
 };
 
@@ -16,22 +16,25 @@ use crate::block_types::TestTransaction;
 use crate::block_types::{TestBlockHeader, TestBlockPayload};
 pub use crate::node_types::TestTypes;
 
-/// sequencing demo entry state
+/// Instance-level state implementation for testing purposes.
+#[derive(Clone, Debug)]
+pub struct TestInstanceState {}
+
+impl InstanceState for TestInstanceState {}
+
+/// Validated state implementation for testing purposes.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct TestState {
+pub struct TestValidatedState {
     /// the block height
     block_height: u64,
-    /// the view number
-    view_number: ViewNumber,
     /// the previous state commitment
     prev_state_commitment: Commitment<Self>,
 }
 
-impl Committable for TestState {
+impl Committable for TestValidatedState {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Test State Commit")
             .u64_field("block_height", self.block_height)
-            .u64_field("view_number", *self.view_number)
             .field("prev_state_commitment", self.prev_state_commitment)
             .finalize()
     }
@@ -41,18 +44,19 @@ impl Committable for TestState {
     }
 }
 
-impl Default for TestState {
+impl Default for TestValidatedState {
     fn default() -> Self {
         Self {
             block_height: 0,
-            view_number: ViewNumber::genesis(),
             prev_state_commitment: fake_commitment(),
         }
     }
 }
 
-impl State for TestState {
+impl ValidatedState for TestValidatedState {
     type Error = BlockError;
+
+    type Instance = TestInstanceState;
 
     type BlockHeader = TestBlockHeader;
 
@@ -62,20 +66,12 @@ impl State for TestState {
 
     fn validate_and_apply_header(
         &self,
-        _proposed_header: &Self::BlockHeader,
+        _instance: &Self::Instance,
         _parent_header: &Self::BlockHeader,
-        view_number: &Self::Time,
+        _proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
-        if view_number == &ViewNumber::genesis() {
-            if &self.view_number != view_number {
-                return Err(BlockError::InvalidBlockHeader);
-            }
-        } else if self.view_number >= *view_number {
-            return Err(BlockError::InvalidBlockHeader);
-        }
-        Ok(TestState {
+        Ok(TestValidatedState {
             block_height: self.block_height + 1,
-            view_number: *view_number,
             prev_state_commitment: self.commit(),
         })
     }
@@ -90,7 +86,7 @@ impl State for TestState {
     fn on_commit(&self) {}
 }
 
-impl TestableState for TestState {
+impl TestableState for TestValidatedState {
     fn create_random_transaction(
         _state: Option<&Self>,
         _rng: &mut dyn rand::RngCore,

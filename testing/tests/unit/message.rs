@@ -13,7 +13,7 @@ use hotshot_types::{
     signature_key::BLSPubKey,
     simple_certificate::SimpleCertificate,
     simple_vote::ViewSyncCommitData,
-    traits::{signature_key::SignatureKey, state::ConsensusTime},
+    traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 
 #[test]

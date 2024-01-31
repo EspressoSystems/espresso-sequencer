@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
     spinning_task::{ChangeNode, UpDown},
+    state_types::TestInstanceState,
     test_launcher::{Networks, TestLauncher},
     view_sync_task::ViewSyncTask,
 };
@@ -18,7 +19,10 @@ use hotshot_task::{
 use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    traits::{election::Membership, node_implementation::NodeType, state::ConsensusTime},
+    traits::{
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType},
+    },
     HotShotConfig, ValidatorConfig,
 };
 use std::{
@@ -64,7 +68,8 @@ pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) task_runner: TaskRunner,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
+impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplementation<TYPES>>
+    TestRunner<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
@@ -225,7 +230,8 @@ where
             let node_id = self.next_node_id;
             let storage = (self.launcher.resource_generator.storage)(node_id);
             let config = self.launcher.resource_generator.config.clone();
-            let initializer = HotShotInitializer::<TYPES>::from_genesis().unwrap();
+            let initializer =
+                HotShotInitializer::<TYPES>::from_genesis(&TestInstanceState {}).unwrap();
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
             // We assign node's public key and stake value rather than read from config file since it's a test
             let validator_config =

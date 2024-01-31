@@ -16,8 +16,8 @@ use crate::{
         ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
-        election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
-        state::ConsensusTime,
+        election::Membership, node_implementation::ConsensusTime, node_implementation::NodeType,
+        signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
 };

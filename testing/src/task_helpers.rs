@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::{
     block_types::{TestBlockHeader, TestBlockPayload},
     node_types::{MemoryImpl, TestTypes},
-    state_types::TestState,
+    state_types::{TestInstanceState, TestValidatedState},
     test_builder::TestMetadata,
 };
 use commit::Committable;
@@ -22,13 +22,12 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     simple_vote::SimpleVote,
     traits::{
-        block_contents::vid_commitment,
-        block_contents::BlockHeader,
+        block_contents::{vid_commitment, BlockHeader, TestableBlock},
         consensus_api::ConsensusApi,
         election::Membership,
-        node_implementation::NodeType,
-        state::{ConsensusTime, TestableBlock},
-        BlockPayload, State,
+        node_implementation::{ConsensusTime, NodeType},
+        states::ValidatedState,
+        BlockPayload,
     },
     vote::HasViewNumber,
 };
@@ -62,7 +61,7 @@ pub async fn build_system_handle(
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TestTypes>::from_genesis().unwrap();
+    let initializer = HotShotInitializer::<TestTypes>::from_genesis(&TestInstanceState {}).unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
@@ -217,7 +216,7 @@ async fn build_quorum_proposal_and_signature(
     // parent_view_number should be equal to 0
     let parent_view_number = &consensus.high_qc.get_view_number();
     assert_eq!(parent_view_number.get_u64(), 0);
-    let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
+    let Some(parent_view) = consensus.validated_state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
     let Some(leaf_view_0) = parent_view.get_leaf_commitment() else {
@@ -239,12 +238,14 @@ async fn build_quorum_proposal_and_signature(
             .quorum_membership
             .total_nodes(),
     );
-    let mut parent_state = <TestState as State>::from_header(&parent_leaf.block_header);
+    let mut parent_state =
+        <TestValidatedState as ValidatedState>::from_header(&parent_leaf.block_header);
     let block_header = TestBlockHeader::new(
+        &parent_state,
+        &TestInstanceState {},
+        &parent_leaf.block_header,
         payload_commitment,
         (),
-        &parent_leaf.block_header,
-        &parent_state,
     );
     // current leaf that can be re-assigned everytime when entering a new view
     let mut leaf = Leaf {
@@ -269,11 +270,11 @@ async fn build_quorum_proposal_and_signature(
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
         let state_new_view = parent_state
-            .validate_and_apply_header(&block_header, &block_header, &ViewNumber::new(cur_view - 1))
+            .validate_and_apply_header(&TestInstanceState {}, &block_header, &block_header)
             .unwrap();
         // save states for the previous view to pass all the qc checks
         // In the long term, we want to get rid of this, do not manually update consensus state
-        consensus.state_map.insert(
+        consensus.validated_state_map.insert(
             ViewNumber::new(cur_view - 1),
             View {
                 view_inner: ViewInner::Leaf {

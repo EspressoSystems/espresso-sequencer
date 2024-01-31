@@ -204,7 +204,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let consensus = self.consensus.read().await;
                 let parent_view_number = &consensus.high_qc.view_number;
 
-                let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
+                let Some(parent_view) = consensus.validated_state_map.get(parent_view_number)
+                else {
                     error!(
                         "Couldn't find high QC parent in state map. Parent view {:?}",
                         parent_view_number

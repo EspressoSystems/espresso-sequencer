@@ -8,8 +8,10 @@ use hotshot_types::{
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        block_contents::vid_commitment, consensus_api::ConsensusApi, election::Membership,
-        node_implementation::NodeType, state::ConsensusTime,
+        block_contents::vid_commitment,
+        consensus_api::ConsensusApi,
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType},
     },
 };
 use sha2::{Digest, Sha256};

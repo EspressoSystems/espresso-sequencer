@@ -26,7 +26,10 @@ use hotshot_types::{
     error::HotShotError,
     event::EventType,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::NodeType, state::ConsensusTime, storage::Storage},
+    traits::{
+        node_implementation::{ConsensusTime, NodeType},
+        storage::Storage,
+    },
 };
 use std::sync::Arc;
 use tracing::error;
@@ -101,7 +104,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     ///
     /// # Panics
     /// If the internal consensus is in an inconsistent state.
-    pub async fn get_decided_state(&self) -> TYPES::StateType {
+    pub async fn get_decided_state(&self) -> TYPES::ValidatedState {
         self.hotshot.get_decided_state().await
     }
 

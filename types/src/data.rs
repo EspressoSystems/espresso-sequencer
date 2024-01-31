@@ -7,14 +7,13 @@ use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
     simple_vote::UpgradeProposalData,
     traits::{
-        block_contents::vid_commitment,
-        block_contents::BlockHeader,
+        block_contents::{vid_commitment, BlockHeader, TestableBlock},
         election::Membership,
-        node_implementation::NodeType,
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
-        state::{ConsensusTime, TestableBlock, TestableState},
+        states::{TestableState, ValidatedState},
         storage::StoredView,
-        BlockPayload, State,
+        BlockPayload,
     },
     vote::{Certificate, HasViewNumber},
 };
@@ -106,9 +105,10 @@ impl std::ops::Sub<u64> for ViewNumber {
     }
 }
 
-/// The `Transaction` type associated with a `State`, as a syntactic shortcut
-pub type Transaction<STATE> = <<STATE as State>::BlockPayload as BlockPayload>::Transaction;
-/// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
+/// The `Transaction` type associated with a `ValidatedState`, as a syntactic shortcut
+pub type Transaction<STATE> =
+    <<STATE as ValidatedState>::BlockPayload as BlockPayload>::Transaction;
+/// `Commitment` to the `Transaction` type associated with a `ValidatedState`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
 /// A proposal to start providing data availability for a block.
@@ -363,8 +363,8 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
     #[must_use]
-    pub fn genesis() -> Self {
-        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
+    pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
+        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis(instance_state);
         Self {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),
@@ -442,6 +442,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_proposer_id(&self) -> TYPES::SignatureKey {
         self.proposer_id.clone()
     }
+
     /// Create a leaf from information stored about a view.
     pub fn from_stored_view(stored_view: StoredView<TYPES>) -> Self {
         Self {
@@ -457,7 +458,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 
 impl<TYPES: NodeType> TestableLeaf for Leaf<TYPES>
 where
-    TYPES::StateType: TestableState,
+    TYPES::ValidatedState: TestableState,
     TYPES::BlockPayload: TestableBlock,
 {
     type NodeType = TYPES;
@@ -467,7 +468,7 @@ where
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction {
-        TYPES::StateType::create_random_transaction(None, rng, padding)
+        TYPES::ValidatedState::create_random_transaction(None, rng, padding)
     }
 }
 /// Fake the thing a genesis block points to. Needed to avoid infinite recursion

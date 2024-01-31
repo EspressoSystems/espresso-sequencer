@@ -22,9 +22,8 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        state::ConsensusTime,
     },
     utils::ViewInner,
     vote::HasViewNumber,
@@ -185,7 +184,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Ensure this view is in the view map for garbage collection, but do not overwrite if
                 // there is already a view there: the replica task may have inserted a `Leaf` view which
                 // contains strictly more information.
-                consensus.state_map.entry(view).or_insert(View {
+                consensus.validated_state_map.entry(view).or_insert(View {
                     view_inner: ViewInner::DA { payload_commitment },
                 });
 

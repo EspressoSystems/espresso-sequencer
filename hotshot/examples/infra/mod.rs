@@ -24,7 +24,10 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_testing::block_types::{TestBlockHeader, TestBlockPayload, TestTransaction};
+use hotshot_testing::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestInstanceState,
+};
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::ValidatorConfig;
@@ -33,10 +36,11 @@ use hotshot_types::{
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
     traits::{
+        block_contents::TestableBlock,
         election::Membership,
         network::CommunicationChannel,
-        node_implementation::NodeType,
-        state::{ConsensusTime, TestableBlock, TestableState},
+        node_implementation::{ConsensusTime, NodeType},
+        states::TestableState,
     },
     HotShotConfig,
 };
@@ -296,7 +300,7 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
 pub trait RunDA<
-    TYPES: NodeType,
+    TYPES: NodeType<InstanceState = TestInstanceState>,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
     VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
@@ -308,7 +312,7 @@ pub trait RunDA<
         Storage = MemoryStorage<TYPES>,
     >,
 > where
-    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
@@ -324,7 +328,7 @@ pub trait RunDA<
     /// get the anchored view
     /// Note: sequencing leaf does not have state, so does not return state
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
-        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis()
+        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis(&TestInstanceState {})
             .expect("Couldn't generate genesis block");
 
         let config = self.get_config();
@@ -519,6 +523,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -536,7 +541,7 @@ impl<
         NODE,
     > for WebServerDARun<TYPES>
 where
-    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -626,6 +631,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -643,7 +649,7 @@ impl<
         NODE,
     > for Libp2pDARun<TYPES>
 where
-    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -724,6 +730,7 @@ impl<
             Transaction = TestTransaction,
             BlockPayload = TestBlockPayload,
             BlockHeader = TestBlockHeader,
+            InstanceState = TestInstanceState,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -741,7 +748,7 @@ impl<
         NODE,
     > for CombinedDARun<TYPES>
 where
-    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -837,6 +844,7 @@ pub async fn main_entry_point<
         Transaction = TestTransaction,
         BlockPayload = TestBlockPayload,
         BlockHeader = TestBlockHeader,
+        InstanceState = TestInstanceState,
     >,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
@@ -852,7 +860,7 @@ pub async fn main_entry_point<
 >(
     args: ValidatorArgs,
 ) where
-    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
 {
@@ -907,7 +915,7 @@ pub async fn main_entry_point<
 
     for round in 0..rounds {
         for _ in 0..transactions_to_send_per_round {
-            let mut txn = <TYPES::StateType>::create_random_transaction(
+            let mut txn = <TYPES::ValidatedState>::create_random_transaction(
                 None,
                 &mut txn_rng,
                 transaction_size as u64,

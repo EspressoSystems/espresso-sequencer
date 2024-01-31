@@ -32,9 +32,11 @@ type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 /// This will contain the state of all rounds.
 #[derive(custom_debug::Debug)]
 pub struct Consensus<TYPES: NodeType> {
-    /// The phases that are currently loaded in memory
-    // TODO(https://github.com/EspressoSystems/hotshot/issues/153): Allow this to be loaded from `Storage`?
-    pub state_map: BTreeMap<TYPES::Time, View<TYPES>>,
+    /// Immutable instance-level state.
+    pub instance_state: TYPES::InstanceState,
+
+    /// The validated states that are currently loaded in memory.
+    pub validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 
     /// All the DA certs we've received for current and future views.
     /// view -> DA cert
@@ -253,7 +255,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     where
         F: FnMut(&Leaf<TYPES>) -> bool,
     {
-        let mut next_leaf = if let Some(view) = self.state_map.get(&start_from) {
+        let mut next_leaf = if let Some(view) = self.validated_state_map.get(&start_from) {
             view.get_leaf_commitment()
                 .ok_or_else(|| HotShotError::InvalidState {
                     context: format!(
@@ -292,7 +294,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Garbage collects based on state change right now, this removes from both the
-    /// `saved_payloads` and `state_map` fields of `Consensus`.
+    /// `saved_payloads` and `validated_state_map` fields of `Consensus`.
     /// # Panics
     /// On inconsistent stored entries
     #[allow(clippy::unused_async)] // async for API compatibility reasons
@@ -303,7 +305,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     ) {
         // state check
         let anchor_entry = self
-            .state_map
+            .validated_state_map
             .iter()
             .next()
             .expect("INCONSISTENT STATE: anchor leaf not in state map!");
@@ -315,13 +317,13 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         // perform gc
         self.saved_da_certs
             .retain(|view_number, _| *view_number >= old_anchor_view);
-        self.state_map
+        self.validated_state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 self.saved_leaves.remove(&leaf);
             });
-        self.state_map = self.state_map.split_off(&new_anchor_view);
+        self.validated_state_map = self.validated_state_map.split_off(&new_anchor_view);
         self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);
     }
 
@@ -333,7 +335,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     #[must_use]
     pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
         let decided_view_num = self.last_decided_view;
-        let view = self.state_map.get(&decided_view_num).unwrap();
+        let view = self.validated_state_map.get(&decided_view_num).unwrap();
         let leaf = view
             .get_leaf_commitment()
             .expect("Decided leaf not found! Consensus internally inconsistent");
@@ -342,8 +344,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
     /// Gets the validated state with the given view number, if in the state map.
     #[must_use]
-    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&TYPES::StateType> {
-        match self.state_map.get(&view_number) {
+    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&TYPES::ValidatedState> {
+        match self.validated_state_map.get(&view_number) {
             Some(view) => view.get_state(),
             None => None,
         }
@@ -355,7 +357,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// If the last decided view's state does not exist in the state map, which should never
     /// happen.
     #[must_use]
-    pub fn get_decided_state(&self) -> &TYPES::StateType {
+    pub fn get_decided_state(&self) -> &TYPES::ValidatedState {
         let decided_view_num = self.last_decided_view;
         self.get_state(decided_view_num)
             .expect("Decided state not found! Consensus internally inconsistent")

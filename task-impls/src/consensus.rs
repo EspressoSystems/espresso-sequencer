@@ -28,10 +28,10 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        state::ConsensusTime,
-        BlockPayload, State,
+        states::ValidatedState,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{Certificate, HasViewNumber},
@@ -154,7 +154,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     async fn genesis_leaf(&self) -> Option<Leaf<TYPES>> {
         let consensus = self.consensus.read().await;
 
-        let Some(genesis_view) = consensus.state_map.get(&TYPES::Time::genesis()) else {
+        let Some(genesis_view) = consensus.validated_state_map.get(&TYPES::Time::genesis()) else {
             error!("Couldn't find genesis view in state map.");
             return None;
         };
@@ -538,10 +538,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_payload: None,
                         proposer_id: sender,
                     };
-                    let state =
-                        <TYPES::StateType as State>::from_header(&proposal.data.block_header);
+                    let state = <TYPES::ValidatedState as ValidatedState>::from_header(
+                        &proposal.data.block_header,
+                    );
 
-                    consensus.state_map.insert(
+                    consensus.validated_state_map.insert(
                         view,
                         View {
                             view_inner: ViewInner::Leaf {
@@ -592,9 +593,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 };
                 let Ok(state) = parent_state.validate_and_apply_header(
-                    &proposal.data.block_header.clone(),
+                    &consensus.instance_state,
                     &parent.block_header.clone(),
-                    &view,
+                    &proposal.data.block_header.clone(),
                 ) else {
                     error!("Block header doesn't extend the proposal",);
                     return;
@@ -749,7 +750,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     HashSet::new()
                 };
 
-                consensus.state_map.insert(
+                consensus.validated_state_map.insert(
                     view,
                     View {
                         view_inner: ViewInner::Leaf {
@@ -1164,7 +1165,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         let parent_view_number = &consensus.high_qc.get_view_number();
         let mut reached_decided = false;
 
-        let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
+        let Some(parent_view) = consensus.validated_state_map.get(parent_view_number) else {
             // This should have been added by the replica?
             error!("Couldn't find parent view in state map, waiting for replica to see proposal\n parent view number: {}", **parent_view_number);
             return false;
@@ -1216,10 +1217,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
         if let Some(commit_and_metadata) = &self.payload_commitment_and_metadata {
             let block_header = TYPES::BlockHeader::new(
+                state,
+                &consensus.instance_state,
+                &parent_header,
                 commit_and_metadata.commitment,
                 commit_and_metadata.metadata.clone(),
-                &parent_header,
-                state,
             );
             let leaf = Leaf {
                 view_number: view,
