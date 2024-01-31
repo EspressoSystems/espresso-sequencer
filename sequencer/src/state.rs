@@ -12,6 +12,7 @@ use jf_primitives::merkle_tree::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -107,10 +108,12 @@ impl HotShotState for ValidatedState {
         parent_header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if let Ok(validated_state) = self.validate_proposal(parent_header, proposed_header) {
-            Ok(validated_state)
-        } else {
-            Err(BlockError::InvalidBlockHeader)
+        match self.validate_proposal(parent_header, proposed_header) {
+            Ok(validated_state) => Ok(validated_state),
+            Err(e) => {
+                debug!("Invalid Proposal: {}", e);
+                Err(BlockError::InvalidBlockHeader)
+            }
         }
     }
 }
