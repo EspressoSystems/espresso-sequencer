@@ -57,41 +57,13 @@ impl BlockPayload for Payload<u32, u32, [u8; 32]> {
             structured_payload.update_namespace_with_tx(tx);
         }
 
-        // first word of namespace table is its length
-        let namespace_table_len = structured_payload.namespaces.len();
+        structured_payload.generate_raw_payload()?;
 
-        let mut namespace_table = Vec::from(
-            TxTableEntry::try_from(namespace_table_len)
-                .ok()
-                .context(BlockBuildingSnafu)?
-                .to_bytes(),
-        );
-
-        // fill payload and namespace table
-        let mut payload = Vec::new();
-        let namespaces = structured_payload.namespaces.clone();
-        for (id, namespace) in namespaces {
-            payload.extend(namespace.tx_table_len.to_bytes());
-            payload.extend(namespace.tx_table);
-            payload.extend(namespace.tx_bodies);
-            namespace_table.extend(
-                TxTableEntry::try_from(id)
-                    .ok()
-                    .context(BlockBuildingSnafu)?
-                    .to_bytes(),
-            );
-            namespace_table.extend(
-                TxTableEntry::try_from(payload.len())
-                    .ok()
-                    .context(BlockBuildingSnafu)?
-                    .to_bytes(),
-            );
-        }
-
-        structured_payload.raw_payload = payload;
-        structured_payload.raw_namespace_table = namespace_table.clone();
-
-        Some((structured_payload, namespace_table)).context(BlockBuildingSnafu)
+        Some((
+            structured_payload.clone(),
+            structured_payload.raw_namespace_table,
+        ))
+        .context(BlockBuildingSnafu)
     }
 
     // TODO(746) from_bytes doesn't need `metadata`!
@@ -345,15 +317,15 @@ mod test {
         let test_cases = vec![
             // 1 namespace only
             vec![vec![5, 8, 8]], // 3 non-empty txs
-                                 // vec![vec![0, 8, 8]], // 1 empty tx at the beginning
-                                 // vec![vec![5, 0, 8]], // 1 empty tx in the middle
-                                 // vec![vec![5, 8, 0]], // 1 empty tx at the end
-                                 // vec![vec![5]],       // 1 nonempty tx
-                                 // vec![vec![0]],       // 1 empty tx
-                                 // // vec![],                 // zero txs
-                                 // vec![vec![1000, 1000, 1000]], // large payload
-                                 // multiple namespaces
-                                 //vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
+            vec![vec![0, 8, 8]], // 1 empty tx at the beginning
+            vec![vec![5, 0, 8]], // 1 empty tx in the middle
+            vec![vec![5, 8, 0]], // 1 empty tx at the end
+            vec![vec![5]],       // 1 nonempty tx
+            vec![vec![0]],       // 1 empty tx
+            // vec![],                 // zero txs
+            vec![vec![1000, 1000, 1000]], // large payload
+            //multiple namespaces
+            vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
         ];
         // TODO(746) future test cases
         // vec![vec![], vec![7, 9, 11], vec![10, 5, 8]], // 1 empty namespace at the beginning

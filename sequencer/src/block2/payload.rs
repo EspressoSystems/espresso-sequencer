@@ -2,12 +2,13 @@ use crate::block2::entry::TxTableEntry;
 use crate::block2::{
     get_ns_payload_range, get_ns_table_len, test_vid_factory, NamespaceProof, RangeProof,
 };
-use crate::VmId;
+use crate::{BlockBuildingSnafu, Error, VmId};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
 use jf_primitives::vid::payload_prover::PayloadProver;
 use serde::{Deserialize, Serialize};
+use snafu::OptionExt;
 use std::default::Default;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
@@ -191,6 +192,39 @@ impl Payload<u32, u32, [u8; 32]> {
             .tx_table_len
             .checked_add_mut(TxTableEntry::one())
             .unwrap(); // TODO (Philippe) error handling
+    }
+
+    pub fn generate_raw_payload(&mut self) -> Result<(), Error> {
+        // fill payload and namespace table
+        let mut payload = Vec::new();
+        let namespaces = self.namespaces.clone();
+
+        self.raw_namespace_table = Vec::from(
+            TxTableEntry::try_from(self.namespaces.len())
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
+        for (id, namespace) in namespaces {
+            payload.extend(namespace.tx_table_len.to_bytes());
+            payload.extend(namespace.tx_table);
+            payload.extend(namespace.tx_bodies);
+            self.raw_namespace_table.extend(
+                TxTableEntry::try_from(id)
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+            self.raw_namespace_table.extend(
+                TxTableEntry::try_from(payload.len())
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+        }
+
+        self.raw_payload = payload;
+        Ok(())
     }
 }
 
