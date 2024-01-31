@@ -118,11 +118,11 @@ pub trait BlockHeader:
     /// Build a header with the payload commitment, metadata, instance-level state, parent header,
     /// and parent state.
     fn new(
-        payload_commitment: VidCommitment,
-        metadata: <Self::Payload as BlockPayload>::Metadata,
+        parent_state: &Self::State,
         instance_state: &<Self::State as ValidatedState>::Instance,
         parent_header: &Self,
-        parent_state: &Self::State,
+        payload_commitment: VidCommitment,
+        metadata: <Self::Payload as BlockPayload>::Metadata,
     ) -> Self;
 
     /// Build the genesis header, payload, and metadata.

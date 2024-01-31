@@ -195,13 +195,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
-        instance_state: TYPES::InstanceState,
         metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
 
         let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
+        let instance_state = initializer.instance_state;
 
         // insert to storage
         storage
@@ -442,7 +442,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
-        instance_state: TYPES::InstanceState,
         metrics: ConsensusMetricsValue,
     ) -> Result<
         (
@@ -461,7 +460,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             memberships,
             networks,
             initializer,
-            instance_state,
             metrics,
         )
         .await?;
@@ -749,6 +747,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
 pub struct HotShotInitializer<TYPES: NodeType> {
     /// the leaf specified initialization
     inner: Leaf<TYPES>,
+
+    /// Instance-level state.
+    instance_state: TYPES::InstanceState,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
@@ -760,11 +761,15 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     ) -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
             inner: Leaf::genesis(instance_state),
+            instance_state: instance_state.clone(),
         })
     }
 
-    /// reload previous state based on most recent leaf
-    pub fn from_reload(anchor_leaf: Leaf<TYPES>) -> Self {
-        Self { inner: anchor_leaf }
+    /// reload previous state based on most recent leaf and the instance-level state.
+    pub fn from_reload(anchor_leaf: Leaf<TYPES>, instance_state: TYPES::InstanceState) -> Self {
+        Self {
+            inner: anchor_leaf,
+            instance_state,
+        }
     }
 }

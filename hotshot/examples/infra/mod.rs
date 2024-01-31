@@ -383,7 +383,6 @@ pub trait RunDA<
             memberships,
             networks_bundle,
             initializer,
-            TestInstanceState {},
             ConsensusMetricsValue::default(),
         )
         .await

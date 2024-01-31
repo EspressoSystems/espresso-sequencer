@@ -321,7 +321,6 @@ where
             memberships,
             network_bundle,
             initializer,
-            TestInstanceState {},
             ConsensusMetricsValue::default(),
         )
         .await

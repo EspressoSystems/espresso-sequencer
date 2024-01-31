@@ -594,9 +594,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
                 let Ok(state) = parent_state.validate_and_apply_header(
                     &consensus.instance_state,
-                    &proposal.data.block_header.clone(),
                     &parent.block_header.clone(),
-                    &view,
+                    &proposal.data.block_header.clone(),
                 ) else {
                     error!("Block header doesn't extend the proposal",);
                     return;
@@ -1218,11 +1217,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
         if let Some(commit_and_metadata) = &self.payload_commitment_and_metadata {
             let block_header = TYPES::BlockHeader::new(
-                commit_and_metadata.commitment,
-                commit_and_metadata.metadata.clone(),
+                state,
                 &consensus.instance_state,
                 &parent_header,
-                state,
+                commit_and_metadata.commitment,
+                commit_and_metadata.metadata.clone(),
             );
             let leaf = Leaf {
                 view_number: view,

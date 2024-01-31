@@ -10,7 +10,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt::Debug, hash::Hash};
 
 /// Instance-level state, which allows us to fetch missing validated state.
-pub trait InstanceState: Debug + Send + Sync {}
+pub trait InstanceState: Clone + Debug + Send + Sync {}
 
 /// Abstraction over the state that blocks modify
 ///
@@ -48,9 +48,8 @@ pub trait ValidatedState:
     fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
-        proposed_header: &Self::BlockHeader,
         parent_header: &Self::BlockHeader,
-        view_number: &Self::Time,
+        proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error>;
 
     /// Construct the state with the given block header.

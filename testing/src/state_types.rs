@@ -4,7 +4,6 @@ use commit::{Commitment, Committable};
 use hotshot_types::{
     data::{fake_commitment, BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime,
         states::{InstanceState, TestableState, ValidatedState},
         BlockPayload,
     },
@@ -18,7 +17,7 @@ use crate::block_types::{TestBlockHeader, TestBlockPayload};
 pub use crate::node_types::TestTypes;
 
 /// Instance-level state implementation for testing purposes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TestInstanceState {}
 
 impl InstanceState for TestInstanceState {}
@@ -28,8 +27,6 @@ impl InstanceState for TestInstanceState {}
 pub struct TestValidatedState {
     /// the block height
     block_height: u64,
-    /// the view number
-    view_number: ViewNumber,
     /// the previous state commitment
     prev_state_commitment: Commitment<Self>,
 }
@@ -38,7 +35,6 @@ impl Committable for TestValidatedState {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Test State Commit")
             .u64_field("block_height", self.block_height)
-            .u64_field("view_number", *self.view_number)
             .field("prev_state_commitment", self.prev_state_commitment)
             .finalize()
     }
@@ -52,7 +48,6 @@ impl Default for TestValidatedState {
     fn default() -> Self {
         Self {
             block_height: 0,
-            view_number: ViewNumber::genesis(),
             prev_state_commitment: fake_commitment(),
         }
     }
@@ -72,20 +67,11 @@ impl ValidatedState for TestValidatedState {
     fn validate_and_apply_header(
         &self,
         _instance: &Self::Instance,
-        _proposed_header: &Self::BlockHeader,
         _parent_header: &Self::BlockHeader,
-        view_number: &Self::Time,
+        _proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
-        if view_number == &ViewNumber::genesis() {
-            if &self.view_number != view_number {
-                return Err(BlockError::InvalidBlockHeader);
-            }
-        } else if self.view_number >= *view_number {
-            return Err(BlockError::InvalidBlockHeader);
-        }
         Ok(TestValidatedState {
             block_height: self.block_height + 1,
-            view_number: *view_number,
             prev_state_commitment: self.commit(),
         })
     }

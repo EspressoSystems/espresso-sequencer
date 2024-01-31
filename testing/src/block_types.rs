@@ -185,11 +185,11 @@ impl BlockHeader for TestBlockHeader {
     type State = TestValidatedState;
 
     fn new(
-        payload_commitment: VidCommitment,
-        _metadata: <Self::Payload as BlockPayload>::Metadata,
+        _parent_state: &Self::State,
         _instance_state: &<Self::State as ValidatedState>::Instance,
         parent_header: &Self,
-        _parent_state: &Self::State,
+        payload_commitment: VidCommitment,
+        _metadata: <Self::Payload as BlockPayload>::Metadata,
     ) -> Self {
         Self {
             block_number: parent_header.block_number + 1,
