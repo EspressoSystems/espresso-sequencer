@@ -1,4 +1,4 @@
-use crate::block2::payload::Payload;
+use crate::block2::payload::{get_table_len, NameSpaceTable, Payload};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use crate::Transaction;
 
 use super::{
     entry::TxTableEntry,
-    get_ns_table_len, get_table_len, test_vid_factory,
+    test_vid_factory,
     tx_iterator::{TxIndex, TxIterator},
     tx_payload_range, RangeProof,
 };
@@ -25,7 +25,8 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
         // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = get_ns_table_len(meta);
+        let ns_table = NameSpaceTable::from_bytes(meta);
+        let ns_table_len = ns_table.len();
 
         // First, collect the offsets of all the nss
         // (Range starts at 1 to conveniently skip the ns table prefix.)

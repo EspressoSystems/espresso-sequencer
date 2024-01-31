@@ -1,9 +1,9 @@
 use std::ops::Range;
 
-use crate::block2::payload::Payload;
+use crate::block2::payload::{get_tx_table_len, NameSpaceTable, Payload};
 use serde::{Deserialize, Serialize};
 
-use super::{get_ns_table_entry, get_ns_table_len, get_tx_table_len};
+use super::get_ns_table_entry;
 
 type NsTable = <Payload<u32, u32, [u8; 32]> as hotshot::traits::BlockPayload>::Metadata;
 
@@ -24,13 +24,14 @@ pub struct TxIterator<'a> {
 }
 
 impl<'a> TxIterator<'a> {
-    pub fn new(ns_table: &'a NsTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
+    pub fn new(ns_table_vec: &'a NsTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
+        let ns_table = NameSpaceTable::from_vec(ns_table_vec.clone());
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
-            ns_iter: 0..get_ns_table_len(ns_table),
+            ns_iter: 0..ns_table.len(),
             tx_iter: 0..0, // empty range
             block_payload,
-            ns_table,
+            ns_table: ns_table_vec, // TODO (Philippe) this is confusing
         }
     }
 }

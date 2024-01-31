@@ -61,7 +61,7 @@ impl BlockPayload for Payload<u32, u32, [u8; 32]> {
 
         Some((
             structured_payload.clone(),
-            structured_payload.raw_namespace_table,
+            structured_payload.ns_table.get_bytes(),
         ))
         .context(BlockBuildingSnafu)
     }
@@ -77,7 +77,7 @@ impl BlockPayload for Payload<u32, u32, [u8; 32]> {
             table_len: 0,
             offset: 0,
             ns_id: [0; 32],
-            raw_namespace_table: vec![],
+            ns_table: Default::default(),
             namespaces: Default::default(), // TODO (philippe) update
         }
     }
@@ -137,41 +137,6 @@ pub(super) type RangeProof =
 /// but that's still pretty crufty.
 pub type NamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
-
-// Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
-// if `table_bytes` has too few bytes at this `offset` then pad with zero.
-// Parse these bytes into a `TxTableEntry` and return.
-// Returns raw bytes, no checking for large values
-fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
-    let end = std::cmp::min(
-        offset.saturating_add(TxTableEntry::byte_len()),
-        table_bytes.len(),
-    );
-    let start = std::cmp::min(offset, end);
-    let tx_table_len_range = start..end;
-    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-    entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
-    TxTableEntry::from_bytes_array(entry_bytes)
-}
-
-// Parse the table length from the beginning of the namespace table.
-//
-// Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
-fn get_ns_table_len(ns_table_bytes: &[u8]) -> usize {
-    let left = get_table_len(ns_table_bytes, 0).try_into().unwrap_or(0);
-    let right = (ns_table_bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
-    std::cmp::min(left, right)
-}
-
-// Parse the table length from the beginning of the tx table inside `ns_bytes`.
-//
-// Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
-fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
-    std::cmp::min(
-        get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
-        (ns_bytes.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
-    )
-}
 
 // returns (ns_id, payload_offset)
 // payload_offset is not checked, could be anything

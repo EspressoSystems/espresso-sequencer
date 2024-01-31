@@ -1,7 +1,5 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::{
-    get_ns_payload_range, get_ns_table_len, test_vid_factory, NamespaceProof, RangeProof,
-};
+use crate::block2::{get_ns_payload_range, test_vid_factory, NamespaceProof, RangeProof};
 use crate::{BlockBuildingSnafu, Error, VmId};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
@@ -37,6 +35,55 @@ pub struct NamespaceInfo {
     tx_bytes_end: TxTableEntry,
     pub(crate) tx_table_len: TxTableEntry,
 }
+#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
+#[derivative(Hash, PartialEq)]
+pub struct NameSpaceTable {
+    raw_payload: Vec<u8>,
+}
+
+impl NameSpaceTable {
+    pub fn from_vec(v: Vec<u8>) -> Self {
+        Self { raw_payload: v }
+    }
+
+    pub fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            raw_payload: b.to_vec(),
+        }
+    }
+
+    pub fn get_bytes(&self) -> Vec<u8> {
+        self.raw_payload.clone()
+    }
+
+    pub fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
+        self.raw_payload.extend(
+            TxTableEntry::try_from(id)
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
+        Ok(())
+    }
+
+    pub fn add_new_entry_payload_len(&mut self, l: usize) -> Result<(), Error> {
+        self.raw_payload.extend(
+            TxTableEntry::try_from(l)
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
+        Ok(())
+    }
+    // Parse the table length from the beginning of the namespace table.
+    // Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
+    pub fn len(&self) -> usize {
+        let left = get_table_len(&self.raw_payload, 0).try_into().unwrap_or(0);
+        let right =
+            (self.raw_payload.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
+        std::cmp::min(left, right)
+    }
+}
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
@@ -61,7 +108,7 @@ pub struct Payload<
     pub raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
-    pub raw_namespace_table: Vec<u8>,
+    pub ns_table: NameSpaceTable,
 
     #[derivative(Hash = "ignore")]
     pub namespaces: HashMap<VmId, NamespaceInfo>,
@@ -82,7 +129,7 @@ impl Payload<u32, u32, [u8; 32]> {
     pub fn new() -> Self {
         Self {
             raw_payload: vec![],
-            raw_namespace_table: vec![],
+            ns_table: Default::default(),
             namespaces: HashMap::new(),
             tx_table_len_proof: Default::default(),
             table_len: Default::default(),
@@ -93,13 +140,15 @@ impl Payload<u32, u32, [u8; 32]> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        get_ns_table_len(ns_table_bytes)
+        let ns_table = NameSpaceTable::from_bytes(ns_table_bytes);
+        ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        0..get_ns_table_len(ns_table_bytes)
+        let ns_table = NameSpaceTable::from_vec(ns_table_bytes.to_vec());
+        0..ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
@@ -110,7 +159,8 @@ impl Payload<u32, u32, [u8; 32]> {
         meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
         ns_index: usize,
     ) -> Option<(Vec<u8>, NamespaceProof)> {
-        if ns_index >= get_ns_table_len(meta) {
+        let ns_table = NameSpaceTable::from_bytes(meta);
+        if ns_index >= ns_table.len() {
             return None; // error: index out of bounds
         }
 
@@ -199,33 +249,51 @@ impl Payload<u32, u32, [u8; 32]> {
         let mut payload = Vec::new();
         let namespaces = self.namespaces.clone();
 
-        self.raw_namespace_table = Vec::from(
+        self.ns_table = NameSpaceTable::from_vec(Vec::from(
             TxTableEntry::try_from(self.namespaces.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
                 .to_bytes(),
-        );
+        ));
         for (id, namespace) in namespaces {
             payload.extend(namespace.tx_table_len.to_bytes());
             payload.extend(namespace.tx_table);
             payload.extend(namespace.tx_bodies);
-            self.raw_namespace_table.extend(
-                TxTableEntry::try_from(id)
-                    .ok()
-                    .context(BlockBuildingSnafu)?
-                    .to_bytes(),
-            );
-            self.raw_namespace_table.extend(
-                TxTableEntry::try_from(payload.len())
-                    .ok()
-                    .context(BlockBuildingSnafu)?
-                    .to_bytes(),
-            );
+            self.ns_table.add_new_entry_vmid(id)?;
+            self.ns_table.add_new_entry_payload_len(payload.len())?;
         }
 
         self.raw_payload = payload;
         Ok(())
     }
+}
+
+// TODO (Philippe) functions below should disappear
+
+// Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
+// if `table_bytes` has too few bytes at this `offset` then pad with zero.
+// Parse these bytes into a `TxTableEntry` and return.
+// Returns raw bytes, no checking for large values
+pub fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
+    let end = std::cmp::min(
+        offset.saturating_add(TxTableEntry::byte_len()),
+        table_bytes.len(),
+    );
+    let start = std::cmp::min(offset, end);
+    let tx_table_len_range = start..end;
+    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+    entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
+    TxTableEntry::from_bytes_array(entry_bytes)
+}
+
+// Parse the table length from the beginning of the tx table inside `ns_bytes`.
+//
+// Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
+pub fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
+    std::cmp::min(
+        get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
+        (ns_bytes.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
+    )
 }
 
 impl Display for Payload<u32, u32, [u8; 32]> {
