@@ -1,9 +1,6 @@
 use crate::{
-    block::{
-        BlockMerkleCommitment, BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleCommitment,
-        FeeMerkleTree,
-    },
-    Error, Header, Payload,
+    block::{BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleTree},
+    Header, Payload,
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
