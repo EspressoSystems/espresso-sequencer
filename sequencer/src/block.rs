@@ -8,7 +8,11 @@ use ark_serialize::{
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::Add;
-use ethers::{abi::Address, types::U256};
+use ethers::{
+    abi::Address,
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    types::{U256, Signature},
+};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     data::VidCommitment,
@@ -198,9 +202,10 @@ pub struct Header {
     pub fee_merkle_tree_root: FeeMerkleCommitment,
     // TODO remove from `Header` when real `ValidatedState` becomes available
     pub validated_state: ValidatedState,
-    pub builder_address: Address,
-    pub builder_signature: String,
-    pub builder_fee_amount: String
+    // FIXME should probably be `FeeAccount`
+    pub builder_address: Option<Address>,
+    pub builder_signature: Option<Signature>,
+    pub builder_fee_amount: Option<FeeAmount>,
 }
 
 impl Committable for Header {
@@ -302,7 +307,9 @@ impl Header {
             }
         }
 
-        Self {
+        // Intantiate headers w/out builder_signature, signit, and add
+        // the signature before returning.
+        let header = Self {
             height,
             timestamp,
             l1_head: l1.head,
@@ -312,6 +319,26 @@ impl Header {
             fee_merkle_tree_root,
             block_merkle_tree_root,
             validated_state,
+            builder_address: None,
+            builder_signature: None,
+            builder_fee_amount: None,
+        };
+
+        // FIXME this will be input from config (somehow...)
+        let mnemonic = "test test test test test test test test test test test junk";
+        let wallet = MnemonicBuilder::<English>::default()
+            .phrase(mnemonic)
+            .build()
+            .unwrap();
+        let builder_address = wallet.address();
+        let hash =
+            ethers::utils::hash_message(serde_json::to_string(&header).unwrap().into_bytes());
+        let builder_signature = wallet.sign_hash(hash).unwrap();
+
+        Header {
+            builder_address: Some(builder_address),
+            builder_signature: Some(builder_signature),
+            ..header
         }
     }
 }
@@ -437,6 +464,9 @@ impl BlockHeader for Header {
             block_merkle_tree_root,
             fee_merkle_tree_root,
             validated_state,
+            builder_address: None,
+            builder_signature: None,
+            builder_fee_amount: None
         };
         (header, payload, transactions_root)
     }
