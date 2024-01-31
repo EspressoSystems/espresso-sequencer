@@ -23,7 +23,6 @@ use crate::{
 };
 use async_compatibility_layer::{
     art::{async_spawn, async_spawn_local},
-    async_primitives::broadcast::BroadcastSender,
     channel::UnboundedSender,
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
@@ -70,7 +69,7 @@ use std::{
     time::Duration,
 };
 use tasks::add_vid_task;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 // -- Rexports
 // External
@@ -142,11 +141,6 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Memberships used by consensus
     pub memberships: Arc<Memberships<TYPES>>,
-
-    // pub quorum_network: Arc<I::QuorumNetwork>;
-    // pub committee_network: Arc<I::CommitteeNetwork>;
-    /// Sender for [`Event`]s
-    event_sender: RwLock<Option<BroadcastSender<Event<TYPES>>>>,
 
     /// the metrics that the implementor is using.
     _metrics: Arc<ConsensusMetricsValue>,
@@ -261,7 +255,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage,
             networks: Arc::new(networks),
             memberships: Arc::new(memberships),
-            event_sender: RwLock::default(),
             _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
             output_event_stream: ChannelStream::new(),
@@ -316,13 +309,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     // TODO: remove with https://github.com/EspressoSystems/HotShot/issues/2407
     async fn send_external_event(&self, event: Event<TYPES>) {
         debug!(?event, "send_external_event");
-        let mut event_sender = self.inner.event_sender.write().await;
-        if let Some(sender) = &*event_sender {
-            if let Err(e) = sender.send_async(event).await {
-                error!(?e, "Could not send event to event_sender");
-                *event_sender = None;
-            }
-        }
+        self.inner.output_event_stream.publish(event).await;
+
     }
 
     /// Publishes a transaction asynchronously to the network
@@ -704,13 +692,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
 
     async fn send_event(&self, event: Event<TYPES>) {
         debug!(?event, "send_event");
-        let mut event_sender = self.inner.event_sender.write().await;
-        if let Some(sender) = &*event_sender {
-            if let Err(e) = sender.send_async(event).await {
-                error!(?e, "Could not send event to event_sender");
-                *event_sender = None;
-            }
-        }
+        self.inner.output_event_stream.publish(event).await;
     }
 
     fn public_key(&self) -> &TYPES::SignatureKey {
