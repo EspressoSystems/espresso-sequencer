@@ -111,7 +111,7 @@ contract FeeContractTest is Test {
     //test deposits with a less than the min amount reverts
     function test_depositMinAmount() public {
         address user = makeAddr("user");
-        uint256 amount = feeContract.MIN_DEPOSIT_AMOUNT() - 0.01 ether;
+        uint256 amount = feeContract.MIN_DEPOSIT_AMOUNT() - 0.0001 ether;
 
         vm.expectRevert(FeeContract.DepositTooSmall.selector);
 

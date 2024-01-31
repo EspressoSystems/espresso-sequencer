@@ -24,13 +24,12 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // @TODO confirm this amount with product
 
     uint256 public immutable MAX_DEPOSIT_AMOUNT = 1 ether;
-    uint256 public immutable MIN_DEPOSIT_AMOUNT = 0.1 ether;
+    uint256 public immutable MIN_DEPOSIT_AMOUNT = 0.001 ether;
 
     // === Errors ===
     //
     /// @notice error types
     error InvalidUserAddress();
-    error NonZeroDepositAmount();
     error NotEnoughDeposited();
     error DepositTooLarge();
     error DepositTooSmall();
@@ -67,9 +66,6 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Allows anyone to deposit an ETH balance for any user
     /// @dev the deposit amount is less than a specified threshold to prevent fat finger errors
     function deposit(address user) public payable {
-        if (msg.value == 0) {
-            revert NonZeroDepositAmount();
-        }
         if (msg.value < MIN_DEPOSIT_AMOUNT) {
             revert DepositTooSmall();
         }
