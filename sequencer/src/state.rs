@@ -1,7 +1,7 @@
 use crate::{
     block::{
         BlockMerkleCommitment, BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleCommitment,
-        FeeMerkleTree, ValidatedState, _validate_proposal,
+        FeeMerkleTree,
     },
     Error, Header, Payload,
 };
@@ -11,6 +11,15 @@ use hotshot_types::data::{BlockError, ViewNumber};
 use jf_primitives::merkle_tree::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
+use serde::{Deserialize, Serialize};
+
+#[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ValidatedState {
+    /// Frontier of Block Merkle Tree
+    pub block_merkle_tree: BlockMerkleTree,
+    /// Fee Merkle Tree
+    pub fee_merkle_tree: FeeMerkleTree,
+}
 
 impl Default for ValidatedState {
     fn default() -> Self {
@@ -26,11 +35,58 @@ impl Default for ValidatedState {
 }
 
 impl ValidatedState {
-    fn validate_header(&self, parent_header: &Header, proposed_header: &Header) -> Option<Header> {
-        if let Err(_) = _validate_proposal(parent_header, proposed_header) {
-            return None;
-        };
-        Some(proposed_header.clone())
+    fn validate_proposal(&self, parent: &Header, proposal: &Header) -> anyhow::Result<Self> {
+        // validate height
+        anyhow::ensure!(
+            proposal.height == parent.height + 1,
+            anyhow::anyhow!(
+                "Invalid Height Error: {}, {}",
+                parent.height,
+                proposal.height
+            )
+        );
+
+        // validate parent fee merkle tree root against state
+        let fee_merkle_tree = self.fee_merkle_tree;
+        let fee_merkle_tree_root = fee_merkle_tree.commitment();
+        anyhow::ensure!(
+            parent.fee_merkle_tree_root == fee_merkle_tree_root,
+            anyhow::anyhow!(
+                "Invalid Fee Merkle Tree Error: {}, {}",
+                parent.fee_merkle_tree_root,
+                fee_merkle_tree_root
+            )
+        );
+
+        // validate parent block merkle tree root against state
+        // `clone` to avoid unknown side-effects with other callers
+        let mut block_merkle_tree = self.block_merkle_tree.clone();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        anyhow::ensure!(
+            parent.block_merkle_tree_root == block_merkle_tree_root,
+            anyhow::anyhow!(
+                "Invalid Fee Merkle Tree Error: {}, {}",
+                parent.block_merkle_tree_root,
+                block_merkle_tree_root
+            )
+        );
+
+        // validate proposal is descendent of parent by appending to parent
+        block_merkle_tree.push(parent.commit()).unwrap();
+        let block_merkle_tree_root = block_merkle_tree.commitment();
+        anyhow::ensure!(
+            proposal.block_merkle_tree_root == block_merkle_tree_root,
+            anyhow::anyhow!(
+                "Invalid Block Merkle Tree Error: {}, {}",
+                block_merkle_tree_root,
+                proposal.block_merkle_tree_root
+            )
+        );
+
+        Ok(ValidatedState {
+            block_merkle_tree,
+            fee_merkle_tree,
+        })
     }
 }
 
@@ -51,22 +107,8 @@ impl HotShotState for ValidatedState {
         parent_header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        // validate proposed fee merkle tree root against state
-        let fee_merkle_tree = self.fee_merkle_tree;
-        if parent_header.fee_merkle_tree_root != self.fee_merkle_tree.commitment() {
-            return Err(BlockError::InvalidBlockHeader);
-        };
-        // validate proposed block merkle tree root against state
-        if parent_header.fee_merkle_tree_root != self.fee_merkle_tree.commitment() {
-            return Err(BlockError::InvalidBlockHeader);
-        };
-        // TODO update fee_merkle_tree
-        // validate that proposed header is a descendent of parent and update
-        if let Ok(block_merkle_tree) = _validate_proposal(parent_header, proposed_header) {
-            Ok(ValidatedState {
-                block_merkle_tree,
-                fee_merkle_tree,
-            })
+        if let Ok(validated_state) = self.validate_proposal(parent_header, proposed_header) {
+            Ok(validated_state)
         } else {
             Err(BlockError::InvalidBlockHeader)
         }
