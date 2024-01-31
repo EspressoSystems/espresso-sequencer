@@ -106,7 +106,6 @@ mod test_helpers {
                     0,
                     Default::default(),
                     Default::default(),
-                    None,
                 )
             }
             .boxed()
@@ -173,7 +172,6 @@ mod test_helpers {
                         0,
                         Default::default(),
                         Default::default(),
-                        None,
                     )
                 }
                 .boxed()
@@ -226,7 +224,6 @@ mod test_helpers {
                         0,
                         Default::default(),
                         Default::default(),
-                        None,
                     )
                 }
                 .boxed()
@@ -305,7 +302,7 @@ mod generic_tests {
             .status(Default::default())
             .serve(|_| {
                 async move {
-                    SequencerContext::new(handle, 0, Default::default(), Default::default(), None)
+                    SequencerContext::new(handle, 0, Default::default(), Default::default())
                 }
                 .boxed()
             })
@@ -516,7 +513,6 @@ mod test {
                         0,
                         Default::default(),
                         Default::default(),
-                        None,
                     )
                 }
                 .boxed()

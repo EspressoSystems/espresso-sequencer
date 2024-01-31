@@ -5,6 +5,7 @@ use crate::state_signature::{
 use async_std::sync::{Arc, RwLock};
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::light_client::StateVerKey;
 use jf_primitives::signatures::SignatureScheme;
 use surf_disco::Client;
@@ -42,6 +43,9 @@ pub struct SequencerContext<N: network::Type> {
 
     /// The state relay server url
     state_relay_server_client: Option<Client<ServerError>>,
+
+    /// An orchestrator to wait for before starting consensus.
+    wait_for_orchestrator: Option<Arc<OrchestratorClient>>,
 }
 
 impl<N: network::Type> SequencerContext<N> {
@@ -51,7 +55,6 @@ impl<N: network::Type> SequencerContext<N> {
         node_index: u64,
         state_key_pair: StateKeyPair,
         stake_table_comm: StakeTableCommitmentType,
-        state_relay_server_url: Option<Url>,
     ) -> Self {
         Self {
             handle,
@@ -59,8 +62,21 @@ impl<N: network::Type> SequencerContext<N> {
             state_key_pair: Arc::new(state_key_pair),
             state_signatures: Default::default(),
             stake_table_comm: Arc::new(stake_table_comm),
-            state_relay_server_client: state_relay_server_url.map(Client::new),
+            state_relay_server_client: None,
+            wait_for_orchestrator: None,
         }
+    }
+
+    /// Wait for a signal from the orchestrator before starting consensus.
+    pub fn wait_for_orchestrator(mut self, client: OrchestratorClient) -> Self {
+        self.wait_for_orchestrator = Some(Arc::new(client));
+        self
+    }
+
+    /// Connect to the given state relay server to send signed HotShot states to.
+    pub fn with_state_relay_server(mut self, url: Url) -> Self {
+        self.state_relay_server_client = Some(Client::new(url));
+        self
     }
 
     /// Return a reference to the underlying consensus handle.
@@ -118,5 +134,16 @@ impl<N: network::Type> SequencerContext<N> {
     /// Return a url to the state relay server
     pub fn get_state_relay_server_client(&self) -> &Option<Client<ServerError>> {
         &self.state_relay_server_client
+    }
+
+    /// Start participating in consensus.
+    pub async fn start_consensus(&self) {
+        if let Some(orchestrator_client) = &self.wait_for_orchestrator {
+            tracing::info!("waiting for orchestrated start");
+            orchestrator_client
+                .wait_for_all_nodes_ready(self.node_index)
+                .await;
+        }
+        self.handle.hotshot.start_consensus().await;
     }
 }
