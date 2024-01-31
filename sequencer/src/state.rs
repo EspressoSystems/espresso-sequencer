@@ -110,6 +110,7 @@ impl HotShotState for ValidatedState {
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
         match self.validate_proposal(parent_header, proposed_header) {
+            // Note that currently only block state is updated.
             Ok(validated_state) => Ok(validated_state),
             Err(e) => {
                 debug!("Invalid Proposal: {}", e);
