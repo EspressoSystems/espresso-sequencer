@@ -373,15 +373,8 @@ impl BlockHeader for Header {
     ) {
         let (payload, transactions_root) = Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
-        let block_merkle_tree =
-            BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+        let ValidatedState { fee_merkle_tree, block_merkle_tree } = ValidatedState::default();
         let block_merkle_tree_root = block_merkle_tree.commitment();
-        // Words of wisdom from @mrain:
-        // "capacity = arity^height
-        // For index space 2^160, arity 256 (2^8),
-        // you should set the height as 160/8=20"
-        let fee_merkle_tree =
-            FeeMerkleTree::from_kv_set(20, Vec::<(FeeAccount, FeeAmount)>::new()).unwrap();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
         let header = Self {

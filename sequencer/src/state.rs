@@ -23,6 +23,10 @@ impl Default for ValidatedState {
     fn default() -> Self {
         let block_merkle_tree =
             BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+
+        // Words of wisdom from @mrain: "capacity = arity^height"
+        // "For index space 2^160, arity 256 (2^8),
+        // you should set the height as 160/8=20"
         let fee_merkle_tree =
             FeeMerkleTree::from_kv_set(20, Vec::<(FeeAccount, FeeAmount)>::new()).unwrap();
         Self {
