@@ -75,3 +75,9 @@ sol-lint:
 sol-test:
     cargo build --bin diff-test --release
     forge test
+
+# Develop contracts to local blockchain for development and testing
+sol-deploy-dev:
+    forge script contracts/script/LightClient.s.sol \
+    --fork-url http://localhost:8545 --broadcast \
+    --mnemonics "test test test test test test test test test test test junk"
