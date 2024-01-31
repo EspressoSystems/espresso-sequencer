@@ -47,7 +47,9 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // sum over these tx table lens
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
+            let tx_table_len = get_table_len(&self.raw_payload, offset)
+                .try_into()
+                .unwrap_or(0);
             // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
         }
@@ -86,7 +88,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
             let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
             (
                 range_proof_start,
-                Some(TxTableEntry::from_bytes(self.payload.get(
+                Some(TxTableEntry::from_bytes(self.raw_payload.get(
                     range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
                 )?)?),
             )
@@ -96,7 +98,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         let tx_table_range_proof_end = index_usize
             .checked_add(2)?
             .checked_mul(TxTableEntry::byte_len())?;
-        let tx_table_range_end = TxTableEntry::from_bytes(self.payload.get(
+        let tx_table_range_end = TxTableEntry::from_bytes(self.raw_payload.get(
             tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
                 ..tx_table_range_proof_end,
         )?)?;
@@ -104,7 +106,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // correctness proof for the tx payload range
         let tx_table_range_proof = vid
             .payload_proof(
-                &self.payload,
+                &self.raw_payload,
                 tx_table_range_proof_start..tx_table_range_proof_end,
             )
             .ok()?;
@@ -113,14 +115,14 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
             &tx_table_range_start,
             &tx_table_range_end,
             &self.get_tx_table_len(),
-            self.payload.len(),
+            self.raw_payload.len(),
         )?;
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(
                 crate::VmId(0),
-                self.payload.get(tx_payload_range.clone())?.to_vec(),
+                self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
                 tx_table_len: self.get_tx_table_len(),
@@ -131,7 +133,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
                 tx_payload_proof: if tx_payload_range.is_empty() {
                     None
                 } else {
-                    vid.payload_proof(&self.payload, tx_payload_range).ok()
+                    vid.payload_proof(&self.raw_payload, tx_payload_range).ok()
                 },
             },
         ))
