@@ -148,9 +148,9 @@ contract FeeContractUpgradabilityTest is Test {
     address payable public proxy;
     address public admin;
     FeeContract public feeContractProxy;
-    DeployFeeContract public deployer = new DeployFeeContract();
 
     function setUp() public {
+        DeployFeeContract deployer = new DeployFeeContract();
         (proxy, admin) = deployer.run();
         feeContractProxy = FeeContract(proxy);
     }
