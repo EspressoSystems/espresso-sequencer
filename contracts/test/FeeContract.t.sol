@@ -31,6 +31,11 @@ contract FeeContractTest is Test {
 
         uint256 balanceBeforeUser = feeContract.getBalance(user);
 
+        //check that the depositEvent is emitted
+        vm.expectEmit(true, false, false, true);
+        // We emit the event we expect to see.
+        emit FeeContract.Deposit(user, amount);
+
         //deposit for the two users
         feeContract.deposit{ value: amount }(user);
 
@@ -130,29 +135,6 @@ contract FeeContractTest is Test {
         feeContract.deposit{ value: amount }(user);
     }
 
-    function testFuzz_depositEvent(address user, uint256 amount) public payable {
-        vm.assume(user != address(0));
-        amount = bound(amount, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
-
-        uint256 balanceBeforeUser = feeContract.getBalance(user);
-
-        vm.expectEmit(true, false, false, true);
-        // We emit the event we expect to see.
-        emit FeeContract.Deposit(user, amount);
-
-        //deposit for the two users
-        feeContract.deposit{ value: amount }(user);
-
-        //get the balance for that user after the deposit
-        uint256 balanceAfterUser = feeContract.getBalance(user);
-
-        //test that the users' balances have been incremented accurately
-        assertEq(balanceAfterUser, balanceBeforeUser + amount);
-
-        //test that the smart contract has the accumulative balance for both users
-        assertEq(address(feeContract).balance, amount);
-    }
-
     function testFuzz_newUserHasZeroBalance(address user) public {
         vm.assume(user != address(0));
 
@@ -181,6 +163,11 @@ contract FeeContractUpgradabilityTest is Test {
         );
 
         uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+        //check that the depositEvent is emitted
+        vm.expectEmit(true, false, false, true);
+        // We emit the event we expect to see.
+        emit FeeContract.Deposit(user, amount);
 
         //deposit for the user
         feeContractProxy.deposit{ value: amount }(user);
