@@ -11,21 +11,25 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::mocks::{
-    DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
-    MockTransaction, MockTypes,
+    MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction, MockTypes,
 };
 use crate::{
-    data_source::FileSystemDataSource, fetching::provider::NoFetching, status::UpdateStatusData,
+    availability::AvailabilityDataSource,
+    data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+    fetching::provider::NoFetching,
+    node::NodeDataSource,
+    status::{StatusDataSource, UpdateStatusData},
     SignatureKey,
 };
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
 };
+use async_trait::async_trait;
 use futures::{future::join_all, stream::StreamExt};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
-    types::SystemContextHandle,
+    types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_types::{
@@ -158,7 +162,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         )
         .await;
 
-        Self { nodes, pub_keys }
+        let network = Self { nodes, pub_keys };
+        D::setup(&network).await;
+        network
     }
 }
 
@@ -179,8 +185,12 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         self.pub_keys[i]
     }
 
+    pub fn data_source_index(&self, i: usize) -> Arc<RwLock<D>> {
+        self.nodes[i].data_source.clone()
+    }
+
     pub fn data_source(&self) -> Arc<RwLock<D>> {
-        self.nodes[0].data_source.clone()
+        self.data_source_index(0)
     }
 
     pub fn storage(&self) -> &D::Storage {
@@ -226,4 +236,41 @@ impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
         async_std::task::block_on(self.shut_down_impl())
     }
+}
+
+#[async_trait]
+pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
+    /// Backing storage for the data source.
+    ///
+    /// This can be used to connect to data sources to the same underlying data. It must be kept
+    /// alive as long as the related data sources are open.
+    type Storage: Send + Sync;
+
+    async fn create(node_id: usize) -> Self::Storage;
+    async fn connect(storage: &Self::Storage) -> Self;
+    async fn reset(storage: &Self::Storage) -> Self;
+    async fn handle_event(&mut self, event: &Event<MockTypes>);
+
+    /// Setup runs after setting up the network but before starting a test.
+    async fn setup(_network: &MockNetwork<Self>) {}
+}
+
+pub trait TestableDataSource:
+    DataSourceLifeCycle
+    + AvailabilityDataSource<MockTypes>
+    + NodeDataSource<MockTypes>
+    + StatusDataSource
+    + UpdateDataSource<MockTypes>
+    + VersionedDataSource
+{
+}
+
+impl<T> TestableDataSource for T where
+    T: DataSourceLifeCycle
+        + AvailabilityDataSource<MockTypes>
+        + NodeDataSource<MockTypes>
+        + StatusDataSource
+        + UpdateDataSource<MockTypes>
+        + VersionedDataSource
+{
 }

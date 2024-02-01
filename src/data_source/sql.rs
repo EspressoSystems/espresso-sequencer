@@ -336,7 +336,7 @@ pub mod testing {
     use super::*;
     use crate::{
         data_source::{UpdateDataSource, VersionedDataSource},
-        testing::mocks::{DataSourceLifeCycle, MockTypes},
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use hotshot::types::Event;
 

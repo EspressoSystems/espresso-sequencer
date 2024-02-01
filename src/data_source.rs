@@ -55,8 +55,8 @@ pub mod availability_tests {
         },
         node::NodeDataSource,
         testing::{
-            consensus::MockNetwork,
-            mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
+            consensus::{MockNetwork, TestableDataSource},
+            mocks::{mock_transaction, MockPayload, MockTypes},
             setup_test,
         },
         Leaf,
@@ -460,8 +460,8 @@ pub mod status_tests {
     use crate::{
         status::{MempoolQueryData, StatusDataSource},
         testing::{
-            consensus::MockNetwork,
-            mocks::{mock_transaction, DataSourceLifeCycle},
+            consensus::{DataSourceLifeCycle, MockNetwork},
+            mocks::mock_transaction,
             setup_test, sleep,
         },
     };

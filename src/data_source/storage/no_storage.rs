@@ -153,3 +153,350 @@ where
         Ok(())
     }
 }
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+pub mod testing {
+    use super::*;
+    use crate::{
+        availability::{define_api, AvailabilityDataSource, Fetch},
+        data_source::{
+            storage::sql::testing::TmpDb, FetchingDataSource, SqlDataSource, UpdateDataSource,
+        },
+        fetching::provider::{NoFetching, QueryServiceProvider},
+        metrics::PrometheusMetrics,
+        node::{NodeDataSource, UpdateNodeData},
+        status::StatusDataSource,
+        testing::{
+            consensus::{DataSourceLifeCycle, MockNetwork},
+            mocks::MockTypes,
+        },
+        Error,
+    };
+    use async_std::task::spawn;
+    use futures::stream::{BoxStream, StreamExt};
+    use hotshot::types::Event;
+    use portpicker::pick_unused_port;
+    use std::fmt::Display;
+    use tide_disco::App;
+
+    /// Either Postgres or no storage.
+    ///
+    /// In order to instantiate [`NoStorage`] for the generic tests, we need some node running a
+    /// real database that our [`NoStorage`] node can fetch from. We use this [`Storage`] enum to
+    /// represent a network where the nodes are either using [`NoStorage`] or SQL storage. We will
+    /// set node 0, the node under test, to always use [`NoStorage`].
+    ///
+    /// This gives us a strongly adversarial test of fetching, where the node under test never gets
+    /// anything from local storage, but the tests still pass.
+    pub enum Storage {
+        Sql(TmpDb),
+        NoStorage,
+    }
+
+    pub enum DataSource {
+        Sql(SqlDataSource<MockTypes, NoFetching>),
+        NoStorage {
+            data_source: FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider>,
+            fetch_from_port: u16,
+        },
+    }
+
+    #[async_trait]
+    impl DataSourceLifeCycle for DataSource {
+        type Storage = Storage;
+
+        async fn create(node_id: usize) -> Self::Storage {
+            if node_id == 0 {
+                Storage::NoStorage
+            } else {
+                Storage::Sql(TmpDb::init().await)
+            }
+        }
+
+        async fn connect(db: &Self::Storage) -> Self {
+            match db {
+                Storage::Sql(db) => {
+                    Self::Sql(db.config().connect(Default::default()).await.unwrap())
+                }
+                Storage::NoStorage => {
+                    let fetch_from_port = pick_unused_port().unwrap();
+                    let provider = QueryServiceProvider::new(
+                        format!("http://localhost:{fetch_from_port}")
+                            .parse()
+                            .unwrap(),
+                    );
+                    Self::NoStorage {
+                        data_source: FetchingDataSource::new(NoStorage, provider).await.unwrap(),
+                        fetch_from_port: pick_unused_port().unwrap(),
+                    }
+                }
+            }
+        }
+
+        async fn reset(db: &Self::Storage) -> Self {
+            match db {
+                Storage::Sql(db) => Self::Sql(
+                    db.config()
+                        .reset_schema()
+                        .connect(Default::default())
+                        .await
+                        .unwrap(),
+                ),
+                db => Self::connect(db).await,
+            }
+        }
+
+        async fn setup(network: &MockNetwork<Self>) {
+            // Spawn the web server on node 1 that node 0 will use to fetch missing data.
+            let Self::NoStorage {
+                fetch_from_port, ..
+            } = *network.data_source().read().await
+            else {
+                panic!("node 0 should always be NoStorage node");
+            };
+            let api_data_source = network.data_source_index(1);
+            let mut app = App::<_, Error>::with_state(api_data_source);
+            app.register_module("availability", define_api(&Default::default()).unwrap())
+                .unwrap();
+            spawn(app.serve(format!("0.0.0.0:{fetch_from_port}")));
+        }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
+        }
+    }
+
+    // Now a lot of boilerplate to implement all teh traits for [`DataSource`], by dispatching each
+    // method to either variant.
+    #[async_trait]
+    impl VersionedDataSource for DataSource {
+        type Error = QueryError;
+
+        async fn commit(&mut self) -> Result<(), Self::Error> {
+            match self {
+                Self::Sql(data_source) => data_source.commit().await.map_err(err_msg),
+                Self::NoStorage { data_source, .. } => data_source.commit().await.map_err(err_msg),
+            }
+        }
+
+        async fn revert(&mut self) {
+            match self {
+                Self::Sql(data_source) => data_source.revert().await,
+                Self::NoStorage { data_source, .. } => data_source.revert().await,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AvailabilityDataSource<MockTypes> for DataSource {
+        type LeafRange<R> = BoxStream<'static, Fetch<LeafQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
+        type BlockRange<R> = BoxStream<'static, Fetch<BlockQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
+        type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
+
+        async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
+        where
+            ID: Into<LeafId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_leaf(id).await,
+                Self::NoStorage { data_source, .. } => data_source.get_leaf(id).await,
+            }
+        }
+
+        async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_block(id).await,
+                Self::NoStorage { data_source, .. } => data_source.get_block(id).await,
+            }
+        }
+
+        async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_payload(id).await,
+                Self::NoStorage { data_source, .. } => data_source.get_payload(id).await,
+            }
+        }
+
+        async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_leaf_range(range).await.boxed(),
+                Self::NoStorage { data_source, .. } => {
+                    data_source.get_leaf_range(range).await.boxed()
+                }
+            }
+        }
+
+        async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_block_range(range).await.boxed(),
+                Self::NoStorage { data_source, .. } => {
+                    data_source.get_block_range(range).await.boxed()
+                }
+            }
+        }
+
+        async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_payload_range(range).await.boxed(),
+                Self::NoStorage { data_source, .. } => {
+                    data_source.get_payload_range(range).await.boxed()
+                }
+            }
+        }
+
+        /// Returns the block containing a transaction with the given `hash` and the transaction's
+        /// position in the block.
+        async fn get_block_with_transaction(
+            &self,
+            hash: TransactionHash<MockTypes>,
+        ) -> Fetch<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
+            match self {
+                Self::Sql(data_source) => data_source.get_block_with_transaction(hash).await,
+                Self::NoStorage { data_source, .. } => {
+                    data_source.get_block_with_transaction(hash).await
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl UpdateAvailabilityData<MockTypes> for DataSource {
+        type Error = QueryError;
+
+        async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> Result<(), Self::Error> {
+            match self {
+                Self::Sql(data_source) => UpdateAvailabilityData::insert_leaf(data_source, leaf)
+                    .await
+                    .map_err(err_msg),
+                Self::NoStorage { data_source, .. } => {
+                    UpdateAvailabilityData::insert_leaf(data_source, leaf)
+                        .await
+                        .map_err(err_msg)
+                }
+            }
+        }
+
+        async fn insert_block(
+            &mut self,
+            block: BlockQueryData<MockTypes>,
+        ) -> Result<(), Self::Error> {
+            match self {
+                Self::Sql(data_source) => data_source.insert_block(block).await.map_err(err_msg),
+                Self::NoStorage { data_source, .. } => {
+                    data_source.insert_block(block).await.map_err(err_msg)
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl NodeDataSource<MockTypes> for DataSource {
+        async fn block_height(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => NodeDataSource::block_height(data_source).await,
+                Self::NoStorage { data_source, .. } => {
+                    NodeDataSource::block_height(data_source).await
+                }
+            }
+        }
+
+        async fn get_proposals(
+            &self,
+            proposer: &SignatureKey<MockTypes>,
+            limit: Option<usize>,
+        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
+            match self {
+                Self::Sql(data_source) => data_source.get_proposals(proposer, limit).await,
+                Self::NoStorage { data_source, .. } => {
+                    data_source.get_proposals(proposer, limit).await
+                }
+            }
+        }
+
+        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => data_source.count_proposals(proposer).await,
+                Self::NoStorage { data_source, .. } => data_source.count_proposals(proposer).await,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl UpdateNodeData<MockTypes> for DataSource {
+        type Error = QueryError;
+
+        async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> Result<(), Self::Error> {
+            match self {
+                Self::Sql(data_source) => UpdateNodeData::insert_leaf(data_source, leaf)
+                    .await
+                    .map_err(err_msg),
+                Self::NoStorage { data_source, .. } => {
+                    UpdateNodeData::insert_leaf(data_source, leaf)
+                        .await
+                        .map_err(err_msg)
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl StatusDataSource for DataSource {
+        async fn block_height(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => StatusDataSource::block_height(data_source).await,
+                Self::NoStorage { data_source, .. } => {
+                    StatusDataSource::block_height(data_source).await
+                }
+            }
+        }
+
+        fn metrics(&self) -> &PrometheusMetrics {
+            match self {
+                Self::Sql(data_source) => data_source.metrics(),
+                Self::NoStorage { data_source, .. } => data_source.metrics(),
+            }
+        }
+    }
+
+    fn err_msg<E: Display>(err: E) -> QueryError {
+        QueryError::Error {
+            message: err.to_string(),
+        }
+    }
+}
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+    use super::testing::DataSource;
+    use crate::data_source::{availability_tests, status_tests};
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_data_source_tests!(DataSource);
+}

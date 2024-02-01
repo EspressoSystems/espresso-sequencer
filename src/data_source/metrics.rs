@@ -86,7 +86,7 @@ impl StatusDataSource for MetricsDataSource {
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::{DataSourceLifeCycle, MockTypes};
+    use crate::testing::{consensus::DataSourceLifeCycle, mocks::MockTypes};
     use hotshot::types::Event;
 
     #[async_trait]

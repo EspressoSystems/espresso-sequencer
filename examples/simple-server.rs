@@ -32,7 +32,10 @@ use hotshot_query_service::{
     fetching::provider::NoFetching,
     run_standalone_service,
     status::UpdateStatusData,
-    testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
+    testing::{
+        consensus::DataSourceLifeCycle,
+        mocks::{MockMembership, MockNodeImpl, MockTypes},
+    },
     Error,
 };
 use hotshot_types::{

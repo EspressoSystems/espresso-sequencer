@@ -10,20 +10,11 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{
-    availability::{AvailabilityDataSource, QueryablePayload},
-    data_source::{UpdateDataSource, VersionedDataSource},
-    node::NodeDataSource,
-    status::StatusDataSource,
-};
-use async_trait::async_trait;
-use hotshot::{
-    traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MemoryCommChannel, MemoryStorage},
-        NodeImplementation,
-    },
-    types::Event,
+use crate::availability::QueryablePayload;
+use hotshot::traits::{
+    election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+    implementations::{MemoryCommChannel, MemoryStorage},
+    NodeImplementation,
 };
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
@@ -105,38 +96,4 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
     ) -> (ChannelMaps<MockTypes>, Option<ChannelMaps<MockTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
-}
-
-#[async_trait]
-pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
-    /// Backing storage for the data source.
-    ///
-    /// This can be used to connect to data sources to the same underlying data. It must be kept
-    /// alive as long as the related data sources are open.
-    type Storage: Send + Sync;
-
-    async fn create(node_id: usize) -> Self::Storage;
-    async fn connect(storage: &Self::Storage) -> Self;
-    async fn reset(storage: &Self::Storage) -> Self;
-    async fn handle_event(&mut self, event: &Event<MockTypes>);
-}
-
-pub trait TestableDataSource:
-    DataSourceLifeCycle
-    + AvailabilityDataSource<MockTypes>
-    + NodeDataSource<MockTypes>
-    + StatusDataSource
-    + UpdateDataSource<MockTypes>
-    + VersionedDataSource
-{
-}
-
-impl<T> TestableDataSource for T where
-    T: DataSourceLifeCycle
-        + AvailabilityDataSource<MockTypes>
-        + NodeDataSource<MockTypes>
-        + StatusDataSource
-        + UpdateDataSource<MockTypes>
-        + VersionedDataSource
-{
 }

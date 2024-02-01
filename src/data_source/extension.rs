@@ -260,7 +260,10 @@ mod impl_testable_data_source {
     use super::*;
     use crate::{
         data_source::UpdateDataSource,
-        testing::mocks::{DataSourceLifeCycle, MockTypes, TestableDataSource},
+        testing::{
+            consensus::{DataSourceLifeCycle, TestableDataSource},
+            mocks::MockTypes,
+        },
     };
     use hotshot::types::Event;
 

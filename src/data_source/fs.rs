@@ -221,7 +221,7 @@ mod impl_testable_data_source {
     use super::*;
     use crate::{
         data_source::{UpdateDataSource, VersionedDataSource},
-        testing::mocks::{DataSourceLifeCycle, MockTypes},
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
     use hotshot::types::Event;
