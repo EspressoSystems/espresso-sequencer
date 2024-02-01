@@ -20,7 +20,7 @@ pub type StateSignatureScheme =
 pub use hotshot_stake_table::vec_based::config::FieldType;
 pub use hotshot_types::light_client::StateKeyPair;
 pub use hotshot_types::light_client::StateSignature;
-pub type LightClientState = hotshot_types::light_client::LightClientState<FieldType>;
+pub type LightClientState = hotshot_types::light_client::LightClientState;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;

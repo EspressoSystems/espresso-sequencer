@@ -15,8 +15,8 @@ use ethers::{
     types::{H256, U256},
 };
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_state_prover::circuit::PublicInput;
-use hotshot_state_prover::Proof;
+// use hotshot_state_prover::circuit::PublicInput;
+// use hotshot_state_prover::Proof;
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{light_client::LightClientState, traits::stake_table::SnapshotVersion};
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
