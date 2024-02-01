@@ -74,9 +74,9 @@ contract FeeContractTest is Test {
         assertEq(balanceAfter2, balanceBefore2 + amount2);
     }
 
-    function testFuzz_noFunction() public payable {
+    function testFuzz_noFunction(uint256 amount) public payable {
         address fcAddress = address(feeContract);
-        (bool success,) = fcAddress.call{ value: msg.value }("");
+        (bool success,) = fcAddress.call{ value: amount }("");
 
         //assert that the transaction was not successful
         assertFalse(success);
@@ -85,10 +85,10 @@ contract FeeContractTest is Test {
         assertEq(address(feeContract).balance, 0);
     }
 
-    function testFuzz_nonExistentFunction() public payable {
+    function testFuzz_nonExistentFunction(uint256 amount) public payable {
         address fcAddress = address(feeContract);
         (bool success,) =
-            fcAddress.call{ value: msg.value }(abi.encodeWithSignature("withdraw(address)", "0x"));
+            fcAddress.call{ value: amount }(abi.encodeWithSignature("withdraw(address)", "0x"));
 
         //assert that the transaction was not successful
         assertFalse(success);
@@ -212,9 +212,9 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(balanceAfter2, balanceAfter + depositAmount);
     }
 
-    function testFuzz_noFunction() public payable {
+    function testFuzz_noFunction(uint256 amount) public payable {
         address fcAddress = address(feeContractProxy);
-        (bool success,) = fcAddress.call{ value: msg.value }("");
+        (bool success,) = fcAddress.call{ value: amount }("");
 
         //assert that the transaction was not successful
         assertFalse(success);
@@ -223,10 +223,10 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(address(feeContractProxy).balance, 0);
     }
 
-    function testFuzz_nonExistentFunction() public payable {
+    function testFuzz_nonExistentFunction(uint256 amount) public payable {
         address fcAddress = address(feeContractProxy);
         (bool success,) =
-            fcAddress.call{ value: msg.value }(abi.encodeWithSignature("withdraw(address)", "0x"));
+            fcAddress.call{ value: amount }(abi.encodeWithSignature("withdraw(address)", "0x"));
 
         //assert that the transaction was not successful
         assertFalse(success);
