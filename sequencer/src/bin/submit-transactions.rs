@@ -117,6 +117,8 @@ async fn main() {
     setup_logging();
 
     let opt = Options::parse();
+    tracing::warn!("starting load generator for sequencer {}", opt.url);
+
     let (sender, mut receiver) = mpsc::channel(opt.channel_bound);
 
     let seed = opt.seed.unwrap_or_else(random_seed);
