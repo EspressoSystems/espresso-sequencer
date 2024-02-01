@@ -6,7 +6,7 @@ import { Script } from "forge-std/Script.sol";
 import { DemoBoxV2 } from "../src/upgradeDemo/DemoBoxV2.sol";
 import { DemoBoxV1 } from "../src/upgradeDemo/DemoBoxV1.sol";
 
-contract UpgradeBox is Script {
+contract UpgradeBoxScript is Script {
     /// @notice runs the upgrade
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy

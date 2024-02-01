@@ -5,7 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { DemoBoxV1 } from "../src/upgradeDemo/DemoBoxV1.sol";
 
-contract DeployBox is Script {
+contract DeployBoxScript is Script {
     /// @notice runs the deployment
     /// @return address of the proxy
     function run() external returns (address) {
