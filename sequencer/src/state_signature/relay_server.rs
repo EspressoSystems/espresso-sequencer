@@ -5,7 +5,7 @@ use clap::Args;
 use ethers::types::U256;
 use futures::FutureExt;
 use hotshot_stake_table::vec_based::config::FieldType;
-use hotshot_state_prover::state::{
+use hotshot_types::light_client::{
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
 use jf_primitives::signatures::SignatureScheme;

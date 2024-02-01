@@ -4,7 +4,7 @@ use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
-use hotshot_types::light_client::LightClientState;
+use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
     circuit::{
@@ -57,84 +57,12 @@ pub struct LightClientStateVar {
     vars: [Variable; 7],
 }
 
-/// public input
-#[derive(Clone, Debug)]
-pub struct PublicInput<F: PrimeField>(Vec<F>);
-
-impl<F: PrimeField> AsRef<[F]> for PublicInput<F> {
-    fn as_ref(&self) -> &[F] {
-        &self.0
-    }
-}
-
-impl<F: PrimeField> From<Vec<F>> for PublicInput<F> {
-    fn from(v: Vec<F>) -> Self {
-        Self(v)
-    }
-}
-
-impl<F: PrimeField> PublicInput<F> {
-    /// Return the threshold
-    #[must_use]
-    pub fn threshold(&self) -> F {
-        self.0[0]
-    }
-
-    /// Return the view number of the light client state
-    #[must_use]
-    pub fn view_number(&self) -> F {
-        self.0[1]
-    }
-
-    /// Return the block height of the light client state
-    #[must_use]
-    pub fn block_height(&self) -> F {
-        self.0[2]
-    }
-
-    /// Return the block commitment root of the light client state
-    #[must_use]
-    pub fn block_comm_root(&self) -> F {
-        self.0[3]
-    }
-
-    /// Return the fee ledger commitment of the light client state
-    #[must_use]
-    pub fn fee_ledger_comm(&self) -> F {
-        self.0[4]
-    }
-
-    /// Return the stake table commitment of the light client state
-    #[must_use]
-    pub fn stake_table_comm(&self) -> (F, F, F) {
-        (self.0[5], self.0[6], self.0[7])
-    }
-
-    /// Return the qc key commitment of the light client state
-    #[must_use]
-    pub fn qc_key_comm(&self) -> F {
-        self.0[5]
-    }
-
-    /// Return the state key commitment of the light client state
-    #[must_use]
-    pub fn state_key_comm(&self) -> F {
-        self.0[6]
-    }
-
-    /// Return the stake amount commitment of the light client state
-    #[must_use]
-    pub fn stake_amount_comm(&self) -> F {
-        self.0[7]
-    }
-}
-
 impl LightClientStateVar {
     /// # Errors
     /// if unable to create any of the public variables
     pub fn new<F: PrimeField>(
         circuit: &mut PlonkCircuit<F>,
-        state: &LightClientState<F>,
+        state: &GenericLightClientState<F>,
     ) -> Result<Self, CircuitError> {
         let view_number_f = F::from(state.view_number as u64);
         let block_height_f = F::from(state.block_height as u64);
@@ -213,9 +141,9 @@ pub(crate) fn build<F, P, STIter, BitIter, SigIter, const STAKE_TABLE_CAPACITY: 
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
     signatures: SigIter,
-    lightclient_state: &LightClientState<F>,
+    lightclient_state: &GenericLightClientState<F>,
     threshold: &U256,
-) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
+) -> Result<(PlonkCircuit<F>, GenericPublicInput<F>), PlonkError>
 where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
@@ -415,12 +343,12 @@ where
 
 /// Internal function to build a dummy circuit
 pub(crate) fn build_for_preprocessing<F, P, const STAKE_TABLE_CAPCITY: usize>(
-) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
+) -> Result<(PlonkCircuit<F>, GenericPublicInput<F>), PlonkError>
 where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
 {
-    let lightclient_state = LightClientState {
+    let lightclient_state = GenericLightClientState {
         view_number: 0,
         block_height: 0,
         block_comm_root: F::default(),
@@ -432,11 +360,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::build;
-    use crate::{
-        state::LightClientState,
-        utils::{key_pairs_for_testing, stake_table_for_testing},
-    };
+    use super::{build, GenericLightClientState};
+    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
     use ark_ed_on_bn254::EdwardsConfig as Config;
     use ethers::types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
@@ -473,7 +398,7 @@ mod tests {
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(3u32), F::from(5u32)]).unwrap()
                 [0];
 
-        let lightclient_state = LightClientState {
+        let lightclient_state = GenericLightClientState {
             view_number: 100,
             block_height: 73,
             block_comm_root,

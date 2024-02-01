@@ -14,11 +14,10 @@ hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
 portpicker = "0.1.1"
 rand = "0.8.5"
-serde_json = "1.0"
 tempfile = "3.9.0"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 ark-bls12-381 = "0.4"
 ark-ed-on-bn254 = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
@@ -42,7 +41,7 @@ itertools = { workspace = true }
 lazy_static = "1.4"
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
-serde_json = "1.0"
+serde_json = "^1.0.113"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
@@ -55,9 +54,7 @@ hotshot-stake-table = { workspace = true }
 hotshot-task = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
-
 hotshot-query-service = { workspace = true }
-
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 
 jf-primitives = { workspace = true }

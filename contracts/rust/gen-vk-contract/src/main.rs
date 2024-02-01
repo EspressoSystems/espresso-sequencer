@@ -1,5 +1,5 @@
 //! This executable generates the solidity files with hardcoded verifying keys for
-//! LightClient updates by running `cargo run --bin gen-vk-contract`.
+//! LightClient updates by running `cargo run -p gen-vk-contract --release`.
 //! Adapted from [CAPE project][https://github.com/EspressoSystems/cape/blob/main/contracts/rust/src/bin/gen-vk-libraries.rs]
 
 use std::fs::OpenOptions;
@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
-use hotshot_contract::jf_helpers::ParsedVerifyingKey;
+use hotshot_contract_adapter::jellyfish::ParsedVerifyingKey;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 

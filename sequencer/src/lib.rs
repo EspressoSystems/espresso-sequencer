@@ -9,7 +9,7 @@ pub mod state_signature;
 use context::SequencerContext;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_state_prover::state::StateKeyPair;
+use hotshot_types::light_client::StateKeyPair;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;

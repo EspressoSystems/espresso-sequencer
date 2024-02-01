@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
-use ark_ff::{Fp2, MontFp, PrimeField};
+use ark_ff::{Fp2, MontFp};
 use ark_std::{rand::Rng, str::FromStr, UniformRand};
 pub use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point};
 use ethers::{
@@ -11,13 +11,10 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
-use itertools::izip;
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
-use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 use jf_plonk::testing_apis::Challenges;
 use jf_plonk::{constants::KECCAK256_STATE_SIZE, transcript::SolidityTranscript};
-use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
-use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+use jf_primitives::pcs::prelude::Commitment;
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -468,123 +465,4 @@ impl From<ParsedChallenges> for Challenges<Fr> {
             u: u256_to_field(c.u),
         }
     }
-}
-
-// modify from <https://github.com/EspressoSystems/cape/blob/main/contracts/rust/src/plonk_verifier/helpers.rs>
-/// return list of (proof, ver_key, public_input, extra_msg, domain_size)
-#[allow(clippy::type_complexity)]
-pub fn gen_plonk_proof_for_test(
-    num_proof: usize,
-) -> Vec<(
-    Proof<Bn254>,
-    VerifyingKey<Bn254>,
-    Vec<Fr>,
-    Option<Vec<u8>>,
-    usize,
-)> {
-    // 1. Simulate universal setup
-    let rng = &mut jf_utils::test_rng();
-    let srs = {
-        let aztec_srs = crs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
-
-        UnivariateUniversalParams {
-            powers_of_g: aztec_srs.powers_of_g,
-            h: aztec_srs.h,
-            beta_h: aztec_srs.beta_h,
-            powers_of_h: vec![aztec_srs.h, aztec_srs.beta_h],
-        }
-    };
-    let open_key = open_key();
-    assert_eq!(srs.h, open_key.h);
-    assert_eq!(srs.beta_h, open_key.beta_h);
-    assert_eq!(srs.powers_of_g[0], open_key.g);
-
-    // 2. Create circuits
-    let circuits = (0..num_proof)
-        .map(|i| {
-            let m = 2 + i / 3;
-            let a0 = 1 + i % 3;
-            gen_circuit_for_test::<Fr>(m, a0)
-        })
-        .collect::<Result<Vec<_>>>()
-        .expect("Test circuits fail to create");
-    let domain_sizes: Vec<usize> = circuits
-        .iter()
-        .map(|c| c.eval_domain_size().unwrap())
-        .collect();
-
-    // 3. Preprocessing
-    let mut prove_keys = vec![];
-    let mut ver_keys = vec![];
-    for c in circuits.iter() {
-        let (pk, vk) =
-            PlonkKzgSnark::<Bn254>::preprocess(&srs, c).expect("Circuit preprocessing failed");
-        prove_keys.push(pk);
-        ver_keys.push(vk);
-    }
-
-    // 4. Proving
-    let mut proofs = vec![];
-    let mut extra_msgs = vec![];
-
-    circuits
-        .iter()
-        .zip(prove_keys.iter())
-        .enumerate()
-        .for_each(|(i, (cs, pk))| {
-            let extra_msg = Some(format!("extra message: {}", i).into_bytes());
-            proofs.push(
-                PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
-                    rng,
-                    cs,
-                    pk,
-                    extra_msg.clone(),
-                )
-                .unwrap(),
-            );
-            extra_msgs.push(extra_msg);
-        });
-
-    let public_inputs: Vec<Vec<Fr>> = circuits
-        .iter()
-        .map(|cs| cs.public_input().unwrap())
-        .collect();
-
-    izip!(proofs, ver_keys, public_inputs, extra_msgs, domain_sizes).collect()
-}
-
-// Different `m`s lead to different circuits.
-// Different `a0`s lead to different witness values.
-pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkCircuit<F>> {
-    let mut cs: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
-    // Create variables
-    let mut a = vec![];
-    for i in a0..(a0 + 4 * m) {
-        a.push(cs.create_variable(F::from(i as u64))?);
-    }
-    let b = [
-        cs.create_public_variable(F::from(m as u64 * 2))?,
-        cs.create_public_variable(F::from(a0 as u64 * 2 + m as u64 * 4 - 1))?,
-    ];
-    let c = cs.create_public_variable(
-        (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
-    )?;
-
-    // Create gates:
-    // 1. a0 + ... + a_{4*m-1} = b0 * b1
-    // 2. (b1 + a0) * (b1 - a0) = c
-    // 3. b0 = 2 * m
-    let mut acc = cs.zero();
-    a.iter().for_each(|&elem| acc = cs.add(acc, elem).unwrap());
-    let b_mul = cs.mul(b[0], b[1])?;
-    cs.enforce_equal(acc, b_mul)?;
-    let b1_plus_a0 = cs.add(b[1], a[0])?;
-    let b1_minus_a0 = cs.sub(b[1], a[0])?;
-    cs.mul_gate(b1_plus_a0, b1_minus_a0, c)?;
-    cs.enforce_constant(b[0], F::from(m as u64 * 2))?;
-
-    // Finalize the circuit.
-    cs.finalize_for_arithmetization()?;
-
-    Ok(cs)
 }

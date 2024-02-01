@@ -14,7 +14,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
-use hotshot_state_prover::state::{LightClientState, StateSignature, StateSignatureRequestBody};
+use hotshot_types::light_client::{LightClientState, StateSignature, StateSignatureRequestBody};
 use tide_disco::Url;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {

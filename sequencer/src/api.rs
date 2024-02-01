@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use data_source::SubmitDataSource;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::state::{LightClientState, StateSignature, StateSignatureRequestBody};
+use hotshot_types::light_client::{LightClientState, StateSignature, StateSignatureRequestBody};
 
 pub mod data_source;
 pub mod endpoints;

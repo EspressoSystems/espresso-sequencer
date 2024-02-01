@@ -5,8 +5,9 @@ use crate::{network, Leaf, SeqTypes};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_state_prover::state::{LightClientState, StateSignatureRequestBody, StateVerKey};
-use hotshot_state_prover::CircuitField;
+use hotshot_types::light_client::{
+    CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
+};
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};

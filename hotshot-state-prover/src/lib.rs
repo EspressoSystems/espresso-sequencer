@@ -6,11 +6,8 @@ pub mod circuit;
 pub mod service;
 /// SNARK proof generation
 pub mod snark;
-/// Light client state related structs
-pub mod state;
 /// Utilities for test
 #[cfg(test)]
-mod utils;
+mod test_utils;
 
-/// Base field
-pub type CircuitField = ark_ed_on_bn254::Fq;
+pub use snark::*;

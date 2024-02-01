@@ -1,14 +1,12 @@
 //! A light client prover service
 
-use crate::circuit::PublicInput;
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
-use crate::state::{LightClientState, StateSignaturesBundle, StateVerKey};
-use crate::CircuitField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_std::{
     sync::Arc,
     task::{sleep, spawn},
 };
+use contract_bindings::light_client::LightClient;
 use displaydoc::Display;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -18,9 +16,12 @@ use ethers::{
     signers::{LocalWallet, Wallet},
     types::{Address, U256},
 };
-use hotshot_contract::jf_helpers::ParsedPlonkProof;
-use hotshot_contract::light_client::ParsedLightClientState;
+use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
+use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::light_client::{
+    CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
+};
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use jf_plonk::errors::PlonkError;
@@ -35,6 +36,26 @@ use time::Instant;
 use url::Url;
 
 const STAKE_TABLE_CAPACITY: usize = 200;
+
+/// A wallet with local signer and connected to network via http
+pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+/// Configuration/Parameters used for hotshot state prover
+#[derive(Debug, Clone)]
+pub struct StateProverConfig {
+    /// Path to the proving key
+    pub proving_key_path: PathBuf,
+    /// Url of the state relay server (a CDN that sequencers push their Schnorr signatures to)
+    pub relay_server: Url,
+    /// Interval between light client state update
+    pub update_interval: Duration,
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    pub l1_provider: Url,
+    /// Address of LightClient contract on layer 1.
+    pub light_client_address: Address,
+    /// Transaction signing key for Ethereum
+    pub eth_signing_key: SigningKey,
+}
 
 pub async fn sync_stake_table() -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     // TODO(Chengyu): initialize a stake table
@@ -88,7 +109,7 @@ pub async fn read_contract_state(
 /// submit the latest finalized state along with a proof to the L1 LightClient contract
 pub async fn submit_state_and_proof(
     proof: Proof,
-    public_input: PublicInput<CircuitField>,
+    public_input: PublicInput,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     let contract = prepare_contract(config)?;
@@ -101,7 +122,7 @@ pub async fn submit_state_and_proof(
     // send the tx
     let (_receipt, _included_block) = sequencer_utils::contract_send(&tx)
         .await
-        .map_err(|e| ProverError::ContractError(e))?;
+        .map_err(ProverError::ContractError)?;
 
     Ok(())
 }
@@ -110,11 +131,12 @@ pub async fn sync_state(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     proving_key: &ProvingKey,
     relay_server_client: &Client<ServerError>,
+    config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
-    let old_state = read_contract_state(&config).await?;
+    let old_state = read_contract_state(config).await?;
     if old_state.block_height >= bundle.state.block_height {
         tracing::info!("No update needed.");
         return Ok(());
@@ -204,32 +226,35 @@ pub fn key_gen(path: PathBuf) {
     );
 }
 
-pub async fn run_prover_service(key_path: PathBuf, relay_server_url: Url, freq: Duration) {
+pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(sync_stake_table().await);
-    let proving_key = Arc::new(load_proving_key(key_path));
-    let relay_server_client = Arc::new(Client::<ServerError>::new(relay_server_url));
+    let proving_key = Arc::new(load_proving_key(config.proving_key_path.clone()));
+    let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
+    let config = Arc::new(config);
+    let update_interval = config.update_interval;
 
     loop {
         let st = st.clone();
         let proving_key = proving_key.clone();
         let relay_server_client = relay_server_client.clone();
+        let config = config.clone();
         spawn(async move {
-            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client).await {
+            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client, &config).await {
                 tracing::error!("Cannot sync the light client state: {}", err);
             }
         });
-        sleep(freq).await;
+        sleep(update_interval).await;
     }
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once(key_path: PathBuf, relay_server_url: Url) {
+pub async fn run_prover_once(config: StateProverConfig) {
     let st = sync_stake_table().await;
-    let proving_key = load_proving_key(key_path);
-    let relay_server_client = Client::<ServerError>::new(relay_server_url);
+    let proving_key = load_proving_key(config.proving_key_path.clone());
+    let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
 
-    sync_state(&st, &proving_key, &relay_server_client)
+    sync_state(&st, &proving_key, &relay_server_client, &config)
         .await
         .expect("Error syncing the light client state.");
 }

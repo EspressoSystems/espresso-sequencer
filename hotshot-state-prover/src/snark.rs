@@ -1,6 +1,3 @@
-use crate::circuit::PublicInput;
-use crate::state::{LightClientState, StateVerKey};
-use crate::CircuitField;
 use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_std::{
@@ -8,6 +5,7 @@ use ark_std::{
     rand::{CryptoRng, RngCore},
 };
 use ethers::types::U256;
+use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StateVerKey};
 use jf_plonk::{
     errors::PlonkError,
     proof_system::{PlonkKzgSnark, UniversalSNARK},
@@ -63,7 +61,7 @@ pub fn generate_state_update_proof<STIter, R, BitIter, SigIter, const STAKE_TABL
     signatures: SigIter,
     lightclient_state: &LightClientState,
     threshold: &U256,
-) -> Result<(Proof, PublicInput<CircuitField>), PlonkError>
+) -> Result<(Proof, PublicInput), PlonkError>
 where
     STIter: IntoIterator,
     STIter::Item: Borrow<(StateVerKey, U256)>,
@@ -92,8 +90,7 @@ mod tests {
     use super::{generate_state_update_proof, preprocess, CircuitField, UniversalSrs};
     use crate::{
         circuit::build_for_preprocessing,
-        state::LightClientState,
-        utils::{key_pairs_for_testing, stake_table_for_testing},
+        test_utils::{key_pairs_for_testing, stake_table_for_testing},
     };
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
@@ -103,7 +100,10 @@ mod tests {
         One,
     };
     use ethers::types::U256;
-    use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
+    use hotshot_types::{
+        light_client::GenericLightClientState,
+        traits::stake_table::{SnapshotVersion, StakeTableScheme},
+    };
     use jf_plonk::{
         proof_system::{PlonkKzgSnark, UniversalSNARK},
         transcript::SolidityTranscript,
@@ -198,7 +198,7 @@ mod tests {
         ])
         .unwrap()[0];
 
-        let lightclient_state = LightClientState {
+        let lightclient_state = GenericLightClientState {
             view_number: 100,
             block_height: 73,
             block_comm_root,

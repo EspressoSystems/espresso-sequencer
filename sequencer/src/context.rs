@@ -1,13 +1,9 @@
 use async_std::sync::{Arc, RwLock};
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
-use hotshot_state_prover::state::StateVerKey;
-use hotshot_state_prover::{
-    state::{
-        LightClientState, StateKeyPair, StateSignature, StateSignatureRequestBody,
-        StateSignatureScheme,
-    },
-    CircuitField,
+use hotshot_types::light_client::{
+    CircuitField, LightClientState, StateKeyPair, StateSignature, StateSignatureRequestBody,
+    StateSignatureScheme, StateVerKey,
 };
 use jf_primitives::signatures::SignatureScheme;
 use surf_disco::Client;
