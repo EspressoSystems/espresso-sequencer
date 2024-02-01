@@ -41,6 +41,7 @@ use hotshot_types::{
         metrics::Metrics,
         network::CommunicationChannel,
         node_implementation::{ChannelMaps, NodeType},
+        states::InstanceState,
     },
     HotShotConfig, ValidatorConfig,
 };
@@ -192,6 +193,10 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct NodeState {}
+impl InstanceState for NodeState {}
+
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
@@ -199,7 +204,8 @@ impl NodeType for SeqTypes {
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;
-    type StateType = ValidatedState;
+    type InstanceState = NodeState;
+    type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
 }
 

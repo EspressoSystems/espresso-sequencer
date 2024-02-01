@@ -3,7 +3,7 @@ use crate::{
     Header, Payload,
 };
 use commit::{Commitment, Committable};
-use hotshot::traits::State as HotShotState;
+use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
 use jf_primitives::merkle_tree::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
@@ -140,7 +140,7 @@ impl std::fmt::Display for ValidatedState {
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::state::TestableState for ValidatedState {
+impl hotshot_types::traits::states::TestableState for ValidatedState {
     fn create_random_transaction(
         _state: Option<&Self>,
         rng: &mut dyn rand::RngCore,

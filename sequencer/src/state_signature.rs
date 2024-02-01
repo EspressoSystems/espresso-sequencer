@@ -10,7 +10,6 @@ use hotshot_types::light_client::StateVerKey;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
-use hotshot_types::traits::state::ConsensusTime;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
