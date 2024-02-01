@@ -13,9 +13,7 @@ use hotshot::traits::{
     NodeImplementation,
 };
 use hotshot_types::{
-    data::ViewNumber,
-    signature_key::BLSPubKey,
-    traits::node_implementation::{ChannelMaps, NodeType},
+    data::ViewNumber, signature_key::BLSPubKey, traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,58 +98,22 @@ impl NodeImplementation<TestTypes> for Libp2pImpl {
     type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticLibp2pQuorumComm;
     type CommitteeNetwork = StaticLibp2pDAComm;
-
-    fn new_channel_maps(
-        start_view: <TestTypes as NodeType>::Time,
-    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
-        (
-            ChannelMaps::new(start_view),
-            Some(ChannelMaps::new(start_view)),
-        )
-    }
 }
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
     type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticMemoryQuorumComm;
     type CommitteeNetwork = StaticMemoryDAComm;
-
-    fn new_channel_maps(
-        start_view: <TestTypes as NodeType>::Time,
-    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
-        (
-            ChannelMaps::new(start_view),
-            Some(ChannelMaps::new(start_view)),
-        )
-    }
 }
 
 impl NodeImplementation<TestTypes> for WebImpl {
     type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticWebQuorumComm;
     type CommitteeNetwork = StaticWebDAComm;
-
-    fn new_channel_maps(
-        start_view: <TestTypes as NodeType>::Time,
-    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
-        (
-            ChannelMaps::new(start_view),
-            Some(ChannelMaps::new(start_view)),
-        )
-    }
 }
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
     type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticCombinedQuorumComm;
     type CommitteeNetwork = StaticCombinedDAComm;
-
-    fn new_channel_maps(
-        start_view: <TestTypes as NodeType>::Time,
-    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
-        (
-            ChannelMaps::new(start_view),
-            Some(ChannelMaps::new(start_view)),
-        )
-    }
 }

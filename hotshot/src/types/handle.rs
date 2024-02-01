@@ -255,40 +255,4 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
             .send_direct_message(MessageKind::from_consensus_message(msg), recipient)
             .await;
     }
-
-    /// Get length of the replica's receiver channel
-    #[cfg(feature = "hotshot-testing")]
-    pub async fn get_replica_receiver_channel_len(
-        &self,
-        view_number: TYPES::Time,
-    ) -> Option<usize> {
-        use async_compatibility_layer::channel::UnboundedReceiver;
-
-        let channel_map = self.hotshot.inner.channel_maps.0.vote_channel.read().await;
-        let chan = channel_map.channel_map.get(&view_number)?;
-        let receiver = chan.receiver_chan.lock().await;
-        UnboundedReceiver::len(&*receiver)
-    }
-
-    /// Get length of the next leaders's receiver channel
-    #[cfg(feature = "hotshot-testing")]
-    pub async fn get_next_leader_receiver_channel_len(
-        &self,
-        view_number: TYPES::Time,
-    ) -> Option<usize> {
-        use async_compatibility_layer::channel::UnboundedReceiver;
-
-        let channel_map = self
-            .hotshot
-            .inner
-            .channel_maps
-            .0
-            .proposal_channel
-            .read()
-            .await;
-        let chan = channel_map.channel_map.get(&view_number)?;
-
-        let receiver = chan.receiver_chan.lock().await;
-        UnboundedReceiver::len(&*receiver)
-    }
 }

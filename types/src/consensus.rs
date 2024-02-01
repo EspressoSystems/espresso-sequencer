@@ -1,9 +1,6 @@
 //! Provides the core consensus types
 
-pub use crate::{
-    traits::node_implementation::ViewQueue,
-    utils::{View, ViewInner},
-};
+pub use crate::utils::{View, ViewInner};
 use displaydoc::Display;
 
 use crate::{

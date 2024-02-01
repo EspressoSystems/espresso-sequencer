@@ -19,7 +19,7 @@ use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
-use hotshot_types::traits::node_implementation::{ChannelMaps, ConsensusTime, NodeType};
+use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
@@ -70,12 +70,6 @@ impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;
     type QuorumNetwork = QuorumNetwork;
     type CommitteeNetwork = DANetwork;
-
-    fn new_channel_maps(
-        start_view: <Test as NodeType>::Time,
-    ) -> (ChannelMaps<Test>, Option<ChannelMaps<Test>>) {
-        (ChannelMaps::new(start_view), None)
-    }
 }
 
 /// fake Eq

@@ -25,7 +25,7 @@ use async_compatibility_layer::{
     art::{async_spawn, async_spawn_local},
     channel::UnboundedSender,
 };
-use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use commit::Committable;
 use custom_debug::Debug;
@@ -37,11 +37,8 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::node_implementation::ChannelMaps;
-
 use hotshot_types::{
-    consensus::{Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
+    consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
     data::Leaf,
     error::StorageSnafu,
     event::EventType,
@@ -52,7 +49,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{ConsensusTime, NodeType, SendToTasks},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
         storage::StoredView,
@@ -147,11 +144,6 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES>>>,
-
-    /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
-    /// latter of which is only applicable for sequencing consensus.
-    #[cfg(feature = "hotshot-testing")]
-    channel_maps: (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>),
 
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
@@ -253,7 +245,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
             #[cfg(feature = "hotshot-testing")]
-            channel_maps: I::new_channel_maps(start_view),
             consensus,
             public_key,
             private_key,
@@ -316,7 +307,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     async fn send_external_event(&self, event: Event<TYPES>) {
         debug!(?event, "send_external_event");
         self.inner.output_event_stream.publish(event).await;
-
     }
 
     /// Publishes a transaction asynchronously to the network
@@ -527,41 +517,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     #[must_use]
     pub fn get_next_view_timeout(&self) -> u64 {
         self.inner.config.next_view_timeout
-    }
-
-    /// given a view number and a upgradable read lock on a channel map, inserts entry into map if it
-    /// doesn't exist, or creates entry. Then returns a clone of the entry
-    pub async fn create_or_obtain_chan_from_read(
-        view_num: TYPES::Time,
-        channel_map: RwLockUpgradableReadGuard<'_, SendToTasks<TYPES>>,
-    ) -> ViewQueue<TYPES> {
-        // check if we have the entry
-        // if we don't, insert
-        if let Some(vq) = channel_map.channel_map.get(&view_num) {
-            vq.clone()
-        } else {
-            let mut channel_map =
-                RwLockUpgradableReadGuard::<'_, SendToTasks<TYPES>>::upgrade(channel_map).await;
-            let new_view_queue = ViewQueue::default();
-            let vq = new_view_queue.clone();
-            // NOTE: the read lock is held until all other read locks are DROPPED and
-            // the read lock may be turned into a write lock.
-            // This means that the `channel_map` will not change. So we don't need
-            // to check again to see if a channel was added
-
-            channel_map.channel_map.insert(view_num, new_view_queue);
-            vq
-        }
-    }
-
-    /// given a view number and a write lock on a channel map, inserts entry into map if it
-    /// doesn't exist, or creates entry. Then returns a clone of the entry
-    #[allow(clippy::unused_async)] // async for API compatibility reasons
-    pub async fn create_or_obtain_chan_from_write(
-        view_num: TYPES::Time,
-        mut channel_map: RwLockWriteGuard<'_, SendToTasks<TYPES>>,
-    ) -> ViewQueue<TYPES> {
-        channel_map.channel_map.entry(view_num).or_default().clone()
     }
 }
 

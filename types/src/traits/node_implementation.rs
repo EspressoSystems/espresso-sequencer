@@ -13,92 +13,21 @@ use super::{
 };
 use crate::{
     data::{Leaf, TestableLeaf},
-    message::ProcessedSequencingMessage,
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
         states::InstanceState, storage::Storage, BlockPayload,
     },
 };
-use async_compatibility_layer::channel::{unbounded, UnboundedReceiver, UnboundedSender};
-use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 use commit::Committable;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fmt::Debug,
     hash::Hash,
     ops,
     ops::{Deref, Sub},
-    sync::{atomic::AtomicBool, Arc},
+    sync::Arc,
 };
-
-/// struct containing messages for a view to send to a replica or DA committee member.
-#[derive(Clone)]
-pub struct ViewQueue<TYPES: NodeType> {
-    /// to send networking events to a replica or DA committee member.
-    pub sender_chan: UnboundedSender<ProcessedSequencingMessage<TYPES>>,
-
-    /// to recv networking events for a replica or DA committee member.
-    pub receiver_chan: Arc<Mutex<UnboundedReceiver<ProcessedSequencingMessage<TYPES>>>>,
-
-    /// `true` if this queue has already received a proposal
-    pub has_received_proposal: Arc<AtomicBool>,
-}
-
-impl<TYPES: NodeType> Default for ViewQueue<TYPES> {
-    /// create new view queue
-    fn default() -> Self {
-        let (s, r) = unbounded();
-        ViewQueue {
-            sender_chan: s,
-            receiver_chan: Arc::new(Mutex::new(r)),
-            has_received_proposal: Arc::new(AtomicBool::new(false)),
-        }
-    }
-}
-
-/// metadata for sending information to the leader, replica, or DA committee member.
-pub struct SendToTasks<TYPES: NodeType> {
-    /// the current view number
-    /// this should always be in sync with `Consensus`
-    pub cur_view: TYPES::Time,
-
-    /// a map from view number to ViewQueue
-    /// one of (replica|next leader)'s' task for view i will be listening on the channel in here
-    pub channel_map: BTreeMap<TYPES::Time, ViewQueue<TYPES>>,
-}
-
-impl<TYPES: NodeType> SendToTasks<TYPES> {
-    /// create new sendtosasks
-    #[must_use]
-    pub fn new(view_num: TYPES::Time) -> Self {
-        SendToTasks {
-            cur_view: view_num,
-            channel_map: BTreeMap::default(),
-        }
-    }
-}
-
-/// Channels for sending/recv-ing proposals and votes.
-#[derive(Clone)]
-pub struct ChannelMaps<TYPES: NodeType> {
-    /// Channel for the next consensus leader or DA leader.
-    pub proposal_channel: Arc<RwLock<SendToTasks<TYPES>>>,
-
-    /// Channel for the replica or DA committee member.
-    pub vote_channel: Arc<RwLock<SendToTasks<TYPES>>>,
-}
-
-impl<TYPES: NodeType> ChannelMaps<TYPES> {
-    /// Create channels starting from a given view.
-    pub fn new(start_view: TYPES::Time) -> Self {
-        Self {
-            proposal_channel: Arc::new(RwLock::new(SendToTasks::new(start_view))),
-            vote_channel: Arc::new(RwLock::new(SendToTasks::new(start_view))),
-        }
-    }
-}
 
 /// Node implementation aggregate trait
 ///
@@ -118,12 +47,6 @@ pub trait NodeImplementation<TYPES: NodeType>:
     type QuorumNetwork: CommunicationChannel<TYPES>;
     /// Network for those in the DA committee
     type CommitteeNetwork: CommunicationChannel<TYPES>;
-
-    /// Create channels for sending/recv-ing proposals and votes for quorum and committee
-    /// exchanges, the latter of which is only applicable for sequencing consensus.
-    fn new_channel_maps(
-        start_view: TYPES::Time,
-    ) -> (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>);
 }
 
 /// extra functions required on a node implementation to be usable by hotshot-testing
