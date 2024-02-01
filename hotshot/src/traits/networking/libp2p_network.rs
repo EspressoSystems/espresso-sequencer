@@ -264,7 +264,7 @@ where
                     {
                         Ok(network) => network,
                         Err(err) => {
-                            panic!("Failed to create network: {err:?}");
+                            panic!("Failed to create libp2p network: {err:?}");
                         }
                     }
                 })
