@@ -1,5 +1,5 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::{get_ns_payload_range, test_vid_factory, NamespaceProof, RangeProof};
+use crate::block2::{test_vid_factory, NamespaceProof, RangeProof};
 use crate::{BlockBuildingSnafu, Error, VmId};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
@@ -107,6 +107,75 @@ impl NameSpaceTable {
         let right =
             (self.raw_payload.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
         std::cmp::min(left, right)
+    }
+
+    // returns (ns_id, payload_offset)
+    // payload_offset is not checked, could be anything
+    pub fn get_table_entry(&self, ns_index: usize) -> (VmId, usize) {
+        // range for ns_id bytes in ns table
+        // ensure `range` is within range for ns_table_bytes
+        let start = std::cmp::min(
+            ns_index
+                .saturating_mul(2)
+                .saturating_add(1)
+                .saturating_mul(TxTableEntry::byte_len()),
+            self.raw_payload.len(),
+        );
+        let end = std::cmp::min(
+            start.saturating_add(TxTableEntry::byte_len()),
+            self.raw_payload.len(),
+        );
+        let ns_id_range = start..end;
+
+        // parse ns_id bytes from ns table
+        // any failure -> VmId(0)
+        let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
+        ns_id_bytes[..ns_id_range.len()].copy_from_slice(&self.raw_payload[ns_id_range]);
+        let ns_id =
+            VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
+                .unwrap_or(VmId(0));
+
+        // range for ns_offset bytes in ns table
+        // ensure `range` is within range for ns_table_bytes
+        // TODO refactor range checking code
+        let start = end;
+        let end = std::cmp::min(
+            start.saturating_add(TxTableEntry::byte_len()),
+            self.raw_payload.len(),
+        );
+        let ns_offset_range = start..end;
+
+        // parse ns_offset bytes from ns table
+        // any failure -> 0 offset (?)
+        // TODO refactor parsing code?
+        let mut ns_offset_bytes = [0u8; TxTableEntry::byte_len()];
+        ns_offset_bytes[..ns_offset_range.len()]
+            .copy_from_slice(&self.raw_payload[ns_offset_range]);
+        let ns_offset = usize::try_from(
+            TxTableEntry::from_bytes(&ns_offset_bytes).unwrap_or(TxTableEntry::zero()),
+        )
+        .unwrap_or(0);
+
+        (ns_id, ns_offset)
+    }
+
+    /// Like `tx_payload_range` except for namespaces.
+    /// Returns the byte range for a ns in the block payload bytes.
+    ///
+    /// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
+    /// TODO make fns such as this methods of a new `NsTable` struct?
+    pub fn get_payload_range(
+        &self,
+        ns_index: usize,
+        block_payload_byte_len: usize,
+    ) -> Range<usize> {
+        let end = std::cmp::min(self.get_table_entry(ns_index).1, block_payload_byte_len);
+        let start = if ns_index == 0 {
+            0
+        } else {
+            std::cmp::min(self.get_table_entry(ns_index - 1).1, end)
+        };
+        start..end
     }
 }
 
@@ -222,7 +291,8 @@ impl Payload<u32, u32, [u8; 32]> {
             return None; // error: index out of bounds
         }
 
-        let ns_payload_range = get_ns_payload_range(meta, ns_index, self.raw_payload.len());
+        let ns_table = NameSpaceTable::from_bytes(meta);
+        let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         let vid = test_vid_factory(); // TODO temporary VID construction
 
@@ -336,4 +406,25 @@ impl Committable for Payload<u32, u32, [u8; 32]> {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }
+}
+
+// TODO currently unused but contains code that might get re-used in the near future.
+fn _get_tx_table_entry(
+    ns_offset: usize,
+    block_payload: &Payload<u32, u32, [u8; 32]>,
+    block_payload_len: usize,
+    tx_index: usize,
+) -> TxTableEntry {
+    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
+
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        block_payload_len,
+    );
+    // todo: clamp offsets
+    let tx_id_range = start..end;
+    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
+    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.raw_payload[tx_id_range]);
+
+    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
 }

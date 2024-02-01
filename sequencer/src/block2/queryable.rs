@@ -57,7 +57,8 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
     }
 
     fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
-        TxIterator::new(meta, self)
+        let ns_table = NameSpaceTable::from_bytes(meta);
+        TxIterator::new(ns_table.clone(), self)
     }
 
     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010

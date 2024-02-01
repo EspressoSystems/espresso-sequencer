@@ -3,10 +3,6 @@ use std::ops::Range;
 use crate::block2::payload::{NameSpaceTable, Payload, TxTable};
 use serde::{Deserialize, Serialize};
 
-use super::get_ns_table_entry;
-
-type NsTable = <Payload<u32, u32, [u8; 32]> as hotshot::traits::BlockPayload>::Metadata;
-
 /// TODO do we really need `PartialOrd`, `Ord` here?
 /// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -20,18 +16,17 @@ pub struct TxIterator<'a> {
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a Payload<u32, u32, [u8; 32]>,
-    ns_table: &'a NsTable,
+    ns_table: NameSpaceTable,
 }
 
 impl<'a> TxIterator<'a> {
-    pub fn new(ns_table_vec: &'a NsTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
-        let ns_table = NameSpaceTable::from_vec(ns_table_vec.clone());
+    pub fn new(ns_table: NameSpaceTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..ns_table.len(),
             tx_iter: 0..0, // empty range
             block_payload,
-            ns_table: ns_table_vec, // TODO (Philippe) this is confusing
+            ns_table,
         }
     }
 }
@@ -54,9 +49,9 @@ impl<'a> Iterator for TxIterator<'a> {
                 let start = if self.ns_idx == 0 {
                     0
                 } else {
-                    get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
+                    self.ns_table.get_table_entry(self.ns_idx - 1).1
                 };
-                let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
+                let end = self.ns_table.get_table_entry(self.ns_idx).1;
 
                 // TODO refactor range-checking code
                 let end = std::cmp::min(end, payload_len);
