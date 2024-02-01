@@ -1,6 +1,7 @@
 use std::ops::Range;
 
-use crate::block2::payload::{NameSpaceTable, Payload, TxTable};
+use crate::block2::payload::{NameSpaceTable, Payload};
+use crate::block2::tables::TxTable;
 use serde::{Deserialize, Serialize};
 
 /// TODO do we really need `PartialOrd`, `Ord` here?

@@ -19,7 +19,9 @@ use self::entry::TxTableEntry;
 pub mod entry;
 pub mod payload;
 pub mod queryable;
+mod tables;
 pub mod tx_iterator;
+
 use payload::Payload;
 
 impl BlockPayload for Payload<u32, u32, [u8; 32]> {

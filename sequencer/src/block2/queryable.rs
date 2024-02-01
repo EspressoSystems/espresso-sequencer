@@ -1,4 +1,5 @@
-use crate::block2::payload::{NameSpaceTable, Payload, Table, TxTable};
+use crate::block2::payload::{NameSpaceTable, Payload};
+use crate::block2::tables::{Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
