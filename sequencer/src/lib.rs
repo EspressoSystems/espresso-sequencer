@@ -284,21 +284,17 @@ pub async fn init_node(
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
-    let mut config = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
-            config
+            (config, false)
         }
         None => {
             tracing::info!("loading network config from orchestrator");
             let config = orchestrator_client.get_config(public_ip.to_string()).await;
             tracing::info!("loaded config, we are node {}", config.node_index);
             persistence.save_config(&config).await?;
-            tracing::info!("waiting for orchestrated start");
-            orchestrator_client
-                .wait_for_all_nodes_ready(config.node_index)
-                .await;
-            config
+            (config, true)
         }
     };
     let node_index = config.node_index;
@@ -344,17 +340,18 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    Ok(SequencerContext::new(
-        init_hotshot(
-            pub_keys.clone(),
-            known_nodes_with_stake.clone(),
-            node_index as usize,
-            priv_key,
-            networks,
-            config.config,
-            metrics,
-        )
-        .await,
+    let hotshot = init_hotshot(
+        pub_keys.clone(),
+        known_nodes_with_stake.clone(),
+        node_index as usize,
+        priv_key,
+        networks,
+        config.config,
+        metrics,
+    )
+    .await;
+    let mut ctx = SequencerContext::new(
+        hotshot,
         node_index,
         state_key_pair,
         static_stake_table_commitment(
@@ -362,8 +359,12 @@ pub async fn init_node(
             &state_ver_keys,
             STAKE_TABLE_CAPACITY,
         ),
-        Some(network_params.state_relay_server_url),
-    ))
+    )
+    .with_state_relay_server(network_params.state_relay_server_url);
+    if wait_for_orchestrator {
+        ctx = ctx.wait_for_orchestrator(orchestrator_client);
+    }
+    Ok(ctx)
 }
 
 #[cfg(any(test, feature = "testing"))]
