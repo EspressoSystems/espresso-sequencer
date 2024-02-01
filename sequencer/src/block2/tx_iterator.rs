@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::block2::payload::{get_tx_table_len, NameSpaceTable, Payload};
+use crate::block2::payload::{NameSpaceTable, Payload, TxTable};
 use serde::{Deserialize, Serialize};
 
 use super::get_ns_table_entry;
@@ -62,7 +62,8 @@ impl<'a> Iterator for TxIterator<'a> {
                 let end = std::cmp::min(end, payload_len);
                 let start = std::cmp::min(start, end);
 
-                let tx_table_len = get_tx_table_len(&self.block_payload.raw_payload[start..end]);
+                let tx_table = TxTable::from_bytes(&self.block_payload.raw_payload[start..end]);
+                let tx_table_len = tx_table.len();
 
                 self.tx_iter = 0..tx_table_len;
                 if let Some(tx_idx) = self.tx_iter.next() {

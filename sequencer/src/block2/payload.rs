@@ -41,6 +41,30 @@ pub struct NameSpaceTable {
     raw_payload: Vec<u8>,
 }
 
+pub trait Table {
+    // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
+    // if `table_bytes` has too few bytes at this `offset` then pad with zero.
+    // Parse these bytes into a `TxTableEntry` and return.
+    // Returns raw bytes, no checking for large values
+    fn get_table_len(&self, offset: usize) -> TxTableEntry;
+}
+
+impl Table for NameSpaceTable {
+    // TODO (Philippe) avoid code duplication with similar function in TxTable?
+    fn get_table_len(&self, offset: usize) -> TxTableEntry {
+        let end = std::cmp::min(
+            offset.saturating_add(TxTableEntry::byte_len()),
+            self.raw_payload.len(),
+        );
+        let start = std::cmp::min(offset, end);
+        let tx_table_len_range = start..end;
+        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+        entry_bytes[..tx_table_len_range.len()]
+            .copy_from_slice(&self.raw_payload[tx_table_len_range]);
+        TxTableEntry::from_bytes_array(entry_bytes)
+    }
+}
+
 impl NameSpaceTable {
     pub fn from_vec(v: Vec<u8>) -> Self {
         Self { raw_payload: v }
@@ -75,13 +99,47 @@ impl NameSpaceTable {
         );
         Ok(())
     }
+
     // Parse the table length from the beginning of the namespace table.
     // Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
     pub fn len(&self) -> usize {
-        let left = get_table_len(&self.raw_payload, 0).try_into().unwrap_or(0);
+        let left = self.get_table_len(0).try_into().unwrap_or(0);
         let right =
             (self.raw_payload.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
         std::cmp::min(left, right)
+    }
+}
+
+pub struct TxTable {
+    raw_payload: Vec<u8>,
+}
+
+impl Table for TxTable {
+    fn get_table_len(&self, offset: usize) -> TxTableEntry {
+        let end = std::cmp::min(
+            offset.saturating_add(TxTableEntry::byte_len()),
+            self.raw_payload.len(),
+        );
+        let start = std::cmp::min(offset, end);
+        let tx_table_len_range = start..end;
+        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+        entry_bytes[..tx_table_len_range.len()]
+            .copy_from_slice(&self.raw_payload[tx_table_len_range]);
+        TxTableEntry::from_bytes_array(entry_bytes)
+    }
+}
+impl TxTable {
+    pub fn len(self) -> usize {
+        std::cmp::min(
+            self.get_table_len(0).try_into().unwrap_or(0),
+            (self.raw_payload.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
+        )
+    }
+
+    pub fn from_bytes(arr: &[u8]) -> Self {
+        Self {
+            raw_payload: arr.to_vec(),
+        }
     }
 }
 
@@ -266,34 +324,6 @@ impl Payload<u32, u32, [u8; 32]> {
         self.raw_payload = payload;
         Ok(())
     }
-}
-
-// TODO (Philippe) functions below should disappear
-
-// Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
-// if `table_bytes` has too few bytes at this `offset` then pad with zero.
-// Parse these bytes into a `TxTableEntry` and return.
-// Returns raw bytes, no checking for large values
-pub fn get_table_len(table_bytes: &[u8], offset: usize) -> TxTableEntry {
-    let end = std::cmp::min(
-        offset.saturating_add(TxTableEntry::byte_len()),
-        table_bytes.len(),
-    );
-    let start = std::cmp::min(offset, end);
-    let tx_table_len_range = start..end;
-    let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-    entry_bytes[..tx_table_len_range.len()].copy_from_slice(&table_bytes[tx_table_len_range]);
-    TxTableEntry::from_bytes_array(entry_bytes)
-}
-
-// Parse the table length from the beginning of the tx table inside `ns_bytes`.
-//
-// Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
-pub fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
-    std::cmp::min(
-        get_table_len(ns_bytes, 0).try_into().unwrap_or(0),
-        (ns_bytes.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
-    )
 }
 
 impl Display for Payload<u32, u32, [u8; 32]> {

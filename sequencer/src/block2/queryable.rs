@@ -1,4 +1,4 @@
-use crate::block2::payload::{get_table_len, NameSpaceTable, Payload};
+use crate::block2::payload::{NameSpaceTable, Payload, Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
@@ -48,9 +48,8 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // sum over these tx table lens
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = get_table_len(&self.raw_payload, offset)
-                .try_into()
-                .unwrap_or(0);
+            let tx_table = TxTable::from_bytes(&self.raw_payload);
+            let tx_table_len = tx_table.get_table_len(offset).try_into().unwrap_or(0);
             // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
         }
