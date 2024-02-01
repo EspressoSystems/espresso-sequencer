@@ -12,6 +12,27 @@ use std::marker::PhantomData;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
+use trait_set::trait_set;
+
+trait_set! {
+
+    pub trait TableLenTraits = CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync;
+
+    pub trait OffsetTraits = CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync;
+
+    pub trait NsIdTraits =CanonicalSerialize + CanonicalDeserialize + Default + std::marker::Sync;
+}
+
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
 // TODO (Philippe) make it private?
@@ -38,14 +59,7 @@ pub struct NamespaceInfo {
 }
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
-pub struct NameSpaceTable<
-    TableLen: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
-> {
+pub struct NameSpaceTable<TableLen: TableLenTraits> {
     pub(crate) raw_payload: Vec<u8>,
     pub phantom: PhantomData<TableLen>,
 }
@@ -53,21 +67,7 @@ pub struct NameSpaceTable<
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct Payload<
-    TableLen: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
-    Offset: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
-    NsId: CanonicalSerialize + CanonicalDeserialize + Default + std::marker::Sync,
-> {
+pub struct Payload<TableLen: TableLenTraits, Offset: OffsetTraits, NsId: NsIdTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     #[serde(skip)]
     pub raw_payload: Vec<u8>,

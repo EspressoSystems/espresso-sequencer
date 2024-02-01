@@ -77,3 +77,4 @@ url = "2.3"
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
+trait-set = "0.3.0"

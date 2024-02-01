@@ -1,21 +1,12 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::{NameSpaceTable, Payload};
+use crate::block2::payload::{NameSpaceTable, Payload, TableLenTraits};
 use crate::{BlockBuildingSnafu, Error, VmId};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use snafu::OptionExt;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ops::Range;
 
-pub trait Table<
-    TableLen: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
->
-{
+pub trait Table<TableLen: TableLenTraits> {
     // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
     // if `table_bytes` has too few bytes at this `offset` then pad with zero.
     // Parse these bytes into a `TxTableEntry` and return.
@@ -29,15 +20,7 @@ pub trait Table<
     }
 }
 
-impl<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > Table<TableLen> for NameSpaceTable<TableLen>
-{
+impl<TableLen: TableLenTraits> Table<TableLen> for NameSpaceTable<TableLen> {
     // TODO (Philippe) avoid code duplication with similar function in TxTable?
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
@@ -57,15 +40,7 @@ impl<
     }
 }
 
-impl<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > NameSpaceTable<TableLen>
-{
+impl<TableLen: TableLenTraits> NameSpaceTable<TableLen> {
     pub fn from_vec(v: Vec<u8>) -> Self {
         Self {
             raw_payload: v,
@@ -182,31 +157,12 @@ impl<
     }
 }
 
-pub struct TxTable<
-    TableLen: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
-> {
+pub struct TxTable<TableLen: TableLenTraits> {
     raw_payload: Vec<u8>,
     phantom: PhantomData<TableLen>,
 }
 
-impl<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > Table<TableLen> for TxTable<TableLen>
-{
-    fn get_payload(&self) -> Vec<u8> {
-        self.raw_payload.clone()
-    }
-
+impl<TableLen: TableLenTraits> Table<TableLen> for TxTable<TableLen> {
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
@@ -219,16 +175,12 @@ impl<
             .copy_from_slice(&self.raw_payload[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
     }
+
+    fn get_payload(&self) -> Vec<u8> {
+        self.raw_payload.clone()
+    }
 }
-impl<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > TxTable<TableLen>
-{
+impl<TableLen: TableLenTraits> TxTable<TableLen> {
     #[cfg(test)]
     pub fn from_entries(entries: &[usize]) -> Self {
         let tx_table_byte_len = entries.len() + 1;

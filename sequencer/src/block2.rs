@@ -141,7 +141,7 @@ pub type NamespaceProof =
 #[cfg(test)]
 mod test {
     use super::{queryable, test_vid_factory, Transaction};
-    use crate::block2::payload::Payload;
+    use crate::block2::payload::{Payload, TableLenTraits};
     use crate::block2::tables::{Table, TxTable};
 
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -162,6 +162,7 @@ mod test {
 
     #[test]
     fn basic_correctness() {
+        // TODO Philippe parametrize with TableLen
         // play with this
         let test_cases = vec![
             // 1 namespace only
@@ -442,14 +443,7 @@ mod test {
         check_malformed_payloads::<u32>();
         // check_malformed_payloads::<u64>(); TODO Philippe this test is failing
     }
-    fn check_malformed_payloads<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    >() {
+    fn check_malformed_payloads<TableLen: TableLenTraits>() {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
@@ -584,27 +578,12 @@ mod test {
             .is_none());
     }
 
-    struct TestCase<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > {
+    struct TestCase<TableLen: TableLenTraits> {
         payload: Vec<u8>,
         num_txs: usize,
         phantomdata: PhantomData<TableLen>,
     }
-    impl<
-            TableLen: CanonicalSerialize
-                + CanonicalDeserialize
-                + TryFrom<usize>
-                + TryInto<usize>
-                + Default
-                + std::marker::Sync,
-        > TestCase<TableLen>
-    {
+    impl<TableLen: TableLenTraits> TestCase<TableLen> {
         /// Return a well-formed random block whose tx table is derived from `lengths`.
         #[allow(dead_code)]
         fn from_lengths<R: RngCore>(lengths: &[usize], rng: &mut R) -> Self {
@@ -733,22 +712,12 @@ mod test {
 
     mod helpers {
         use crate::block2::entry::TxTableEntry;
-        use crate::block2::payload::NameSpaceTable;
+        use crate::block2::payload::{NameSpaceTable, TableLenTraits};
         use crate::block2::tables::{Table, TxTable};
         use crate::VmId;
-        use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
         use rand::RngCore;
 
-        pub fn tx_table_byte_len<
-            TableLen: CanonicalSerialize
-                + CanonicalDeserialize
-                + TryFrom<usize>
-                + TryInto<usize>
-                + Default
-                + std::marker::Sync,
-        >(
-            entries: &[usize],
-        ) -> usize {
+        pub fn tx_table_byte_len<TableLen: TableLenTraits>(entries: &[usize]) -> usize {
             (entries.len() + 1) * TxTable::<TableLen>::byte_len()
         }
 
@@ -801,14 +770,7 @@ mod test {
             result
         }
 
-        pub fn ns_table_iter<
-            TableLen: CanonicalSerialize
-                + CanonicalDeserialize
-                + TryFrom<usize>
-                + TryInto<usize>
-                + Default
-                + std::marker::Sync,
-        >(
+        pub fn ns_table_iter<TableLen: TableLenTraits>(
             ns_table_bytes: &[u8],
         ) -> impl Iterator<Item = (VmId, TxTableEntry)> + '_ {
             ns_table_bytes[NameSpaceTable::<TableLen>::byte_len()..] // first few bytes is the table lengh, skip that
