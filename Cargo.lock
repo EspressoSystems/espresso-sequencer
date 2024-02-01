@@ -3550,7 +3550,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "include_dir",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "native-tls",
  "portpicker",
  "postgres-native-tls",
@@ -3781,7 +3781,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-types",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "jf-plonk",
  "jf-primitives",
  "jf-relation",
@@ -4248,9 +4248,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
@@ -7354,7 +7354,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-web-server",
  "include_dir",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "jf-primitives",
  "jf-utils",
  "lazy_static",
