@@ -233,11 +233,17 @@ contract FeeContractUpgradabilityTest is Test {
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 
-    function testFailUpgradeToWithWrongAdmin() public {
+    function testUpgradeToWithWrongAdmin() public {
         FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
         //start the upgrade with another address which isn't the admin
-        vm.prank(makeAddr("otherUser"));
+        address otherUser = makeAddr("otherUser");
+        vm.prank(otherUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                OwnableUpgradeable.OwnableUnauthorizedAccount.selector, otherUser
+            )
+        );
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 }
