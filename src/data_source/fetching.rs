@@ -107,7 +107,7 @@ where
         delay: Option<Duration>,
     ) -> anyhow::Result<Self> {
         let mut ds = Self {
-            fetcher: Arc::new(Fetcher::new(storage, provider, delay).await),
+            fetcher: Arc::new(Fetcher::new(storage, provider, delay).await?),
             metrics: Default::default(),
         };
 
@@ -199,7 +199,7 @@ where
     P: Send + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        NodeDataSource::block_height(&*self.storage().await).await
+        NodeDataSource::block_height(self).await
     }
 
     fn metrics(&self) -> &PrometheusMetrics {
@@ -302,7 +302,7 @@ where
     P: Send + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        self.storage().await.block_height().await
+        Ok(self.fetcher.storage.read().await.height as usize)
     }
 
     async fn get_proposals(
@@ -416,14 +416,7 @@ where
     Types: NodeType,
     S: NodeDataSource<Types>,
 {
-    async fn new(storage: S, provider: P, retry_delay: Option<Duration>) -> Self {
-        // Get the height from storage if possible. If not, it's fine: we'll update this as soon as
-        // we see a new block or leaf anyways.
-        let height = storage.block_height().await.unwrap_or_else(|err| {
-            tracing::error!("unable to load block height, defaulting to 0: {err}");
-            0
-        }) as u64;
-
+    async fn new(storage: S, provider: P, retry_delay: Option<Duration>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
         if let Some(delay) = retry_delay {
@@ -431,17 +424,17 @@ where
             leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
         }
 
-        Self {
+        Ok(Self {
             storage: RwLock::new(NotifyStorage {
+                height: storage.block_height().await? as u64,
                 storage,
-                height,
                 block_notifier: Notifier::new(),
                 leaf_notifier: Notifier::new(),
             }),
             provider: Arc::new(provider),
             payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
-        }
+        })
     }
 }
 
