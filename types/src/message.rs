@@ -132,15 +132,6 @@ impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
     }
 }
 
-/// Internal triggers sent by consensus messages.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[serde(bound(deserialize = ""))]
-pub enum InternalTrigger<TYPES: NodeType> {
-    // May add other triggers if necessary.
-    /// Internal timeout at the specified view number.
-    Timeout(TYPES::Time),
-}
-
 /// A processed consensus message for both validating and sequencing consensus.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(bound(deserialize = ""))]
@@ -149,9 +140,6 @@ pub enum ProcessedGeneralConsensusMessage<TYPES: NodeType> {
     Proposal(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
     Vote(QuorumVote<TYPES>, TYPES::SignatureKey),
-    /// Internal ONLY message indicating a view interrupt.
-    #[serde(skip)]
-    InternalTrigger(InternalTrigger<TYPES>),
 }
 
 impl<TYPES: NodeType> From<ProcessedGeneralConsensusMessage<TYPES>>
@@ -163,9 +151,6 @@ impl<TYPES: NodeType> From<ProcessedGeneralConsensusMessage<TYPES>>
                 GeneralConsensusMessage::Proposal(p)
             }
             ProcessedGeneralConsensusMessage::Vote(v, _) => GeneralConsensusMessage::Vote(v),
-            ProcessedGeneralConsensusMessage::InternalTrigger(a) => {
-                GeneralConsensusMessage::InternalTrigger(a)
-            }
         }
     }
 }
@@ -180,9 +165,6 @@ impl<TYPES: NodeType> ProcessedGeneralConsensusMessage<TYPES> {
                 ProcessedGeneralConsensusMessage::Proposal(p, sender)
             }
             GeneralConsensusMessage::Vote(v) => ProcessedGeneralConsensusMessage::Vote(v, sender),
-            GeneralConsensusMessage::InternalTrigger(a) => {
-                ProcessedGeneralConsensusMessage::InternalTrigger(a)
-            }
             // ED NOTE These are deprecated
             GeneralConsensusMessage::TimeoutVote(_) => unimplemented!(),
             GeneralConsensusMessage::ViewSyncPreCommitVote(_) => unimplemented!(),
@@ -313,10 +295,6 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
 
     /// Message with an upgrade vote
     UpgradeVote(UpgradeVote<TYPES>),
-
-    /// Internal ONLY message indicating a view interrupt.
-    #[serde(skip)]
-    InternalTrigger(InternalTrigger<TYPES>),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -360,10 +338,6 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                         p.data.get_view_number()
                     }
                     GeneralConsensusMessage::Vote(vote_message) => vote_message.get_view_number(),
-                    GeneralConsensusMessage::InternalTrigger(trigger) => match trigger {
-                        InternalTrigger::Timeout(time) => *time,
-                    },
-
                     GeneralConsensusMessage::TimeoutVote(message) => message.get_view_number(),
                     GeneralConsensusMessage::ViewSyncPreCommitVote(message) => {
                         message.get_view_number()
@@ -419,7 +393,6 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                 GeneralConsensusMessage::Vote(_) | GeneralConsensusMessage::TimeoutVote(_) => {
                     MessagePurpose::Vote
                 }
-                GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
                 GeneralConsensusMessage::ViewSyncPreCommitVote(_)
                 | GeneralConsensusMessage::ViewSyncCommitVote(_)
                 | GeneralConsensusMessage::ViewSyncFinalizeVote(_) => MessagePurpose::ViewSyncVote,

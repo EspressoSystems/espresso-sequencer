@@ -243,41 +243,6 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
     }
 }
 
-/// A state change encoded in a leaf.
-///
-/// [`DeltasType`] represents a [block](NodeType::BlockPayload), but it may not contain the block in
-/// full. It is guaranteed to contain, at least, a cryptographic commitment to the block, and it
-/// provides an interface for resolving the commitment to a full block if the full block is
-/// available.
-pub trait DeltasType<PAYLOAD: BlockPayload>:
-    Clone + Debug + for<'a> Deserialize<'a> + PartialEq + Eq + std::hash::Hash + Send + Serialize + Sync
-{
-    /// Errors reported by this type.
-    type Error: std::error::Error;
-
-    /// Get a cryptographic commitment to the block represented by this delta.
-    fn payload_commitment(&self) -> VidCommitment;
-
-    /// Get the full block if it is available, otherwise return this object unchanged.
-    ///
-    /// # Errors
-    ///
-    /// Returns the original [`DeltasType`], unchanged, in an [`Err`] variant in the case where the
-    /// full block is not currently available.
-    fn try_resolve(self) -> Result<PAYLOAD, Self>;
-
-    /// Fill this [`DeltasType`] by providing a complete block.
-    ///
-    /// After this function succeeds, [`try_resolve`](Self::try_resolve) is guaranteed to return
-    /// `Ok(block)`.
-    ///
-    /// # Errors
-    ///
-    /// Fails if `block` does not match `self.payload_commitment()`, or if the block is not able to be
-    /// stored for some implementation-defined reason.
-    fn fill(&mut self, block: PAYLOAD) -> Result<(), Self::Error>;
-}
-
 /// The error type for block and its transactions.
 #[derive(Snafu, Debug)]
 pub enum BlockError {

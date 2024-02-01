@@ -3,7 +3,6 @@
 use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
 use async_lock::RwLock;
-use commit::Committable;
 use futures::Stream;
 use hotshot_task::{
     boxed_sync,
@@ -14,25 +13,12 @@ use hotshot_task::{
 };
 use hotshot_task_impls::events::HotShotEvent;
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::{
-    message::{MessageKind, SequencingMessage},
-    traits::election::Membership,
-};
+use hotshot_types::traits::election::Membership;
 
-use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
-    consensus::Consensus,
-    data::Leaf,
-    error::HotShotError,
-    event::EventType,
-    simple_certificate::QuorumCertificate,
-    traits::{
-        node_implementation::{ConsensusTime, NodeType},
-        storage::Storage,
-    },
+    consensus::Consensus, data::Leaf, error::HotShotError, traits::node_implementation::NodeType,
 };
 use std::sync::Arc;
-use tracing::error;
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
@@ -140,39 +126,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.publish_transaction_async(tx).await
     }
 
-    /// performs the genesis initializaiton
-    pub async fn maybe_do_genesis_init(&self) {
-        let _anchor = self.storage();
-        if let Ok(anchor_leaf) = self.storage().get_anchored_view().await {
-            if anchor_leaf.view_number == TYPES::Time::genesis() {
-                let leaf = Leaf::from_stored_view(anchor_leaf);
-                let mut qc = QuorumCertificate::<TYPES>::genesis();
-                qc.data = QuorumData {
-                    leaf_commit: leaf.commit(),
-                };
-                let event = Event {
-                    view_number: TYPES::Time::genesis(),
-                    event: EventType::Decide {
-                        leaf_chain: Arc::new(vec![leaf]),
-                        qc: Arc::new(qc),
-                        block_size: None,
-                    },
-                };
-                self.output_event_stream.publish(event).await;
-            }
-        } else {
-            // TODO (justin) this seems bad. I think we should hard error in this case??
-            error!("Hotshot storage has no anchor leaf!");
-        }
-    }
-
-    /// begin consensus by sending a genesis event
-    /// Use `start_consensus` on `SystemContext` instead
-    #[deprecated]
-    pub async fn start_consensus_deprecated(&self) {
-        self.maybe_do_genesis_init().await;
-    }
-
     /// Provides a reference to the underlying storage for this [`SystemContext`], allowing access to
     /// historical data
     pub fn storage(&self) -> &I::Storage {
@@ -232,27 +185,5 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     #[cfg(feature = "hotshot-testing")]
     pub async fn get_current_view(&self) -> TYPES::Time {
         self.hotshot.inner.consensus.read().await.cur_view
-    }
-
-    /// Wrapper around `HotShotConsensusApi`'s `send_broadcast_consensus_message` function
-    #[cfg(feature = "hotshot-testing")]
-    pub async fn send_broadcast_consensus_message(&self, msg: SequencingMessage<TYPES>) {
-        let _result = self
-            .hotshot
-            .send_broadcast_message(MessageKind::from_consensus_message(msg))
-            .await;
-    }
-
-    /// Wrapper around `HotShotConsensusApi`'s `send_direct_consensus_message` function
-    #[cfg(feature = "hotshot-testing")]
-    pub async fn send_direct_consensus_message(
-        &self,
-        msg: SequencingMessage<TYPES>,
-        recipient: TYPES::SignatureKey,
-    ) {
-        let _result = self
-            .hotshot
-            .send_direct_message(MessageKind::from_consensus_message(msg), recipient)
-            .await;
     }
 }

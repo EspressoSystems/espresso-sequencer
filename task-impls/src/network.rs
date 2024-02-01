@@ -95,10 +95,6 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                             GeneralConsensusMessage::UpgradeVote(message) => {
                                 HotShotEvent::UpgradeVoteRecv(message)
                             }
-                            GeneralConsensusMessage::InternalTrigger(_) => {
-                                error!("Got unexpected message type in network task!");
-                                return;
-                            }
                         },
                         Either::Right(committee_message) => match committee_message {
                             CommitteeConsensusMessage::DAProposal(proposal) => {

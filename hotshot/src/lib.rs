@@ -21,10 +21,7 @@ use crate::{
     traits::{NodeImplementation, Storage},
     types::{Event, SystemContextHandle},
 };
-use async_compatibility_layer::{
-    art::{async_spawn, async_spawn_local},
-    channel::UnboundedSender,
-};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
 use commit::Committable;
@@ -42,13 +39,11 @@ use hotshot_types::{
     data::Leaf,
     error::StorageSnafu,
     event::EventType,
-    message::{
-        DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
-    },
+    message::{DataMessage, Message, MessageKind},
     simple_certificate::QuorumCertificate,
     traits::{
         consensus_api::ConsensusApi,
-        network::{CommunicationChannel, NetworkError},
+        network::CommunicationChannel,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
@@ -66,7 +61,7 @@ use std::{
     time::Duration,
 };
 use tasks::add_vid_task;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace};
 
 // -- Rexports
 // External
@@ -270,37 +265,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .await;
     }
 
-    /// Marks a given view number as timed out. This should be called a fixed period after a round is started.
-    ///
-    /// If the round has already ended then this function will essentially be a no-op. Otherwise `run_round` will return shortly after this function is called.
-    /// # Panics
-    /// Panics if the current view is not in the channel map
-    #[instrument(
-        skip_all,
-        fields(id = self.inner.id, view = *current_view),
-        name = "Timeout consensus tasks",
-        level = "warn"
-    )]
-    pub async fn timeout_view(
-        &self,
-        current_view: TYPES::Time,
-        send_replica: UnboundedSender<ProcessedGeneralConsensusMessage<TYPES>>,
-        send_next_leader: Option<UnboundedSender<ProcessedGeneralConsensusMessage<TYPES>>>,
-    ) {
-        let msg = ProcessedGeneralConsensusMessage::<TYPES>::InternalTrigger(
-            InternalTrigger::Timeout(current_view),
-        );
-        if let Some(chan) = send_next_leader {
-            if chan.send(msg.clone()).await.is_err() {
-                debug!("Error timing out next leader task");
-            }
-        };
-        // NOTE this should always exist
-        if send_replica.send(msg).await.is_err() {
-            debug!("Error timing out replica task");
-        };
-    }
-
     /// Emit an external event
     // A copypasta of `ConsensusApi::send_event`
     // TODO: remove with https://github.com/EspressoSystems/HotShot/issues/2407
@@ -445,72 +409,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let internal_event_stream = hotshot.inner.internal_event_stream.clone();
 
         Ok((handle, internal_event_stream))
-    }
-
-    /// Send a broadcast message.
-    ///
-    /// This is an alias for `hotshot.inner.networking.broadcast_message(msg.into())`.
-    ///
-    /// # Errors
-    ///
-    /// Will return any errors that the underlying `broadcast_message` can return.
-    // this clippy lint is silly. This is async by requirement of the trait.
-    #[allow(clippy::unused_async)]
-    pub async fn send_broadcast_message(
-        &self,
-        kind: impl Into<MessageKind<TYPES>>,
-    ) -> std::result::Result<(), NetworkError> {
-        let inner = self.inner.clone();
-        let pk = self.inner.public_key.clone();
-        let kind = kind.into();
-
-        async_spawn_local(async move {
-            if inner
-                .networks
-                .quorum_network
-                .broadcast_message(
-                    Message {
-                        version: PROGRAM_PROTOCOL_VERSION,
-                        sender: pk,
-                        kind,
-                    },
-                    // TODO this is morally wrong
-                    &inner.memberships.quorum_membership.clone(),
-                )
-                .await
-                .is_err()
-            {
-                warn!("Failed to broadcast message");
-            };
-        });
-        Ok(())
-    }
-
-    /// Send a direct message to a given recipient.
-    ///
-    /// This is an alias for `hotshot.inner.networking.message_node(msg.into(), recipient)`.
-    ///
-    /// # Errors
-    ///
-    /// Will return any errors that the underlying `message_node` can return.
-    pub async fn send_direct_message(
-        &self,
-        kind: impl Into<MessageKind<TYPES>>,
-        recipient: TYPES::SignatureKey,
-    ) -> std::result::Result<(), NetworkError> {
-        self.inner
-            .networks
-            .quorum_network
-            .direct_message(
-                Message {
-                    version: PROGRAM_PROTOCOL_VERSION,
-                    sender: self.inner.public_key.clone(),
-                    kind: kind.into(),
-                },
-                recipient,
-            )
-            .await?;
-        Ok(())
     }
 
     /// return the timeout for a view for `self`
