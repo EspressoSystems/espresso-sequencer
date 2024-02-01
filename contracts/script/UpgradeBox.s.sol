@@ -3,8 +3,8 @@ pragma solidity ^0.8.19;
 
 import { Script } from "forge-std/Script.sol";
 // import {DevOpsTools} from "../lib/foundry-devops/src/DevOpsTools.sol";
-import { BoxV2 } from "../src/upgradeDemo/BoxV2.sol";
-import { BoxV1 } from "../src/upgradeDemo/BoxV1.sol";
+import { DemoBoxV2 } from "../src/upgradeDemo/DemoBoxV2.sol";
+import { DemoBoxV1 } from "../src/upgradeDemo/DemoBoxV1.sol";
 
 contract UpgradeBox is Script {
     /// @notice runs the upgrade
@@ -13,7 +13,7 @@ contract UpgradeBox is Script {
     /// TODO get th most recent deployment from the devops tooling
 
     function run(address admin, address mostRecentlyDeployedProxy) external returns (address) {
-        BoxV2 newAddy = new BoxV2(); //gets the address of the new implementation
+        DemoBoxV2 newAddy = new DemoBoxV2(); //gets the address of the new implementation
         address proxy = upgradeBox(admin, mostRecentlyDeployedProxy, address(newAddy));
         return proxy;
     }
@@ -27,7 +27,8 @@ contract UpgradeBox is Script {
         public
         returns (address)
     {
-        BoxV1 proxy = BoxV1(proxyAddress); //make the function call on the previous implementation
+        DemoBoxV1 proxy = DemoBoxV1(proxyAddress); //make the function call on the previous
+            // implementation
         vm.prank(admin);
 
         proxy.upgradeToAndCall(newBox, ""); //proxy address now points to the new implementation

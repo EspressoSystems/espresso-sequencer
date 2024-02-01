@@ -2,14 +2,14 @@
 pragma solidity ^0.8.0;
 
 import { Test } /*, console2*/ from "forge-std/Test.sol";
-import { BoxV1 } from "../src/upgradeDemo/BoxV1.sol";
-import { BoxV2 } from "../src/upgradeDemo/BoxV2.sol";
+import { DemoBoxV1 } from "../src/upgradeDemo/DemoBoxV1.sol";
+import { DemoBoxV2 } from "../src/upgradeDemo/DemoBoxV2.sol";
 import { DeployBox } from "../script/DeployBox.s.sol";
 import { UpgradeBox } from "../script/UpgradeBox.s.sol";
 
-contract BoxTest is Test {
-    BoxV1 public boxV1Proxy;
-    BoxV2 public boxV2Proxy;
+contract DemoBoxTest is Test {
+    DemoBoxV1 public boxV1Proxy;
+    DemoBoxV2 public boxV2Proxy;
     DeployBox public deployer = new DeployBox();
     UpgradeBox public upgrader = new UpgradeBox();
     address public proxy;
@@ -18,7 +18,7 @@ contract BoxTest is Test {
     // deploy the first implementation with its proxy
     function setUp() public {
         proxy = deployer.run();
-        boxV1Proxy = BoxV1(proxy);
+        boxV1Proxy = DemoBoxV1(proxy);
     }
 
     // test the addbox method call via the proxy
@@ -36,10 +36,10 @@ contract BoxTest is Test {
         assertEq(boxV1Proxy.getBox().size, boxSize);
 
         //upgrade box and check that the box size is maintained and the capacity is empty
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
-        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
+        DemoBoxV2.Box memory boxV2 = boxV2Proxy.getBox();
         assertEq(boxV2.size, boxSize);
-        assertTrue(boxV2.status == BoxV2.BoxStatus.EMPTY);
+        assertTrue(boxV2.status == DemoBoxV2.BoxStatus.EMPTY);
         assertEq(boxV2.maxItems, type(uint256).min);
     }
 
@@ -52,13 +52,13 @@ contract BoxTest is Test {
 
         //upgrade box
         uint256 newVersion = 2;
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
         assertEq(address(boxV2Proxy), address(boxV1Proxy));
         uint256 newSize = 2;
         uint256 newCapacity = 20;
         boxV2Proxy.updateBox(newSize, newCapacity);
 
-        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        DemoBoxV2.Box memory boxV2 = boxV2Proxy.getBox();
         assertEq(boxV2.size, newSize);
         assertEq(boxV2.maxItems, newCapacity);
         assertEq(boxV2Proxy.version(), newVersion);
@@ -73,7 +73,7 @@ contract BoxTest is Test {
         assertEq(boxV1Proxy.getBox().balance, amount);
 
         //upgrade box
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
         assertEq(boxV2Proxy.getBox().balance, amount);
     }
 
@@ -94,7 +94,7 @@ contract BoxTest is Test {
         assertEq(boxV1Proxy.getBox().balance, amount);
 
         //upgrade box
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
         //withdraw ETH
         vm.prank(msg.sender);
         uint256 userBalanceBefore = msg.sender.balance;
@@ -117,7 +117,7 @@ contract BoxTest is Test {
         boxV1Proxy.addBox(boxSize);
 
         //upgrade
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
 
         //deposit
         vm.prank(msg.sender);
@@ -136,7 +136,7 @@ contract BoxTest is Test {
         boxV1Proxy.addBox(boxSize);
 
         //upgrade
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
 
         //deposit
         vm.prank(msg.sender);
@@ -154,11 +154,11 @@ contract BoxTest is Test {
         assertEq(boxV1Proxy.getBox().size, boxSize);
 
         //upgrade Box
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
-        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
+        DemoBoxV2.Box memory boxV2 = boxV2Proxy.getBox();
 
         assertEq(boxV2.size, boxSize);
-        assertTrue(boxV2.status == BoxV2.BoxStatus.EMPTY);
+        assertTrue(boxV2.status == DemoBoxV2.BoxStatus.EMPTY);
         assertEq(boxV2.maxItems, type(uint256).min);
 
         //use newly updated struct element, maxItems
@@ -171,20 +171,20 @@ contract BoxTest is Test {
     function testUpgradeNewEnumType() public {
         //add Box of size 1
         uint256 boxSize = 1;
-        BoxV1.BoxStatus boxStatus = BoxV1.BoxStatus.FULL;
+        DemoBoxV1.BoxStatus boxStatus = DemoBoxV1.BoxStatus.FULL;
         boxV1Proxy.addBox(boxSize);
         boxV1Proxy.updateBoxStatus(boxStatus);
-        BoxV1.Box memory boxV1 = boxV1Proxy.getBox();
+        DemoBoxV1.Box memory boxV1 = boxV1Proxy.getBox();
         assertEq(boxV1.size, boxSize);
         assertTrue(boxV1.status == boxStatus);
 
         //upgrade
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
         uint256 currentMaxItems = type(uint256).min;
 
-        BoxV2.Box memory boxV2 = boxV2Proxy.getBox();
+        DemoBoxV2.Box memory boxV2 = boxV2Proxy.getBox();
         assertEq(boxV2.size, boxSize);
-        assertTrue(boxV2.status == BoxV2.BoxStatus.FULL);
+        assertTrue(boxV2.status == DemoBoxV2.BoxStatus.FULL);
         assertEq(boxV2.maxItems, currentMaxItems);
     }
 
@@ -192,13 +192,13 @@ contract BoxTest is Test {
     function testNewEnumType() public {
         //add Box of size 1
         uint256 boxSize = 1;
-        BoxV1.BoxStatus boxStatus = BoxV1.BoxStatus.FULL;
+        DemoBoxV1.BoxStatus boxStatus = DemoBoxV1.BoxStatus.FULL;
         boxV1Proxy.addBox(boxSize);
         boxV1Proxy.updateBoxStatus(boxStatus);
 
         //upgrade
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
-        BoxV2.BoxStatus newBoxStatus = BoxV2.BoxStatus.ALMOST_FULL;
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
+        DemoBoxV2.BoxStatus newBoxStatus = DemoBoxV2.BoxStatus.ALMOST_FULL;
 
         boxV2Proxy.updateBoxStatus(newBoxStatus);
 
@@ -213,7 +213,7 @@ contract BoxTest is Test {
         uint256 boxV1Size = boxV1Proxy.getBox().size;
 
         //upgrade box
-        boxV2Proxy = BoxV2(upgrader.run(admin, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(admin, address(proxy)));
         uint256 boxV2Size = boxV2Proxy.getBox().size;
 
         assertEq(boxV1Size, boxV2Size);
@@ -224,6 +224,6 @@ contract BoxTest is Test {
 
         //attempted upgrade as attacker will revert
         vm.expectRevert();
-        boxV2Proxy = BoxV2(upgrader.run(attacker, address(proxy)));
+        boxV2Proxy = DemoBoxV2(upgrader.run(attacker, address(proxy)));
     }
 }

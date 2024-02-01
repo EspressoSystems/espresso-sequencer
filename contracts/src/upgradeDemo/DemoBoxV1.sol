@@ -10,7 +10,7 @@ import { UUPSUpgradeable } from
 
 /// @title An arbitrary Box contract that is only used for upgrade Sanity Checks
 /// @notice The Box can be used by an account and they can deposit into their box
-contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract DemoBoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error BoxAlreadyExists();
     error BoxSizeTooSmall();
     error NoBoxExists();

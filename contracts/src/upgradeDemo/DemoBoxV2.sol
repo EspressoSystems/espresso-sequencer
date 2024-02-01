@@ -11,7 +11,7 @@ import { UUPSUpgradeable } from
 /// @title An arbitrary Box contract that is only used for upgrade Sanity Checks
 /// @notice This is an upgrade of BoxV1 to allow users to withdraw, adds another enum type & struct
 /// member
-contract BoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error BoxAlreadyExists();
     error BoxSizeTooSmall();
     error BoxCapcityTooSmall();

@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import { Script } from "forge-std/Script.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import { BoxV1 } from "../src/upgradeDemo/BoxV1.sol";
+import { DemoBoxV1 } from "../src/upgradeDemo/DemoBoxV1.sol";
 
 contract DeployBox is Script {
     /// @notice runs the deployment
@@ -19,12 +19,13 @@ contract DeployBox is Script {
     function deployBox(address admin) public returns (address) {
         vm.startBroadcast(admin);
 
-        BoxV1 box = new BoxV1(); //Our implementation(logic).Proxy will point here to delegate
+        DemoBoxV1 box = new DemoBoxV1(); //Our implementation(logic).Proxy will point here to
+            // delegate
             // call/borrow the functions
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSelector(
-            BoxV1(box).initialize.selector,
+            DemoBoxV1(box).initialize.selector,
             msg.sender // Initial owner/admin of the contract
         );
 
