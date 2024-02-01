@@ -8,6 +8,7 @@ use jf_primitives::vid::payload_prover::PayloadProver;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
+use std::marker::PhantomData;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
@@ -37,8 +38,16 @@ pub struct NamespaceInfo {
 }
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
-pub struct NameSpaceTable {
+pub struct NameSpaceTable<
+    TableLen: CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync,
+> {
     pub(crate) raw_payload: Vec<u8>,
+    pub phantom: PhantomData<TableLen>,
 }
 
 #[allow(dead_code)] // TODO temporary
@@ -64,7 +73,7 @@ pub struct Payload<
     pub raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
-    pub ns_table: NameSpaceTable,
+    pub ns_table: NameSpaceTable<TableLen>,
 
     #[derivative(Hash = "ignore")]
     pub namespaces: HashMap<VmId, NamespaceInfo>,
@@ -96,14 +105,14 @@ impl Payload<u32, u32, [u8; 32]> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        let ns_table = NameSpaceTable::from_bytes(ns_table_bytes);
+        let ns_table = NameSpaceTable::<u32>::from_bytes(ns_table_bytes);
         ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        let ns_table = NameSpaceTable::from_vec(ns_table_bytes.to_vec());
+        let ns_table = NameSpaceTable::<u32>::from_vec(ns_table_bytes.to_vec());
         0..ns_table.len()
     }
 
@@ -115,12 +124,12 @@ impl Payload<u32, u32, [u8; 32]> {
         meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
         ns_index: usize,
     ) -> Option<(Vec<u8>, NamespaceProof)> {
-        let ns_table = NameSpaceTable::from_bytes(meta);
+        let ns_table = NameSpaceTable::<u32>::from_bytes(meta);
         if ns_index >= ns_table.len() {
             return None; // error: index out of bounds
         }
 
-        let ns_table = NameSpaceTable::from_bytes(meta);
+        let ns_table = NameSpaceTable::<u32>::from_bytes(meta);
         let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         let vid = test_vid_factory(); // TODO temporary VID construction
@@ -235,25 +244,4 @@ impl Committable for Payload<u32, u32, [u8; 32]> {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }
-}
-
-// TODO currently unused but contains code that might get re-used in the near future.
-fn _get_tx_table_entry(
-    ns_offset: usize,
-    block_payload: &Payload<u32, u32, [u8; 32]>,
-    block_payload_len: usize,
-    tx_index: usize,
-) -> TxTableEntry {
-    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
-
-    let end = std::cmp::min(
-        start.saturating_add(TxTableEntry::byte_len()),
-        block_payload_len,
-    );
-    // todo: clamp offsets
-    let tx_id_range = start..end;
-    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
-    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.raw_payload[tx_id_range]);
-
-    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
 }

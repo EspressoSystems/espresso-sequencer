@@ -38,7 +38,6 @@ impl TxTableEntry {
         size_of::<TxTableEntryWord>()
     }
 
-    #[cfg(test)]
     pub fn from_usize(val: usize) -> Self {
         Self(
             val.try_into()

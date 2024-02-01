@@ -3,6 +3,7 @@ use crate::block2::tables::{Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 
 use crate::Transaction;
 
@@ -10,12 +11,12 @@ use super::{
     entry::TxTableEntry,
     test_vid_factory,
     tx_iterator::{TxIndex, TxIterator},
-    tx_payload_range, RangeProof,
+    RangeProof,
 };
 
 impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
     type TransactionIndex = TxIndex;
-    type Iter<'a> = TxIterator<'a>;
+    type Iter<'a> = TxIterator<'a, u32>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
@@ -26,7 +27,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
         // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table = NameSpaceTable::from_bytes(meta);
+        let ns_table = NameSpaceTable::<u32>::from_bytes(meta);
         let ns_table_len = ns_table.len();
 
         // First, collect the offsets of all the nss
@@ -49,7 +50,7 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
         // sum over these tx table lens
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table = TxTable::from_bytes(&self.raw_payload);
+            let tx_table = TxTable::<u32>::from_bytes(&self.raw_payload);
             let tx_table_len = tx_table.get_table_len(offset).try_into().unwrap_or(0);
             // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
@@ -140,6 +141,34 @@ impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
             },
         ))
     }
+}
+
+/// Returns the byte range for a tx in the block payload bytes.
+///
+/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
+/// Lots of ugly type conversion and checked arithmetic.
+fn tx_payload_range(
+    tx_table_range_start: &Option<TxTableEntry>,
+    tx_table_range_end: &TxTableEntry,
+    tx_table_len: &TxTableEntry,
+    block_payload_byte_len: usize,
+) -> Option<Range<usize>> {
+    // TODO(817) allow arbitrary tx_table_len
+    // eg: if overflow then just return a 0-length tx
+    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
+        .ok()?
+        .checked_add(1)?
+        .checked_mul(TxTableEntry::byte_len())?;
+    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = usize::try_from(tx_table_range_end.clone())
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = std::cmp::max(start, end);
+    let start = std::cmp::min(start, block_payload_byte_len);
+    let end = std::cmp::min(end, block_payload_byte_len);
+    Some(start..end)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

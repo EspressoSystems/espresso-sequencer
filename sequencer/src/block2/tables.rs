@@ -1,18 +1,43 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::NameSpaceTable;
+use crate::block2::payload::{NameSpaceTable, Payload};
 use crate::{BlockBuildingSnafu, Error, VmId};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use snafu::OptionExt;
+use std::marker::PhantomData;
+use std::mem::size_of;
 use std::ops::Range;
 
-pub trait Table {
+pub trait Table<
+    TableLen: CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync,
+>
+{
     // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
     // if `table_bytes` has too few bytes at this `offset` then pad with zero.
     // Parse these bytes into a `TxTableEntry` and return.
     // Returns raw bytes, no checking for large values
     fn get_table_len(&self, offset: usize) -> TxTableEntry;
+
+    fn get_payload(&self) -> Vec<u8>;
+
+    fn byte_len() -> usize {
+        size_of::<TableLen>()
+    }
 }
 
-impl Table for NameSpaceTable {
+impl<
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > Table<TableLen> for NameSpaceTable<TableLen>
+{
     // TODO (Philippe) avoid code duplication with similar function in TxTable?
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
@@ -26,16 +51,32 @@ impl Table for NameSpaceTable {
             .copy_from_slice(&self.raw_payload[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
     }
+
+    fn get_payload(&self) -> Vec<u8> {
+        self.raw_payload.clone()
+    }
 }
 
-impl NameSpaceTable {
+impl<
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > NameSpaceTable<TableLen>
+{
     pub fn from_vec(v: Vec<u8>) -> Self {
-        Self { raw_payload: v }
+        Self {
+            raw_payload: v,
+            phantom: Default::default(),
+        }
     }
 
     pub fn from_bytes(b: &[u8]) -> Self {
         Self {
             raw_payload: b.to_vec(),
+            phantom: Default::default(),
         }
     }
 
@@ -126,7 +167,6 @@ impl NameSpaceTable {
     /// Returns the byte range for a ns in the block payload bytes.
     ///
     /// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
-    /// TODO make fns such as this methods of a new `NsTable` struct?
     pub fn get_payload_range(
         &self,
         ns_index: usize,
@@ -142,11 +182,31 @@ impl NameSpaceTable {
     }
 }
 
-pub struct TxTable {
+pub struct TxTable<
+    TableLen: CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync,
+> {
     raw_payload: Vec<u8>,
+    phantom: PhantomData<TableLen>,
 }
 
-impl Table for TxTable {
+impl<
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > Table<TableLen> for TxTable<TableLen>
+{
+    fn get_payload(&self) -> Vec<u8> {
+        self.raw_payload.clone()
+    }
+
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
@@ -160,7 +220,30 @@ impl Table for TxTable {
         TxTableEntry::from_bytes_array(entry_bytes)
     }
 }
-impl TxTable {
+impl<
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > TxTable<TableLen>
+{
+    #[cfg(test)]
+    pub fn from_entries(entries: &[usize]) -> Self {
+        let tx_table_byte_len = entries.len() + 1;
+        let mut tx_table = Vec::with_capacity(tx_table_byte_len);
+        tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
+        for entry in entries {
+            tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+        }
+
+        Self {
+            raw_payload: tx_table,
+            phantom: Default::default(),
+        }
+    }
+
     pub fn len(self) -> usize {
         std::cmp::min(
             self.get_table_len(0).try_into().unwrap_or(0),
@@ -171,6 +254,27 @@ impl TxTable {
     pub fn from_bytes(arr: &[u8]) -> Self {
         Self {
             raw_payload: arr.to_vec(),
+            phantom: Default::default(),
         }
     }
+}
+// TODO currently unused but contains code that might get re-used in the near future.
+fn _get_tx_table_entry(
+    ns_offset: usize,
+    block_payload: &Payload<u32, u32, [u8; 32]>,
+    block_payload_len: usize,
+    tx_index: usize,
+) -> TxTableEntry {
+    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
+
+    let end = std::cmp::min(
+        start.saturating_add(TxTableEntry::byte_len()),
+        block_payload_len,
+    );
+    // todo: clamp offsets
+    let tx_id_range = start..end;
+    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
+    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.raw_payload[tx_id_range]);
+
+    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
 }

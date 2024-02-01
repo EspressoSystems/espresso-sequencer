@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use std::ops::Range;
 
 use crate::block2::payload::{NameSpaceTable, Payload};
@@ -12,16 +13,36 @@ pub struct TxIndex {
     pub tx_idx: usize,
 }
 
-pub struct TxIterator<'a> {
+pub struct TxIterator<
+    'a,
+    TableLen: CanonicalSerialize
+        + CanonicalDeserialize
+        + TryFrom<usize>
+        + TryInto<usize>
+        + Default
+        + std::marker::Sync,
+> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a Payload<u32, u32, [u8; 32]>,
-    ns_table: NameSpaceTable,
+    ns_table: NameSpaceTable<TableLen>,
 }
 
-impl<'a> TxIterator<'a> {
-    pub fn new(ns_table: NameSpaceTable, block_payload: &'a Payload<u32, u32, [u8; 32]>) -> Self {
+impl<
+        'a,
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > TxIterator<'a, TableLen>
+{
+    pub fn new(
+        ns_table: NameSpaceTable<TableLen>,
+        block_payload: &'a Payload<u32, u32, [u8; 32]>,
+    ) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..ns_table.len(),
@@ -32,7 +53,16 @@ impl<'a> TxIterator<'a> {
     }
 }
 
-impl<'a> Iterator for TxIterator<'a> {
+impl<
+        'a,
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
+    > Iterator for TxIterator<'a, TableLen>
+{
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -58,7 +88,8 @@ impl<'a> Iterator for TxIterator<'a> {
                 let end = std::cmp::min(end, payload_len);
                 let start = std::cmp::min(start, end);
 
-                let tx_table = TxTable::from_bytes(&self.block_payload.raw_payload[start..end]);
+                let tx_table =
+                    TxTable::<u32>::from_bytes(&self.block_payload.raw_payload[start..end]);
                 let tx_table_len = tx_table.len();
 
                 self.tx_iter = 0..tx_table_len;
