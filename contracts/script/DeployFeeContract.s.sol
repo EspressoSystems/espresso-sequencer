@@ -16,7 +16,8 @@ contract DeployFeeContract is Script {
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
-    // @return address of proxy and admin
+    /// @return proxyAddress The address of the proxy
+    /// @return admin The address of the admin
     function deployFeeContract() public returns (address payable proxyAddress, address admin) {
         vm.startBroadcast();
 
@@ -25,7 +26,7 @@ contract DeployFeeContract is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSelector(
-            FeeContract(feeContract).initialize.selector,
+            FeeContract.initialize.selector,
             msg.sender // Initial owner/admin of the contract
         );
 
