@@ -19,11 +19,15 @@ use ethers::{
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::light_client::{
-    CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
-};
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
+use hotshot_types::{
+    light_client::{
+        CircuitField, LightClientState, PublicInput, StateKeyPair, StateSignaturesBundle,
+        StateVerKey,
+    },
+    traits::signature_key::SignatureKey,
+};
 use jf_plonk::errors::PlonkError;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
@@ -55,11 +59,29 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
+    /// Number of nodes
+    pub num_nodes: usize,
+    /// Seed to generate keys
+    pub seed: [u8; 32],
 }
 
-pub async fn sync_stake_table() -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    // TODO(Chengyu): initialize a stake table
-    Default::default()
+pub async fn init_stake_table(
+    config: &StateProverConfig,
+) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+    // We now initialize a static stake table as what hotshot orchestrator does.
+    // In the future we should get the stake table from the contract.
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    (0..config.num_nodes).for_each(|id| {
+        let bls_key = BLSPubKey::generated_from_seed_indexed(config.seed, id as u64).0;
+        let state_ver_key =
+            StateKeyPair::generate_from_seed_indexed(config.seed, id as u64).ver_key();
+        st.register(bls_key, U256::from(1u64), state_ver_key)
+            .expect("Key registration shouldn't fail.");
+    });
+    st.advance();
+    st.advance();
+    std::println!("Stake table initialized.");
+    st
 }
 
 pub fn load_proving_key(path: PathBuf) -> ProvingKey {
@@ -228,7 +250,7 @@ pub fn key_gen(path: PathBuf) {
 
 pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(sync_stake_table().await);
+    let st = Arc::new(init_stake_table(&config).await);
     let proving_key = Arc::new(load_proving_key(config.proving_key_path.clone()));
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
@@ -250,7 +272,7 @@ pub async fn run_prover_service(config: StateProverConfig) {
 
 /// Run light client state prover once
 pub async fn run_prover_once(config: StateProverConfig) {
-    let st = sync_stake_table().await;
+    let st = init_stake_table(&config).await;
     let proving_key = load_proving_key(config.proving_key_path.clone());
     let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
 

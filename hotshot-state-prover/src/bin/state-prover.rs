@@ -1,9 +1,11 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
+use derive_more::From;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
+use ethers::utils::hex::{self, FromHexError};
 use hotshot_state_prover::service::{
     key_gen, run_prover_once, run_prover_service, StateProverConfig,
 };
@@ -44,15 +46,15 @@ struct Args {
 
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
-    pub l1_provider: Url,
+    l1_provider: Url,
 
     /// Address of LightClient contract on layer 1.
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS")]
-    pub light_client_address: Address,
+    light_client_address: Address,
 
     /// Mnemonic phrase for a funded Ethereum wallet.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC", default_value = None)]
-    pub eth_mnemonic: String,
+    eth_mnemonic: String,
 
     /// Index of a funded account derived from eth-mnemonic.
     #[clap(
@@ -60,7 +62,24 @@ struct Args {
         env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
         default_value = "0"
     )]
-    pub eth_account_index: u32,
+    eth_account_index: u32,
+
+    /// Number of nodes in the stake table.
+    /// WARNING: This is used temporarily to initialize a static stake table.
+    ///          In the future we should get the stake table from the contract.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_NUM_NODES",
+        default_value = "5"
+    )]
+    num_nodes: usize,
+
+    /// Seed to use for generating node keys.
+    /// WARNING: This is used temporarily to initialize a static stake table.
+    ///          In the future we should get the stake table from the contract.
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
+    keygen_seed: [u8; 32],
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -74,6 +93,20 @@ fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
         .map_err(|err| ParseDurationError {
             reason: err.to_string(),
         })
+}
+
+#[derive(Debug, Snafu, From)]
+enum ParseSeedError {
+    #[snafu(display("seed must be valid hex: {source}"))]
+    Hex { source: FromHexError },
+
+    #[snafu(display("wrong length for seed {length} (expected 32)"))]
+    WrongLength { length: usize },
+}
+
+fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
+    <[u8; 32]>::try_from(hex::decode(s)?)
+        .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
 }
 
 #[async_std::main]
@@ -101,6 +134,8 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
+        num_nodes: args.num_nodes,
+        seed: args.keygen_seed,
     };
 
     if args.keygen {
