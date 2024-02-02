@@ -86,7 +86,7 @@ pub async fn init_stake_table(
 
 pub fn load_proving_key(path: PathBuf) -> ProvingKey {
     let f = File::open(path).unwrap_or_else(|err| panic!("{err}"));
-    <ProvingKey as CanonicalDeserialize>::deserialize_compressed(f)
+    <ProvingKey as CanonicalDeserialize>::deserialize_compressed_unchecked(f)
         .unwrap_or_else(|err| panic!("{err}"))
 }
 
