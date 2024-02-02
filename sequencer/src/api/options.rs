@@ -189,7 +189,7 @@ impl Options {
         };
 
         // Start consensus.
-        node.context.consensus().hotshot.start_consensus().await;
+        node.context.start_consensus().await;
         Ok(node)
     }
 }
