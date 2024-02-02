@@ -167,7 +167,7 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
 
     pub fn update_namespace_with_tx(
         &mut self,
-        tx: <Payload<u32> as hotshot::traits::BlockPayload>::Transaction,
+        tx: <Payload<u64> as hotshot::traits::BlockPayload>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 

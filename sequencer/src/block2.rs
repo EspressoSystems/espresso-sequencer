@@ -13,7 +13,7 @@ pub mod tx_iterator;
 
 use payload::Payload;
 
-impl BlockPayload for Payload<u32> {
+impl BlockPayload for Payload<u64> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = Vec<u8>;
