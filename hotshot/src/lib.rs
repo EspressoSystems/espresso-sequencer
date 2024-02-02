@@ -27,7 +27,7 @@ use async_trait::async_trait;
 use commit::Committable;
 use custom_debug::Debug;
 use futures::join;
-use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
+use hotshot_constants::VERSION_0_1;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
@@ -303,7 +303,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                     .da_network
                     .broadcast_message(
                         Message {
-                            version: PROGRAM_PROTOCOL_VERSION,
+                            version: VERSION_0_1,
                             sender: api.inner.public_key.clone(),
                             kind: MessageKind::from(message),
                         },

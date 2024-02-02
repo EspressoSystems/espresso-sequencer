@@ -9,7 +9,7 @@ use hotshot::traits::implementations::{
 };
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
-use hotshot_constants::PROGRAM_PROTOCOL_VERSION;
+use hotshot_constants::VERSION_0_1;
 use hotshot_testing::state_types::TestInstanceState;
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
@@ -106,7 +106,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
         rng.fill_bytes(&mut bytes);
 
         let message = Message {
-            version: PROGRAM_PROTOCOL_VERSION,
+            version: VERSION_0_1,
             sender: pk,
             kind: MessageKind::Data(DataMessage::SubmitTransaction(
                 TestTransaction(bytes.to_vec()),

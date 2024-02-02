@@ -8,6 +8,10 @@ use hotshot_constants::Version;
 
 use hotshot_testing::node_types::TestTypes;
 
+use hotshot_utils::bincode::bincode_opts;
+
+use bincode::config::Options;
+
 use hotshot_types::{
     message::{GeneralConsensusMessage, Message, MessageKind, SequencingMessage},
     signature_key::BLSPubKey,
@@ -42,13 +46,13 @@ fn version_number_at_start_of_serialization() {
         _pd: PhantomData,
     };
     let message = Message {
-        version: version.clone(),
+        version,
         sender,
         kind: MessageKind::Consensus(SequencingMessage(Left(
             GeneralConsensusMessage::ViewSyncCommitCertificate(simple_certificate),
         ))),
     };
-    let serialized_message: Vec<u8> = bincode::serialize(&message).unwrap();
+    let serialized_message: Vec<u8> = bincode_opts().serialize(&message).unwrap();
     // The versions we've read from the message
     let major_version_read = u16::from_le_bytes(serialized_message[..2].try_into().unwrap());
     let minor_version_read = u16::from_le_bytes(serialized_message[2..4].try_into().unwrap());

@@ -215,6 +215,8 @@ pub trait NetworkMsg:
 {
 }
 
+impl NetworkMsg for Vec<u8> {}
+
 /// a message
 pub trait ViewMessage<TYPES: NodeType> {
     /// get the view out of the message
