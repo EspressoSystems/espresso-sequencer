@@ -473,8 +473,7 @@ pub trait RunDA<
                         EventType::NextLeaderViewTimeout { view_number } => {
                             warn!("Timed out as the next leader in view {:?}", view_number);
                         }
-                        EventType::ViewFinished { view_number: _ } => {}
-                        _ => unimplemented!(),
+                        _ => {}
                     }
                 }
             }

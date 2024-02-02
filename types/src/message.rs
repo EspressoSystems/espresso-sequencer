@@ -63,10 +63,10 @@ pub struct Messages<TYPES: NodeType>(pub Vec<Message<TYPES>>);
 /// A message type agnostic description of a message's purpose
 #[derive(PartialEq, Copy, Clone)]
 pub enum MessagePurpose {
-    /// Message with a quorum proposal.
+    /// Message with a [quorum/DA] proposal.
     Proposal,
-    /// Message with most recent quorum proposal the server has
-    LatestQuorumProposal,
+    /// Message with most recent [quorum/DA] proposal the server has
+    LatestProposal,
     /// Message with most recent view sync certificate the server has
     LatestViewSyncCertificate,
     /// Message with a quorum vote.

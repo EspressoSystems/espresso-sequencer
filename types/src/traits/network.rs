@@ -147,8 +147,8 @@ pub enum ConsensusIntentEvent<K: SignatureKey> {
     PollForProposal(u64),
     /// Poll for VID disperse data for a particular view
     PollForVIDDisperse(u64),
-    /// Poll for the most recent quorum proposal the webserver has
-    PollForLatestQuorumProposal,
+    /// Poll for the most recent [quorum/da] proposal the webserver has
+    PollForLatestProposal,
     /// Poll for the most recent view sync proposal the webserver has
     PollForLatestViewSyncCertificate,
     /// Poll for a DAC for a particular view
@@ -203,7 +203,7 @@ impl<K: SignatureKey> ConsensusIntentEvent<K> {
             | ConsensusIntentEvent::PollForTransactions(view_number)
             | ConsensusIntentEvent::CancelPollForTransactions(view_number)
             | ConsensusIntentEvent::PollFutureLeader(view_number, _) => *view_number,
-            ConsensusIntentEvent::PollForLatestQuorumProposal
+            ConsensusIntentEvent::PollForLatestProposal
             | ConsensusIntentEvent::PollForLatestViewSyncCertificate => 1,
         }
     }

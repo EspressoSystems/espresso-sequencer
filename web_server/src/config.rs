@@ -26,7 +26,7 @@ pub fn post_proposal_route(view_number: u64) -> String {
 
 /// get latest qc
 #[must_use]
-pub fn get_latest_quorum_proposal_route() -> String {
+pub fn get_latest_proposal_route() -> String {
     "api/proposal/latest".to_string()
 }
 

@@ -43,7 +43,7 @@ struct WebServerState<KEY> {
     /// view number -> (secret, da_certificates)
     da_certificates: HashMap<u64, (String, Vec<u8>)>,
     /// view for the most recent proposal to help nodes catchup
-    latest_quorum_proposal: u64,
+    latest_proposal: u64,
     /// view for the most recent view sync proposal
     latest_view_sync_certificate: u64,
     /// view for the oldest DA certificate
@@ -101,7 +101,7 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             votes: HashMap::new(),
             num_txns: 0,
             oldest_vote: 0,
-            latest_quorum_proposal: 0,
+            latest_proposal: 0,
             latest_view_sync_certificate: 0,
             oldest_certificate: 0,
             shutdown: None,
@@ -153,7 +153,7 @@ pub trait WebServerDataSource<KEY> {
     /// Get latest quanrum proposal
     /// # Errors
     /// Error if unable to serve.
-    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_latest_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
     /// Get latest view sync proposal
     /// # Errors
     /// Error if unable to serve.
@@ -306,8 +306,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         }
     }
 
-    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
-        self.get_proposal(self.latest_quorum_proposal)
+    fn get_latest_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_proposal(self.latest_proposal)
     }
 
     fn get_latest_view_sync_certificate(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
@@ -556,8 +556,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
         info!("Received proposal for view {}", view_number);
 
-        if view_number > self.latest_quorum_proposal {
-            self.latest_quorum_proposal = view_number;
+        if view_number > self.latest_proposal {
+            self.latest_proposal = view_number;
         }
 
         // Only keep proposal history for MAX_VIEWS number of view
@@ -781,8 +781,8 @@ where
         }
         .boxed()
     })?
-    .get("get_latest_quorum_proposal", |_req, state| {
-        async move { state.get_latest_quorum_proposal() }.boxed()
+    .get("get_latest_proposal", |_req, state| {
+        async move { state.get_latest_proposal() }.boxed()
     })?
     .get("get_latest_view_sync_certificate", |_req, state| {
         async move { state.get_latest_view_sync_certificate() }.boxed()
