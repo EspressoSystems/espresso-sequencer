@@ -67,7 +67,7 @@ pub struct NameSpaceTable<TableLen: TableLenTraits> {
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct Payload<TableLen: TableLenTraits, Offset: OffsetTraits, NsId: NsIdTraits> {
+pub struct Payload<TableLen: TableLenTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     #[serde(skip)]
     pub raw_payload: Vec<u8>,
@@ -86,11 +86,11 @@ pub struct Payload<TableLen: TableLenTraits, Offset: OffsetTraits, NsId: NsIdTra
     #[serde(skip)]
     pub tx_table_len_proof: OnceLock<Option<RangeProof>>,
     pub table_len: TableLen,
-    pub offset: Offset,
-    pub ns_id: NsId,
+    // TODO pub offset: Offset,
+    // TODO pub ns_id: NsId,
 }
 
-impl Payload<u32, u32, [u8; 32]> {
+impl<TableLen: TableLenTraits> Payload<TableLen> {
     pub fn new() -> Self {
         Self {
             raw_payload: vec![],
@@ -98,21 +98,21 @@ impl Payload<u32, u32, [u8; 32]> {
             namespaces: HashMap::new(),
             tx_table_len_proof: Default::default(),
             table_len: Default::default(),
-            offset: Default::default(),
-            ns_id: Default::default(),
+            //offset: Default::default(),
+            //ns_id: Default::default(),
         }
     }
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        let ns_table = NameSpaceTable::<u32>::from_bytes(ns_table_bytes);
+        let ns_table = NameSpaceTable::<TableLen>::from_bytes(ns_table_bytes);
         ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        let ns_table = NameSpaceTable::<u32>::from_vec(ns_table_bytes.to_vec());
+        let ns_table = NameSpaceTable::<TableLen>::from_vec(ns_table_bytes.to_vec());
         0..ns_table.len()
     }
 
@@ -121,15 +121,15 @@ impl Payload<u32, u32, [u8; 32]> {
     /// Returns (ns_payload, ns_proof) where ns_payload is raw bytes.
     pub fn namespace_with_proof(
         &self,
-        meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
+        meta: &[u8], //&<Self as hotshot_types::traits::BlockPayload>::Metadata, TODO
         ns_index: usize,
     ) -> Option<(Vec<u8>, NamespaceProof)> {
-        let ns_table = NameSpaceTable::<u32>::from_bytes(meta);
+        let ns_table = NameSpaceTable::<TableLen>::from_bytes(meta);
         if ns_index >= ns_table.len() {
             return None; // error: index out of bounds
         }
 
-        let ns_table = NameSpaceTable::<u32>::from_bytes(meta);
+        let ns_table = NameSpaceTable::<TableLen>::from_bytes(meta);
         let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         let vid = test_vid_factory(); // TODO temporary VID construction
@@ -186,7 +186,7 @@ impl Payload<u32, u32, [u8; 32]> {
 
     pub fn update_namespace_with_tx(
         &mut self,
-        tx: <Payload<u32, u32, [u8; 32]> as hotshot::traits::BlockPayload>::Transaction,
+        tx: <Payload<u32> as hotshot::traits::BlockPayload>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
@@ -234,13 +234,13 @@ impl Payload<u32, u32, [u8; 32]> {
     }
 }
 
-impl Display for Payload<u32, u32, [u8; 32]> {
+impl<TableLen: TableLenTraits + std::fmt::Debug> Display for Payload<TableLen> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl Committable for Payload<u32, u32, [u8; 32]> {
+impl<TableLen: TableLenTraits> Committable for Payload<TableLen> {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }

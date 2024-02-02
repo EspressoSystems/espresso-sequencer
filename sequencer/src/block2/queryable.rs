@@ -14,7 +14,7 @@ use super::{
     RangeProof,
 };
 
-impl QueryablePayload for Payload<u32, u32, [u8; 32]> {
+impl QueryablePayload for Payload<u32> {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a, u32>;
     type InclusionProof = TxInclusionProof;

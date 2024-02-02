@@ -213,7 +213,7 @@ impl<TableLen: TableLenTraits> TxTable<TableLen> {
 // TODO currently unused but contains code that might get re-used in the near future.
 fn _get_tx_table_entry(
     ns_offset: usize,
-    block_payload: &Payload<u32, u32, [u8; 32]>,
+    block_payload: &Payload<u32>,
     block_payload_len: usize,
     tx_index: usize,
 ) -> TxTableEntry {

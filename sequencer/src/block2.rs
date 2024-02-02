@@ -22,10 +22,11 @@ pub mod tx_iterator;
 
 use payload::Payload;
 
-impl BlockPayload for Payload<u32, u32, [u8; 32]> {
+impl BlockPayload for Payload<u32> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = Vec<u8>;
+
     type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
     /// Returns (Self, metadata).
@@ -75,8 +76,8 @@ impl BlockPayload for Payload<u32, u32, [u8; 32]> {
             raw_payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
             table_len: 0,
-            offset: 0,
-            ns_id: [0; 32],
+            //offset: 0,
+            //ns_id: [0; 32],
             ns_table: Default::default(),
             namespaces: Default::default(), // TODO (philippe) update
         }

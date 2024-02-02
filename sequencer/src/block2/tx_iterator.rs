@@ -25,7 +25,7 @@ pub struct TxIterator<
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
-    block_payload: &'a Payload<u32, u32, [u8; 32]>,
+    block_payload: &'a Payload<u32>,
     ns_table: NameSpaceTable<TableLen>,
 }
 
@@ -39,10 +39,7 @@ impl<
             + std::marker::Sync,
     > TxIterator<'a, TableLen>
 {
-    pub fn new(
-        ns_table: NameSpaceTable<TableLen>,
-        block_payload: &'a Payload<u32, u32, [u8; 32]>,
-    ) -> Self {
+    pub fn new(ns_table: NameSpaceTable<TableLen>, block_payload: &'a Payload<u32>) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..ns_table.len(),
