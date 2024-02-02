@@ -177,7 +177,7 @@ pub mod testing {
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
     use portpicker::pick_unused_port;
-    use std::fmt::Display;
+    use std::{fmt::Display, time::Duration};
     use tide_disco::App;
 
     /// Either Postgres or no storage.
@@ -191,15 +191,12 @@ pub mod testing {
     /// anything from local storage, but the tests still pass.
     pub enum Storage {
         Sql(TmpDb),
-        NoStorage,
+        NoStorage { fetch_from_port: u16 },
     }
 
     pub enum DataSource {
         Sql(SqlDataSource<MockTypes, NoFetching>),
-        NoStorage {
-            data_source: FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider>,
-            fetch_from_port: u16,
-        },
+        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider>),
     }
 
     #[async_trait]
@@ -208,7 +205,9 @@ pub mod testing {
 
         async fn create(node_id: usize) -> Self::Storage {
             if node_id == 0 {
-                Storage::NoStorage
+                Storage::NoStorage {
+                    fetch_from_port: pick_unused_port().unwrap(),
+                }
             } else {
                 Storage::Sql(TmpDb::init().await)
             }
@@ -219,17 +218,29 @@ pub mod testing {
                 Storage::Sql(db) => {
                     Self::Sql(db.config().connect(Default::default()).await.unwrap())
                 }
-                Storage::NoStorage => {
-                    let fetch_from_port = pick_unused_port().unwrap();
+                Storage::NoStorage { fetch_from_port } => {
+                    tracing::info!("creating NoStorage node, fetching missing data from port {fetch_from_port}");
                     let provider = QueryServiceProvider::new(
                         format!("http://localhost:{fetch_from_port}")
                             .parse()
                             .unwrap(),
                     );
-                    Self::NoStorage {
-                        data_source: FetchingDataSource::new(NoStorage, provider).await.unwrap(),
-                        fetch_from_port: pick_unused_port().unwrap(),
-                    }
+                    Self::NoStorage(
+                        FetchingDataSource::builder(NoStorage, provider)
+                            // The default minor scan interval is suitable for real scenarios, where
+                            // missing blocks are quite rare. But in these tests, we rely entirely
+                            // on proactive scanning to recover some objects, so we want to do this
+                            // quite frequently.
+                            .with_minor_scan_interval(Duration::from_millis(100))
+                            // Similarly, we even need to do major scans frequently (every 2 minor
+                            // scans, or 0.2s), since we are constantly losing old objects (since we
+                            // don't have storage) and the test frequently goes back and looks up
+                            // old objects.
+                            .with_major_scan_interval(2)
+                            .build()
+                            .await
+                            .unwrap(),
+                    )
                 }
             }
         }
@@ -249,12 +260,10 @@ pub mod testing {
 
         async fn setup(network: &MockNetwork<Self>) {
             // Spawn the web server on node 1 that node 0 will use to fetch missing data.
-            let Self::NoStorage {
-                fetch_from_port, ..
-            } = *network.data_source().read().await
-            else {
+            let Storage::NoStorage { fetch_from_port } = network.storage() else {
                 panic!("node 0 should always be NoStorage node");
             };
+            tracing::info!("spawning server for missing data on port {fetch_from_port}");
             let api_data_source = network.data_source_index(1);
             let mut app = App::<_, Error>::with_state(api_data_source);
             app.register_module("availability", define_api(&Default::default()).unwrap())
@@ -277,14 +286,14 @@ pub mod testing {
         async fn commit(&mut self) -> Result<(), Self::Error> {
             match self {
                 Self::Sql(data_source) => data_source.commit().await.map_err(err_msg),
-                Self::NoStorage { data_source, .. } => data_source.commit().await.map_err(err_msg),
+                Self::NoStorage(data_source) => data_source.commit().await.map_err(err_msg),
             }
         }
 
         async fn revert(&mut self) {
             match self {
                 Self::Sql(data_source) => data_source.revert().await,
-                Self::NoStorage { data_source, .. } => data_source.revert().await,
+                Self::NoStorage(data_source) => data_source.revert().await,
             }
         }
     }
@@ -307,7 +316,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_leaf(id).await,
-                Self::NoStorage { data_source, .. } => data_source.get_leaf(id).await,
+                Self::NoStorage(data_source) => data_source.get_leaf(id).await,
             }
         }
 
@@ -317,7 +326,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_block(id).await,
-                Self::NoStorage { data_source, .. } => data_source.get_block(id).await,
+                Self::NoStorage(data_source) => data_source.get_block(id).await,
             }
         }
 
@@ -327,7 +336,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_payload(id).await,
-                Self::NoStorage { data_source, .. } => data_source.get_payload(id).await,
+                Self::NoStorage(data_source) => data_source.get_payload(id).await,
             }
         }
 
@@ -337,9 +346,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_leaf_range(range).await.boxed(),
-                Self::NoStorage { data_source, .. } => {
-                    data_source.get_leaf_range(range).await.boxed()
-                }
+                Self::NoStorage(data_source) => data_source.get_leaf_range(range).await.boxed(),
             }
         }
 
@@ -349,9 +356,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_block_range(range).await.boxed(),
-                Self::NoStorage { data_source, .. } => {
-                    data_source.get_block_range(range).await.boxed()
-                }
+                Self::NoStorage(data_source) => data_source.get_block_range(range).await.boxed(),
             }
         }
 
@@ -361,9 +366,7 @@ pub mod testing {
         {
             match self {
                 Self::Sql(data_source) => data_source.get_payload_range(range).await.boxed(),
-                Self::NoStorage { data_source, .. } => {
-                    data_source.get_payload_range(range).await.boxed()
-                }
+                Self::NoStorage(data_source) => data_source.get_payload_range(range).await.boxed(),
             }
         }
 
@@ -375,9 +378,7 @@ pub mod testing {
         ) -> Fetch<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
             match self {
                 Self::Sql(data_source) => data_source.get_block_with_transaction(hash).await,
-                Self::NoStorage { data_source, .. } => {
-                    data_source.get_block_with_transaction(hash).await
-                }
+                Self::NoStorage(data_source) => data_source.get_block_with_transaction(hash).await,
             }
         }
     }
@@ -391,7 +392,7 @@ pub mod testing {
                 Self::Sql(data_source) => UpdateAvailabilityData::insert_leaf(data_source, leaf)
                     .await
                     .map_err(err_msg),
-                Self::NoStorage { data_source, .. } => {
+                Self::NoStorage(data_source) => {
                     UpdateAvailabilityData::insert_leaf(data_source, leaf)
                         .await
                         .map_err(err_msg)
@@ -405,7 +406,7 @@ pub mod testing {
         ) -> Result<(), Self::Error> {
             match self {
                 Self::Sql(data_source) => data_source.insert_block(block).await.map_err(err_msg),
-                Self::NoStorage { data_source, .. } => {
+                Self::NoStorage(data_source) => {
                     data_source.insert_block(block).await.map_err(err_msg)
                 }
             }
@@ -417,9 +418,7 @@ pub mod testing {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
                 Self::Sql(data_source) => NodeDataSource::block_height(data_source).await,
-                Self::NoStorage { data_source, .. } => {
-                    NodeDataSource::block_height(data_source).await
-                }
+                Self::NoStorage(data_source) => NodeDataSource::block_height(data_source).await,
             }
         }
 
@@ -430,16 +429,14 @@ pub mod testing {
         ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
             match self {
                 Self::Sql(data_source) => data_source.get_proposals(proposer, limit).await,
-                Self::NoStorage { data_source, .. } => {
-                    data_source.get_proposals(proposer, limit).await
-                }
+                Self::NoStorage(data_source) => data_source.get_proposals(proposer, limit).await,
             }
         }
 
         async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
             match self {
                 Self::Sql(data_source) => data_source.count_proposals(proposer).await,
-                Self::NoStorage { data_source, .. } => data_source.count_proposals(proposer).await,
+                Self::NoStorage(data_source) => data_source.count_proposals(proposer).await,
             }
         }
     }
@@ -453,11 +450,9 @@ pub mod testing {
                 Self::Sql(data_source) => UpdateNodeData::insert_leaf(data_source, leaf)
                     .await
                     .map_err(err_msg),
-                Self::NoStorage { data_source, .. } => {
-                    UpdateNodeData::insert_leaf(data_source, leaf)
-                        .await
-                        .map_err(err_msg)
-                }
+                Self::NoStorage(data_source) => UpdateNodeData::insert_leaf(data_source, leaf)
+                    .await
+                    .map_err(err_msg),
             }
         }
     }
@@ -467,16 +462,14 @@ pub mod testing {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
                 Self::Sql(data_source) => StatusDataSource::block_height(data_source).await,
-                Self::NoStorage { data_source, .. } => {
-                    StatusDataSource::block_height(data_source).await
-                }
+                Self::NoStorage(data_source) => StatusDataSource::block_height(data_source).await,
             }
         }
 
         fn metrics(&self) -> &PrometheusMetrics {
             match self {
                 Self::Sql(data_source) => data_source.metrics(),
-                Self::NoStorage { data_source, .. } => data_source.metrics(),
+                Self::NoStorage(data_source) => data_source.metrics(),
             }
         }
     }
@@ -498,5 +491,6 @@ mod test {
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(DataSource);
+    instantiate_availability_tests!(DataSource);
+    instantiate_status_tests!(DataSource);
 }

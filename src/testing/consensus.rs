@@ -57,11 +57,11 @@ pub struct MockNetwork<D: DataSourceLifeCycle> {
 // convenient type alias.
 pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
 
-const MINIMUM_NODES: usize = 2;
+pub const NUM_NODES: usize = 2;
 
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
-        let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..MINIMUM_NODES)
+        let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..NUM_NODES)
             .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
             .unzip();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();

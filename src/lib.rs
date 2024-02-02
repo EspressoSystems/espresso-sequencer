@@ -383,6 +383,7 @@ pub mod metrics;
 pub mod node;
 mod resolvable;
 pub mod status;
+mod task;
 pub mod testing;
 
 pub use error::Error;

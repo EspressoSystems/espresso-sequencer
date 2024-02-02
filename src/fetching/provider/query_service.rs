@@ -97,13 +97,14 @@ mod test {
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
         data_source::{
-            storage::sql::{testing::TmpDb, SqlStorage},
-            FetchingDataSource, VersionedDataSource,
+            sql::{self, SqlDataSource},
+            storage::sql::testing::TmpDb,
+            AvailabilityProvider, VersionedDataSource,
         },
         fetching::provider::{NoFetching, TestProvider},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::mock_transaction,
+            mocks::{mock_transaction, MockTypes},
             setup_test, sleep,
         },
     };
@@ -117,6 +118,28 @@ mod test {
     type Provider = TestProvider<QueryServiceProvider>;
 
     fn ignore<T>(_: T) {}
+
+    /// Build a data source suitable for this suite of tests.
+    async fn builder<P: AvailabilityProvider<MockTypes> + Clone>(
+        db: &TmpDb,
+        provider: &P,
+    ) -> sql::Builder<MockTypes, P> {
+        db.config()
+            .builder((*provider).clone())
+            .await
+            .unwrap()
+            // We disable proactive fetching for these tests, since we are intending to test on
+            // demand fetching, and proactive fetching could lead to false successes.
+            .disable_proactive_fetching()
+    }
+
+    /// A data source suitable for this suite of tests, with the default options.
+    async fn data_source<P: AvailabilityProvider<MockTypes> + Clone>(
+        db: &TmpDb,
+        provider: &P,
+    ) -> SqlDataSource<MockTypes, P> {
+        builder(db, provider).await.build().await.unwrap()
+    }
 
     #[async_std::test]
     async fn test_fetch_on_request() {
@@ -137,7 +160,7 @@ mod test {
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
         ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let mut data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -326,7 +349,7 @@ mod test {
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
         ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let mut data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -378,7 +401,7 @@ mod test {
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
         ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let mut data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -434,7 +457,7 @@ mod test {
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
         ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let mut data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -479,9 +502,10 @@ mod test {
             .unwrap();
         spawn(app.serve(format!("0.0.0.0:{port}")));
 
-        // Start a data source which is not receiving events from consensus.
+        // Start a data source which is not receiving events from consensus. We don't give it a
+        // fetcher since transactions are always fetched passively anyways.
         let db = TmpDb::init().await;
-        let mut data_source = db.config().connect(NoFetching).await.unwrap();
+        let mut data_source = data_source(&db, &NoFetching).await;
 
         // Subscribe to blocks.
         let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
@@ -551,13 +575,12 @@ mod test {
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
         ));
-        let mut data_source = FetchingDataSource::with_retry_delay(
-            SqlStorage::connect(db.config()).await.unwrap(),
-            provider.clone(),
-            Some(Duration::from_secs(1)),
-        )
-        .await
-        .unwrap();
+        let mut data_source = builder(&db, &provider)
+            .await
+            .with_retry_delay(Duration::from_secs(1))
+            .build()
+            .await
+            .unwrap();
 
         // Start consensus.
         network.start().await;

@@ -296,7 +296,6 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::super::{availability_tests, status_tests};
     use super::ExtensibleDataSource;
     use crate::testing::consensus::MockDataSource;
 

@@ -10,6 +10,69 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Asynchronous retrieval of missing data.
+//!
+//! [`FetchingDataSource`] combines a local storage implementation with a remote data availability
+//! provider to create a data sources which caches data locally, but which is capable of fetching
+//! missing data from a remote source, either proactively or on demand.
+//!
+//! This implementation supports three kinds of data fetching.
+//!
+//! # Proactive Fetching
+//!
+//! Proactive fetching means actively scanning the local database for missing objects and
+//! proactively retrieving them from a remote provider, even if those objects have yet to be
+//! requested by a client. Doing this increases the chance of success and decreases latency when a
+//! client does eventually ask for those objects. This is also the mechanism by which a query
+//! service joining a network late, or having been offline for some time, is able to catch up with
+//! the events on the network that it missed.
+//!
+//! The current implementation of proactive fetching is meant to be the simplest effective algorithm
+//! which still gives us a reasonable range of configuration options for experimentation. It is
+//! subject to change as we learn about the behavior of proactive fetching in a realistic system.
+//!
+//! Proactive fetching is currently implemented by a background task which performs periodic scans
+//! of the database, identifying and retrieving missing objects. This task is generally low
+//! priority, since missing objects are rare, and it will take care not to monopolize resources that
+//! could be used to serve requests. To reduce load and to optimize for the common case where blocks
+//! are usually not missing once they have already been retrieved, we distinguish between _major_
+//! and _minor_ scans.
+//!
+//! Minor scans are lightweight and can run very frequently. They will only look for missing
+//! blocks among blocks that are new since the previous scan. Thus, the more frequently minor
+//! scans run, the less work they have to do. This allows them to run frequently, giving low
+//! latency for retrieval of newly produced blocks that we failed to receive initially. Between
+//! each minor scan, the task will sleep for [a configurable
+//! duration](Builder::with_minor_scan_interval) to wait for new blocks to be produced and give
+//! other tasks full access to all shared resources.
+//!
+//! Every `n`th scan (`n` is [configurable](Builder::with_major_scan_interval)) is a major scan.
+//! These scan all blocks from 0, which guarantees that we will eventually retrieve all blocks, even
+//! if for some reason we have lost a block that we previously had (due to storage failures and
+//! corruptions, or simple bugs in this software). These scans are rather expensive (although they
+//! will release control of shared resources many times during the duration of the scan), but
+//! because it is rather unlikely that a major scan will discover any missing blocks that the next
+//! minor scan would have missed, it is ok if major scans run very infrequently.
+//!
+//! # Active Fetching
+//!
+//! Active fetching means reaching out to a remote data availability provider to retrieve a missing
+//! resource, upon receiving a request for that resource from a client. Not every request for a
+//! missing resource triggers an active fetch. To avoid spamming peers with requests for missing
+//! data, we only actively fetch resources that are known to exist somewhere. This means we can
+//! actively fetch leaves and headers when we are requested a leaf or header by height, whose height
+//! is less than the current chain height. We can fetch a block when the corresponding header exists
+//! (corresponding based on height, hash, or payload hash) or can be actively fetched.
+//!
+//! # Passive Fetching
+//!
+//! For requests that cannot be actively fetched (for example, a block requested by hash, where we
+//! do not have a header proving that a block with that hash exists), we use passive fetching. This
+//! essentially means waiting passively until the query service receives an object that satisfies
+//! the request. This object may be received because it was actively fetched in responsive to a
+//! different request for the same object, one that permitted an active fetch. Or it may have been
+//! fetched [proactively](#proactive-fetching).
+
 use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
 use crate::{
     availability::{
@@ -25,10 +88,14 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
+    task::BackgroundTask,
     Header, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use anyhow::Context;
-use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use async_std::{
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    task::sleep,
+};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -43,17 +110,108 @@ use std::{
     fmt::{Debug, Display},
     future::IntoFuture,
     iter::once,
+    marker::PhantomData,
     ops::{Bound, Deref, DerefMut, Range, RangeBounds},
     time::Duration,
 };
 
-/// The number of items to process at a time when loading a range or stream.
-///
-/// This determines:
-/// * The number of objects to load from storage in a single request
-/// * The number of objects to buffer in memory per request/stream
-/// * The number of concurrent notification subscriptions per request/stream
-const RANGE_CHUNK_SIZE: usize = 25;
+/// Builder for [`FetchingDataSource`] with configuration.
+pub struct Builder<Types, S, P> {
+    storage: S,
+    provider: P,
+    retry_delay: Option<Duration>,
+    range_chunk_size: usize,
+    minor_scan_interval: Duration,
+    major_scan_interval: usize,
+    proactive_fetching: bool,
+    _types: PhantomData<Types>,
+}
+
+impl<Types, S, P> Builder<Types, S, P> {
+    /// Construct a new builder with the given storage and fetcher and the default options.
+    pub fn new(storage: S, provider: P) -> Self {
+        Self {
+            storage,
+            provider,
+            retry_delay: None,
+            range_chunk_size: 25,
+            // By default, we run minor proactive scans fairly frequently: once every minute. These
+            // scans are cheap (moreso the more frequently they run) and can help us keep up with
+            // the head of the chain even if our attached consensus instance is behind.
+            minor_scan_interval: Duration::from_secs(60),
+            // Major scans, on the other hand, are rather expensive and not especially important for
+            // usability. We run them rarely, once every 60 minor scans, or once every hour by
+            // default.
+            major_scan_interval: 60,
+            proactive_fetching: true,
+            _types: Default::default(),
+        }
+    }
+
+    /// Set the maximum delay between retries of fetches.
+    pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
+        self.retry_delay = Some(retry_delay);
+        self
+    }
+
+    /// Set the number of items to process at a time when loading a range or stream.
+    ///
+    /// This determines:
+    /// * The number of objects to load from storage in a single request
+    /// * The number of objects to buffer in memory per request/stream
+    /// * The number of concurrent notification subscriptions per request/stream
+    pub fn with_range_chunk_size(mut self, range_chunk_size: usize) -> Self {
+        self.range_chunk_size = range_chunk_size;
+        self
+    }
+
+    /// Set the time interval between minor proactive fetching scans.
+    ///
+    /// See [proactive fetching](self#proactive-fetching).
+    pub fn with_minor_scan_interval(mut self, interval: Duration) -> Self {
+        self.minor_scan_interval = interval;
+        self
+    }
+
+    /// Set the interval (denominated in [minor scans](Self::with_minor_scan_interval)) between
+    /// major proactive fetching scans.
+    ///
+    /// See [proactive fetching](self#proactive-fetching).
+    pub fn with_major_scan_interval(mut self, interval: usize) -> Self {
+        self.major_scan_interval = interval;
+        self
+    }
+
+    /// Run without [proactive fetching](self#proactive-fetching).
+    ///
+    /// This can reduce load on the CPU and the database, but increases the probability that
+    /// requests will fail due to missing resources. If resources are constrained, it is recommended
+    /// to run with rare proactive fetching (see
+    /// [`with_major_scan_interval`](Self::with_major_scan_interval),
+    /// [`with_minor_scan_interval`](Self::with_minor_scan_interval)), rather than disabling it
+    /// entirely.
+    pub fn disable_proactive_fetching(mut self) -> Self {
+        self.proactive_fetching = false;
+        self
+    }
+}
+
+impl<Types, S, P> Builder<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: NodeDataSource<Types>
+        + UpdateNodeData<Types>
+        + AvailabilityStorage<Types>
+        + VersionedDataSource
+        + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    /// Build a [`FetchingDataSource`] with these options.
+    pub async fn build(self) -> anyhow::Result<FetchingDataSource<Types, S, P>> {
+        FetchingDataSource::new(self).await
+    }
+}
 
 /// The most basic kind of data source.
 ///
@@ -84,6 +242,8 @@ where
     fetcher: Arc<Fetcher<Types, S, P>>,
     // The rest of the data we need for implementing data source traits but not for fetching.
     metrics: PrometheusMetrics,
+    // The proactive scanner task. This is only saved here so that we can cancel it on drop.
+    scanner: Option<BackgroundTask>,
 }
 
 impl<Types, S, P> FetchingDataSource<Types, S, P>
@@ -93,21 +253,36 @@ where
     S: NodeDataSource<Types>
         + UpdateNodeData<Types>
         + AvailabilityStorage<Types>
-        + VersionedDataSource,
-    P: Send + Sync,
+        + VersionedDataSource
+        + 'static,
+    P: AvailabilityProvider<Types>,
 {
-    /// Create a data source with local storage and a remote data availability provider.
-    pub async fn new(storage: S, provider: P) -> anyhow::Result<Self> {
-        Self::with_retry_delay(storage, provider, None).await
+    /// Build a [`FetchingDataSource`] with the given `storage` and `provider`.
+    pub fn builder(storage: S, provider: P) -> Builder<Types, S, P> {
+        Builder::new(storage, provider)
     }
 
-    pub async fn with_retry_delay(
-        storage: S,
-        provider: P,
-        delay: Option<Duration>,
-    ) -> anyhow::Result<Self> {
+    /// Create a data source with local storage and a remote data availability provider.
+    pub async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let proactive_fetching = builder.proactive_fetching;
+        let minor_interval = builder.minor_scan_interval;
+        let major_interval = builder.major_scan_interval;
+
+        let fetcher = Arc::new(Fetcher::new(builder).await?);
+        let scanner = if proactive_fetching {
+            Some(BackgroundTask::spawn(
+                "proactive scanner",
+                fetcher
+                    .clone()
+                    .proactive_scan(minor_interval, major_interval),
+            ))
+        } else {
+            None
+        };
+
         let mut ds = Self {
-            fetcher: Arc::new(Fetcher::new(storage, provider, delay).await?),
+            fetcher,
+            scanner,
             metrics: Default::default(),
         };
 
@@ -348,11 +523,11 @@ where
     type Error = S::Error;
 
     async fn commit(&mut self) -> Result<(), Self::Error> {
-        self.storage_mut().await.commit().await
+        self.fetcher.storage.write().await.commit().await
     }
 
     async fn revert(&mut self) {
-        self.storage_mut().await.revert().await
+        self.fetcher.storage.write().await.revert().await
     }
 }
 
@@ -366,6 +541,7 @@ where
     provider: Arc<P>,
     payload_fetcher: Arc<fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>>,
     leaf_fetcher: Arc<fetching::Fetcher<request::LeafRequest, LeafCallback<Types, S, P>>>,
+    range_chunk_size: usize,
 }
 
 #[derive(Debug)]
@@ -375,6 +551,8 @@ where
 {
     storage: S,
     height: u64,
+    // The block height at the last commit, which we will roll back to on `revert`.
+    committed_height: u64,
     block_notifier: Notifier<BlockQueryData<Types>>,
     leaf_notifier: Notifier<LeafQueryData<Types>>,
 }
@@ -407,7 +585,14 @@ where
     S: VersionedDataSource,
 {
     async fn commit(&mut self) -> Result<(), S::Error> {
-        self.storage.commit().await
+        self.storage.commit().await?;
+        self.committed_height = self.height;
+        Ok(())
+    }
+
+    async fn revert(&mut self) {
+        self.storage.revert().await;
+        self.height = self.committed_height;
     }
 }
 
@@ -416,24 +601,27 @@ where
     Types: NodeType,
     S: NodeDataSource<Types>,
 {
-    async fn new(storage: S, provider: P, retry_delay: Option<Duration>) -> anyhow::Result<Self> {
+    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
-        if let Some(delay) = retry_delay {
+        if let Some(delay) = builder.retry_delay {
             payload_fetcher = payload_fetcher.with_retry_delay(delay);
             leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
         }
 
+        let height = builder.storage.block_height().await? as u64;
         Ok(Self {
             storage: RwLock::new(NotifyStorage {
-                height: storage.block_height().await? as u64,
-                storage,
+                height,
+                committed_height: height,
+                storage: builder.storage,
                 block_notifier: Notifier::new(),
                 leaf_notifier: Notifier::new(),
             }),
-            provider: Arc::new(provider),
+            provider: Arc::new(builder.provider),
             payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
+            range_chunk_size: builder.range_chunk_size,
         })
     }
 }
@@ -476,7 +664,7 @@ where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
     {
-        stream::iter(range_chunks(range))
+        stream::iter(range_chunks(range, self.range_chunk_size))
             .then(move |chunk| self.clone().get_chunk(chunk))
             .flatten()
             .boxed()
@@ -627,10 +815,51 @@ where
         // Wait for the object to arrive.
         Fetch::Pending(fut.boxed())
     }
+
+    /// Proactively search for and retrieve missing objects.
+    ///
+    /// This function will proactively identify and retrieve blocks and leaves which are missing
+    /// from storage. It will run until cancelled, thus, it is meant to be spawned as a background
+    /// task rather than called synchronously.
+    async fn proactive_scan(self: Arc<Self>, minor_interval: Duration, major_interval: usize) {
+        let mut prev_height = 0;
+
+        for i in 0.. {
+            // Get the block height; we will look for any missing blocks up to `block_height`.
+            let block_height = { self.storage.read().await.height } as usize;
+
+            // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
+            // (much more frequent) we fetch blocks that are missing since the last scan.
+            let start = if i % major_interval == 0 {
+                0
+            } else {
+                prev_height
+            };
+            tracing::info!("starting proactive scan {i} of blocks from {start}-{block_height}");
+            prev_height = block_height;
+
+            // Iterate over all blocks that we should have. Merely iterating over the `Fetch`es
+            // without awaiting them is enough to trigger active fetches of missing blocks, since
+            // we always trigger an active fetch when fetching by block number. Moreover, fetching
+            // the block is enough to trigger an active fetch of the corresponding leaf if it too is
+            // missing, so this one loop takes care of all resources that might be missing.
+            //
+            // The chunking behavior of `get_range` automatically ensures that, no matter how big
+            // the range is, we will release the read lock on storage every `chunk_size` items, so
+            // we don't starve out would-be writers.
+            let mut blocks = self
+                .clone()
+                .get_range::<_, BlockQueryData<Types>>(start..block_height);
+            while blocks.next().await.is_some() {}
+
+            tracing::info!("completed proactive scan {i} of blocks from {start}-{block_height}, will scan again in {minor_interval:?}");
+            sleep(minor_interval).await;
+        }
+    }
 }
 
 /// A provider which can be used as a fetcher by the availability service.
-trait AvailabilityProvider<Types: NodeType>:
+pub trait AvailabilityProvider<Types: NodeType>:
     Provider<Types, request::LeafRequest> + Provider<Types, request::PayloadRequest> + Sync + 'static
 {
 }
@@ -953,7 +1182,7 @@ where
                 //    members.
                 if let Some(header) = load_header(&**storage, id)
                     .await
-                    .context("loading header for block {id}")
+                    .context(format!("loading header for block {id}"))
                     .ok_or_trace()
                 {
                     fetch_block_with_header(fetcher, header);
@@ -1361,7 +1590,7 @@ where
 }
 
 /// Break a range into fixed-size chunks.
-fn range_chunks<R>(range: R) -> impl Iterator<Item = Range<usize>>
+fn range_chunks<R>(range: R, chunk_size: usize) -> impl Iterator<Item = Range<usize>>
 where
     R: RangeBounds<usize>,
 {
@@ -1377,7 +1606,7 @@ where
         Bound::Unbounded => usize::MAX,
     };
     std::iter::from_fn(move || {
-        let chunk_end = min(start + RANGE_CHUNK_SIZE, end);
+        let chunk_end = min(start + chunk_size, end);
         if chunk_end == start {
             return None;
         }

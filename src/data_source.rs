@@ -27,7 +27,7 @@
 //!
 
 mod extension;
-mod fetching;
+pub mod fetching;
 mod fs;
 mod metrics;
 mod notifier;
@@ -36,7 +36,7 @@ pub mod storage;
 mod update;
 
 pub use extension::ExtensibleDataSource;
-pub use fetching::FetchingDataSource;
+pub use fetching::{AvailabilityProvider, FetchingDataSource};
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
 #[cfg(feature = "metrics-data-source")]
@@ -45,31 +45,18 @@ pub use metrics::MetricsDataSource;
 pub use sql::SqlDataSource;
 pub use update::{UpdateDataSource, VersionedDataSource};
 
-/// Generic tests we can instantiate for all the availability data sources.
 #[cfg(any(test, feature = "testing"))]
-#[espresso_macros::generic_tests]
-pub mod availability_tests {
+mod test_helpers {
     use crate::{
-        availability::{
-            payload_size, BlockId, BlockQueryData, Fetch, LeafQueryData, UpdateAvailabilityData,
-        },
+        availability::{BlockQueryData, Fetch, LeafQueryData},
         node::NodeDataSource,
-        testing::{
-            consensus::{MockNetwork, TestableDataSource},
-            mocks::{mock_transaction, MockPayload, MockTypes},
-            setup_test,
-        },
-        Leaf,
+        testing::{consensus::TestableDataSource, mocks::MockTypes},
     };
     use async_std::sync::RwLock;
-    use commit::Committable;
     use futures::{
         future,
         stream::{BoxStream, StreamExt},
     };
-    use hotshot_types::simple_certificate::QuorumCertificate;
-    use std::collections::{HashMap, HashSet};
-    use std::fmt::Debug;
     use std::ops::{Bound, RangeBounds};
 
     /// Apply an upper bound to a range based on the currently available block height.
@@ -87,7 +74,10 @@ pub mod availability_tests {
     }
 
     /// Get a stream of blocks, implicitly terminating at the current block height.
-    async fn block_range<R, D>(ds: &D, range: R) -> BoxStream<'static, BlockQueryData<MockTypes>>
+    pub async fn block_range<R, D>(
+        ds: &D,
+        range: R,
+    ) -> BoxStream<'static, BlockQueryData<MockTypes>>
     where
         D: TestableDataSource,
         R: RangeBounds<usize> + Send + 'static,
@@ -99,7 +89,7 @@ pub mod availability_tests {
     }
 
     /// Get a stream of leaves, implicitly terminating at the current block height.
-    async fn leaf_range<R, D>(ds: &D, range: R) -> BoxStream<'static, LeafQueryData<MockTypes>>
+    pub async fn leaf_range<R, D>(ds: &D, range: R) -> BoxStream<'static, LeafQueryData<MockTypes>>
     where
         D: TestableDataSource,
         R: RangeBounds<usize> + Send + 'static,
@@ -110,7 +100,7 @@ pub mod availability_tests {
             .boxed()
     }
 
-    async fn get_non_empty_blocks(
+    pub async fn get_non_empty_blocks(
         ds: &RwLock<impl TestableDataSource>,
     ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
         let ds = ds.read().await;
@@ -122,6 +112,28 @@ pub mod availability_tests {
             .collect()
             .await
     }
+}
+
+/// Generic tests we can instantiate for all the availability data sources.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod availability_tests {
+    use super::test_helpers::*;
+    use crate::{
+        availability::{payload_size, BlockId},
+        node::NodeDataSource,
+        testing::{
+            consensus::{MockNetwork, TestableDataSource},
+            mocks::{mock_transaction, MockTypes},
+            setup_test,
+        },
+    };
+    use async_std::sync::RwLock;
+    use commit::Committable;
+    use futures::stream::StreamExt;
+    use std::collections::HashMap;
+    use std::fmt::Debug;
+    use std::ops::{Bound, RangeBounds};
 
     async fn validate(ds: &RwLock<impl TestableDataSource>) {
         let ds = ds.read().await;
@@ -136,17 +148,12 @@ pub mod availability_tests {
             assert_eq!(leaf.hash(), leaf.leaf().commit());
 
             // Check indices.
+            tracing::info!("looking up leaf {i} various ways");
             assert_eq!(leaf, ds.get_leaf(i).await.await);
             assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.await);
-            assert!(ds
-                .get_proposals(&leaf.proposer(), None)
-                .await
-                .unwrap()
-                .contains(&leaf));
 
-            let Ok(block) = ds.get_block(i).await.try_resolve() else {
-                continue;
-            };
+            tracing::info!("looking up block {i} various ways");
+            let block = ds.get_block(i).await.await;
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
             assert_eq!(block.hash(), block.header().commit());
@@ -158,71 +165,83 @@ pub mod availability_tests {
             // We should be able to look up the block by payload hash unless its payload is a
             // duplicate. For duplicate payloads, this function returns the index of the first
             // duplicate.
+            //
+            // Note: this ordering is not a strict requirement. It should hold for payloads in local
+            // storage, but we don't have a good way of enforcing it if the payload is missing, in
+            // which case we will return the first matching payload we see, which could happen in
+            // any order. We use `try_resolve` to skip this check if the object isn't available
+            // locally.
             let ix = seen_payloads
                 .entry(block.payload_hash())
                 .or_insert(i as u64);
-            assert_eq!(
+            if let Ok(block) = ds
+                .get_block(BlockId::PayloadHash(block.payload_hash()))
+                .await
+                .try_resolve()
+            {
+                assert_eq!(block.height(), *ix);
+            } else {
+                tracing::warn!(
+                    "skipping block by payload index check for missing payload {:?}",
+                    block.header()
+                );
+                // At least check that _some_ block can be fetched.
                 ds.get_block(BlockId::PayloadHash(block.payload_hash()))
                     .await
-                    .await
-                    .height(),
-                *ix
-            );
+                    .await;
+            }
 
             // Check payload lookup.
             let expected_payload = block.clone().into();
             assert_eq!(ds.get_payload(i).await.await, expected_payload);
             assert_eq!(ds.get_payload(block.hash()).await.await, expected_payload);
-            if *ix == i as u64 {
-                assert_eq!(
-                    ds.get_payload(BlockId::PayloadHash(block.payload_hash()))
-                        .await
-                        .await,
-                    expected_payload
+            // Similar to the above, we can't guarantee which index we will get when passively
+            // fetching this payload, so only check the index if the payload is available locally.
+            if let Ok(payload) = ds
+                .get_payload(BlockId::PayloadHash(block.payload_hash()))
+                .await
+                .try_resolve()
+            {
+                if *ix == i as u64 {
+                    assert_eq!(payload, expected_payload);
+                }
+            } else {
+                tracing::warn!(
+                    "skipping payload index check for missing payload {:?}",
+                    block.header()
                 );
+                // At least check that _some_ payload can be fetched.
+                ds.get_payload(BlockId::PayloadHash(block.payload_hash()))
+                    .await
+                    .await;
             }
 
             for (j, txn) in block.enumerate() {
+                tracing::info!("looking up transaction {i},{j}");
+
                 // We should be able to look up the transaction by hash unless it is a duplicate.
                 // For duplicate transactions, this function returns the index of the first
                 // duplicate.
+                //
+                // Similar to the above, we can't guarantee which index we will get when passively
+                // fetching this transaction, so only check the index if the transaction is
+                // available locally.
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                let (block, pos) = ds.get_block_with_transaction(txn.commit()).await.await;
-                assert_eq!((block.height(), pos), *ix);
-            }
-        }
-
-        // Validate the list of proposals for every distinct proposer ID in the chain.
-        for proposer in leaf_range(&*ds, ..)
-            .await
-            .map(|leaf| leaf.proposer())
-            .collect::<HashSet<_>>()
-            .await
-        {
-            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
-            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
-            // one proposal from this proposer.
-            assert!(!proposals.is_empty());
-            // If we select with a limit, we should get the most recent `limit` proposals in
-            // chronological order.
-            let suffix = ds
-                .get_proposals(&proposer, Some(proposals.len() / 2))
-                .await
-                .unwrap();
-            assert_eq!(suffix.len(), proposals.len() / 2);
-            assert!(proposals.ends_with(&suffix));
-
-            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
-            // that the list of proposals is in chronological order.
-            let mut prev_height = None;
-            for leaf in proposals {
-                assert_eq!(proposer, leaf.proposer());
-                if let Some(prev_height) = prev_height {
-                    assert!(prev_height < leaf.height());
+                if let Ok((block, pos)) = ds
+                    .get_block_with_transaction(txn.commit())
+                    .await
+                    .try_resolve()
+                {
+                    assert_eq!((block.height(), pos), *ix);
+                } else {
+                    tracing::warn!(
+                        "skipping transaction index check for missing transaction {j} {txn:?}"
+                    );
+                    // At least check that _some_ transaction can be fetched.
+                    ds.get_block_with_transaction(txn.commit()).await.await;
                 }
-                prev_height = Some(leaf.height());
             }
         }
     }
@@ -262,16 +281,41 @@ pub mod availability_tests {
         // should be able to read the same data if we connect an entirely new data source to the
         // underlying storage.
         {
+            tracing::info!("checking persisted storage");
+
             // Lock the original data source to prevent concurrent updates.
             let ds = ds.read().await;
             let storage = D::connect(network.storage()).await;
+
+            // Ensure we have the same data in both data sources (if data was missing from the
+            // original it is of course allowed to be missing from persistent storage and thus from
+            // the latter).
+            let block_height = NodeDataSource::block_height(&*ds).await.unwrap();
             assert_eq!(
-                block_range(&*ds, ..).await.collect::<Vec<_>>().await,
-                block_range(&storage, ..).await.collect::<Vec<_>>().await
+                ds.get_block_range(..block_height)
+                    .await
+                    .map(|fetch| fetch.try_resolve().ok())
+                    .collect::<Vec<_>>()
+                    .await,
+                storage
+                    .get_block_range(..block_height)
+                    .await
+                    .map(|fetch| fetch.try_resolve().ok())
+                    .collect::<Vec<_>>()
+                    .await
             );
             assert_eq!(
-                leaf_range(&*ds, ..).await.collect::<Vec<_>>().await,
-                leaf_range(&storage, ..).await.collect::<Vec<_>>().await
+                ds.get_leaf_range(..block_height)
+                    .await
+                    .map(|fetch| fetch.try_resolve().ok())
+                    .collect::<Vec<_>>()
+                    .await,
+                storage
+                    .get_leaf_range(..block_height)
+                    .await
+                    .map(|fetch| fetch.try_resolve().ok())
+                    .collect::<Vec<_>>()
+                    .await
             );
         }
     }
@@ -358,6 +402,24 @@ pub mod availability_tests {
             self.0.end_bound()
         }
     }
+}
+
+/// Generic tests we can instantiate for any data source with reliable, versioned persistent storage.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod persistence_tests {
+    use crate::{
+        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        node::NodeDataSource,
+        testing::{
+            consensus::TestableDataSource,
+            mocks::{MockPayload, MockTypes},
+            setup_test,
+        },
+        Leaf,
+    };
+    use commit::Committable;
+    use hotshot_types::simple_certificate::QuorumCertificate;
 
     #[async_std::test]
     pub async fn test_revert<D: TestableDataSource>() {
@@ -450,6 +512,100 @@ pub mod availability_tests {
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.try_resolve().unwrap_err();
+    }
+}
+
+/// Generic tests we can instantiate for all the node data sources.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod node_tests {
+    use super::test_helpers::*;
+    use crate::testing::{
+        consensus::{MockNetwork, TestableDataSource},
+        setup_test,
+    };
+    use futures::stream::StreamExt;
+    use std::collections::HashSet;
+
+    async fn validate(ds: &impl TestableDataSource) {
+        let mut leaves = leaf_range(ds, ..).await;
+
+        // Check the consistency of our indexes by proposer for every leaf.
+        while let Some(leaf) = leaves.next().await {
+            assert!(ds
+                .get_proposals(&leaf.proposer(), None)
+                .await
+                .unwrap()
+                .contains(&leaf));
+        }
+
+        // Validate the list of proposals for every distinct proposer ID in the chain.
+        for proposer in leaf_range(ds, ..)
+            .await
+            .map(|leaf| leaf.proposer())
+            .collect::<HashSet<_>>()
+            .await
+        {
+            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
+            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
+            // one proposal from this proposer.
+            assert!(!proposals.is_empty());
+            // If we select with a limit, we should get the most recent `limit` proposals in
+            // chronological order.
+            let suffix = ds
+                .get_proposals(&proposer, Some(proposals.len() / 2))
+                .await
+                .unwrap();
+            assert_eq!(suffix.len(), proposals.len() / 2);
+            assert!(proposals.ends_with(&suffix));
+
+            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
+            // that the list of proposals is in chronological order.
+            let mut prev_height = None;
+            for leaf in proposals {
+                assert_eq!(proposer, leaf.proposer());
+                if let Some(prev_height) = prev_height {
+                    assert!(prev_height < leaf.height());
+                }
+                prev_height = Some(leaf.height());
+            }
+        }
+    }
+
+    #[async_std::test]
+    pub async fn test_proposer_queries<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        network.start().await;
+
+        // Wait for a few blocks to be produced, then validate the chain. We will wait for more
+        // blocks than there are nodes in the network, so we have some blocks with the same proposer.
+        let mut leaves = {
+            ds.read()
+                .await
+                .subscribe_leaves(0)
+                .await
+                .take(2 * network.num_nodes())
+        };
+        while let Some(leaf) = leaves.next().await {
+            tracing::info!("got leaf {}", leaf.height());
+        }
+        {
+            validate(&*ds.read().await).await;
+        }
+
+        // Check that all the updates have been committed to storage, not simply held in memory: a
+        // new data source created from the same underlying storage should have valid proposer
+        // indexes.
+        tracing::info!("checking persisted storage");
+
+        // Lock the original data source to prevent concurrent updates.
+        let _ = ds.read().await;
+        let storage = D::connect(network.storage()).await;
+        validate(&storage).await;
     }
 }
 
@@ -569,7 +725,13 @@ pub mod status_tests {
 #[macro_export]
 macro_rules! instantiate_data_source_tests {
     ($t:ty) => {
+        use $crate::data_source::{
+            availability_tests, node_tests, persistence_tests, status_tests,
+        };
+
         instantiate_availability_tests!($t);
+        instantiate_persistence_tests!($t);
+        instantiate_node_tests!($t);
         instantiate_status_tests!($t);
     };
 }
