@@ -105,7 +105,8 @@ forge test
 In order to avoid constant warnings about checksum mismatches with [svm-rs](https://github.com/roynalnaruto/svm-rs)
 managed `solc` we set `FOUNDRY_SRC` to solc installed via flake.nix.
 
-- To use the contrats from rust generate the rust contracts bindings: `just gen-bindings`.
+- To use the contracts from rust generate the rust contracts bindings: `just gen-bindings`.
+- Bindings are only generated for contracts in the `contracts/src` folder
 
 To generate documentation in `./docs` for solidity code run
 
@@ -128,6 +129,11 @@ To additionally verify the contact on etherscan set the `ETHERSCAN_API_KEY` env 
     forge script DeployHotShot --broadcast --rpc-url sepolia --verify
 
 Running the script will save a file with details about the deployment in `contracts/broadcast/$CHAIN_ID`.
+
+#### Folder Structure Rationale
+
+- code for demo purposes goes into the `contracts/demo` folder
+- code that eventually ends up in production goes into the `contracts/src` folder
 
 ## Misc
 
