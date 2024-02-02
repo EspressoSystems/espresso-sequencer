@@ -7,7 +7,19 @@ import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
 import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
 
-/// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
+/// @title Light Client Contract
+/// @notice This contract serves as an always-on client
+/// that verifies HotShot's state (Espresso's consensus state) which can be used by
+/// Rollup contracts on L1 (Ethereum).
+/// This state is submitted by any state-prover with evidence which is
+/// a SNARK proof that proves consensus.
+/// This contract also keeps track of the current epoch and stake table.
+/// For Decaf, both the stake table and the epoch are not used. <br>
+/// The light client state primarily consists of:<br>
+/// - the merkle root of finalized block committments,<br>
+/// - the fee ledger committment and <br>
+/// - the active stake table committment<br>
+/// @dev You can use this contract to keep track of its finalized states in safe,
 /// authenticated ways.
 contract LightClient {
     // === Events ===
@@ -18,11 +30,13 @@ contract LightClient {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
+    /// - not used in Decaf to set to type(uint32).max when deployed
     uint32 public immutable BLOCKS_PER_EPOCH;
 
     // === Storage ===
     //
     /// @notice genesis block commitment
+    /// @dev the genesis block contains a single Genesis transaction
     LightClientState public genesisState;
     /// @notice global storage of the finalized HotShot's light client state
     LightClientState public finalizedState;
@@ -76,6 +90,10 @@ contract LightClient {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
+    ///@dev For the Decaf launch, we are not using epochs so numBlockPerEpoch
+    /// is set to type(uint32).max during deployment
+    ///@param genesis this is the initial state of Hotshot (Espresso's consensus state)
+    ///@param numBlockPerEpoch this specifies the number of L1 blocks in an epoch
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
@@ -110,6 +128,10 @@ contract LightClient {
     /// periodically, especially an update for the last block for every epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
+    /// @dev in Decaf, only a permissioned prover doing the computations
+    /// will call this function
+    /// @param newState new light client state
+    /// @param proof PlonkProof
     function newFinalizedState(
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
@@ -148,7 +170,7 @@ contract LightClient {
     }
 
     // === Pure or View-only APIs ===
-    /// @dev Transform a state into an array of field elements, prepared as public inputs of the
+    /// @notice Transform a state into an array of field elements, prepared as public inputs of the
     /// plonk proof verification
     function preparePublicInput(LightClientState memory state)
         internal
@@ -167,7 +189,8 @@ contract LightClient {
         return publicInput;
     }
 
-    /// @dev Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK used
+    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
+    /// used
     /// in inherited contracts.
     function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
         internal
