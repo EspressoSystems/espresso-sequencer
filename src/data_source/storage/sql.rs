@@ -1343,6 +1343,7 @@ pub mod testing {
     use crate::testing::sleep;
     use portpicker::pick_unused_port;
     use std::{
+        env,
         process::{Command, Stdio},
         str,
         time::Duration,
@@ -1350,13 +1351,21 @@ pub mod testing {
 
     #[derive(Debug)]
     pub struct TmpDb {
+        host: String,
         port: u16,
         container_id: String,
     }
 
     impl TmpDb {
         pub async fn init() -> Self {
+            let docker_hostname = env::var("DOCKER_HOSTNAME");
+            // This picks an unused port on the current system.  If docker is
+            // configured to run on a different host then this may not find a
+            // "free" port on that system.
+            // We *might* be able to get away with this as any remote docker
+            // host should hopefully be pretty open with it's port space.
             let port = pick_unused_port().unwrap();
+            let host = docker_hostname.unwrap_or("localhost".to_string());
 
             let output = Command::new("docker")
                 .arg("run")
@@ -1376,11 +1385,22 @@ pub mod testing {
             // anything panics after this `drop` will be called and we will clean up.
             let container_id = stdout.trim().to_owned();
             tracing::info!("launched postgres docker {container_id}");
-            let db = Self { port, container_id };
+            let db = Self {
+                host,
+                port,
+                container_id,
+            };
 
             // Wait for the database to be ready.
             while !Command::new("psql")
-                .args(["-h", "localhost", "-p", &port.to_string(), "-U", "postgres"])
+                .args([
+                    "-h",
+                    &(db.host()),
+                    "-p",
+                    &(db.port().to_string()),
+                    "-U",
+                    "postgres",
+                ])
                 .env("PGPASSWORD", "password")
                 // Null input so the command terminates as soon as it manages to connect.
                 .stdin(Stdio::null())
@@ -1398,6 +1418,10 @@ pub mod testing {
             db
         }
 
+        pub fn host(&self) -> String {
+            self.host.clone()
+        }
+
         pub fn port(&self) -> u16 {
             self.port
         }
@@ -1406,6 +1430,7 @@ pub mod testing {
             Config::default()
                 .user("postgres")
                 .password("password")
+                .host(self.host())
                 .port(self.port())
                 .tls()
         }
@@ -1452,11 +1477,13 @@ mod test {
 
         let db = TmpDb::init().await;
         let port = db.port();
+        let host = &db.host();
 
         let connect = |migrations: bool, custom_migrations| async move {
             let mut cfg = Config::default()
                 .user("postgres")
                 .password("password")
+                .host(host)
                 .port(port)
                 .migrations(custom_migrations);
             if !migrations {
