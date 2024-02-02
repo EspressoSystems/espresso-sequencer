@@ -239,7 +239,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
-            #[cfg(feature = "hotshot-testing")]
             consensus,
             public_key,
             private_key,
