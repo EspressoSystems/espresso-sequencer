@@ -1,10 +1,38 @@
 use crate::block2::entry::TxTableEntry;
 use crate::block2::payload::{NameSpaceTable, Payload, TableLenTraits};
 use crate::{BlockBuildingSnafu, Error, VmId};
+use derivative::Derivative;
+use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ops::Range;
+
+#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
+#[derivative(Hash, PartialEq)]
+
+// TODO (Philippe) make it private?
+pub struct NamespaceInfo {
+    // `tx_table` is a bytes representation of the following table:
+    // word[0]: [number n of entries in tx table]
+    // word[j>0]: [end byte index of the (j-1)th tx in the payload]
+    //
+    // Thus, the ith tx payload bytes range is word[i-1]..word[i].
+    // Edge case: tx_table[-1] is implicitly 0.
+    //
+    // Word type is `TxTableEntry`.
+    //
+    // TODO final entry should be implicit:
+    // https://github.com/EspressoSystems/espresso-sequencer/issues/757
+    pub(crate) tx_table: Vec<u8>,
+    pub(crate) tx_bodies: Vec<u8>, // concatenation of all tx payloads
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[serde(skip)]
+    pub(crate) tx_bytes_end: TxTableEntry,
+    pub(crate) tx_table_len: TxTableEntry,
+}
 
 pub trait Table<TableLen: TableLenTraits> {
     // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.

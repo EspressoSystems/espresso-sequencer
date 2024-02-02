@@ -1,4 +1,4 @@
-use crate::block2::payload::{NameSpaceTable, Payload};
+use crate::block2::payload::{test_vid_factory, NameSpaceTable, Payload, RangeProof};
 use crate::block2::tables::{Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
@@ -9,9 +9,7 @@ use crate::Transaction;
 
 use super::{
     entry::TxTableEntry,
-    test_vid_factory,
     tx_iterator::{TxIndex, TxIterator},
-    RangeProof,
 };
 
 impl QueryablePayload for Payload<u32> {
