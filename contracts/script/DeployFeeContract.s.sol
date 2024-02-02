@@ -20,10 +20,7 @@ contract DeployFeeContract is Script {
         FeeContract feeContract = new FeeContract();
 
         // Encode the initializer function call
-        bytes memory data = abi.encodeWithSelector(
-            FeeContract.initialize.selector,
-            msg.sender // Initial owner/admin of the contract
-        );
+        bytes memory data = abi.encodeWithSelector(FeeContract.initialize.selector);
 
         // our proxy
         ERC1967Proxy proxy = new ERC1967Proxy(address(feeContract), data);
