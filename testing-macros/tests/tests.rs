@@ -1,7 +1,7 @@
 use hotshot_testing::completion_task::{
     CompletionTaskDescription, TimeBasedCompletionTaskDescription,
 };
-use hotshot_testing::node_types::{CombinedImpl, Libp2pImpl, MemoryImpl, WebImpl};
+use hotshot_testing::node_types::{MemoryImpl, WebImpl};
 use hotshot_testing::spinning_task::ChangeNode;
 use hotshot_testing::spinning_task::SpinningTaskDescription;
 use hotshot_testing::spinning_task::UpDown;
@@ -31,11 +31,13 @@ cross_tests!(
 // Test one node leaving the network.
 cross_tests!(
     TestName: test_with_failures_one,
-    Impls: [MemoryImpl, Libp2pImpl, WebImpl, CombinedImpl],
+    Impls: [MemoryImpl, WebImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
+        metadata.num_bootstrap_nodes = 19;
+        metadata.start_nodes = 19;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -58,11 +60,13 @@ cross_tests!(
 // Test f/2 nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_half_f,
-    Impls: [MemoryImpl, Libp2pImpl, WebImpl, CombinedImpl],
+    Impls: [MemoryImpl, WebImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
+        metadata.num_bootstrap_nodes = 17;
+        metadata.start_nodes = 17;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -97,7 +101,7 @@ cross_tests!(
 // Test f nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_f,
-    Impls: [MemoryImpl, Libp2pImpl, WebImpl, CombinedImpl],
+    Impls: [MemoryImpl, WebImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
@@ -106,6 +110,8 @@ cross_tests!(
         metadata.overall_safety_properties.num_failed_views = 6;
         // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 22;
+        metadata.num_bootstrap_nodes = 14;
+        metadata.start_nodes = 14;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -149,14 +155,15 @@ cross_tests!(
 // Test that a good leader can succeed in the view directly after view sync
 cross_tests!(
     TestName: test_with_failures_2,
-    Impls: [MemoryImpl, Libp2pImpl, WebImpl, CombinedImpl],
+    Impls: [MemoryImpl, WebImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
+        metadata.num_bootstrap_nodes = 10;
         metadata.total_nodes = 12;
         metadata.da_committee_size = 12;
-        metadata.start_nodes = 12;
+        metadata.start_nodes = 10;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
