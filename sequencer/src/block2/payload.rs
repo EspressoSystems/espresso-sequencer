@@ -10,6 +10,7 @@ use jf_primitives::pcs::{checked_fft_size, PolynomialCommitmentScheme};
 use jf_primitives::vid::advz::payload_prover::{LargeRangeProof, SmallRangeProof};
 use jf_primitives::vid::advz::Advz;
 use jf_primitives::vid::payload_prover::PayloadProver;
+use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
@@ -26,6 +27,7 @@ trait_set! {
         + TryFrom<usize>
         + TryInto<usize>
         + Default
+         + PrimInt
         + std::marker::Sync;
 
     pub trait OffsetTraits = CanonicalSerialize
@@ -277,8 +279,6 @@ mod test {
     use super::test_vid_factory;
     use crate::block2::payload::{Payload, TableLenTraits};
     use crate::block2::tables::{Table, TxTable};
-
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -303,7 +303,6 @@ mod test {
     }
 
     fn check_basic_correctness<TableLen: TableLenTraits>() {
-        // TODO Philippe parametrize with TableLen
         // play with this
         let test_cases = vec![
             // 1 namespace only
@@ -673,14 +672,7 @@ mod test {
         check_malicious_tx_inclusion_proof::<u64>();
     }
 
-    fn check_malicious_tx_inclusion_proof<
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    >() {
+    fn check_malicious_tx_inclusion_proof<TableLen: TableLenTraits>() {
         setup_logging();
         setup_backtrace();
 

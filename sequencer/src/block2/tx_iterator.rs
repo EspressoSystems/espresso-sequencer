@@ -1,7 +1,6 @@
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use std::ops::Range;
 
-use crate::block2::payload::{NameSpaceTable, Payload};
+use crate::block2::payload::{NameSpaceTable, Payload, TableLenTraits};
 use crate::block2::tables::TxTable;
 use serde::{Deserialize, Serialize};
 
@@ -13,15 +12,7 @@ pub struct TxIndex {
     pub tx_idx: usize,
 }
 
-pub struct TxIterator<
-    'a,
-    TableLen: CanonicalSerialize
-        + CanonicalDeserialize
-        + TryFrom<usize>
-        + TryInto<usize>
-        + Default
-        + std::marker::Sync,
-> {
+pub struct TxIterator<'a, TableLen: TableLenTraits> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
@@ -29,16 +20,7 @@ pub struct TxIterator<
     ns_table: NameSpaceTable<TableLen>,
 }
 
-impl<
-        'a,
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > TxIterator<'a, TableLen>
-{
+impl<'a, TableLen: TableLenTraits> TxIterator<'a, TableLen> {
     pub fn new(ns_table: NameSpaceTable<TableLen>, block_payload: &'a Payload<TableLen>) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
@@ -50,16 +32,7 @@ impl<
     }
 }
 
-impl<
-        'a,
-        TableLen: CanonicalSerialize
-            + CanonicalDeserialize
-            + TryFrom<usize>
-            + TryInto<usize>
-            + Default
-            + std::marker::Sync,
-    > Iterator for TxIterator<'a, TableLen>
-{
+impl<'a, TableLen: TableLenTraits> Iterator for TxIterator<'a, TableLen> {
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
