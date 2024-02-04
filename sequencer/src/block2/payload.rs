@@ -16,7 +16,6 @@ use std::default::Default;
 use std::marker::PhantomData;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
-use rand_distr::num_traits::PrimInt;
 
 use trait_set::trait_set;
 
@@ -27,7 +26,6 @@ trait_set! {
         + TryFrom<usize>
         + TryInto<usize>
         + Default
-        + PrimInt
         + std::marker::Sync;
 
     pub trait OffsetTraits = CanonicalSerialize
@@ -59,7 +57,7 @@ pub struct Payload<TableLen: TableLenTraits> {
     pub ns_table: NameSpaceTable<TableLen>,
 
     #[derivative(Hash = "ignore")]
-    pub namespaces: HashMap<VmId, NamespaceInfo<TableLen>>,
+    pub namespaces: HashMap<VmId, NamespaceInfo>,
 
     // cache frequently used items
     //
@@ -137,7 +135,7 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
     /// Return length of the tx table, read from the payload bytes.
     ///
     /// This quantity equals number of txs in the payload.
-    pub fn get_tx_table_len(&self) -> TxTableEntry<TableLen> {
+    pub fn get_tx_table_len(&self) -> TxTableEntry {
         let tx_table_len_range = self.tx_table_len_range();
         let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
         entry_bytes[..tx_table_len_range.len()]
@@ -147,7 +145,7 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
     }
     fn _get_tx_table_len_as<T>(&self) -> Option<T>
     where
-        TxTableEntry<TableLen>: TryInto<T>,
+        TxTableEntry: TryInto<T>,
     {
         self.get_tx_table_len().try_into().ok()
     }
@@ -299,13 +297,7 @@ mod test {
     use std::{collections::HashMap, ops::Range};
 
     #[test]
-
-    fn basic_correctness(){
-        check_basic_correctness::<u32>();
-        check_basic_correctness::<u64>();
-    }
-
-    fn check_basic_correctness<TableLen: TableLenTraits>() {
+    fn basic_correctness() {
         // TODO Philippe parametrize with TableLen
         // play with this
         let test_cases = vec![
@@ -339,9 +331,9 @@ mod test {
         setup_backtrace();
         let mut rng = jf_utils::test_rng();
 
-        struct NamespaceInfo<TableLen:TableLenTraits> {
+        struct NamespaceInfo {
             payload_flat: Vec<u8>,
-            tx_table: Vec<TableLen>, // TODO Philippe => change
+            tx_table: Vec<TxTableEntry>, // TODO Philippe => change
             #[allow(dead_code)] // TODO temporary
             tx_payloads: Vec<Vec<u8>>,
         }
@@ -451,7 +443,7 @@ mod test {
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableLen>(&actual_ns_table).enumerate() {
+            for (ns_idx, (ns_id, entry)) in ns_table_iter::<u32>(&actual_ns_table).enumerate() {
                 let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
                 // test ns iterator
@@ -676,7 +668,12 @@ mod test {
     }
 
     fn check_malicious_tx_inclusion_proof<
-        TableLen: TableLenTraits,
+        TableLen: CanonicalSerialize
+            + CanonicalDeserialize
+            + TryFrom<usize>
+            + TryInto<usize>
+            + Default
+            + std::marker::Sync,
     >() {
         setup_logging();
         setup_backtrace();
@@ -911,7 +908,7 @@ mod test {
 
         pub fn ns_table_iter<TableLen: TableLenTraits>(
             ns_table_bytes: &[u8],
-        ) -> impl Iterator<Item = (VmId, TxTableEntry<TableLen>)> + '_ {
+        ) -> impl Iterator<Item = (VmId, TxTableEntry)> + '_ {
             ns_table_bytes[NameSpaceTable::<TableLen>::byte_len()..] // first few bytes is the table lengh, skip that
                 .chunks(2 * TxTableEntry::byte_len())
                 .map(|bytes| {

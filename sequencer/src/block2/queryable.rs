@@ -1,4 +1,4 @@
-use crate::block2::payload::{test_vid_factory, NameSpaceTable, Payload, RangeProof, TableLenTraits};
+use crate::block2::payload::{test_vid_factory, NameSpaceTable, Payload, RangeProof};
 use crate::block2::tables::{Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
@@ -12,10 +12,10 @@ use super::{
     tx_iterator::{TxIndex, TxIterator},
 };
 
-impl QueryablePayload for Payload<u64> { // TODO Philippe Make this parametrizable
+impl QueryablePayload for Payload<u64> {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a, u64>;
-    type InclusionProof = TxInclusionProof<u64>;
+    type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
         let entry_len = TxTableEntry::byte_len();
@@ -145,10 +145,10 @@ impl QueryablePayload for Payload<u64> { // TODO Philippe Make this parametrizab
 ///
 /// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
 /// Lots of ugly type conversion and checked arithmetic.
-fn tx_payload_range<TableLen:TableLenTraits>(
-    tx_table_range_start: &Option<TxTableEntry<TableLen>>,
-    tx_table_range_end: &TxTableEntry<TableLen>,
-    tx_table_len: &TxTableEntry<TableLen>,
+fn tx_payload_range(
+    tx_table_range_start: &Option<TxTableEntry>,
+    tx_table_range_end: &TxTableEntry,
+    tx_table_len: &TxTableEntry,
     block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
     // TODO(817) allow arbitrary tx_table_len
@@ -170,18 +170,18 @@ fn tx_payload_range<TableLen:TableLenTraits>(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TxInclusionProof<TableLen: TableLenTraits> {
-    tx_table_len: TableLen,
+pub struct TxInclusionProof {
+    tx_table_len: TxTableEntry,
     tx_table_len_proof: RangeProof,
 
-    tx_table_range_start: Option<TableLen>, // `None` for the 0th tx
-    tx_table_range_end: TableLen,
+    tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
+    tx_table_range_end: TxTableEntry,
     tx_table_range_proof: RangeProof,
 
     tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
 }
 
-impl<TableLen:TableLenTraits> TxInclusionProof<TableLen> {
+impl TxInclusionProof {
     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     //
     // - We need to decide where to store VID params.
@@ -296,11 +296,11 @@ impl<TableLen:TableLenTraits> TxInclusionProof<TableLen> {
 }
 
 #[cfg(test)]
-pub(crate) fn gen_tx_proof_for_testing<TableLen:TableLenTraits>(
-    tx_table_len: TxTableEntry<TableLen>,
+pub(crate) fn gen_tx_proof_for_testing(
+    tx_table_len: TxTableEntry,
     tx_table_len_proof: RangeProof,
     payload_proof: RangeProof,
-) -> TxInclusionProof<TableLen> {
+) -> TxInclusionProof {
     TxInclusionProof {
         tx_table_len,
         tx_table_len_proof,

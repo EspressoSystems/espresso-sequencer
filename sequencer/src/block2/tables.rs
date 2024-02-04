@@ -12,7 +12,7 @@ use std::ops::Range;
 #[derivative(Hash, PartialEq)]
 
 // TODO (Philippe) make it private?
-pub struct NamespaceInfo<TableLen:TableLenTraits> {
+pub struct NamespaceInfo {
     // `tx_table` is a bytes representation of the following table:
     // word[0]: [number n of entries in tx table]
     // word[j>0]: [end byte index of the (j-1)th tx in the payload]
@@ -30,8 +30,8 @@ pub struct NamespaceInfo<TableLen:TableLenTraits> {
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[serde(skip)]
-    pub(crate) tx_bytes_end: TableLen,
-    pub(crate) tx_table_len: TableLen,
+    pub(crate) tx_bytes_end: TxTableEntry,
+    pub(crate) tx_table_len: TxTableEntry,
 }
 
 pub trait Table<TableLen: TableLenTraits> {
@@ -39,7 +39,7 @@ pub trait Table<TableLen: TableLenTraits> {
     // if `table_bytes` has too few bytes at this `offset` then pad with zero.
     // Parse these bytes into a `TxTableEntry` and return.
     // Returns raw bytes, no checking for large values
-    fn get_table_len(&self, offset: usize) -> TxTableEntry<TableLen>;
+    fn get_table_len(&self, offset: usize) -> TxTableEntry;
 
     fn get_payload(&self) -> Vec<u8>;
 
@@ -50,7 +50,7 @@ pub trait Table<TableLen: TableLenTraits> {
 
 impl<TableLen: TableLenTraits> Table<TableLen> for NameSpaceTable<TableLen> {
     // TODO (Philippe) avoid code duplication with similar function in TxTable?
-    fn get_table_len(&self, offset: usize) -> TxTableEntry<TableLen> {
+    fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
             self.raw_payload.len(),
@@ -191,7 +191,7 @@ pub struct TxTable<TableLen: TableLenTraits> {
 }
 
 impl<TableLen: TableLenTraits> Table<TableLen> for TxTable<TableLen> {
-    fn get_table_len(&self, offset: usize) -> TxTableEntry<TableLen> {
+    fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
             self.raw_payload.len(),
@@ -239,12 +239,12 @@ impl<TableLen: TableLenTraits> TxTable<TableLen> {
     }
 }
 // TODO currently unused but contains code that might get re-used in the near future.
-fn _get_tx_table_entry<TableLen:TableLenTraits>(
+fn _get_tx_table_entry(
     ns_offset: usize,
     block_payload: &Payload<u32>,
     block_payload_len: usize,
     tx_index: usize,
-) -> TxTableEntry<TableLen> {
+) -> TxTableEntry {
     let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
 
     let end = std::cmp::min(
