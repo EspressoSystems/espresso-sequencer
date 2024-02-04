@@ -298,6 +298,11 @@ mod test {
 
     #[test]
     fn basic_correctness() {
+        check_basic_correctness::<u32>();
+        //check_basic_correctness::<u64>();
+    }
+
+    fn check_basic_correctness<TableLen: TableLenTraits>() {
         // TODO Philippe parametrize with TableLen
         // play with this
         let test_cases = vec![
@@ -443,7 +448,8 @@ mod test {
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_idx, (ns_id, entry)) in ns_table_iter::<u32>(&actual_ns_table).enumerate() {
+            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableLen>(&actual_ns_table).enumerate()
+            {
                 let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
                 // test ns iterator
