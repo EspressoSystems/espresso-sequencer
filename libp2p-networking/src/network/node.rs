@@ -19,15 +19,12 @@ use super::{
     NetworkNodeType,
 };
 
-use crate::network::{
-    behaviours::{
-        dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery},
-        direct_message::{DMBehaviour, DMEvent},
-        direct_message_codec::{DirectMessageProtocol, MAX_MSG_SIZE_DM},
-        exponential_backoff::ExponentialBackoff,
-        gossip::GossipEvent,
-    },
-    def::NUM_REPLICATED_TO_TRUST,
+use crate::network::behaviours::{
+    dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
+    direct_message::{DMBehaviour, DMEvent},
+    direct_message_codec::{DirectMessageProtocol, MAX_MSG_SIZE_DM},
+    exponential_backoff::ExponentialBackoff,
+    gossip::GossipEvent,
 };
 use async_compatibility_layer::{
     art::async_spawn,
