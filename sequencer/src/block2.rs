@@ -45,17 +45,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let mut structured_payload = Payload::new();
-
-        for tx in txs.into_iter() {
-            structured_payload.update_namespace_with_tx(tx);
-        }
-
-        structured_payload.generate_raw_payload()?;
+        let structured_payload = Payload::from_txs(txs)?;
 
         Some((
             structured_payload.clone(),
-            structured_payload.ns_table.get_bytes(),
+            structured_payload.get_ns_table_bytes(),
         ))
         .context(BlockBuildingSnafu)
     }
@@ -68,9 +62,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         Self {
             raw_payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
-            table_len: 0,
-            //offset: 0,
-            //ns_id: [0; 32],
             ns_table: NameSpaceTable::from_bytes(_metadata),
             namespaces: Default::default(), // TODO (philippe) update
         }

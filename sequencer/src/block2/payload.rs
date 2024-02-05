@@ -1,4 +1,5 @@
 use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
+use crate::block2::payload;
 use crate::block2::tables::NamespaceInfo;
 use crate::{BlockBuildingSnafu, Error, VmId};
 use ark_bls12_381::Bls12_381;
@@ -68,23 +69,9 @@ pub struct Payload<TableWord: TableWordTraits> {
     #[derivative(PartialEq = "ignore")]
     #[serde(skip)]
     pub tx_table_len_proof: OnceLock<Option<RangeProof>>,
-    pub table_len: TableWord,
-    // TODO pub offset: Offset,
-    // TODO pub ns_id: NsId,
 }
 
 impl<TableWord: TableWordTraits> Payload<TableWord> {
-    pub fn new() -> Self {
-        Self {
-            raw_payload: vec![],
-            ns_table: Default::default(),
-            namespaces: HashMap::new(),
-            tx_table_len_proof: Default::default(),
-            table_len: Default::default(),
-            //offset: Default::default(),
-            //ns_id: Default::default(),
-        }
-    }
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
@@ -126,14 +113,6 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         ))
     }
 
-    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
-    ///
-    /// Typically `r` is `0..TxTableEntry::byte_len()`.
-    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
-    fn tx_table_len_range(&self) -> Range<usize> {
-        0..std::cmp::min(TxTableEntry::byte_len(), self.raw_payload.len())
-    }
-
     /// Return length of the tx table, read from the payload bytes.
     ///
     /// This quantity equals number of txs in the payload.
@@ -144,12 +123,6 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .copy_from_slice(&self.raw_payload[tx_table_len_range]);
 
         TxTableEntry::from_bytes_array(entry_bytes)
-    }
-    fn _get_tx_table_len_as<T>(&self) -> Option<T>
-    where
-        TxTableEntry: TryInto<T>,
-    {
-        self.get_tx_table_len().try_into().ok()
     }
 
     // Fetch the tx table length range proof from cache.
@@ -167,7 +140,31 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .as_ref()
     }
 
-    pub fn update_namespace_with_tx(
+    pub fn get_ns_table_bytes(&self) -> Vec<u8> {
+        self.ns_table.get_bytes()
+    }
+
+    pub fn from_txs(
+        txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as hotshot::traits::BlockPayload>::Transaction>,
+    ) -> Result<Self, Error> {
+        let mut structured_payload = Self {
+            raw_payload: vec![],
+            ns_table: NameSpaceTable {
+                raw_payload: vec![],
+                phantom: Default::default(),
+            },
+            namespaces: Default::default(),
+            tx_table_len_proof: Default::default(),
+        };
+        for tx in txs.into_iter() {
+            structured_payload.update_namespace_with_tx(tx);
+        }
+
+        structured_payload.generate_raw_payload()?;
+        Ok(structured_payload)
+    }
+
+    fn update_namespace_with_tx(
         &mut self,
         tx: <Payload<TxTableEntryWord> as hotshot::traits::BlockPayload>::Transaction,
     ) {
@@ -193,7 +190,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .unwrap(); // TODO (Philippe) error handling
     }
 
-    pub fn generate_raw_payload(&mut self) -> Result<(), Error> {
+    fn generate_raw_payload(&mut self) -> Result<(), Error> {
         // fill payload and namespace table
         let mut payload = Vec::new();
         let namespaces = self.namespaces.clone();
@@ -214,6 +211,14 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
         self.raw_payload = payload;
         Ok(())
+    }
+
+    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
+    ///
+    /// Typically `r` is `0..TxTableEntry::byte_len()`.
+    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
+    fn tx_table_len_range(&self) -> Range<usize> {
+        0..std::cmp::min(TxTableEntry::byte_len(), self.raw_payload.len())
     }
 }
 
