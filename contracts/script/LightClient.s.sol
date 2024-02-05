@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
-contract DeployLightClient is Script {
+contract DeployLightClientScript is Script {
     function run() external {
         string memory seedPhrase = vm.envString("MNEMONIC");
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
@@ -17,11 +17,11 @@ contract DeployLightClient is Script {
         // TODO for a production deployment provide the right genesis state
         uint64 viewNum = 0;
         uint64 blockHeight = 0;
-        BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(0x42);
+        BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(42);
         BN254.ScalarField feeLedgerComm = BN254.ScalarField.wrap(0);
-        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(0x42);
-        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0x42);
-        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(0x42);
+        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(42);
+        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(42);
+        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(42);
         uint256 threshold = 10;
 
         LC.LightClientState memory genesis = LC.LightClientState(

@@ -316,3 +316,51 @@ impl From<StakeTableError> for ProverError {
 }
 
 impl std::error::Error for ProverError {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use anyhow::Result;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use ethers::{providers::Middleware, utils::Anvil};
+    use std::process::Command;
+
+    #[async_std::test]
+    async fn test_read_contract_state() -> Result<()> {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = Anvil::new().spawn();
+        let provider_url = Url::parse(&anvil.endpoint()).unwrap();
+        let provider = Provider::<Http>::try_from(provider_url.to_string())?;
+        let signer = Wallet::from(anvil.keys()[0].clone());
+        let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
+
+        Command::new("just")
+            .arg("sol-deploy-url")
+            .arg(provider_url.to_string())
+            .status()
+            .expect("fail to deploy");
+
+        let last_blk_num = provider.get_block_number().await?;
+        let address = provider.get_block_receipts(last_blk_num).await?[1]
+            .contract_address
+            .expect("fail to get LightClient address from receipt");
+
+        let contract = LightClient::new(address, l1_wallet);
+
+        // now test if we can read from the contract
+        assert_eq!(contract.blocks_per_epoch().call().await?, u32::MAX);
+        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
+        // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
+        assert_eq!(genesis.view_num, 0);
+        assert_eq!(genesis.block_height, 0);
+        assert_eq!(genesis.block_comm_root, U256::from(42));
+        assert_eq!(genesis.fee_ledger_comm, U256::from(0));
+        assert_eq!(genesis.bls_key_comm, U256::from(42));
+        assert_eq!(genesis.schnorr_key_comm, U256::from(42));
+        assert_eq!(genesis.amount_comm, U256::from(42));
+        assert_eq!(genesis.threshold, U256::from(10));
+        Ok(())
+    }
+}
