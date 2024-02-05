@@ -538,9 +538,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_payload: None,
                         proposer_id: sender,
                     };
-                    let state = <TYPES::ValidatedState as ValidatedState>::from_header(
+                    let state = Arc::new(<TYPES::ValidatedState as ValidatedState>::from_header(
                         &proposal.data.block_header,
-                    );
+                    ));
 
                     consensus.validated_state_map.insert(
                         view,
@@ -600,6 +600,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Block header doesn't extend the proposal",);
                     return;
                 };
+                let state = Arc::new(state);
                 let parent_commitment = parent.commit();
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,

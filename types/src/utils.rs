@@ -8,7 +8,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Commitment;
 use digest::OutputSizeUser;
 use sha2::Digest;
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 use tagged_base64::tagged;
 use typenum::Unsigned;
 
@@ -27,17 +27,21 @@ pub enum ViewInner<TYPES: NodeType> {
     /// Undecided view
     Leaf {
         /// Proposed leaf
-        leaf: Commitment<Leaf<TYPES>>,
+        leaf: LeafCommitment<TYPES>,
         /// Validated state.
-        state: TYPES::ValidatedState,
+        state: Arc<TYPES::ValidatedState>,
     },
     /// Leaf has failed
     Failed,
 }
 
+/// The hash of a leaf.
+pub type LeafCommitment<TYPES> = Commitment<Leaf<TYPES>>;
+
 impl<TYPES: NodeType> ViewInner<TYPES> {
     /// Return the underlying undecide leaf view if it exists.
-    pub fn get_leaf(&self) -> Option<(Commitment<Leaf<TYPES>>, &TYPES::ValidatedState)> {
+    #[must_use]
+    pub fn get_leaf(&self) -> Option<(LeafCommitment<TYPES>, &Arc<TYPES::ValidatedState>)> {
         if let Self::Leaf { leaf, state } = self {
             Some((*leaf, state))
         } else {
@@ -47,7 +51,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying leaf hash if it exists
     #[must_use]
-    pub fn get_leaf_commitment(&self) -> Option<Commitment<Leaf<TYPES>>> {
+    pub fn get_leaf_commitment(&self) -> Option<LeafCommitment<TYPES>> {
         if let Self::Leaf { leaf, .. } = self {
             Some(*leaf)
         } else {
@@ -57,7 +61,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying validated state if it exists
     #[must_use]
-    pub fn get_state(&self) -> Option<&TYPES::ValidatedState> {
+    pub fn get_state(&self) -> Option<&Arc<TYPES::ValidatedState>> {
         if let Self::Leaf { state, .. } = self {
             Some(state)
         } else {

@@ -341,7 +341,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
     /// Gets the validated state with the given view number, if in the state map.
     #[must_use]
-    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&TYPES::ValidatedState> {
+    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&Arc<TYPES::ValidatedState>> {
         match self.validated_state_map.get(&view_number) {
             Some(view) => view.get_state(),
             None => None,
@@ -354,7 +354,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// If the last decided view's state does not exist in the state map, which should never
     /// happen.
     #[must_use]
-    pub fn get_decided_state(&self) -> &TYPES::ValidatedState {
+    pub fn get_decided_state(&self) -> &Arc<TYPES::ValidatedState> {
         let decided_view_num = self.last_decided_view;
         self.get_state(decided_view_num)
             .expect("Decided state not found! Consensus internally inconsistent")

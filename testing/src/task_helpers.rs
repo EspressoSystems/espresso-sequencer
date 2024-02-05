@@ -42,7 +42,7 @@ use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
 
 use serde::Serialize;
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash, sync::Arc};
 
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics
@@ -238,10 +238,11 @@ async fn build_quorum_proposal_and_signature(
             .quorum_membership
             .total_nodes(),
     );
-    let mut parent_state =
-        <TestValidatedState as ValidatedState>::from_header(&parent_leaf.block_header);
+    let mut parent_state = Arc::new(<TestValidatedState as ValidatedState>::from_header(
+        &parent_leaf.block_header,
+    ));
     let block_header = TestBlockHeader::new(
-        &parent_state,
+        &*parent_state,
         &TestInstanceState {},
         &parent_leaf.block_header,
         payload_commitment,
@@ -269,9 +270,11 @@ async fn build_quorum_proposal_and_signature(
 
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
-        let state_new_view = parent_state
-            .validate_and_apply_header(&TestInstanceState {}, &block_header, &block_header)
-            .unwrap();
+        let state_new_view = Arc::new(
+            parent_state
+                .validate_and_apply_header(&TestInstanceState {}, &block_header, &block_header)
+                .unwrap(),
+        );
         // save states for the previous view to pass all the qc checks
         // In the long term, we want to get rid of this, do not manually update consensus state
         consensus.validated_state_map.insert(

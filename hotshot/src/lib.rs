@@ -191,7 +191,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         // insert genesis (or latest block) to state map
         let mut validated_state_map = BTreeMap::default();
-        let validated_state = TYPES::ValidatedState::genesis(&instance_state);
+        let validated_state = Arc::new(TYPES::ValidatedState::genesis(&instance_state));
         validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
@@ -349,7 +349,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_decided_state(&self) -> TYPES::ValidatedState {
+    pub async fn get_decided_state(&self) -> Arc<TYPES::ValidatedState> {
         self.inner
             .consensus
             .read()

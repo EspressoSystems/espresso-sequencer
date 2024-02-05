@@ -22,7 +22,7 @@ pub trait InstanceState: Clone + Debug + Send + Sync {}
 /// produce a new state, with the modifications from the block applied
 /// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
 pub trait ValidatedState:
-    Serialize + DeserializeOwned + Clone + Debug + Default + Hash + PartialEq + Eq + Send + Sync
+    Serialize + DeserializeOwned + Debug + Default + Hash + PartialEq + Eq + Send + Sync
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
