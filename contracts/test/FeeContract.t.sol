@@ -5,7 +5,7 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import { Test } /*, console2 }*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -14,7 +14,7 @@ import { UUPSUpgradeable } from
 
 // Target contract
 import { FeeContract } from "../src/FeeContract.sol";
-import { DeployFeeContract } from "../script/DeployFeeContract.s.sol";
+import { DeployFeeContractScript } from "../script/DeployFeeContract.s.sol";
 
 /// @title FeeContract Test
 contract FeeContractTest is Test {
@@ -150,7 +150,7 @@ contract FeeContractUpgradabilityTest is Test {
     FeeContract public feeContractProxy;
 
     function setUp() public {
-        DeployFeeContract deployer = new DeployFeeContract();
+        DeployFeeContractScript deployer = new DeployFeeContractScript();
         (proxy, admin) = deployer.run();
         feeContractProxy = FeeContract(proxy);
     }

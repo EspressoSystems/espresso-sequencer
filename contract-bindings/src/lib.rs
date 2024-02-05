@@ -9,7 +9,6 @@ pub mod bls_sig;
 pub mod bn254;
 pub mod bytes_lib;
 pub mod context_upgradeable;
-pub mod deploy_fee_contract;
 pub mod deploy_hot_shot;
 pub mod ed_on_bn254;
 pub mod erc1967_proxy;
