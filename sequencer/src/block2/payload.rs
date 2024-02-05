@@ -22,7 +22,7 @@ use trait_set::trait_set;
 
 trait_set! {
 
-    pub trait TableLenTraits = CanonicalSerialize
+    pub trait TableWordTraits = CanonicalSerialize
         + CanonicalDeserialize
         + TryFrom<usize>
         + TryInto<usize>
@@ -42,21 +42,21 @@ trait_set! {
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
-pub struct NameSpaceTable<TableLen: TableLenTraits> {
+pub struct NameSpaceTable<TableWord: TableWordTraits> {
     pub(crate) raw_payload: Vec<u8>,
-    pub phantom: PhantomData<TableLen>,
+    pub phantom: PhantomData<TableWord>,
 }
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct Payload<TableLen: TableLenTraits> {
+pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     #[serde(skip)]
     pub raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
-    pub ns_table: NameSpaceTable<TableLen>,
+    pub ns_table: NameSpaceTable<TableWord>,
 
     #[derivative(Hash = "ignore")]
     pub namespaces: HashMap<VmId, NamespaceInfo>,
@@ -68,12 +68,12 @@ pub struct Payload<TableLen: TableLenTraits> {
     #[derivative(PartialEq = "ignore")]
     #[serde(skip)]
     pub tx_table_len_proof: OnceLock<Option<RangeProof>>,
-    pub table_len: TableLen,
+    pub table_len: TableWord,
     // TODO pub offset: Offset,
     // TODO pub ns_id: NsId,
 }
 
-impl<TableLen: TableLenTraits> Payload<TableLen> {
+impl<TableWord: TableWordTraits> Payload<TableWord> {
     pub fn new() -> Self {
         Self {
             raw_payload: vec![],
@@ -88,14 +88,14 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        let ns_table = NameSpaceTable::<TableLen>::from_bytes(ns_table_bytes);
+        let ns_table = NameSpaceTable::<TableWord>::from_bytes(ns_table_bytes);
         ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        let ns_table = NameSpaceTable::<TableLen>::from_vec(ns_table_bytes.to_vec());
+        let ns_table = NameSpaceTable::<TableWord>::from_vec(ns_table_bytes.to_vec());
         0..ns_table.len()
     }
 
@@ -107,12 +107,12 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
         meta: &[u8], //&<Self as hotshot_types::traits::BlockPayload>::Metadata, TODO
         ns_index: usize,
     ) -> Option<(Vec<u8>, NamespaceProof)> {
-        let ns_table = NameSpaceTable::<TableLen>::from_bytes(meta);
+        let ns_table = NameSpaceTable::<TableWord>::from_bytes(meta);
         if ns_index >= ns_table.len() {
             return None; // error: index out of bounds
         }
 
-        let ns_table = NameSpaceTable::<TableLen>::from_bytes(meta);
+        let ns_table = NameSpaceTable::<TableWord>::from_bytes(meta);
         let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         let vid = test_vid_factory(); // TODO temporary VID construction
@@ -217,13 +217,13 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
     }
 }
 
-impl<TableLen: TableLenTraits + std::fmt::Debug> Display for Payload<TableLen> {
+impl<TableWord: TableWordTraits + std::fmt::Debug> Display for Payload<TableWord> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl<TableLen: TableLenTraits> Committable for Payload<TableLen> {
+impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }
@@ -277,7 +277,7 @@ pub type NamespaceProof =
 mod test {
 
     use super::test_vid_factory;
-    use crate::block2::payload::{Payload, TableLenTraits};
+    use crate::block2::payload::{Payload, TableWordTraits};
     use crate::block2::tables::{Table, TxTable};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -303,7 +303,7 @@ mod test {
         check_basic_correctness::<TxTableEntryWord>()
     }
 
-    fn check_basic_correctness<TableLen: TableLenTraits>() {
+    fn check_basic_correctness<TableWord: TableWordTraits>() {
         // play with this
         let test_cases = vec![
             // 1 namespace only
@@ -448,7 +448,7 @@ mod test {
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableLen>(&actual_ns_table).enumerate()
+            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableWord>(&actual_ns_table).enumerate()
             {
                 let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
@@ -585,13 +585,13 @@ mod test {
         check_malformed_payloads::<u32>();
         //check_malformed_payloads::<u64>(); // TODO Philippe this test is failing
     }
-    fn check_malformed_payloads<TableLen: TableLenTraits>() {
+    fn check_malformed_payloads<TableWord: TableWordTraits>() {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
             // negative-length txs
-            TestCase::<TableLen>::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
-            TestCase::from_entries(&[30, 20, 10], &mut rng),             // 2 negative-length txs
+            TestCase::<TableWord>::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
+            TestCase::from_entries(&[30, 20, 10], &mut rng),              // 2 negative-length txs
             // truncated payload
             TestCase::with_total_len(&[10, 20, 30], 20, &mut rng), // truncated tx payload
             TestCase::with_trimmed_body(&[10, 20, 30], 0, &mut rng), // 0-length tx payload
@@ -673,12 +673,12 @@ mod test {
         check_malicious_tx_inclusion_proof::<u64>();
     }
 
-    fn check_malicious_tx_inclusion_proof<TableLen: TableLenTraits>() {
+    fn check_malicious_tx_inclusion_proof<TableWord: TableWordTraits>() {
         setup_logging();
         setup_backtrace();
 
         let mut rng = jf_utils::test_rng();
-        let test_case = TestCase::<TableLen>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
+        let test_case = TestCase::<TableWord>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
         let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
@@ -713,12 +713,12 @@ mod test {
             .is_none());
     }
 
-    struct TestCase<TableLen: TableLenTraits> {
+    struct TestCase<TableWord: TableWordTraits> {
         payload: Vec<u8>,
         num_txs: usize,
-        phantomdata: PhantomData<TableLen>,
+        phantomdata: PhantomData<TableWord>,
     }
-    impl<TableLen: TableLenTraits> TestCase<TableLen> {
+    impl<TableWord: TableWordTraits> TestCase<TableWord> {
         /// Return a well-formed random block whose tx table is derived from `lengths`.
         #[allow(dead_code)]
         fn from_lengths<R: RngCore>(lengths: &[usize], rng: &mut R) -> Self {
@@ -729,7 +729,7 @@ mod test {
         ///
         /// If `entries` is well-formed then the result is well-formed.
         fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
-            let tx_table = TxTable::<TableLen>::from_entries(entries);
+            let tx_table = TxTable::<TableWord>::from_entries(entries);
             Self {
                 payload: [
                     tx_table.get_payload(),
@@ -749,7 +749,7 @@ mod test {
                 body_len < tx_bodies_byte_len(entries),
                 "body_len too large to trim the body"
             );
-            let tx_table = TxTable::<TableLen>::from_entries(entries);
+            let tx_table = TxTable::<TableWord>::from_entries(entries);
             Self {
                 payload: [tx_table.get_payload(), random_bytes(body_len, rng)].concat(),
                 num_txs: entries.len(),
@@ -769,9 +769,9 @@ mod test {
             rng: &mut R,
         ) -> Self {
             assert!(
-                tx_table_byte_len::<TableLen>(entries) <= block_byte_len,
+                tx_table_byte_len::<TableWord>(entries) <= block_byte_len,
                 "tx table size {} for entries {:?} exceeds block_byte_len {}",
-                tx_table_byte_len::<TableLen>(entries),
+                tx_table_byte_len::<TableWord>(entries),
                 entries,
                 block_byte_len
             );
@@ -784,14 +784,14 @@ mod test {
             block_byte_len: usize,
             rng: &mut R,
         ) -> Self {
-            let tx_table = TxTable::<TableLen>::from_entries(entries);
+            let tx_table = TxTable::<TableWord>::from_entries(entries);
             let mut payload = tx_table.get_payload();
             let num_txs = if block_byte_len > payload.len() {
                 payload.extend(random_bytes(block_byte_len - payload.len(), rng));
                 entries.len()
             } else {
                 payload.truncate(block_byte_len);
-                (block_byte_len / TxTable::<TableLen>::byte_len()).saturating_sub(1)
+                (block_byte_len / TxTable::<TableWord>::byte_len()).saturating_sub(1)
             };
             Self {
                 payload,
@@ -811,7 +811,7 @@ mod test {
             block_byte_len: usize,
             rng: &mut R,
         ) -> Self {
-            let tx_table_byte_len = (tx_table_len + 1) * TxTable::<TableLen>::byte_len();
+            let tx_table_byte_len = (tx_table_len + 1) * TxTable::<TableWord>::byte_len();
             assert!(
                 tx_table_byte_len <= block_byte_len,
                 "tx table size {} exceeds block size {}",
@@ -828,7 +828,7 @@ mod test {
             rng: &mut R,
         ) -> Self {
             // accommodate extremely small block payload
-            let header_byte_len = std::cmp::min(TxTable::<TableLen>::byte_len(), block_byte_len);
+            let header_byte_len = std::cmp::min(TxTable::<TableWord>::byte_len(), block_byte_len);
             let mut payload = vec![0; block_byte_len];
             rng.fill_bytes(&mut payload);
             payload[..header_byte_len].copy_from_slice(
@@ -838,7 +838,7 @@ mod test {
                 payload,
                 num_txs: std::cmp::min(
                     tx_table_len,
-                    (block_byte_len / TxTable::<TableLen>::byte_len()).saturating_sub(1),
+                    (block_byte_len / TxTable::<TableWord>::byte_len()).saturating_sub(1),
                 ),
                 phantomdata: Default::default(),
             }
@@ -847,13 +847,13 @@ mod test {
 
     mod helpers {
         use crate::block2::entry::TxTableEntry;
-        use crate::block2::payload::{NameSpaceTable, TableLenTraits};
+        use crate::block2::payload::{NameSpaceTable, TableWordTraits};
         use crate::block2::tables::{Table, TxTable};
         use crate::VmId;
         use rand::RngCore;
 
-        pub fn tx_table_byte_len<TableLen: TableLenTraits>(entries: &[usize]) -> usize {
-            (entries.len() + 1) * TxTable::<TableLen>::byte_len()
+        pub fn tx_table_byte_len<TableWord: TableWordTraits>(entries: &[usize]) -> usize {
+            (entries.len() + 1) * TxTable::<TableWord>::byte_len()
         }
 
         pub fn entries_from_lengths(lengths: &[usize]) -> Vec<usize> {
@@ -905,10 +905,10 @@ mod test {
             result
         }
 
-        pub fn ns_table_iter<TableLen: TableLenTraits>(
+        pub fn ns_table_iter<TableWord: TableWordTraits>(
             ns_table_bytes: &[u8],
         ) -> impl Iterator<Item = (VmId, TxTableEntry)> + '_ {
-            ns_table_bytes[NameSpaceTable::<TableLen>::byte_len()..] // first few bytes is the table lengh, skip that
+            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table lengh, skip that
                 .chunks(2 * TxTableEntry::byte_len())
                 .map(|bytes| {
                     // read (namespace id, entry) from the namespace table

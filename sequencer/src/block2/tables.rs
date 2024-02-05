@@ -1,5 +1,5 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::{NameSpaceTable, Payload, TableLenTraits};
+use crate::block2::payload::{NameSpaceTable, Payload, TableWordTraits};
 use crate::{BlockBuildingSnafu, Error, VmId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,7 @@ pub struct NamespaceInfo {
     pub(crate) tx_table_len: TxTableEntry,
 }
 
-pub trait Table<TableLen: TableLenTraits> {
+pub trait Table<TableWord: TableWordTraits> {
     // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
     // if `table_bytes` has too few bytes at this `offset` then pad with zero.
     // Parse these bytes into a `TxTableEntry` and return.
@@ -44,11 +44,11 @@ pub trait Table<TableLen: TableLenTraits> {
     fn get_payload(&self) -> Vec<u8>;
 
     fn byte_len() -> usize {
-        size_of::<TableLen>()
+        size_of::<TableWord>()
     }
 }
 
-impl<TableLen: TableLenTraits> Table<TableLen> for NameSpaceTable<TableLen> {
+impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> {
     // TODO (Philippe) avoid code duplication with similar function in TxTable?
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
@@ -68,7 +68,7 @@ impl<TableLen: TableLenTraits> Table<TableLen> for NameSpaceTable<TableLen> {
     }
 }
 
-impl<TableLen: TableLenTraits> NameSpaceTable<TableLen> {
+impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     pub fn from_vec(v: Vec<u8>) -> Self {
         Self {
             raw_payload: v,
@@ -185,12 +185,12 @@ impl<TableLen: TableLenTraits> NameSpaceTable<TableLen> {
     }
 }
 
-pub struct TxTable<TableLen: TableLenTraits> {
+pub struct TxTable<TableWord: TableWordTraits> {
     raw_payload: Vec<u8>,
-    phantom: PhantomData<TableLen>,
+    phantom: PhantomData<TableWord>,
 }
 
-impl<TableLen: TableLenTraits> Table<TableLen> for TxTable<TableLen> {
+impl<TableWord: TableWordTraits> Table<TableWord> for TxTable<TableWord> {
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
@@ -208,7 +208,7 @@ impl<TableLen: TableLenTraits> Table<TableLen> for TxTable<TableLen> {
         self.raw_payload.clone()
     }
 }
-impl<TableLen: TableLenTraits> TxTable<TableLen> {
+impl<TableWord: TableWordTraits> TxTable<TableWord> {
     #[cfg(test)]
     pub fn from_entries(entries: &[usize]) -> Self {
         let tx_table_byte_len = entries.len() + 1;
