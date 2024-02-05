@@ -1,6 +1,5 @@
 use crate::{NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
-
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::block_contents::BlockPayload, utils::BuilderCommitment};
 use jf_primitives::merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, prelude::*};

@@ -1,20 +1,20 @@
 use std::ops::Add;
 
 use crate::{Header, NodeState, Payload};
+use anyhow::{ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
-
+use commit::{Commitment, Committable};
 use derive_more::Add;
 use ethers::{abi::Address, types::U256};
-
-use commit::{Commitment, Committable};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
-use jf_primitives::merkle_tree::prelude::{LightWeightSHA3MerkleTree, Sha3Node};
 use jf_primitives::merkle_tree::{
-    prelude::Sha3Digest, universal_merkle_tree::UniversalMerkleTree, AppendableMerkleTreeScheme,
-    ForgetableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
+    prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
+    universal_merkle_tree::UniversalMerkleTree,
+    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeScheme,
 };
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use serde::{Deserialize, Serialize};
@@ -274,3 +274,128 @@ pub fn fetch_fee_receipts(_parent: &Header) -> Vec<FeeReceipt> {
 pub type FeeMerkleTree =
     UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, typenum::U256, Sha3Node>;
 pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
+
+/// A proof of the balance of an account in the fee ledger.
+///
+/// If the account of interest does not exist in the fee state, this is a Merkle non-membership
+/// proof, and the balance is implicitly zero. Otherwise, this is a normal Merkle membership proof.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeeAccountProof {
+    account: Address,
+    proof: FeeMerkleProof,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum FeeMerkleProof {
+    Presence(<FeeMerkleTree as MerkleTreeScheme>::MembershipProof),
+    Absence(<FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof),
+}
+
+impl FeeAccountProof {
+    pub fn prove(tree: &FeeMerkleTree, account: Address) -> Option<(Self, U256)> {
+        match tree.universal_lookup(FeeAccount(account)) {
+            LookupResult::Ok(balance, proof) => Some((
+                Self {
+                    account,
+                    proof: FeeMerkleProof::Presence(proof),
+                },
+                balance.0,
+            )),
+            LookupResult::NotFound(proof) => Some((
+                Self {
+                    account,
+                    proof: FeeMerkleProof::Absence(proof),
+                },
+                0.into(),
+            )),
+            LookupResult::NotInMemory => None,
+        }
+    }
+
+    pub fn verify(&self, comm: &FeeMerkleCommitment) -> anyhow::Result<U256> {
+        match &self.proof {
+            FeeMerkleProof::Presence(proof) => {
+                ensure!(
+                    FeeMerkleTree::verify(comm.digest(), FeeAccount(self.account), proof)?.is_ok(),
+                    "invalid proof"
+                );
+                Ok(proof
+                    .elem()
+                    .context("presence proof is missing account balance")?
+                    .0)
+            }
+            FeeMerkleProof::Absence(proof) => {
+                let tree = FeeMerkleTree::from_commitment(comm);
+                ensure!(
+                    tree.non_membership_verify(FeeAccount(self.account), proof)?,
+                    "invalid proof"
+                );
+                Ok(0.into())
+            }
+        }
+    }
+
+    pub fn remember(&self, tree: &mut FeeMerkleTree) -> anyhow::Result<()> {
+        match &self.proof {
+            FeeMerkleProof::Presence(proof) => {
+                tree.remember(
+                    FeeAccount(self.account),
+                    proof
+                        .elem()
+                        .context("presence proof is missing account balance")?,
+                    proof,
+                )?;
+                Ok(())
+            }
+            FeeMerkleProof::Absence(proof) => {
+                tree.non_membership_remember(FeeAccount(self.account), proof)?;
+                Ok(())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
+    #[test]
+    fn test_fee_proofs() {
+        setup_logging();
+        setup_backtrace();
+
+        let mut tree = ValidatedState::default().fee_merkle_tree;
+        let account1 = Address::random();
+        let account2 = Address::default();
+        tracing::info!(%account1, %account2);
+
+        let balance1 = U256::from(100);
+        tree.update(FeeAccount(account1), FeeAmount(balance1))
+            .unwrap();
+
+        // Membership proof.
+        let (proof1, balance) = FeeAccountProof::prove(&tree, account1).unwrap();
+        tracing::info!(?proof1, %balance);
+        assert_eq!(balance, balance1);
+        assert!(matches!(proof1.proof, FeeMerkleProof::Presence(_)));
+        assert_eq!(proof1.verify(&tree.commitment()).unwrap(), balance1);
+
+        // Non-membership proof.
+        let (proof2, balance) = FeeAccountProof::prove(&tree, account2).unwrap();
+        tracing::info!(?proof2, %balance);
+        assert_eq!(balance, 0.into());
+        assert!(matches!(proof2.proof, FeeMerkleProof::Absence(_)));
+        assert_eq!(proof2.verify(&tree.commitment()).unwrap(), 0.into());
+
+        // Test forget/remember. We cannot generate proofs in a completely sparse tree:
+        let mut tree = FeeMerkleTree::from_commitment(tree.commitment());
+        assert!(FeeAccountProof::prove(&tree, account1).is_none());
+        assert!(FeeAccountProof::prove(&tree, account2).is_none());
+        // After remembering the proofs, we can generate proofs again:
+        proof1.remember(&mut tree).unwrap();
+        proof2.remember(&mut tree).unwrap();
+        FeeAccountProof::prove(&tree, account1).unwrap();
+        FeeAccountProof::prove(&tree, account2).unwrap();
+    }
+}

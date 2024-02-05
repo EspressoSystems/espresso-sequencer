@@ -1,17 +1,21 @@
 //! Sequencer-specific API endpoint handlers.
 
 use super::{
-    data_source::{SequencerDataSource, StateSignatureDataSource, SubmitDataSource},
+    data_source::{
+        SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+    },
     AppState,
 };
-use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
+use crate::{network, state::FeeAccountProof, Header, NamespaceProofType, SeqTypes, Transaction};
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
+use ethers::prelude::U256;
 use futures::FutureExt;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
     Error,
 };
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
 use tide_disco::{
@@ -43,6 +47,12 @@ impl TimeWindowQueryData {
             .or(self.next.as_ref())
             .map(|header| header.height)
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccountQueryData {
+    pub balance: U256,
+    pub proof: FeeAccountProof,
 }
 
 pub(super) type AvailState<N, D> = Arc<RwLock<AppState<N, D>>>;
@@ -148,6 +158,52 @@ where
                     StatusCode::NotFound,
                     "Signature not found.".to_owned(),
                 ))
+        }
+        .boxed()
+    })?;
+
+    Ok(api)
+}
+
+pub(super) fn state<S>() -> anyhow::Result<Api<S, Error>>
+where
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + StateDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/state.toml"))?;
+    let mut api = Api::<S, Error>::new(toml)?;
+
+    api.get("account", |req, state| {
+        async move {
+            let state = match req
+                .opt_integer_param("view")
+                .map_err(Error::from_request_error)?
+            {
+                Some(view) => state
+                    .get_undecided_state(ViewNumber::new(view))
+                    .await
+                    .ok_or(Error::catch_all(
+                        StatusCode::NotFound,
+                        format!("state not available for view {view}"),
+                    ))?,
+                None => state.get_decided_state().await,
+            };
+            let account = req
+                .string_param("address")
+                .map_err(Error::from_request_error)?;
+            let account = account.parse().map_err(|err| {
+                Error::catch_all(
+                    StatusCode::BadRequest,
+                    format!("malformed account {account}: {err}"),
+                )
+            })?;
+
+            let (proof, balance) =
+                FeeAccountProof::prove(&state.fee_merkle_tree, account).ok_or(Error::catch_all(
+                    StatusCode::NotFound,
+                    format!("account {account} is not in memory"),
+                ))?;
+            Ok(AccountQueryData { balance, proof })
         }
         .boxed()
     })?;

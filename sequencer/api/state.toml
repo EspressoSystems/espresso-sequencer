@@ -1,0 +1,36 @@
+[route.account]
+PATH = ["/catchup/:view/account/:address", "/account/:address"]
+":view" = "Integer"
+":address" = "Literal"
+DOC = """
+Get the fee account balance for `address`.
+
+This endpoint can be used to catch up to the current state from a recent state by fetching the
+balance (with proof) at the given `:view` number. It can also be used to query the latest finalized
+state.
+
+Returns the account balance and a Merkle proof relative to the fee state root at the requested view.
+If there is no entry for this account in the requested fee state (note: this is distinct from the
+server _not knowing_ the entry for this account), the returned balance is 0 and the proof is a
+Merkle _non-membership_ proof.
+
+```
+{
+    "balance": "integer",
+    "proof": { ... },
+}
+```
+"""
+
+[route.blocks]
+PATH = ["/catchup/:view/blocks", "/blocks"]
+":view" = "Integer"
+DOC = """
+Get the blocks Merkle tree frontier.
+
+This endpoint can be used to catch up to the current state from a recent state by fetching the
+frontier at the given `:view` number. It can also be used to query the latest finalized state.
+
+Returns the blocks Merkle tree frontier -- the path to the most recently appended leaf, relative to
+root node at the requested view.
+"""
