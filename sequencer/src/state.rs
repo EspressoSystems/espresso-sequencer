@@ -59,18 +59,8 @@ impl ValidatedState {
             )
         );
 
-        // validate parent block merkle tree root against state
-        // `clone` to avoid possible side-effects
         let mut block_merkle_tree = self.block_merkle_tree.clone();
         let block_merkle_tree_root = block_merkle_tree.commitment();
-        anyhow::ensure!(
-            parent.block_merkle_tree_root == block_merkle_tree_root,
-            anyhow::anyhow!(
-                "Invalid Block Merkle Tree Error: {}, {}",
-                parent.block_merkle_tree_root,
-                block_merkle_tree_root
-            )
-        );
 
         // validate proposal is descendent of parent by appending to parent
         block_merkle_tree.push(parent.commit()).unwrap();
