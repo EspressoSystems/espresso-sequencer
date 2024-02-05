@@ -9,7 +9,6 @@ use jf_primitives::merkle_tree::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -113,7 +112,7 @@ impl HotShotState for ValidatedState {
             // Note that currently only block state is updated.
             Ok(validated_state) => Ok(validated_state),
             Err(e) => {
-                debug!("Invalid Proposal: {}", e);
+                tracing::warn!("Invalid Proposal: {}", e);
                 Err(BlockError::InvalidBlockHeader)
             }
         }
