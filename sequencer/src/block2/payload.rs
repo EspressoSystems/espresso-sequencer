@@ -303,8 +303,6 @@ mod test {
 
     #[test]
     fn basic_correctness() {
-        //check_basic_correctness::<u32>();
-        //check_basic_correctness::<u64>();
         check_basic_correctness::<TxTableEntryWord>()
     }
 
