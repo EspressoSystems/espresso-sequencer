@@ -59,9 +59,6 @@ pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the namespace table
     pub ns_table: NameSpaceTable<TableWord>,
 
-    #[derivative(Hash = "ignore")]
-    pub namespaces: HashMap<VmId, NamespaceInfo>,
-
     // cache frequently used items
     //
     // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
@@ -147,30 +144,30 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     pub fn from_txs(
         txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as hotshot::traits::BlockPayload>::Transaction>,
     ) -> Result<Self, Error> {
+        let mut namespaces: HashMap<VmId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
             raw_payload: vec![],
             ns_table: NameSpaceTable {
                 raw_payload: vec![],
                 phantom: Default::default(),
             },
-            namespaces: Default::default(),
             tx_table_len_proof: Default::default(),
         };
         for tx in txs.into_iter() {
-            structured_payload.update_namespace_with_tx(tx);
+            Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
         }
 
-        structured_payload.generate_raw_payload()?;
+        structured_payload.generate_raw_payload(namespaces)?;
         Ok(structured_payload)
     }
 
     fn update_namespace_with_tx(
-        &mut self,
+        namespaces: &mut HashMap<VmId, NamespaceInfo>,
         tx: <Payload<TxTableEntryWord> as hotshot::traits::BlockPayload>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
-        let namespace = self.namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
+        let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
             tx_table: Vec::new(),
             tx_bodies: Vec::new(),
             tx_bytes_end: TxTableEntry::zero(),
@@ -190,13 +187,15 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .unwrap(); // TODO (Philippe) error handling
     }
 
-    fn generate_raw_payload(&mut self) -> Result<(), Error> {
+    fn generate_raw_payload(
+        &mut self,
+        namespaces: HashMap<VmId, NamespaceInfo>,
+    ) -> Result<(), Error> {
         // fill payload and namespace table
         let mut payload = Vec::new();
-        let namespaces = self.namespaces.clone();
 
         self.ns_table = NameSpaceTable::from_vec(Vec::from(
-            TxTableEntry::try_from(self.namespaces.len())
+            TxTableEntry::try_from(namespaces.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
                 .to_bytes(),

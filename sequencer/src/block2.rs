@@ -63,7 +63,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
             raw_payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
             ns_table: NameSpaceTable::from_bytes(_metadata),
-            namespaces: Default::default(), // TODO (philippe) update
         }
     }
 
