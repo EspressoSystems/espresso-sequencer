@@ -70,7 +70,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
             table_len: 0,
             //offset: 0,
             //ns_id: [0; 32],
-            ns_table: Default::default(),
+            ns_table: _metadata,
             namespaces: Default::default(), // TODO (philippe) update
         }
     }
