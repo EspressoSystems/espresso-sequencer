@@ -6,7 +6,7 @@ use std::mem::size_of;
 // Use newtype pattern so that tx table entires cannot be confused with other types.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Default)]
 pub struct TxTableEntry(TxTableEntryWord);
-type TxTableEntryWord = u32;
+pub type TxTableEntryWord = u32;
 
 impl TxTableEntry {
     pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);

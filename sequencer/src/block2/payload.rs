@@ -1,4 +1,4 @@
-use crate::block2::entry::TxTableEntry;
+use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block2::tables::NamespaceInfo;
 use crate::{BlockBuildingSnafu, Error, VmId};
 use ark_bls12_381::Bls12_381;
@@ -169,7 +169,7 @@ impl<TableLen: TableLenTraits> Payload<TableLen> {
 
     pub fn update_namespace_with_tx(
         &mut self,
-        tx: <Payload<u64> as hotshot::traits::BlockPayload>::Transaction,
+        tx: <Payload<TxTableEntryWord> as hotshot::traits::BlockPayload>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
@@ -288,7 +288,7 @@ mod test {
         VidScheme,
     };
 
-    use crate::block2::entry::TxTableEntry;
+    use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
     use crate::block2::queryable;
     use crate::block2::tx_iterator::TxIndex;
     use crate::Transaction;
@@ -298,8 +298,9 @@ mod test {
 
     #[test]
     fn basic_correctness() {
-        check_basic_correctness::<u32>();
+        //check_basic_correctness::<u32>();
         //check_basic_correctness::<u64>();
+        check_basic_correctness::<TxTableEntryWord>()
     }
 
     fn check_basic_correctness<TableLen: TableLenTraits>() {
@@ -582,7 +583,7 @@ mod test {
     #[test]
     fn malformed_payloads() {
         check_malformed_payloads::<u32>();
-        // check_malformed_payloads::<u64>(); TODO Philippe this test is failing
+        //check_malformed_payloads::<u64>(); // TODO Philippe this test is failing
     }
     fn check_malformed_payloads<TableLen: TableLenTraits>() {
         // play with this

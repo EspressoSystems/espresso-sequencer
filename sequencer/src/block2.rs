@@ -11,9 +11,10 @@ pub mod queryable;
 mod tables;
 pub mod tx_iterator;
 
+use crate::block2::entry::TxTableEntryWord;
 use payload::Payload;
 
-impl BlockPayload for Payload<u64> {
+impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = Vec<u8>;

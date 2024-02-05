@@ -1,3 +1,4 @@
+use crate::block2::entry::TxTableEntryWord;
 use crate::block2::payload::{test_vid_factory, NameSpaceTable, Payload, RangeProof};
 use crate::block2::tables::{Table, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
@@ -12,9 +13,9 @@ use super::{
     tx_iterator::{TxIndex, TxIterator},
 };
 
-impl QueryablePayload for Payload<u64> {
+impl QueryablePayload for Payload<TxTableEntryWord> {
     type TransactionIndex = TxIndex;
-    type Iter<'a> = TxIterator<'a, u64>;
+    type Iter<'a> = TxIterator<'a, TxTableEntryWord>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, meta: &Self::Metadata) -> usize {
