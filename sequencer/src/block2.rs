@@ -12,6 +12,7 @@ mod tables;
 pub mod tx_iterator;
 
 use crate::block2::entry::TxTableEntryWord;
+use crate::block2::payload::NameSpaceTable;
 use payload::Payload;
 
 impl BlockPayload for Payload<TxTableEntryWord> {
@@ -70,7 +71,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
             table_len: 0,
             //offset: 0,
             //ns_id: [0; 32],
-            ns_table: _metadata,
+            ns_table: NameSpaceTable::from_bytes(_metadata),
             namespaces: Default::default(), // TODO (philippe) update
         }
     }
