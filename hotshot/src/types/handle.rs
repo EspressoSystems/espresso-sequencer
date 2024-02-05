@@ -94,6 +94,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.get_decided_state().await
     }
 
+    /// Get the validated state from a given `view`.
+    ///
+    /// Returns the requested state, if the [`SystemContext`] is tracking this view. Consensus
+    /// tracks views that have not yet been decided but could be in the future. This function may
+    /// return [`None`] if the requested view has already been decided (but see
+    /// [`get_decided_state`](Self::get_decided_state)) or if there is no path for the requested
+    /// view to ever be decided.
+    pub async fn get_state(&self, view: TYPES::Time) -> Option<Arc<TYPES::ValidatedState>> {
+        self.hotshot.get_state(view).await
+    }
+
     /// Get the last decided leaf of the [`SystemContext`] instance.
     ///
     /// # Panics
