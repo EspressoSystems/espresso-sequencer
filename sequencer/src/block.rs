@@ -373,7 +373,10 @@ impl BlockHeader for Header {
     ) {
         let (payload, transactions_root) = Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
-        let ValidatedState { fee_merkle_tree, block_merkle_tree } = ValidatedState::default();
+        let ValidatedState {
+            fee_merkle_tree,
+            block_merkle_tree,
+        } = ValidatedState::default();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
