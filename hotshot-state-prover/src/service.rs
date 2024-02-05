@@ -322,23 +322,25 @@ mod test {
     use super::*;
     use anyhow::Result;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::{providers::Middleware, utils::Anvil};
+    use ethers::{
+        providers::Middleware,
+        utils::{Anvil, AnvilInstance},
+    };
+    use jf_utils::test_rng;
     use std::process::Command;
 
-    #[async_std::test]
-    async fn test_read_contract_state() -> Result<()> {
-        setup_logging();
-        setup_backtrace();
-
-        let anvil = Anvil::new().spawn();
-        let provider_url = Url::parse(&anvil.endpoint()).unwrap();
-        let provider = Provider::<Http>::try_from(provider_url.to_string())?;
+    /// deploy LightClient.sol on local blockchian (via `anvil`) for testing
+    /// return (signer-loaded wallet, contract instance)
+    async fn deploy_contract_for_test(
+        anvil: &AnvilInstance,
+    ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
         Command::new("just")
-            .arg("sol-deploy-url")
-            .arg(provider_url.to_string())
+            .arg("dev-deploy")
+            .arg(anvil.endpoint())
             .status()
             .expect("fail to deploy");
 
@@ -347,7 +349,41 @@ mod test {
             .contract_address
             .expect("fail to get LightClient address from receipt");
 
-        let contract = LightClient::new(address, l1_wallet);
+        let contract = LightClient::new(address, l1_wallet.clone());
+        Ok((l1_wallet, contract))
+    }
+
+    impl StateProverConfig {
+        /// update only L1 related info
+        fn update_l1_info(&mut self, anvil: &AnvilInstance, light_client_address: Address) {
+            self.l1_provider = Url::parse(&anvil.endpoint()).unwrap();
+            self.light_client_address = light_client_address;
+            self.eth_signing_key = anvil.keys()[0].clone().into();
+        }
+    }
+    // only for testing purposes
+    impl Default for StateProverConfig {
+        fn default() -> Self {
+            Self {
+                proving_key_path: PathBuf::default(),
+                relay_server: Url::parse("http://localhost").unwrap(),
+                update_interval: Duration::default(),
+                l1_provider: Url::parse("http://localhost").unwrap(),
+                light_client_address: Address::default(),
+                eth_signing_key: SigningKey::random(&mut test_rng()),
+                num_nodes: 10,
+                seed: [0u8; 32],
+            }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_read_contract_state() -> Result<()> {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, u32::MAX);
@@ -361,6 +397,22 @@ mod test {
         assert_eq!(genesis.schnorr_key_comm, U256::from(42));
         assert_eq!(genesis.amount_comm, U256::from(42));
         assert_eq!(genesis.threshold, U256::from(10));
+
+        let mut config = StateProverConfig::default();
+        config.update_l1_info(&anvil, contract.address());
+        let state = super::read_contract_state(&config).await?;
+        assert_eq!(state, genesis.into());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_submit_state_and_proof() -> Result<()> {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, _contract) = deploy_contract_for_test(&anvil).await?;
+
         Ok(())
     }
 }
