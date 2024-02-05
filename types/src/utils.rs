@@ -4,8 +4,13 @@ use crate::{
     data::{Leaf, VidCommitment},
     traits::node_implementation::NodeType,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Commitment;
+use digest::OutputSizeUser;
+use sha2::Digest;
 use std::ops::Deref;
+use tagged_base64::tagged;
+use typenum::Unsigned;
 
 /// A view's state
 #[derive(Debug)]
@@ -100,4 +105,31 @@ pub enum Terminator<T> {
     Exclusive(T),
     /// Stop including this view number
     Inclusive(T),
+}
+
+/// Type alias for byte array of SHA256 digest length
+type Sha256Digest = [u8; <sha2::Sha256 as OutputSizeUser>::OutputSize::USIZE];
+
+#[tagged("BUILDER_COMMITMENT")]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+/// Commitment that builders use to sign block options.
+/// A thin wrapper around a Sha256 digest.
+pub struct BuilderCommitment(Sha256Digest);
+
+impl BuilderCommitment {
+    /// Create new commitment for `data`
+    pub fn from_bytes(data: impl AsRef<[u8]>) -> Self {
+        Self(sha2::Sha256::digest(data.as_ref()).into())
+    }
+
+    /// Create a new commitment from a raw Sha256 digest
+    pub fn from_raw_digest(digest: impl Into<Sha256Digest>) -> Self {
+        Self(digest.into())
+    }
+}
+
+impl AsRef<Sha256Digest> for BuilderCommitment {
+    fn as_ref(&self) -> &Sha256Digest {
+        &self.0
+    }
 }

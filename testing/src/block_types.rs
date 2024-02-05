@@ -10,6 +10,7 @@ use hotshot_types::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock, Transaction},
         BlockPayload, ValidatedState,
     },
+    utils::BuilderCommitment,
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
@@ -158,6 +159,14 @@ impl BlockPayload for TestBlockPayload {
             .iter()
             .map(commit::Committable::commit)
             .collect()
+    }
+
+    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+        let mut digest = sha2::Sha256::new();
+        for txn in &self.transactions {
+            digest.update(&txn.0);
+        }
+        BuilderCommitment::from_raw_digest(digest.finalize())
     }
 }
 

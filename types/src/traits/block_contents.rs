@@ -6,6 +6,7 @@
 use crate::{
     data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait},
     traits::ValidatedState,
+    utils::BuilderCommitment,
 };
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
@@ -77,6 +78,9 @@ pub trait BlockPayload:
         &self,
         metadata: &Self::Metadata,
     ) -> Vec<Commitment<Self::Transaction>>;
+
+    /// Generate commitment that builders use to sign block options.
+    fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment;
 }
 
 /// extra functions required on block to be usable by hotshot-testing
