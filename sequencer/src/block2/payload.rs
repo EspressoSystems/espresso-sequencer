@@ -65,6 +65,7 @@ struct NamespaceInfo {
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
+// TODO store only a reference to raw_payload.
 pub struct NameSpaceTable<TableWord: TableWordTraits> {
     pub(crate) raw_payload: Vec<u8>,
     pub phantom: PhantomData<TableWord>,
