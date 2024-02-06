@@ -13,8 +13,9 @@
 #![cfg(feature = "sql-data-source")]
 
 use super::{
+    fetching,
     storage::sql::{self, SqlStorage},
-    FetchingDataSource,
+    AvailabilityProvider, FetchingDataSource,
 };
 use crate::{availability::QueryablePayload, Payload, QueryResult};
 use async_std::sync::Arc;
@@ -30,12 +31,27 @@ pub use tokio_postgres as postgres;
 
 pub use sql::{Config, Query, Transaction};
 
+pub type Builder<Types, Provider> = fetching::Builder<Types, SqlStorage, Provider>;
+
 impl Config {
     /// Connect to the database with this config.
-    pub async fn connect<Types, P: Send + Sync>(
+    pub async fn connect<Types, P: AvailabilityProvider<Types>>(
         self,
         provider: P,
     ) -> Result<SqlDataSource<Types, P>, Error>
+    where
+        Types: NodeType,
+        Payload<Types>: QueryablePayload,
+    {
+        self.builder(provider).await?.build().await
+    }
+
+    /// Connect to the database, setting options on the underlying [`FetchingDataSource`] using the
+    /// [`fetching::Builder`] interface.
+    pub async fn builder<Types, P: AvailabilityProvider<Types>>(
+        self,
+        provider: P,
+    ) -> Result<Builder<Types, P>, Error>
     where
         Types: NodeType,
         Payload<Types>: QueryablePayload,
@@ -287,14 +303,19 @@ impl Config {
 /// ```
 pub type SqlDataSource<Types, P> = FetchingDataSource<Types, SqlStorage, P>;
 
-impl<Types, P: Send + Sync> SqlDataSource<Types, P>
+impl<Types, P: AvailabilityProvider<Types>> SqlDataSource<Types, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
-    pub async fn connect(config: Config, provider: P) -> Result<Self, Error> {
-        Self::new(SqlStorage::connect(config).await?, provider).await
+    ///
+    /// This function returns a [`fetching::Builder`] which can be used to set options on the
+    /// underlying [`FetchingDataSource`], before constructing the [`SqlDataSource`] with
+    /// [`build`](fetching::Builder::build). For a convenient constructor that uses the default
+    /// fetching options, see [`Config::connect`].
+    pub async fn connect(config: Config, provider: P) -> Result<Builder<Types, P>, Error> {
+        Ok(Self::builder(SqlStorage::connect(config).await?, provider))
     }
 }
 
@@ -336,14 +357,16 @@ pub mod testing {
     use super::*;
     use crate::{
         data_source::{UpdateDataSource, VersionedDataSource},
-        testing::mocks::{DataSourceLifeCycle, MockTypes},
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use hotshot::types::Event;
 
     pub use sql::testing::TmpDb;
 
     #[async_trait]
-    impl<P: Default + Send + Sync + 'static> DataSourceLifeCycle for SqlDataSource<MockTypes, P> {
+    impl<P: AvailabilityProvider<MockTypes> + Default> DataSourceLifeCycle
+        for SqlDataSource<MockTypes, P>
+    {
         type Storage = TmpDb;
 
         async fn create(_node_id: usize) -> Self::Storage {
@@ -373,7 +396,6 @@ pub mod testing {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod generic_test {
-    use super::super::{availability_tests, status_tests};
     use super::SqlDataSource;
     use crate::{fetching::provider::NoFetching, testing::mocks::MockTypes};
 

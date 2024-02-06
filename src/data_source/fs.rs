@@ -12,7 +12,7 @@
 
 #![cfg(feature = "file-system-data-source")]
 
-use super::{storage::FileSystemStorage, FetchingDataSource};
+use super::{storage::FileSystemStorage, AvailabilityProvider, FetchingDataSource};
 use crate::{availability::query_data::QueryablePayload, Payload};
 use atomic_store::AtomicStoreLoader;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -146,7 +146,7 @@ pub type FileSystemDataSource<Types, P> = FetchingDataSource<Types, FileSystemSt
 impl<Types: NodeType, P> FileSystemDataSource<Types, P>
 where
     Payload<Types>: QueryablePayload,
-    P: Send + Sync,
+    P: AvailabilityProvider<Types>,
 {
     /// Create a new [FileSystemDataSource] with storage at `path`.
     ///
@@ -154,7 +154,9 @@ where
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
     pub async fn create(path: &Path, provider: P) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::create(path).await?, provider).await
+        FetchingDataSource::builder(FileSystemStorage::create(path).await?, provider)
+            .build()
+            .await
     }
 
     /// Open an existing [FileSystemDataSource] from storage at `path`.
@@ -163,7 +165,9 @@ where
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
     pub async fn open(path: &Path, provider: P) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::open(path).await?, provider).await
+        FetchingDataSource::builder(FileSystemStorage::open(path).await?, provider)
+            .build()
+            .await
     }
 
     /// Create a new [FileSystemDataSource] using a persistent storage loader.
@@ -178,10 +182,11 @@ where
         loader: &mut AtomicStoreLoader,
         provider: P,
     ) -> anyhow::Result<Self> {
-        FetchingDataSource::new(
+        FetchingDataSource::builder(
             FileSystemStorage::create_with_store(loader).await?,
             provider,
         )
+        .build()
         .await
     }
 
@@ -197,7 +202,9 @@ where
         loader: &mut AtomicStoreLoader,
         provider: P,
     ) -> anyhow::Result<Self> {
-        FetchingDataSource::new(FileSystemStorage::open_with_store(loader).await?, provider).await
+        FetchingDataSource::builder(FileSystemStorage::open_with_store(loader).await?, provider)
+            .build()
+            .await
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
@@ -221,14 +228,14 @@ mod impl_testable_data_source {
     use super::*;
     use crate::{
         data_source::{UpdateDataSource, VersionedDataSource},
-        testing::mocks::{DataSourceLifeCycle, MockTypes},
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
     use hotshot::types::Event;
     use tempdir::TempDir;
 
     #[async_trait]
-    impl<P: Default + Send + Sync + 'static> DataSourceLifeCycle
+    impl<P: AvailabilityProvider<MockTypes> + Default> DataSourceLifeCycle
         for FileSystemDataSource<MockTypes, P>
     {
         type Storage = TempDir;
@@ -258,7 +265,6 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::super::{availability_tests, status_tests};
     use super::FileSystemDataSource;
     use crate::{fetching::provider::NoFetching, testing::mocks::MockTypes};
 

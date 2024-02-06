@@ -260,7 +260,10 @@ mod impl_testable_data_source {
     use super::*;
     use crate::{
         data_source::UpdateDataSource,
-        testing::mocks::{DataSourceLifeCycle, MockTypes, TestableDataSource},
+        testing::{
+            consensus::{DataSourceLifeCycle, TestableDataSource},
+            mocks::MockTypes,
+        },
     };
     use hotshot::types::Event;
 
@@ -293,7 +296,6 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::super::{availability_tests, status_tests};
     use super::ExtensibleDataSource;
     use crate::testing::consensus::MockDataSource;
 

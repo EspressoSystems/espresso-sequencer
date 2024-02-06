@@ -19,8 +19,21 @@ license = "GPL-3.0-or-later"
 
 [features]
 default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
+
+# Enable the availability data source backed by the local file system.
 file-system-data-source = ["atomic_store"]
+
+# Enable a lightweight data source for status APIs without the archival availability API.
 metrics-data-source = []
+
+# Enable a mock persistence layer which doesn't actually persist anything.
+#
+# This is useful for adversarial testing, as it can be used to test the behavior of the query
+# service where data is never available locally and must always be fetched on demand from a peer
+# query service.
+no-storage = []
+
+# Enable the availability data source backed by a Postgres database.
 sql-data-source = [
 	"include_dir",
 	"native-tls",
@@ -30,6 +43,8 @@ sql-data-source = [
 	"tokio",
 	"tokio-postgres",
 ]
+
+# Enable extra features useful for writing tests with a query service.
 testing = [
 	"espresso-macros",
 	"hotshot-testing",
@@ -52,6 +67,7 @@ async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-trait = "0.1"
 bincode = "1.3"
 clap = { version = "4.4", features = ["derive", "env"] }
+cld = "0.5"
 commit = { git = "https://github.com/EspressoSystems/commit.git" }
 custom_debug = "0.5"
 derivative = "2.2"

@@ -28,13 +28,13 @@
 
 use crate::{api::load_api, Payload};
 use clap::Args;
+use cld::ClDuration;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
-use std::fmt::Display;
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf, str::FromStr, time::Duration};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
 pub(crate) mod data_source;
@@ -49,6 +49,19 @@ pub struct Options {
     #[arg(long = "availability-api-path", env = "HOTSHOT_AVAILABILITY_API_PATH")]
     pub api_path: Option<PathBuf>,
 
+    /// Timeout for failing requests due to missing data.
+    ///
+    /// If data needed to respond to a request is missing, it can (in some cases) be fetched from an
+    /// external provider. This parameter controls how long the request handler will wait for
+    /// missing data to be fetched before giving up and failing the request.
+    #[arg(
+        long = "availability-fetch-timeout",
+        env = "HOTSHOT_AVAILABILITY_FETCH_TIMEOUT",
+        default_value = "500ms",
+        value_parser = parse_duration,
+    )]
+    pub fetch_timeout: Duration,
+
     /// Additional API specification files to merge with `availability-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
@@ -59,6 +72,19 @@ pub struct Options {
         value_delimiter = ','
     )]
     pub extensions: Vec<toml::Value>,
+}
+
+#[derive(Clone, Debug, Snafu)]
+struct ParseDurationError {
+    reason: String,
+}
+
+fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+    ClDuration::from_str(s)
+        .map(Duration::from)
+        .map_err(|err| ParseDurationError {
+            reason: err.to_string(),
+        })
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
@@ -125,20 +151,27 @@ where
         include_str!("../api/availability.toml"),
         options.extensions.clone(),
     )?;
+    let timeout = options.fetch_timeout;
+
     api.with_version("0.0.1".parse().unwrap())
-        .get("get_leaf", |req, state| {
+        .get("get_leaf", move |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
                     Some(height) => LeafId::Number(height),
                     None => LeafId::Hash(req.blob_param("hash")?),
                 };
-                state.get_leaf(id).await.context(FetchLeafSnafu {
-                    resource: id.to_string(),
-                })
+                state
+                    .get_leaf(id)
+                    .await
+                    .with_timeout(timeout)
+                    .await
+                    .context(FetchLeafSnafu {
+                        resource: id.to_string(),
+                    })
             }
             .boxed()
         })?
-        .stream("stream_leaves", |req, state| {
+        .stream("stream_leaves", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
@@ -150,7 +183,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_header", |req, state| {
+        .get("get_header", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -162,6 +195,8 @@ where
                 Ok(state
                     .get_block(id)
                     .await
+                    .with_timeout(timeout)
+                    .await
                     .context(FetchBlockSnafu {
                         resource: id.to_string(),
                     })?
@@ -170,7 +205,7 @@ where
             }
             .boxed()
         })?
-        .stream("stream_headers", |req, state| {
+        .stream("stream_headers", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 Ok(state
@@ -188,7 +223,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_block", |req, state| {
+        .get("get_block", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -197,13 +232,18 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                state.get_block(id).await.context(FetchBlockSnafu {
-                    resource: id.to_string(),
-                })
+                state
+                    .get_block(id)
+                    .await
+                    .with_timeout(timeout)
+                    .await
+                    .context(FetchBlockSnafu {
+                        resource: id.to_string(),
+                    })
             }
             .boxed()
         })?
-        .stream("stream_blocks", |req, state| {
+        .stream("stream_blocks", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 Ok(state
@@ -215,7 +255,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_payload", |req, state| {
+        .get("get_payload", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -224,13 +264,18 @@ where
                 } else {
                     BlockId::Hash(req.blob_param("block-hash")?)
                 };
-                state.get_payload(id).await.context(FetchBlockSnafu {
-                    resource: id.to_string(),
-                })
+                state
+                    .get_payload(id)
+                    .await
+                    .with_timeout(timeout)
+                    .await
+                    .context(FetchBlockSnafu {
+                        resource: id.to_string(),
+                    })
             }
             .boxed()
         })?
-        .stream("stream_payloads", |req, state| {
+        .stream("stream_payloads", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 Ok(state
@@ -242,20 +287,28 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_transaction", |req, state| {
+        .get("get_transaction", move |req, state| {
             async move {
                 let (block, index) = match req.opt_blob_param("hash")? {
-                    Some(hash) => state.get_block_with_transaction(hash).await.context(
-                        FetchTransactionSnafu {
+                    Some(hash) => state
+                        .get_block_with_transaction(hash)
+                        .await
+                        .with_timeout(timeout)
+                        .await
+                        .context(FetchTransactionSnafu {
                             resource: hash.to_string(),
-                        },
-                    )?,
+                        })?,
                     None => {
                         let height = req.integer_param("height")?;
                         let id = BlockId::Number(height);
-                        let block = state.get_block(id).await.context(FetchBlockSnafu {
-                            resource: id.to_string(),
-                        })?;
+                        let block = state
+                            .get_block(id)
+                            .await
+                            .with_timeout(timeout)
+                            .await
+                            .context(FetchBlockSnafu {
+                                resource: id.to_string(),
+                            })?;
                         let i = req.integer_param("index")?;
                         let index = block.payload().nth(block.metadata(), i).context(
                             InvalidTransactionIndexSnafu {
@@ -280,9 +333,9 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::ExtensibleDataSource,
+        data_source::{storage::no_storage, ExtensibleDataSource},
         testing::{
-            consensus::{MockDataSource, MockNetwork},
+            consensus::{MockDataSource, MockNetwork, TestableDataSource},
             mocks::{mock_transaction, MockHeader, MockTypes},
             setup_test,
         },
@@ -292,7 +345,6 @@ mod test {
     use commit::Committable;
     use futures::FutureExt;
     use portpicker::pick_unused_port;
-    use std::collections::HashSet;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
@@ -335,10 +387,7 @@ mod test {
     }
 
     async fn validate(client: &Client<Error>, height: u64) {
-        // Check the consistency of every block/leaf pair. Keep track of payloads and transactions
-        // we have seen so we can detect duplicates.
-        let mut seen_payloads = HashSet::new();
-        let mut seen_txns = HashSet::new();
+        // Check the consistency of every block/leaf pair.
         for i in 0..height {
             tracing::info!("validate block {i}/{height}");
 
@@ -393,34 +442,46 @@ mod test {
                     .await
                     .unwrap(),
             );
-            // We should be able to look up the block by payload hash as long as it's not a
-            // duplicate. For duplicate payloads, these endpoints only returns the first one.
-            if seen_payloads.insert(block.payload_hash()) {
-                assert_eq!(
-                    block,
-                    client
-                        .get(&format!("block/payload-hash/{}", block.payload_hash()))
-                        .send()
-                        .await
-                        .unwrap()
-                );
-                assert_eq!(
-                    *block.header(),
-                    client
-                        .get(&format!("header/payload-hash/{}", block.payload_hash()))
-                        .send()
-                        .await
-                        .unwrap()
-                );
-                assert_eq!(
-                    expected_payload,
-                    client
-                        .get(&format!("payload/hash/{}", block.payload_hash()))
-                        .send()
-                        .await
-                        .unwrap(),
-                );
-            }
+            // We should be able to look up the block by payload hash. Note that for duplicate
+            // payloads, these endpoints may return a different block with the same payload, which
+            // is acceptable. Therefore, we don't check equivalence of the entire `BlockQueryData`
+            // response, only its payload.
+            assert_eq!(
+                block.payload(),
+                client
+                    .get::<BlockQueryData<MockTypes>>(&format!(
+                        "block/payload-hash/{}",
+                        block.payload_hash()
+                    ))
+                    .send()
+                    .await
+                    .unwrap()
+                    .payload()
+            );
+            assert_eq!(
+                block.payload_hash(),
+                client
+                    .get::<Header<MockTypes>>(&format!(
+                        "header/payload-hash/{}",
+                        block.payload_hash()
+                    ))
+                    .send()
+                    .await
+                    .unwrap()
+                    .payload_commitment
+            );
+            assert_eq!(
+                block.payload(),
+                client
+                    .get::<PayloadQueryData<MockTypes>>(&format!(
+                        "payload/hash/{}",
+                        block.payload_hash()
+                    ))
+                    .send()
+                    .await
+                    .unwrap()
+                    .data(),
+            );
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
@@ -434,35 +495,64 @@ mod test {
                 assert_eq!(txn.block_hash(), block.hash());
                 assert_eq!(txn.hash(), txn_from_block.commit());
                 assert_eq!(txn.transaction(), &txn_from_block);
-                // We should be able to look up the transaction by hash as long as it's not a
-                // duplicate. For duplicate transactions, this endpoint only returns the first one.
-                if seen_txns.insert(txn.hash()) {
-                    assert_eq!(
-                        txn,
-                        client
-                            .get(&format!("transaction/hash/{}", txn.hash()))
-                            .send()
-                            .await
-                            .unwrap()
-                    );
-                }
+                // We should be able to look up the transaction by hash. Note that for duplicate
+                // transactions, this endpoint may return a different transaction with the same
+                // hash, which is acceptable. Therefore, we don't check equivalence of the entire
+                // `TransactionQueryData` response, only its commitment.
+                assert_eq!(
+                    txn.hash(),
+                    client
+                        .get::<TransactionQueryData<MockTypes>>(&format!(
+                            "transaction/hash/{}",
+                            txn.hash()
+                        ))
+                        .send()
+                        .await
+                        .unwrap()
+                        .hash()
+                );
             }
         }
     }
 
     #[async_std::test]
     async fn test_api() {
+        test_api_helper::<MockDataSource>(Duration::from_millis(500)).await;
+    }
+
+    // This test runs the `postgres` Docker image, which doesn't work on Windows.
+    #[cfg(not(target_os = "windows"))]
+    #[async_std::test]
+    async fn test_api_no_storage() {
+        // With a long enough fetch timeout, we can run the API without any local storage and it
+        // still works: missing data is fetched on demand or proactively from a peer.
+        //
+        // We set the timeout very conservatively here at 5s, so the test passes deterministically
+        // even in resource-constrained environments like CI builders. In practice, on a reasonably
+        // powerful server with a fast connection to a powerful peer, this timeout can likely be
+        // made much shorter, under 1s.
+        test_api_helper::<no_storage::testing::DataSource>(Duration::from_secs(5)).await;
+    }
+
+    async fn test_api_helper<D: TestableDataSource>(fetch_timeout: Duration) {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        let mut network = MockNetwork::<D>::init().await;
         network.start().await;
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
         let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
+        app.register_module(
+            "availability",
+            define_api(&Options {
+                fetch_timeout,
+                ..Default::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
         spawn(app.serve(format!("0.0.0.0:{}", port)));
 
         // Start a client.

@@ -21,6 +21,7 @@
 //! This module also comes with a few pre-built persistence implementations:
 //! * [`SqlStorage`]
 //! * [`FileSystemStorage`]
+//! * [`NoStorage`]
 //!
 
 use crate::{
@@ -37,10 +38,13 @@ use std::ops::RangeBounds;
 
 pub mod fs;
 mod ledger_log;
+pub mod no_storage;
 pub mod sql;
 
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemStorage;
+#[cfg(feature = "no-storage")]
+pub use no_storage::NoStorage;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlStorage;
 

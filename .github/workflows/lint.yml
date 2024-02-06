@@ -24,8 +24,9 @@ jobs:
           - sql-data-source
           - file-system-data-source
           - metrics-data-source
+          - no-storage
           # All optional features together
-          - sql-data-source,file-system-data-source,metrics-data-source
+          - sql-data-source,file-system-data-source,metrics-data-source,no-storage
     env:
         RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
         RUST_LOG: info
