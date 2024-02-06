@@ -304,7 +304,7 @@ mod test {
 
     use super::test_vid_factory;
     use crate::block2::payload::{Payload, TableWordTraits};
-    use crate::block2::tables::{Table, TxTable};
+    use crate::block2::tables::{Table, TxTableTest};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -753,7 +753,7 @@ mod test {
         ///
         /// If `entries` is well-formed then the result is well-formed.
         fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
-            let tx_table = TxTable::<TableWord>::from_entries(entries);
+            let tx_table = TxTableTest::<TableWord>::from_entries(entries);
             Self {
                 payload: [
                     tx_table.get_payload(),
@@ -773,7 +773,7 @@ mod test {
                 body_len < tx_bodies_byte_len(entries),
                 "body_len too large to trim the body"
             );
-            let tx_table = TxTable::<TableWord>::from_entries(entries);
+            let tx_table = TxTableTest::<TableWord>::from_entries(entries);
             Self {
                 payload: [tx_table.get_payload(), random_bytes(body_len, rng)].concat(),
                 num_txs: entries.len(),
@@ -808,14 +808,14 @@ mod test {
             block_byte_len: usize,
             rng: &mut R,
         ) -> Self {
-            let tx_table = TxTable::<TableWord>::from_entries(entries);
+            let tx_table = TxTableTest::<TableWord>::from_entries(entries);
             let mut payload = tx_table.get_payload();
             let num_txs = if block_byte_len > payload.len() {
                 payload.extend(random_bytes(block_byte_len - payload.len(), rng));
                 entries.len()
             } else {
                 payload.truncate(block_byte_len);
-                (block_byte_len / TxTable::<TableWord>::byte_len()).saturating_sub(1)
+                (block_byte_len / TxTableTest::<TableWord>::byte_len()).saturating_sub(1)
             };
             Self {
                 payload,
@@ -835,7 +835,7 @@ mod test {
             block_byte_len: usize,
             rng: &mut R,
         ) -> Self {
-            let tx_table_byte_len = (tx_table_len + 1) * TxTable::<TableWord>::byte_len();
+            let tx_table_byte_len = (tx_table_len + 1) * TxTableTest::<TableWord>::byte_len();
             assert!(
                 tx_table_byte_len <= block_byte_len,
                 "tx table size {} exceeds block size {}",
@@ -852,7 +852,8 @@ mod test {
             rng: &mut R,
         ) -> Self {
             // accommodate extremely small block payload
-            let header_byte_len = std::cmp::min(TxTable::<TableWord>::byte_len(), block_byte_len);
+            let header_byte_len =
+                std::cmp::min(TxTableTest::<TableWord>::byte_len(), block_byte_len);
             let mut payload = vec![0; block_byte_len];
             rng.fill_bytes(&mut payload);
             payload[..header_byte_len].copy_from_slice(
@@ -862,7 +863,7 @@ mod test {
                 payload,
                 num_txs: std::cmp::min(
                     tx_table_len,
-                    (block_byte_len / TxTable::<TableWord>::byte_len()).saturating_sub(1),
+                    (block_byte_len / TxTableTest::<TableWord>::byte_len()).saturating_sub(1),
                 ),
                 phantomdata: Default::default(),
             }
@@ -872,12 +873,12 @@ mod test {
     mod helpers {
         use crate::block2::entry::TxTableEntry;
         use crate::block2::payload::{NameSpaceTable, TableWordTraits};
-        use crate::block2::tables::{Table, TxTable};
+        use crate::block2::tables::{Table, TxTableTest};
         use crate::VmId;
         use rand::RngCore;
 
         pub fn tx_table_byte_len<TableWord: TableWordTraits>(entries: &[usize]) -> usize {
-            (entries.len() + 1) * TxTable::<TableWord>::byte_len()
+            (entries.len() + 1) * TxTableTest::<TableWord>::byte_len()
         }
 
         pub fn entries_from_lengths(lengths: &[usize]) -> Vec<usize> {

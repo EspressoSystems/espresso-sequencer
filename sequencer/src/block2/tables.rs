@@ -158,30 +158,36 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     }
 }
 
-pub struct TxTable<TableWord: TableWordTraits> {
-    raw_payload: Vec<u8>,
-    phantom: PhantomData<TableWord>,
-}
-
-impl<TableWord: TableWordTraits> Table<TableWord> for TxTable<TableWord> {
-    fn get_table_len(&self, offset: usize) -> TxTableEntry {
+pub struct TxTable {}
+impl TxTable {
+    pub(crate) fn get_table_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
-            self.raw_payload.len(),
+            raw_payload.len(),
         );
         let start = std::cmp::min(offset, end);
         let tx_table_len_range = start..end;
         let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-        entry_bytes[..tx_table_len_range.len()]
-            .copy_from_slice(&self.raw_payload[tx_table_len_range]);
+        entry_bytes[..tx_table_len_range.len()].copy_from_slice(&raw_payload[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
+    }
+}
+
+pub struct TxTableTest<TableWord: TableWordTraits> {
+    raw_payload: Vec<u8>,
+    phantom: PhantomData<TableWord>,
+}
+
+impl<TableWord: TableWordTraits> Table<TableWord> for TxTableTest<TableWord> {
+    fn get_table_len(&self, offset: usize) -> TxTableEntry {
+        TxTable::get_table_len(&self.raw_payload, offset)
     }
 
     fn get_payload(&self) -> Vec<u8> {
         self.raw_payload.clone()
     }
 }
-impl<TableWord: TableWordTraits> TxTable<TableWord> {
+impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
     #[cfg(test)]
     pub fn from_entries(entries: &[usize]) -> Self {
         let tx_table_byte_len = entries.len() + 1;
