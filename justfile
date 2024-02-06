@@ -61,7 +61,7 @@ build-docker-images:
 
 # generate rust bindings for contracts
 gen-bindings:
-    forge bind --contracts ./contracts/src --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
+    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
     cargo fmt --all
     cargo sort -g -w
 
