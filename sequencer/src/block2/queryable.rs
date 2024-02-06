@@ -1,6 +1,6 @@
 use crate::block2::entry::TxTableEntryWord;
-use crate::block2::payload::{test_vid_factory, NameSpaceTable, Payload, RangeProof};
-use crate::block2::tables::TxTable;
+use crate::block2::payload::{test_vid_factory, Payload, RangeProof};
+use crate::block2::tables::{NameSpaceTable, TxTable};
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,8 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::{NameSpaceTable, Payload, TableWordTraits};
+use crate::block2::payload::{Payload, TableWordTraits};
 use crate::{BlockBuildingSnafu, Error, VmId};
+use derivative::Derivative;
+use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -38,6 +40,14 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
     fn get_payload(&self) -> Vec<u8> {
         self.raw_payload.clone()
     }
+}
+
+#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
+#[derivative(Hash, PartialEq)]
+// TODO store only a reference to raw_payload.
+pub(super) struct NameSpaceTable<TableWord: TableWordTraits> {
+    pub(super) raw_payload: Vec<u8>,
+    pub(super) phantom: PhantomData<TableWord>,
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {

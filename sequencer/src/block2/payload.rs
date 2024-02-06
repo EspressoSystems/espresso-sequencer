@@ -14,10 +14,10 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::marker::PhantomData;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
+use crate::block2::tables::NameSpaceTable;
 use trait_set::trait_set;
 
 trait_set! {
@@ -59,23 +59,15 @@ pub(super) struct NamespaceInfo {
     pub(crate) tx_table_len: TxTableEntry,
 }
 
-#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
-#[derivative(Hash, PartialEq)]
-// TODO store only a reference to raw_payload.
-pub struct NameSpaceTable<TableWord: TableWordTraits> {
-    pub(crate) raw_payload: Vec<u8>,
-    pub phantom: PhantomData<TableWord>,
-}
-
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct Payload<TableWord: TableWordTraits> {
+pub(super) struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     pub(super) raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
-    pub ns_table: NameSpaceTable<TableWord>,
+    pub(super) ns_table: NameSpaceTable<TableWord>,
 
     // cache frequently used items
     //
@@ -868,8 +860,8 @@ mod test {
 
     mod helpers {
         use crate::block2::entry::TxTableEntry;
-        use crate::block2::payload::{NameSpaceTable, TableWordTraits};
-        use crate::block2::tables::{Table, TxTableTest};
+        use crate::block2::payload::TableWordTraits;
+        use crate::block2::tables::{NameSpaceTable, Table, TxTableTest};
         use crate::VmId;
         use rand::RngCore;
 

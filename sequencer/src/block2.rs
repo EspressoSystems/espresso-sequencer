@@ -12,7 +12,7 @@ mod tables;
 pub mod tx_iterator;
 
 use crate::block2::entry::TxTableEntryWord;
-use crate::block2::payload::NameSpaceTable;
+use crate::block2::tables::NameSpaceTable;
 use payload::Payload;
 
 impl BlockPayload for Payload<TxTableEntryWord> {

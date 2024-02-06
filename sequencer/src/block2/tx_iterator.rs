@@ -1,7 +1,7 @@
 use std::ops::Range;
 
-use crate::block2::payload::{NameSpaceTable, Payload, TableWordTraits};
-use crate::block2::tables::TxTable;
+use crate::block2::payload::{Payload, TableWordTraits};
+use crate::block2::tables::{NameSpaceTable, TxTable};
 use serde::{Deserialize, Serialize};
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
@@ -21,7 +21,10 @@ pub struct TxIterator<'a, TableWord: TableWordTraits> {
 }
 
 impl<'a, TableWord: TableWordTraits> TxIterator<'a, TableWord> {
-    pub fn new(ns_table: NameSpaceTable<TableWord>, block_payload: &'a Payload<TableWord>) -> Self {
+    pub(super) fn new(
+        ns_table: NameSpaceTable<TableWord>,
+        block_payload: &'a Payload<TableWord>,
+    ) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..ns_table.len(),
