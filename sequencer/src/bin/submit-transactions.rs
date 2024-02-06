@@ -85,6 +85,18 @@ struct Options {
     )]
     jobs: usize,
 
+    /// Number of accumulated pending transactions which should trigger a warning.
+    #[clap(
+        long,
+        default_value = "10",
+        env = "ESPRESSO_SUBMIT_TRANSACTIONS_PENDING_TRANSACTIONS_WARNING_THRESHOLD"
+    )]
+    pending_transactions_warning_threshold: usize,
+
+    /// Duration after which we should warn about a pending transaction.
+    #[clap(long, value_parser = parse_duration, default_value = "30s", env = "ESPRESSO_SUBMIT_TRANSACTIONS_SLOW_TRANSACTION_WARNING_THRESHOLD")]
+    slow_transaction_warning_threshold: Duration,
+
     /// URL of the query service.
     #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
     url: Url,
@@ -105,6 +117,8 @@ async fn main() {
     setup_logging();
 
     let opt = Options::parse();
+    tracing::warn!("starting load generator for sequencer {}", opt.url);
+
     let (sender, mut receiver) = mpsc::channel(opt.channel_bound);
 
     let seed = opt.seed.unwrap_or_else(random_seed);
@@ -165,7 +179,26 @@ async fn main() {
             }
         }
 
-        tracing::debug!("{} transactions still pending", pending.len());
+        // If a lot of transactions are pending, it might indicate the sequencer is struggling to
+        // finalize them. We should warn about this.
+        if pending.len() >= opt.pending_transactions_warning_threshold {
+            tracing::warn!(
+                "transactions are not being finalized or being finalized too slowly, {} pending",
+                pending.len()
+            );
+        } else {
+            tracing::debug!("{} transactions still pending", pending.len());
+
+            // Even if we are not accumulating transactions, it is still possible that some
+            // individual transactions are not being finalized. Warn about any transaction which has
+            // been pending for too long.
+            for (tx, submitted_at) in &pending {
+                let duration = received_at - *submitted_at;
+                if duration >= opt.slow_transaction_warning_threshold {
+                    tracing::warn!("transaction {tx} has been pending for {duration:?}");
+                }
+            }
+        }
     }
     tracing::info!(
         "block stream ended with {} transactions still pending",
