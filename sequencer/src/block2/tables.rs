@@ -160,7 +160,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
 pub struct TxTable {}
 impl TxTable {
-    pub(crate) fn get_table_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
+    pub(crate) fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
             raw_payload.len(),
@@ -180,7 +180,7 @@ pub struct TxTableTest<TableWord: TableWordTraits> {
 
 impl<TableWord: TableWordTraits> Table<TableWord> for TxTableTest<TableWord> {
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
-        TxTable::get_table_len(&self.raw_payload, offset)
+        TxTable::get_len(&self.raw_payload, offset)
     }
 
     fn get_payload(&self) -> Vec<u8> {
@@ -199,20 +199,6 @@ impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
 
         Self {
             raw_payload: tx_table,
-            phantom: Default::default(),
-        }
-    }
-
-    pub fn len(self) -> usize {
-        std::cmp::min(
-            self.get_table_len(0).try_into().unwrap_or(0),
-            (self.raw_payload.len() - TxTableEntry::byte_len()) / TxTableEntry::byte_len(),
-        )
-    }
-
-    pub fn from_bytes(arr: &[u8]) -> Self {
-        Self {
-            raw_payload: arr.to_vec(),
             phantom: Default::default(),
         }
     }

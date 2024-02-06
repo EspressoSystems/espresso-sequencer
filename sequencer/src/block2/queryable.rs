@@ -49,7 +49,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // sum over these tx table lens
         let mut result = 0;
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = TxTable::get_table_len(&self.raw_payload, offset)
+            let tx_table_len = TxTable::get_len(&self.raw_payload, offset)
                 .try_into()
                 .unwrap_or(0);
             // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)

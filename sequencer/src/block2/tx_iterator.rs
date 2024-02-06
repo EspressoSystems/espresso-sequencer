@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use crate::block2::payload::{NameSpaceTable, Payload, TableWordTraits};
-use crate::block2::tables::TxTableTest;
+use crate::block2::tables::TxTable;
 use serde::{Deserialize, Serialize};
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
@@ -58,11 +58,9 @@ impl<'a, TableWord: TableWordTraits> Iterator for TxIterator<'a, TableWord> {
                 let end = std::cmp::min(end, payload_len);
                 let start = std::cmp::min(start, end);
 
-                let tx_table = TxTableTest::<TableWord>::from_bytes(
-                    &self.block_payload.raw_payload[start..end],
-                );
-                let tx_table_len = tx_table.len();
-
+                let tx_table_len = TxTable::get_len(&self.block_payload.raw_payload[start..end], 0)
+                    .try_into()
+                    .unwrap_or(0);
                 self.tx_iter = 0..tx_table_len;
                 if let Some(tx_idx) = self.tx_iter.next() {
                     return Some(TxIndex {
