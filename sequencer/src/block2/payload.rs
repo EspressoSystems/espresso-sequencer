@@ -41,7 +41,7 @@ trait_set! {
 }
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-struct NamespaceInfo {
+pub(crate) struct NamespaceInfo {
     // `tx_table` is a bytes representation of the following table:
     // word[0]: [number n of entries in tx table]
     // word[j>0]: [end byte index of the (j-1)th tx in the payload]
@@ -223,13 +223,15 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
                 .context(BlockBuildingSnafu)?
                 .to_bytes(),
         ));
+
+        let mut namespaces_offsets = vec![];
         for (id, namespace) in namespaces {
             payload.extend(namespace.tx_table_len.to_bytes());
             payload.extend(namespace.tx_table);
             payload.extend(namespace.tx_bodies);
-            self.ns_table.add_new_entry_vmid(id)?;
-            self.ns_table.add_new_entry_payload_len(payload.len())?;
+            namespaces_offsets.push((id, payload.len()));
         }
+        self.ns_table = NameSpaceTable::from_namespace_offsets(namespaces_offsets).unwrap();
 
         self.raw_payload = payload;
         Ok(())

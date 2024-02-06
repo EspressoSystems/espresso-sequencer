@@ -48,6 +48,20 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         }
     }
 
+    pub fn from_namespace_offsets(namespace_offsets: Vec<(VmId, usize)>) -> Result<Self, Error> {
+        let mut ns_table = NameSpaceTable::from_vec(Vec::from(
+            TxTableEntry::try_from(namespace_offsets.len())
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        ));
+        for (id, offset) in namespace_offsets {
+            ns_table.add_new_entry_vmid(id)?;
+            ns_table.add_new_entry_payload_len(offset)?;
+        }
+        Ok(ns_table)
+    }
+
     // TODO see how we can  avoid cloning the whole payload
     pub fn from_bytes(b: &[u8]) -> Self {
         Self {
@@ -60,7 +74,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         self.raw_payload.clone()
     }
 
-    pub fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
+    fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
         self.raw_payload.extend(
             TxTableEntry::try_from(id)
                 .ok()
@@ -70,7 +84,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         Ok(())
     }
 
-    pub fn add_new_entry_payload_len(&mut self, l: usize) -> Result<(), Error> {
+    fn add_new_entry_payload_len(&mut self, l: usize) -> Result<(), Error> {
         self.raw_payload.extend(
             TxTableEntry::try_from(l)
                 .ok()
