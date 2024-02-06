@@ -192,15 +192,12 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         let maybe_leaf: Option<Leaf<TYPES>> = result.0.into_iter().last();
         if let Some(leaf) = maybe_leaf.clone() {
-            // Skip the genesis leaf.
-            if leaf.get_view_number() != TYPES::Time::genesis() {
-                match self.leaf_map.entry(leaf.clone()) {
-                    std::collections::hash_map::Entry::Occupied(mut o) => {
-                        *o.get_mut() += 1;
-                    }
-                    std::collections::hash_map::Entry::Vacant(v) => {
-                        v.insert(1);
-                    }
+            match self.leaf_map.entry(leaf.clone()) {
+                std::collections::hash_map::Entry::Occupied(mut o) => {
+                    *o.get_mut() += 1;
+                }
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert(1);
                 }
             }
 
