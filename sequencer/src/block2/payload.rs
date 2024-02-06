@@ -94,13 +94,13 @@ pub struct Payload<TableWord: TableWordTraits> {
 impl<TableWord: TableWordTraits> Payload<TableWord> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
-    pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
+    pub fn num_namespaces(&self) -> usize {
         self.ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
-    pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
+    pub fn namespace_iter(&self) -> impl Iterator<Item = usize> {
         0..self.ns_table.len()
     }
 
@@ -449,7 +449,7 @@ mod test {
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
             // test total ns length
-            assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
+            assert_eq!(block.num_namespaces(), derived_nss.len());
 
             // test total tx length
             tracing::info!("actual_ns_table {:?}", actual_ns_table);
@@ -469,7 +469,7 @@ mod test {
 
             // test each namespace
             // let mut tx_index_offset = 0;
-            let mut ns_iter = block.namespace_iter(&actual_ns_table);
+            let mut ns_iter = block.namespace_iter();
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
