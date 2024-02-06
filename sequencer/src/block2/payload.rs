@@ -30,6 +30,7 @@ trait_set! {
          + PrimInt
         + std::marker::Sync;
 
+    // Note: this trait is not used yet as for now the Payload structs are only parametrized with the TableWord parameter.
     pub trait OffsetTraits = CanonicalSerialize
         + CanonicalDeserialize
         + TryFrom<usize>
@@ -37,6 +38,7 @@ trait_set! {
         + Default
         + std::marker::Sync;
 
+    // Note: this trait is not used yet as for now the Payload structs are only parametrized with the TableWord parameter.
     pub trait NsIdTraits =CanonicalSerialize + CanonicalDeserialize + Default + std::marker::Sync;
 }
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
