@@ -77,7 +77,7 @@ pub struct NameSpaceTable<TableWord: TableWordTraits> {
 pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     #[serde(skip)]
-    pub raw_payload: Vec<u8>,
+    pub(super) raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
     pub ns_table: NameSpaceTable<TableWord>,
