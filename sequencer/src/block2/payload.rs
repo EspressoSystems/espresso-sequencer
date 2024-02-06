@@ -102,8 +102,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
-        let ns_table = NameSpaceTable::<TableWord>::from_vec(ns_table_bytes.to_vec());
-        0..ns_table.len()
+        0..self.ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
