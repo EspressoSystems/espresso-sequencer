@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import { HotShot } from "../src/HotShot.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
-contract DeployHotShot is Script {
+contract DeployHotShotScript is Script {
     function run() external {
         string memory seedPhrase = vm.envString("MNEMONIC");
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
