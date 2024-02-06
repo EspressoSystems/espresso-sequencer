@@ -41,9 +41,7 @@ trait_set! {
     // Note: this trait is not used yet as for now the Payload structs are only parametrized with the TableWord parameter.
     pub trait NsIdTraits =CanonicalSerialize + CanonicalDeserialize + Default + std::marker::Sync;
 }
-#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
-#[derivative(Hash, PartialEq)]
-pub(crate) struct NamespaceInfo {
+pub(super) struct NamespaceInfo {
     // `tx_table` is a bytes representation of the following table:
     // word[0]: [number n of entries in tx table]
     // word[j>0]: [end byte index of the (j-1)th tx in the payload]
@@ -57,10 +55,6 @@ pub(crate) struct NamespaceInfo {
     // https://github.com/EspressoSystems/espresso-sequencer/issues/757
     pub(crate) tx_table: Vec<u8>,
     pub(crate) tx_bodies: Vec<u8>, // concatenation of all tx payloads
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[serde(skip)]
     pub(crate) tx_bytes_end: TxTableEntry,
     pub(crate) tx_table_len: TxTableEntry,
 }
