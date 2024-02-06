@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Start doing consensus.
-    context.consensus().hotshot.start_consensus().await;
+    context.start_consensus().await;
 
     // Wait for events just to keep the process from exiting before consensus exits.
     let mut events = context

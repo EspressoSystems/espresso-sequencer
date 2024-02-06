@@ -6,12 +6,15 @@ use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{future::join_all, stream::StreamExt};
 use hotshot_query_service::availability::LeafQueryData;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
+use rand_distr::Distribution;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::{Header, SeqTypes};
+use crate::{options::parse_duration, Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -56,6 +59,10 @@ pub struct CommitmentTaskOptions {
     /// passing the options to `run_hotshot_commitment_task`.
     #[clap(long, env = "ESPRESSO_SEQUENCER_QUERY_SERVICE_URL")]
     pub query_service_url: Option<Url>,
+
+    /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
+    #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
+    pub delay: Option<Duration>,
 }
 
 pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
@@ -81,15 +88,21 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
             panic!("hotshot commitment task will exit");
         }
     };
-    sequence(max, hotshot, contract).await;
+    sequence(max, hotshot, contract, opt.delay).await;
 }
 
-async fn sequence(hard_block_limit: usize, hotshot: HotShotClient, contract: HotShot<Signer>) {
+async fn sequence(
+    hard_block_limit: usize,
+    hotshot: HotShotClient,
+    contract: HotShot<Signer>,
+    delay: Option<Duration>,
+) {
     // This is the number of blocks we attempt to sequence
     // If we fail to submit soft_block_limit leaves, we assume we have hit
     // A gas limit exception and decrease the limit
     // If we succeed, we increase the limit towards the hard_block_limit
     let mut soft_block_limit = hard_block_limit;
+    let mut rng = ChaChaRng::from_entropy();
     loop {
         if let Err(sync_err) = sync_with_l1(soft_block_limit, &hotshot, &contract).await {
             match sync_err {
@@ -106,7 +119,15 @@ async fn sequence(hard_block_limit: usize, hotshot: HotShotClient, contract: Hot
             sleep(RETRY_DELAY).await;
         } else {
             // If we succeed, increase the limit
-            soft_block_limit = std::cmp::min(soft_block_limit * 2, hard_block_limit)
+            soft_block_limit = std::cmp::min(soft_block_limit * 2, hard_block_limit);
+            if let Some(delay) = delay {
+                // Create an exponential distribution for sampling delay times. The distribution should have
+                // mean `delay`, or parameter `\lambda = 1 / delay`.
+                let delay_distr =
+                    rand_distr::Exp::<f64>::new(1f64 / delay.as_millis() as f64).unwrap();
+                let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
+                sleep(delay).await;
+            }
         }
     }
 }

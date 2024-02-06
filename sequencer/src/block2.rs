@@ -1,18 +1,33 @@
-use self::{boilerplate::RangeProof, tx_table_entry::TxTableEntry};
-use crate::{Transaction, VmId};
+use crate::{BlockBuildingSnafu, Transaction, VmId};
+use ark_bls12_381::Bls12_381;
+use commit::{Commitment, Committable};
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::traits::BlockPayload;
 use jf_primitives::{
-    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::payload_prover::{PayloadProver, Statement},
+    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::{
+        advz::{
+            payload_prover::{LargeRangeProof, SmallRangeProof},
+            Advz,
+        },
+        payload_prover::PayloadProver,
+    },
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ops::Range, sync::OnceLock};
+use snafu::OptionExt;
+use std::{collections::HashMap, fmt::Display, ops::Range, sync::OnceLock};
+
+use self::entry::TxTableEntry;
+
+pub mod entry;
+pub mod queryable;
+pub mod tx_iterator;
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub struct BlockPayload {
+pub struct Payload {
     payload: Vec<u8>,
 
     // cache frequently used items
@@ -24,99 +39,7 @@ pub struct BlockPayload {
     tx_table_len_proof: OnceLock<Option<RangeProof>>,
 }
 
-impl BlockPayload {
-    /// Returns (Self, metadata).
-    ///
-    /// `metadata` is a bytes representation of the namespace table.
-    /// Why bytes? To make it easy to move metdata into payload in the future.
-    ///
-    /// Namespace table defined as follows for j>0:
-    /// word[0]:    [number of entries in namespace table]
-    /// word[2j-1]: [id for the jth namespace]
-    /// word[2j]:   [end byte index of the jth namespace in the payload]
-    ///
-    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
-    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
-    ///
-    /// Word type is `TxTableEntry`.
-    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
-    ///
-    /// TODO final entry should be implicit:
-    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
-    ///
-    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
-    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<(Self, Vec<u8>)> {
-        struct NamespaceInfo {
-            // `tx_table` is a bytes representation of the following table:
-            // word[0]: [number n of entries in tx table]
-            // word[j>0]: [end byte index of the (j-1)th tx in the payload]
-            //
-            // Thus, the ith tx payload bytes range is word[i-1]..word[i].
-            // Edge case: tx_table[-1] is implicitly 0.
-            //
-            // Word type is `TxTableEntry`.
-            //
-            // TODO final entry should be implicit:
-            // https://github.com/EspressoSystems/espresso-sequencer/issues/757
-            tx_table: Vec<u8>,
-            tx_bodies: Vec<u8>, // concatenation of all tx payloads
-            tx_bytes_end: TxTableEntry,
-            tx_table_len: TxTableEntry,
-        }
-
-        let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
-        for tx in txs.into_iter() {
-            let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
-
-            let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
-                tx_table: Vec::new(),
-                tx_bodies: Vec::new(),
-                tx_bytes_end: TxTableEntry::zero(),
-                tx_table_len: TxTableEntry::zero(),
-            });
-
-            namespace.tx_bytes_end.checked_add_mut(tx_bytes_len)?;
-            namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
-            namespace.tx_bodies.extend(tx.payload());
-            namespace
-                .tx_table_len
-                .checked_add_mut(TxTableEntry::one())?;
-        }
-
-        // first word of namespace table is its length
-        let namespace_table_len = namespaces.len();
-        let mut namespace_table =
-            Vec::from(TxTableEntry::try_from(namespace_table_len).ok()?.to_bytes());
-
-        // fill payload and namespace table
-        let mut payload = Vec::new();
-        for (id, namespace) in namespaces {
-            payload.extend(namespace.tx_table_len.to_bytes());
-            payload.extend(namespace.tx_table);
-            payload.extend(namespace.tx_bodies);
-            namespace_table.extend(TxTableEntry::try_from(id).ok()?.to_bytes());
-            namespace_table.extend(TxTableEntry::try_from(payload.len()).ok()?.to_bytes());
-        }
-
-        Some((
-            Self {
-                payload,
-                tx_table_len_proof: Default::default(),
-            },
-            namespace_table,
-        ))
-    }
-
-    fn from_bytes<B>(bytes: B) -> Self
-    where
-        B: IntoIterator<Item = u8>,
-    {
-        Self {
-            payload: bytes.into_iter().collect(),
-            tx_table_len_proof: Default::default(),
-        }
-    }
-
+impl Payload {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
@@ -127,6 +50,30 @@ impl BlockPayload {
     #[allow(dead_code)]
     pub fn namespace_iter(&self, ns_table_bytes: &[u8]) -> impl Iterator<Item = usize> {
         0..get_ns_table_len(ns_table_bytes)
+    }
+
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    #[allow(dead_code)]
+    /// Returns (ns_payload, ns_proof) where ns_payload is raw bytes.
+    pub fn namespace_with_proof(
+        &self,
+        meta: &<Self as hotshot_types::traits::BlockPayload>::Metadata,
+        ns_index: usize,
+    ) -> Option<(Vec<u8>, NamespaceProof)> {
+        if ns_index >= get_ns_table_len(meta) {
+            return None; // error: index out of bounds
+        }
+
+        let ns_payload_range = get_ns_payload_range(meta, ns_index, self.payload.len());
+
+        let vid = test_vid_factory(); // TODO temporary VID construction
+
+        // TODO log output for each `?`
+        // fix this when we settle on an error handling pattern
+        Some((
+            self.payload.get(ns_payload_range.clone())?.to_vec(),
+            vid.payload_proof(&self.payload, ns_payload_range).ok()?,
+        ))
     }
 
     /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
@@ -166,6 +113,199 @@ impl BlockPayload {
             .as_ref()
     }
 }
+
+impl BlockPayload for Payload {
+    type Error = crate::Error;
+    type Transaction = Transaction;
+    type Metadata = Vec<u8>;
+    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+
+    /// Returns (Self, metadata).
+    ///
+    /// `metadata` is a bytes representation of the namespace table.
+    /// Why bytes? To make it easy to move metdata into payload in the future.
+    ///
+    /// Namespace table defined as follows for j>0:
+    /// word[0]:    [number of entries in namespace table]
+    /// word[2j-1]: [id for the jth namespace]
+    /// word[2j]:   [end byte index of the jth namespace in the payload]
+    ///
+    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
+    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
+    ///
+    /// Word type is `TxTableEntry`.
+    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
+    ///
+    /// TODO final entry should be implicit:
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
+    ///
+    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
+    fn from_transactions(
+        txs: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        struct NamespaceInfo {
+            // `tx_table` is a bytes representation of the following table:
+            // word[0]: [number n of entries in tx table]
+            // word[j>0]: [end byte index of the (j-1)th tx in the payload]
+            //
+            // Thus, the ith tx payload bytes range is word[i-1]..word[i].
+            // Edge case: tx_table[-1] is implicitly 0.
+            //
+            // Word type is `TxTableEntry`.
+            //
+            // TODO final entry should be implicit:
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/757
+            tx_table: Vec<u8>,
+            tx_bodies: Vec<u8>, // concatenation of all tx payloads
+            tx_bytes_end: TxTableEntry,
+            tx_table_len: TxTableEntry,
+        }
+
+        let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
+        for tx in txs.into_iter() {
+            let tx_bytes_len: TxTableEntry = tx
+                .payload()
+                .len()
+                .try_into()
+                .ok()
+                .context(BlockBuildingSnafu)?;
+
+            let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
+                tx_table: Vec::new(),
+                tx_bodies: Vec::new(),
+                tx_bytes_end: TxTableEntry::zero(),
+                tx_table_len: TxTableEntry::zero(),
+            });
+
+            namespace
+                .tx_bytes_end
+                .checked_add_mut(tx_bytes_len)
+                .context(BlockBuildingSnafu)?;
+            namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
+            namespace.tx_bodies.extend(tx.payload());
+            namespace
+                .tx_table_len
+                .checked_add_mut(TxTableEntry::one())
+                .context(BlockBuildingSnafu)?;
+        }
+
+        // first word of namespace table is its length
+        let namespace_table_len = namespaces.len();
+        let mut namespace_table = Vec::from(
+            TxTableEntry::try_from(namespace_table_len)
+                .ok()
+                .context(BlockBuildingSnafu)?
+                .to_bytes(),
+        );
+
+        // fill payload and namespace table
+        let mut payload = Vec::new();
+        for (id, namespace) in namespaces {
+            payload.extend(namespace.tx_table_len.to_bytes());
+            payload.extend(namespace.tx_table);
+            payload.extend(namespace.tx_bodies);
+            namespace_table.extend(
+                TxTableEntry::try_from(id)
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+            namespace_table.extend(
+                TxTableEntry::try_from(payload.len())
+                    .ok()
+                    .context(BlockBuildingSnafu)?
+                    .to_bytes(),
+            );
+        }
+
+        Some((
+            Self {
+                payload,
+                tx_table_len_proof: Default::default(),
+            },
+            namespace_table,
+        ))
+        .context(BlockBuildingSnafu)
+    }
+
+    // TODO(746) from_bytes doesn't need `metadata`!
+    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        Self {
+            payload: encoded_transactions.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
+        }
+    }
+
+    fn genesis() -> (Self, Self::Metadata) {
+        Self::from_transactions([]).unwrap()
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(self.payload.iter().cloned())
+    }
+
+    fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
+    }
+}
+impl Display for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
+    }
+}
+
+impl Committable for Payload {
+    fn commit(&self) -> commit::Commitment<Self> {
+        todo!()
+    }
+}
+
+/// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
+///
+/// Unfortunately, [`PayloadProver`] has a generic type param.
+/// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
+/// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
+/// TODO Workaround using generic params, which is allows the caller to influence the return type:
+/// https://stackoverflow.com/a/52886787
+///
+/// TODO temporary VID constructor.
+pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+    // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
+    let (payload_chunk_size, num_storage_nodes) = (8, 10);
+
+    let mut rng = jf_utils::test_rng();
+    let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(payload_chunk_size - 1).unwrap(),
+    )
+    .unwrap();
+    Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+}
+
+// TODO type alias needed only because nested impl Trait is not allowed
+// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+pub(super) type RangeProof =
+    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
+/// Namespace proof type
+///
+/// # Type complexity
+///
+/// Jellyfish's `LargeRangeProof` type has a prime field generic parameter `F`.
+/// This `F` is determined by the pairing parameter for `Advz` currently returned by `test_vid_factory()`.
+/// Jellyfish needs a more ergonomic way for downstream users to refer to this type.
+///
+/// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
+/// If it were public then we could instead use
+/// ```compile_fail
+/// LargeRangeProof<KzgEval<Bls12_281>>
+/// ```
+/// but that's still pretty crufty.
+pub type NamespaceProof =
+    LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 
 // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
 // if `table_bytes` has too few bytes at this `offset` then pad with zero.
@@ -254,7 +394,7 @@ fn get_ns_table_entry(ns_table_bytes: &[u8], ns_index: usize) -> (VmId, usize) {
 // TODO currently unused but contains code that might get re-used in the near future.
 fn _get_tx_table_entry(
     ns_offset: usize,
-    block_payload: &BlockPayload,
+    block_payload: &Payload,
     block_payload_len: usize,
     tx_index: usize,
 ) -> TxTableEntry {
@@ -300,520 +440,43 @@ fn tx_payload_range(
     Some(start..end)
 }
 
-impl QueryablePayload for BlockPayload {
-    type TransactionIndex = TxIndex;
-    type Iter<'a> = TxIterator<'a>;
-    type InclusionProof = TxInclusionProof;
-
-    fn len(&self, meta: &Self::Metadata) -> usize {
-        let entry_len = TxTableEntry::byte_len();
-
-        // The number of nss in a block is defined as the minimum of:
-        // (1) the number of nss indicated in the ns table
-        // (2) the number of ns table entries that could fit inside the ns table byte len
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
-        // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = get_ns_table_len(meta);
-
-        // First, collect the offsets of all the nss
-        // (Range starts at 1 to conveniently skip the ns table prefix.)
-        let mut ns_end_offsets = vec![0usize];
-        for i in 1..=ns_table_len {
-            let ns_offset_bytes = meta
-                .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
-                .unwrap();
-
-            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
-                .map(|tx| usize::try_from(tx).unwrap())
-                .unwrap();
-            ns_end_offsets.push(ns_offset);
-        }
-
-        // for each entry in the ns table:
-        // read the tx table len for that ns
-        // that tx table len is the number of txs in that namespace
-        // sum over these tx table lens
-        let mut result = 0;
-        for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = get_table_len(&self.payload, offset).try_into().unwrap_or(0);
-            // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
-            result += tx_table_len;
-        }
-        result
-    }
-
-    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
-        TxIterator::new(meta, self)
-    }
-
-    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-    fn transaction_with_proof(
-        &self,
-        meta: &Self::Metadata,
-        index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        if index_usize >= self.len(meta) {
-            return None; // error: index out of bounds
-        }
-
-        let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
-
-        // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
-        //
-        // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
-        //
-        // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
-        //
-        // TODO why isn't cargo fmt wrapping these comments?
-
-        // start
-        let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
-            (TxTableEntry::byte_len(), None)
-        } else {
-            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
-            (
-                range_proof_start,
-                Some(TxTableEntry::from_bytes(self.payload.get(
-                    range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
-                )?)?),
-            )
-        };
-
-        // end
-        let tx_table_range_proof_end = index_usize
-            .checked_add(2)?
-            .checked_mul(TxTableEntry::byte_len())?;
-        let tx_table_range_end = TxTableEntry::from_bytes(self.payload.get(
-            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
-                ..tx_table_range_proof_end,
-        )?)?;
-
-        // correctness proof for the tx payload range
-        let tx_table_range_proof = vid
-            .payload_proof(
-                &self.payload,
-                tx_table_range_proof_start..tx_table_range_proof_end,
-            )
-            .ok()?;
-
-        let tx_payload_range = tx_payload_range(
-            &tx_table_range_start,
-            &tx_table_range_end,
-            &self.get_tx_table_len(),
-            self.payload.len(),
-        )?;
-        Some((
-            // TODO don't copy the tx bytes into the return value
-            // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-            Transaction::new(
-                crate::VmId(0),
-                self.payload.get(tx_payload_range.clone())?.to_vec(),
-            ),
-            TxInclusionProof {
-                tx_table_len: self.get_tx_table_len(),
-                tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
-                tx_table_range_start,
-                tx_table_range_end,
-                tx_table_range_proof,
-                tx_payload_proof: if tx_payload_range.is_empty() {
-                    None
-                } else {
-                    vid.payload_proof(&self.payload, tx_payload_range).ok()
-                },
-            },
-        ))
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TxInclusionProof {
-    tx_table_len: TxTableEntry,
-    tx_table_len_proof: RangeProof,
-
-    tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
-    tx_table_range_end: TxTableEntry,
-    tx_table_range_proof: RangeProof,
-
-    tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
-}
-
-impl TxInclusionProof {
-    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-    //
-    // - We need to decide where to store VID params.
-    // - Returns `None` if an error occurred.
-    // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
-    #[allow(dead_code)] // TODO temporary
-    #[allow(clippy::too_many_arguments)]
-    fn verify<V>(
-        &self,
-        tx: &Transaction,
-        tx_index: TxIndex,
-        vid: &V,
-        vid_commit: &V::Commit,
-        vid_common: &V::Common,
-    ) -> Option<Result<(), ()>>
-    where
-        V: PayloadProver<RangeProof>,
-    {
-        V::is_consistent(vid_commit, vid_common).ok()?;
-
-        // Verify proof for tx payload.
-        // Proof is `None` if and only if tx has zero length.
-        let tx_payload_range = tx_payload_range(
-            &self.tx_table_range_start,
-            &self.tx_table_range_end,
-            &self.tx_table_len,
-            V::get_payload_byte_len(vid_common),
-        )?;
-        match &self.tx_payload_proof {
-            Some(tx_payload_proof) => {
-                if vid
-                    .payload_verify(
-                        Statement {
-                            payload_subslice: tx.payload(),
-                            range: tx_payload_range,
-                            commit: vid_commit,
-                            common: vid_common,
-                        },
-                        tx_payload_proof,
-                    )
-                    .ok()?
-                    .is_err()
-                {
-                    return Some(Err(())); // TODO it would be nice to use ? here...
-                }
-            }
-            None => {
-                if !tx.payload().is_empty() || !tx_payload_range.is_empty() {
-                    return None; // error: nonempty payload but no proof
-                }
-            }
-        };
-
-        // Verify proof for tx table len.
-        if vid
-            .payload_verify(
-                Statement {
-                    payload_subslice: &self.tx_table_len.to_bytes(),
-                    range: 0..TxTableEntry::byte_len(),
-                    commit: vid_commit,
-                    common: vid_common,
-                },
-                &self.tx_table_len_proof,
-            )
-            .ok()?
-            .is_err()
-        {
-            return Some(Err(()));
-        }
-
-        // Verify proof for tx table entries.
-        // Start index missing for the 0th tx
-        let index: usize = tx_index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        let mut tx_table_range_bytes =
-            Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
-        let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
-            if index == 0 {
-                return None; // error: first tx should have empty start index
-            }
-            tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
-            index * TxTableEntry::byte_len()
-        } else {
-            if index != 0 {
-                return None; // error: only the first tx should have empty start index
-            }
-            TxTableEntry::byte_len()
-        };
-        tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
-        let range = start
-            ..index
-                .checked_add(2)?
-                .checked_mul(TxTableEntry::byte_len())?;
-
-        if vid
-            .payload_verify(
-                Statement {
-                    payload_subslice: &tx_table_range_bytes,
-                    range,
-                    commit: vid_commit,
-                    common: vid_common,
-                },
-                &self.tx_table_range_proof,
-            )
-            .ok()?
-            .is_err()
-        {
-            return Some(Err(()));
-        }
-
-        Some(Ok(()))
-    }
-}
-
-mod tx_table_entry {
-    use super::{Deserialize, Serialize};
-    use crate::VmId;
-    use core::fmt;
-    use std::mem::size_of;
-
-    // Use newtype pattern so that tx table entires cannot be confused with other types.
-    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-    pub struct TxTableEntry(TxTableEntryWord);
-    type TxTableEntryWord = u32;
-
-    impl TxTableEntry {
-        pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
-
-        /// Adds `rhs` to `self` in place. Returns `None` on overflow.
-        pub fn checked_add_mut(&mut self, rhs: Self) -> Option<()> {
-            self.0 = self.0.checked_add(rhs.0)?;
-            Some(())
-        }
-        pub const fn zero() -> Self {
-            Self(0)
-        }
-        pub const fn one() -> Self {
-            Self(1)
-        }
-        pub const fn to_bytes(&self) -> [u8; size_of::<TxTableEntryWord>()] {
-            self.0.to_le_bytes()
-        }
-        pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-            Some(Self(TxTableEntryWord::from_le_bytes(
-                bytes.try_into().ok()?,
-            )))
-        }
-        /// Infallible constructor.
-        pub fn from_bytes_array(bytes: [u8; TxTableEntry::byte_len()]) -> Self {
-            Self(TxTableEntryWord::from_le_bytes(bytes))
-        }
-        pub const fn byte_len() -> usize {
-            size_of::<TxTableEntryWord>()
-        }
-
-        #[cfg(test)]
-        pub fn from_usize(val: usize) -> Self {
-            Self(
-                val.try_into()
-                    .expect("usize -> TxTableEntry should succeed"),
-            )
-        }
-    }
-
-    impl fmt::Display for TxTableEntry {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0)
-        }
-    }
-
-    impl TryFrom<usize> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<usize>>::Error;
-
-        fn try_from(value: usize) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for usize {
-        type Error = <usize as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            usize::try_from(value.0)
-        }
-    }
-
-    impl TryFrom<VmId> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
-
-        fn try_from(value: VmId) -> Result<Self, Self::Error> {
-            TxTableEntryWord::try_from(value.0).map(Self)
-        }
-    }
-    impl TryFrom<TxTableEntry> for VmId {
-        type Error = <u64 as TryFrom<TxTableEntryWord>>::Error;
-
-        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-            Ok(Self(From::from(value.0)))
-        }
-    }
-}
-
-type NsTable = <BlockPayload as hotshot::traits::BlockPayload>::Metadata;
-
-/// TODO do we really need `PartialOrd`, `Ord` here?
-/// Could the `Ord` bound be removed from `QueryablePayload::TransactionIndex`?`
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct TxIndex {
-    ns_idx: usize,
-    tx_idx: usize,
-}
-
-pub struct TxIterator<'a> {
-    ns_idx: usize, // simpler than using `Peekable`
-    ns_iter: Range<usize>,
-    tx_iter: Range<usize>,
-    block_payload: &'a BlockPayload,
-    ns_table: &'a NsTable,
-}
-
-impl<'a> TxIterator<'a> {
-    fn new(ns_table: &'a NsTable, block_payload: &'a BlockPayload) -> Self {
-        Self {
-            ns_idx: 0, // arbitrary value, changed in first call to next()
-            ns_iter: 0..get_ns_table_len(ns_table),
-            tx_iter: 0..0, // empty range
-            block_payload,
-            ns_table,
-        }
-    }
-}
-
-impl<'a> Iterator for TxIterator<'a> {
-    type Item = TxIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(tx_idx) = self.tx_iter.next() {
-            // we still have txs left to consume in current ns
-            Some(TxIndex {
-                ns_idx: self.ns_idx,
-                tx_idx,
-            })
-        } else {
-            // move to the next name space
-            let payload_len = self.block_payload.payload.len();
-            for ns_idx in self.ns_iter.by_ref() {
-                self.ns_idx = ns_idx;
-                let start = if self.ns_idx == 0 {
-                    0
-                } else {
-                    get_ns_table_entry(self.ns_table, self.ns_idx - 1).1
-                };
-                let end = get_ns_table_entry(self.ns_table, self.ns_idx).1;
-
-                // TODO refactor range-checking code
-                let end = std::cmp::min(end, payload_len);
-                let start = std::cmp::min(start, end);
-
-                let tx_table_len = get_tx_table_len(&self.block_payload.payload[start..end]);
-
-                self.tx_iter = 0..tx_table_len;
-                if let Some(tx_idx) = self.tx_iter.next() {
-                    return Some(TxIndex {
-                        ns_idx: self.ns_idx,
-                        tx_idx,
-                    });
-                } else {
-                    continue;
-                }
-            }
-            None // all namespaces consumed
-        }
-    }
-}
-
-// TODO remove this `boilerplate` module, tidy what's in here.
-// - Skeleton impl of `BlockPayload` for now so as to enable `QueryablePayload`.
-//   https://github.com/EspressoSystems/espresso-sequencer/issues/856
-// - Opaque (not really though) constructor to return an abstract [`PayloadProver`].
-mod boilerplate {
-    use super::{
-        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
+/// Like `tx_payload_range` except for namespaces.
+/// Returns the byte range for a ns in the block payload bytes.
+///
+/// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
+/// TODO make fns such as this methods of a new `NsTable` struct?
+pub fn get_ns_payload_range(
+    ns_table_bytes: &[u8],
+    ns_index: usize,
+    block_payload_byte_len: usize,
+) -> Range<usize> {
+    let end = std::cmp::min(
+        get_ns_table_entry(ns_table_bytes, ns_index).1,
+        block_payload_byte_len,
+    );
+    let start = if ns_index == 0 {
+        0
+    } else {
+        std::cmp::min(get_ns_table_entry(ns_table_bytes, ns_index - 1).1, end)
     };
-    use crate::BlockBuildingSnafu;
-    use ark_bls12_381::Bls12_381;
-    use commit::{Commitment, Committable};
-    use jf_primitives::{
-        pcs::checked_fft_size,
-        vid::advz::{payload_prover::SmallRangeProof, Advz},
-    };
-    use snafu::OptionExt;
-    use std::fmt::Display;
-
-    impl hotshot::traits::BlockPayload for BlockPayload {
-        type Error = crate::Error;
-        type Transaction = Transaction;
-        type Metadata = Vec<u8>;
-        type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
-
-        fn from_transactions(
-            transactions: impl IntoIterator<Item = Self::Transaction>,
-        ) -> Result<(Self, Self::Metadata), Self::Error> {
-            Self::from_txs(transactions).context(BlockBuildingSnafu)
-        }
-
-        // TODO(746) from_bytes doesn't need `metadata`!
-        fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
-        where
-            I: Iterator<Item = u8>,
-        {
-            Self::from_bytes(encoded_transactions)
-        }
-
-        fn genesis() -> (Self, Self::Metadata) {
-            Self::from_transactions([]).unwrap()
-        }
-
-        fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-            Ok(self.payload.iter().cloned())
-        }
-
-        fn transaction_commitments(
-            &self,
-            meta: &Self::Metadata,
-        ) -> Vec<Commitment<Self::Transaction>> {
-            self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
-        }
-    }
-
-    impl Display for BlockPayload {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{self:#?}")
-        }
-    }
-
-    impl Committable for BlockPayload {
-        fn commit(&self) -> commit::Commitment<Self> {
-            todo!()
-        }
-    }
-
-    /// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
-    ///
-    /// Unfortunately, [`PayloadProver`] has a generic type param.
-    /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
-    /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
-    ///
-    /// TODO temporary VID constructor.
-    pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
-        // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-        let (payload_chunk_size, num_storage_nodes) = (8, 10);
-
-        let mut rng = jf_utils::test_rng();
-        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
-            &mut rng,
-            checked_fft_size(payload_chunk_size - 1).unwrap(),
-        )
-        .unwrap();
-        Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
-    }
-
-    // TODO type alias needed only because nested impl Trait is not allowed
-    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-    pub(super) type RangeProof =
-        SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+    start..end
 }
 
 #[cfg(test)]
 mod test {
-    use super::{
-        boilerplate::test_vid_factory, BlockPayload, Transaction, TxInclusionProof, TxIndex,
-        TxTableEntry,
+    use super::{test_vid_factory, Payload, Transaction, TxTableEntry};
+    use crate::block2::{
+        queryable::{self},
+        tx_iterator::TxIndex,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use hotshot_types::traits::BlockPayload;
+    use jf_primitives::vid::{
+        payload_prover::{PayloadProver, Statement},
+        VidScheme,
+    };
     use rand::RngCore;
     use std::{collections::HashMap, ops::Range};
 
@@ -858,7 +521,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        // let vid = test_vid_factory();
+        let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -934,15 +597,15 @@ mod test {
             assert_eq!(derived_nss.len(), test_case.len());
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
-            let (block, actual_ns_table) = BlockPayload::from_txs(txs).unwrap();
-            // let disperse_data = vid.disperse(&block.payload).unwrap();
+            let (block, actual_ns_table) = Payload::from_transactions(txs).unwrap();
+            let disperse_data = vid.disperse(&block.payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
             // test total ns length
             assert_eq!(block.num_namespaces(&actual_ns_table), derived_nss.len());
 
             // test total tx length
-            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            // tracing::info!("actual_ns_table {:?}", actual_ns_table);
             assert_eq!(block.len(&actual_ns_table), total_num_txs);
             // TODO assert the final ns table entry offset == self.payload.len()
 
@@ -964,16 +627,48 @@ mod test {
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter(&actual_ns_table).enumerate() {
+                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+
                 // test ns iterator
                 let ns_iter_idx = ns_iter.next().unwrap();
                 assert_eq!(ns_iter_idx, ns_idx);
 
+                // test ns payload
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
-                let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns = derived_nss.remove(&ns_id).unwrap();
+                let actual_ns_payload_flat =
+                    block.payload.get(actual_ns_payload_range.clone()).unwrap();
+                assert_eq!(
+                    actual_ns_payload_flat, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes",
+                    ns_id.0,
+                );
+
+                // test ns proof
+                let (ns_payload_flat_from_proof, ns_proof) = block
+                    .namespace_with_proof(&actual_ns_table, ns_idx)
+                    .unwrap();
+                assert_eq!(
+                    ns_payload_flat_from_proof, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                    ns_id.0,
+                );
+                // NOTE: There is no NamespaceProof::verify method because it's quite simple.
+                // compare: there is a TxInclusionProof::verify method for txs because that's complex.
+                // TODO make a NamespaceProof::verify method?
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: &ns_payload_flat_from_proof,
+                        range: actual_ns_payload_range,
+                        commit: &disperse_data.commit,
+                        common: &disperse_data.common,
+                    },
+                    &ns_proof,
+                )
+                .unwrap()
+                .unwrap_or_else(|_| panic!("namespace {} proof verification failure", ns_id.0));
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -1002,16 +697,6 @@ mod test {
                     "namespace {} incorrect tx table for",
                     ns_id.0
                 );
-
-                // test entire namespace payload flat
-                assert_eq!(
-                    actual_ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes",
-                    ns_id.0,
-                );
-
-                // tests for individual txs in this namespace
-                // TODO(746) rework this part
 
                 // testing tx iterator
                 // TODO(746) incorporate this test into the following commented code when it's fixed
@@ -1125,7 +810,7 @@ mod test {
                 payload_byte_len
             );
 
-            let block = BlockPayload::from_bytes(test_case.payload);
+            let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.payload.len(), payload_byte_len);
 
@@ -1161,7 +846,7 @@ mod test {
 
         let mut rng = jf_utils::test_rng();
         let test_case = TestCase::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
-        let block = BlockPayload::from_bytes(test_case.payload.iter().cloned());
+        let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
         assert_eq!(block.payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
@@ -1173,14 +858,11 @@ mod test {
 
         // make a fake proof for a nonexistent tx in the small block
         let tx = Transaction::new(crate::VmId(0), Vec::new());
-        let proof = TxInclusionProof {
-            tx_table_len: block.get_tx_table_len(),
-            tx_table_len_proof: block.get_tx_table_len_proof(&vid).unwrap().clone(),
-            tx_table_range_start: None,
-            tx_table_range_end: TxTableEntry::from_usize(1),
-            tx_table_range_proof: vid.payload_proof(&block.payload, 0..3).unwrap(),
-            tx_payload_proof: None,
-        };
+        let proof = queryable::gen_tx_proof_for_testing(
+            block.get_tx_table_len(),
+            block.get_tx_table_len_proof(&vid).unwrap().clone(),
+            vid.payload_proof(&block.payload, 0..3).unwrap(),
+        );
 
         // test: fake proof should get rejected
         // TODO should return Some(Err()) instead of None
@@ -1320,7 +1002,7 @@ mod test {
     }
 
     mod helpers {
-        use crate::{block2::tx_table_entry::TxTableEntry, VmId};
+        use crate::{block2::entry::TxTableEntry, VmId};
         use rand::RngCore;
 
         pub fn tx_table(entries: &[usize]) -> Vec<u8> {
