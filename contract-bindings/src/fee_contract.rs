@@ -398,13 +398,6 @@ pub mod fee_contract {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("NotEnoughDeposited"),
-                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
-                        name: ::std::borrow::ToOwned::to_owned("NotEnoughDeposited"),
-                        inputs: ::std::vec![],
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("NotInitializing"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("NotInitializing"),
@@ -856,21 +849,6 @@ pub mod fee_contract {
     )]
     #[etherror(name = "NoFunctionCalled", abi = "NoFunctionCalled()")]
     pub struct NoFunctionCalled;
-    ///Custom Error type `NotEnoughDeposited` with signature `NotEnoughDeposited()` and selector `0x5fd4ac44`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[etherror(name = "NotEnoughDeposited", abi = "NotEnoughDeposited()")]
-    pub struct NotEnoughDeposited;
     ///Custom Error type `NotInitializing` with signature `NotInitializing()` and selector `0xd7e6bcf8`
     #[derive(
         Clone,
@@ -983,7 +961,6 @@ pub mod fee_contract {
         InvalidInitialization(InvalidInitialization),
         InvalidUserAddress(InvalidUserAddress),
         NoFunctionCalled(NoFunctionCalled),
-        NotEnoughDeposited(NotEnoughDeposited),
         NotInitializing(NotInitializing),
         OwnableInvalidOwner(OwnableInvalidOwner),
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
@@ -1044,11 +1021,6 @@ pub mod fee_contract {
             {
                 return Ok(Self::NoFunctionCalled(decoded));
             }
-            if let Ok(decoded) =
-                <NotEnoughDeposited as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::NotEnoughDeposited(decoded));
-            }
             if let Ok(decoded) = <NotInitializing as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::NotInitializing(decoded));
             }
@@ -1096,9 +1068,6 @@ pub mod fee_contract {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::NoFunctionCalled(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::NotEnoughDeposited(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::NotInitializing(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::OwnableInvalidOwner(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -1161,11 +1130,6 @@ pub mod fee_contract {
                 _ if selector == <NoFunctionCalled as ::ethers::contract::EthError>::selector() => {
                     true
                 }
-                _ if selector
-                    == <NotEnoughDeposited as ::ethers::contract::EthError>::selector() =>
-                {
-                    true
-                }
                 _ if selector == <NotInitializing as ::ethers::contract::EthError>::selector() => {
                     true
                 }
@@ -1210,7 +1174,6 @@ pub mod fee_contract {
                 Self::InvalidInitialization(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidUserAddress(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NoFunctionCalled(element) => ::core::fmt::Display::fmt(element, f),
-                Self::NotEnoughDeposited(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NotInitializing(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OwnableInvalidOwner(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OwnableUnauthorizedAccount(element) => ::core::fmt::Display::fmt(element, f),
@@ -1275,11 +1238,6 @@ pub mod fee_contract {
     impl ::core::convert::From<NoFunctionCalled> for FeeContractErrors {
         fn from(value: NoFunctionCalled) -> Self {
             Self::NoFunctionCalled(value)
-        }
-    }
-    impl ::core::convert::From<NotEnoughDeposited> for FeeContractErrors {
-        fn from(value: NotEnoughDeposited) -> Self {
-            Self::NotEnoughDeposited(value)
         }
     }
     impl ::core::convert::From<NotInitializing> for FeeContractErrors {

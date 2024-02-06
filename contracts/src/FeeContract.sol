@@ -29,7 +29,6 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     /// @notice error types
     error InvalidUserAddress();
-    error NotEnoughDeposited();
     error DepositTooLarge();
     error DepositTooSmall();
     error FunctionDoesNotExist();
