@@ -54,15 +54,14 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         .context(BlockBuildingSnafu)
     }
 
-    // TODO(746) from_bytes doesn't need `metadata`!
-    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
         Self {
             raw_payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
-            ns_table: NameSpaceTable::from_bytes(_metadata),
+            ns_table: NameSpaceTable::from_bytes(metadata),
         }
     }
 
