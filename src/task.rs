@@ -32,6 +32,9 @@ struct BackgroundTaskInner {
 /// dropped.
 #[derive(Clone, Debug)]
 pub struct BackgroundTask {
+    // The task handle is an `Option` so we can `take()` out of it during `drop`, where we have a
+    // mutable reference but need to move out of the underlying task handle to cancel it. This will
+    // always be `Some` except during cancellation.
     inner: Option<Arc<BackgroundTaskInner>>,
 }
 
