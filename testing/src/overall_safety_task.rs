@@ -453,6 +453,10 @@ impl OverallSafetyPropertiesDescription {
                                         qc,
                                         block_size: maybe_block_size,
                                     } => {
+                                        // Skip the genesis leaf.
+                                        if leaf_chain.len() == 1 && leaf_chain[0].get_view_number() == TYPES::Time::genesis() {
+                                            return (None, state);
+                                        }
                                         let paired_up = (leaf_chain.to_vec(), (*qc).clone());
                                         match state.ctx.round_results.entry(view_number) {
                                             Entry::Occupied(mut o) => o.get_mut().insert_into_result(
