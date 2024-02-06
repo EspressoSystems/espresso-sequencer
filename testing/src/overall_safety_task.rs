@@ -15,7 +15,7 @@ use hotshot_types::{
     error::RoundTimedoutState,
     event::{Event, EventType},
     simple_certificate::QuorumCertificate,
-    traits::node_implementation::NodeType,
+    traits::node_implementation::{ConsensusTime, NodeType},
 };
 use snafu::Snafu;
 use std::{
@@ -192,12 +192,15 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         let maybe_leaf: Option<Leaf<TYPES>> = result.0.into_iter().last();
         if let Some(leaf) = maybe_leaf.clone() {
-            match self.leaf_map.entry(leaf.clone()) {
-                std::collections::hash_map::Entry::Occupied(mut o) => {
-                    *o.get_mut() += 1;
-                }
-                std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(1);
+            // Skip the genesis leaf.
+            if leaf.get_view_number() != TYPES::Time::genesis() {
+                match self.leaf_map.entry(leaf.clone()) {
+                    std::collections::hash_map::Entry::Occupied(mut o) => {
+                        *o.get_mut() += 1;
+                    }
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        v.insert(1);
+                    }
                 }
             }
 
@@ -246,6 +249,11 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         check_block: bool,
         transaction_threshold: u64,
     ) {
+        // Skip for the genesis leaf.
+        if key.get_view_number() == TYPES::Time::genesis() {
+            return;
+        }
+
         let num_decided = self.success_nodes.len();
         let num_failed = self.failed_nodes.len();
         let remaining_nodes = total_num_nodes - (num_decided + num_failed);
