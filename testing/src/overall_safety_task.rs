@@ -246,11 +246,6 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         check_block: bool,
         transaction_threshold: u64,
     ) {
-        // Skip for the genesis leaf.
-        if key.get_view_number() == TYPES::Time::genesis() {
-            return;
-        }
-
         let num_decided = self.success_nodes.len();
         let num_failed = self.failed_nodes.len();
         let remaining_nodes = total_num_nodes - (num_decided + num_failed);
