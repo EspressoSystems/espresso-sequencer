@@ -48,6 +48,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         }
     }
 
+    // TODO see how we can  avoid cloning the whole payload
     pub fn from_bytes(b: &[u8]) -> Self {
         Self {
             raw_payload: b.to_vec(),
