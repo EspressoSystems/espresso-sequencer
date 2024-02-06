@@ -469,8 +469,12 @@ mod test {
             .expect("fail to deploy");
 
         let last_blk_num = provider.get_block_number().await?;
-        // the first receipt is for PlonkVerifier.sol library, the second is our LightClient contract
-        let address = provider.get_block_receipts(last_blk_num).await?[1]
+        // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
+        let address = provider
+            .get_block_receipts(last_blk_num)
+            .await?
+            .last()
+            .unwrap()
             .contract_address
             .expect("fail to get LightClient address from receipt");
 
