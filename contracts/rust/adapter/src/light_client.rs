@@ -10,7 +10,7 @@ use ethers::{
 use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput};
 
 /// Intermediate representations for `LightClientState` in Solidity
-#[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
+#[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
 pub struct ParsedLightClientState {
     pub view_num: u64,
     pub block_height: u64,

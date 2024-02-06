@@ -1,6 +1,7 @@
 //! A light client prover service
 
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
+use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_std::{
     sync::Arc,
@@ -12,8 +13,8 @@ use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::SignerMiddleware,
     providers::Http,
-    providers::Provider,
-    signers::{LocalWallet, Wallet},
+    providers::{Middleware, Provider, ProviderError},
+    signers::{LocalWallet, Signer, Wallet},
     types::{Address, U256},
 };
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
@@ -101,10 +102,13 @@ pub async fn fetch_latest_state(
 }
 
 /// prepare a contract interface ready to be read from or written to
-fn prepare_contract(config: &StateProverConfig) -> Result<LightClient<L1Wallet>, ProverError> {
+async fn prepare_contract(
+    config: &StateProverConfig,
+) -> Result<LightClient<L1Wallet>, ProverError> {
     let provider = Provider::try_from(config.l1_provider.to_string())
         .expect("unable to instantiate Provider, likely wrong URL");
-    let signer = Wallet::from(config.eth_signing_key.clone());
+    let signer = Wallet::from(config.eth_signing_key.clone())
+        .with_chain_id(provider.get_chainid().await?.as_u64());
     let l1_wallet = Arc::new(L1Wallet::new(provider, signer));
 
     let contract = LightClient::new(config.light_client_address, l1_wallet);
@@ -115,7 +119,7 @@ fn prepare_contract(config: &StateProverConfig) -> Result<LightClient<L1Wallet>,
 pub async fn read_contract_state(
     config: &StateProverConfig,
 ) -> Result<LightClientState, ProverError> {
-    let contract = prepare_contract(config)?;
+    let contract = prepare_contract(config).await?;
     let state: ParsedLightClientState = match contract.finalized_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
@@ -134,7 +138,7 @@ pub async fn submit_state_and_proof(
     public_input: PublicInput,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
-    let contract = prepare_contract(config)?;
+    let contract = prepare_contract(config).await?;
 
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
@@ -285,7 +289,7 @@ pub async fn run_prover_once(config: StateProverConfig) {
 pub enum ProverError {
     /// Invalid light client state or signatures
     InvalidState,
-    /// Error when communicating with the smart contract
+    /// Error when communicating with the smart contract: {0}
     ContractError(anyhow::Error),
     /// Error when communicating with the state relay server
     RelayServerError(ServerError),
@@ -315,19 +319,139 @@ impl From<StakeTableError> for ProverError {
     }
 }
 
+impl From<ProviderError> for ProverError {
+    fn from(err: ProviderError) -> Self {
+        Self::ContractError(anyhow!("{}", err))
+    }
+}
+
 impl std::error::Error for ProverError {}
 
 #[cfg(test)]
 mod test {
+    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
+
     use super::*;
     use anyhow::Result;
+    use ark_ed_on_bn254::EdwardsConfig;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
+        abi::AbiEncode,
         providers::Middleware,
         utils::{Anvil, AnvilInstance},
     };
+    use hotshot_contract_adapter::jellyfish::field_to_u256;
+    use hotshot_stake_table::vec_based::StakeTable;
+    use hotshot_types::light_client::StateSignKey;
+    use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use std::process::Command;
+
+    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+
+    /// Init a meaningful ledger state that prover can generate future valid proof.
+    /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
+    ///
+    /// NOTE: please update `contracts/script/LightClientTest.s.sol`'s genesis with the stderr print info
+    #[allow(clippy::type_complexity)]
+    fn init_ledger_for_test() -> (
+        ParsedLightClientState,
+        Vec<BLSPubKey>,
+        Vec<(StateSignKey, StateVerKey)>,
+        StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+    ) {
+        let mut rng = test_rng();
+        let (qc_keys, state_keys) = key_pairs_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &mut rng);
+        let st = stake_table_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &qc_keys, &state_keys);
+        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
+
+        let stake_table_comm = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        let genesis = ParsedLightClientState {
+            view_num: 0,
+            block_height: 0,
+            block_comm_root: U256::from(42), // arbitrary value
+            fee_ledger_comm: U256::from(42), // arbitrary value
+            bls_key_comm: field_to_u256(stake_table_comm.0),
+            schnorr_key_comm: field_to_u256(stake_table_comm.1),
+            amount_comm: field_to_u256(stake_table_comm.2),
+            threshold,
+        };
+
+        eprintln!(
+            "Genesis: view_num: {}, block_height: {}, block_comm_root: {}, fee_ledger_comm: {}\
+             bls_key_comm: {:x?},\
+             schnorr_key_comm: {:x?},\
+             amount_comm: {:x?},\
+             threshold: {}",
+            genesis.view_num,
+            genesis.block_height,
+            genesis.block_comm_root,
+            genesis.fee_ledger_comm,
+            genesis.bls_key_comm.encode_hex(),
+            genesis.schnorr_key_comm.encode_hex(),
+            genesis.amount_comm.encode_hex(),
+            genesis.threshold,
+        );
+        (genesis, qc_keys, state_keys, st)
+    }
+
+    // everybody signs, then generate a proof
+    fn gen_state_proof(
+        old_state: &ParsedLightClientState,
+        new_state: ParsedLightClientState,
+        state_keypairs: &[(StateSignKey, StateVerKey)],
+        st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+    ) -> (PublicInput, Proof) {
+        let mut rng = test_rng();
+
+        let new_state_msg: [CircuitField; 7] = {
+            // sorry for the complicated .into() conversion chain, might improve in the future
+            let pi_msg: LightClientState = new_state.clone().into();
+            pi_msg.into()
+        };
+        let bit_vec = vec![true; st.len(SnapshotVersion::LastEpochStart).unwrap()];
+        let sigs = state_keypairs
+            .iter()
+            .map(|(sk, _)| {
+                SchnorrSignatureScheme::<EdwardsConfig>::sign(&(), sk, new_state_msg, &mut rng)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        let srs = {
+            // load SRS from Aztec's ceremony
+            let srs = crs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+                .expect("Aztec SRS fail to load");
+            // convert to Jellyfish type
+            // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
+            UnivariateUniversalParams {
+                powers_of_g: srs.powers_of_g,
+                h: srs.h,
+                beta_h: srs.beta_h,
+                powers_of_h: vec![srs.h, srs.beta_h],
+            }
+        };
+        let (pk, _) = crate::preprocess::<STAKE_TABLE_CAPACITY_FOR_TEST>(&srs)
+            .expect("Fail to preprocess state prover circuit");
+        let stake_table_entries = st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .collect::<Vec<_>>();
+        let (proof, pi) =
+            crate::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY_FOR_TEST>(
+                &mut rng,
+                &pk,
+                &stake_table_entries,
+                &bit_vec,
+                &sigs,
+                &new_state.into(),
+                &old_state.threshold,
+            )
+            .expect("Fail to generate state proof");
+
+        (pi, proof)
+    }
 
     /// deploy LightClient.sol on local blockchian (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
@@ -345,6 +469,7 @@ mod test {
             .expect("fail to deploy");
 
         let last_blk_num = provider.get_block_number().await?;
+        // the first receipt is for PlonkVerifier.sol library, the second is our LightClient contract
         let address = provider.get_block_receipts(last_blk_num).await?[1]
             .contract_address
             .expect("fail to get LightClient address from receipt");
@@ -391,12 +516,7 @@ mod test {
         // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
         assert_eq!(genesis.view_num, 0);
         assert_eq!(genesis.block_height, 0);
-        assert_eq!(genesis.block_comm_root, U256::from(42));
-        assert_eq!(genesis.fee_ledger_comm, U256::from(0));
-        assert_eq!(genesis.bls_key_comm, U256::from(42));
-        assert_eq!(genesis.schnorr_key_comm, U256::from(42));
-        assert_eq!(genesis.amount_comm, U256::from(42));
-        assert_eq!(genesis.threshold, U256::from(10));
+        assert_eq!(genesis.threshold, U256::from(36));
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -410,9 +530,32 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let anvil = Anvil::new().spawn();
-        let (_wallet, _contract) = deploy_contract_for_test(&anvil).await?;
+        let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let mut config = StateProverConfig::default();
+        config.update_l1_info(&anvil, contract.address());
+        // sanity check on `config`
+
+        // sanity check to ensure the same genesis state for LightClientTest and for our tests
+        let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
+        assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
+
+        let mut new_state = genesis.clone();
+        new_state.view_num = 5;
+        new_state.block_height = 4;
+        new_state.block_comm_root = U256::from(123);
+        new_state.fee_ledger_comm = U256::from(456);
+
+        let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
+        tracing::info!("Successfully generated proof for new state.");
+
+        super::submit_state_and_proof(proof, pi, &config).await?;
+        tracing::info!("Successfully submited new finalized state to L1.");
+        // test if new state is updated in l1
+        let finalized_l1: ParsedLightClientState = contract.finalized_state().await?.into();
+        assert_eq!(finalized_l1, new_state);
         Ok(())
     }
 }
