@@ -5,7 +5,7 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import { Test } from "forge-std/Test.sol";
+import { Test, console2 } from "forge-std/Test.sol";
 import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -53,8 +53,7 @@ contract FeeContractTest is Test {
     function test_depositForManyDifferentUsers() public payable {
         for (uint256 i = 0; i < 10; i++) {
             address user = makeAddr(string(abi.encode(i)));
-            uint256 amount = i / 100 ether + feeContract.MIN_DEPOSIT_AMOUNT();
-
+            uint256 amount = i + feeContract.MIN_DEPOSIT_AMOUNT();
             //fund this account
             vm.deal(user, amount);
 
@@ -83,7 +82,7 @@ contract FeeContractTest is Test {
         uint256 totalAmountDeposited = 0;
 
         for (uint256 i = 0; i < 10; i++) {
-            uint256 amount = i / 100 ether + feeContract.MIN_DEPOSIT_AMOUNT();
+            uint256 amount = i + feeContract.MIN_DEPOSIT_AMOUNT();
 
             //check the balance before
             uint256 balanceBefore = feeContract.getBalance(user);
@@ -209,7 +208,7 @@ contract FeeContractUpgradabilityTest is Test {
     function test_depositForManyDifferentUsers() public payable {
         for (uint256 i = 0; i < 10; i++) {
             address user = makeAddr(string(abi.encode(i)));
-            uint256 amount = i / 100 ether + feeContractProxy.MIN_DEPOSIT_AMOUNT();
+            uint256 amount = i + feeContractProxy.MIN_DEPOSIT_AMOUNT();
 
             //fund this account
             vm.deal(user, amount);
@@ -239,7 +238,7 @@ contract FeeContractUpgradabilityTest is Test {
         uint256 totalAmountDeposited = 0;
 
         for (uint256 i = 0; i < 10; i++) {
-            uint256 amount = i / 100 ether + feeContractProxy.MIN_DEPOSIT_AMOUNT();
+            uint256 amount = i + feeContractProxy.MIN_DEPOSIT_AMOUNT();
 
             //check the balance before
             uint256 balanceBefore = feeContractProxy.getBalance(user);
