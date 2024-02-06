@@ -95,8 +95,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     pub fn num_namespaces(&self, ns_table_bytes: &[u8]) -> usize {
-        let ns_table = NameSpaceTable::<TableWord>::from_bytes(ns_table_bytes);
-        ns_table.len()
+        self.ns_table.len()
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
