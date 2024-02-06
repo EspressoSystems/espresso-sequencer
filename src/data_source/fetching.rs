@@ -262,8 +262,7 @@ where
         Builder::new(storage, provider)
     }
 
-    /// Create a data source with local storage and a remote data availability provider.
-    pub async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let proactive_fetching = builder.proactive_fetching;
         let minor_interval = builder.minor_scan_interval;
         let major_interval = builder.major_scan_interval;
