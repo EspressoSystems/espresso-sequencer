@@ -123,6 +123,7 @@ pub struct Builder<Types, S, P> {
     range_chunk_size: usize,
     minor_scan_interval: Duration,
     major_scan_interval: usize,
+    proactive_range_chunk_size: Option<usize>,
     proactive_fetching: bool,
     _types: PhantomData<Types>,
 }
@@ -143,6 +144,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             // usability. We run them rarely, once every 60 minor scans, or once every hour by
             // default.
             major_scan_interval: 60,
+            proactive_range_chunk_size: None,
             proactive_fetching: true,
             _types: Default::default(),
         }
@@ -179,6 +181,19 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// See [proactive fetching](self#proactive-fetching).
     pub fn with_major_scan_interval(mut self, interval: usize) -> Self {
         self.major_scan_interval = interval;
+        self
+    }
+
+    /// Set the number of items to process at a time when scanning for proactive fetching.
+    ///
+    /// This is similar to [`Self::with_range_chunk_size`], but only affects the chunk size for
+    /// proactive fetching scans, not for normal subscription streams. This can be useful to tune
+    /// the proactive scanner to be more or less greedy with the lock on persistent storage.
+    ///
+    /// By default (i.e. if this method is not called) the proactive range chunk size will be set to
+    /// whatever the normal range chunk size is.
+    pub fn with_proactive_range_chunk_size(mut self, range_chunk_size: usize) -> Self {
+        self.proactive_range_chunk_size = Some(range_chunk_size);
         self
     }
 
@@ -266,14 +281,19 @@ where
         let proactive_fetching = builder.proactive_fetching;
         let minor_interval = builder.minor_scan_interval;
         let major_interval = builder.major_scan_interval;
+        let proactive_range_chunk_size = builder
+            .proactive_range_chunk_size
+            .unwrap_or(builder.range_chunk_size);
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
         let scanner = if proactive_fetching {
             Some(BackgroundTask::spawn(
                 "proactive scanner",
-                fetcher
-                    .clone()
-                    .proactive_scan(minor_interval, major_interval),
+                fetcher.clone().proactive_scan(
+                    minor_interval,
+                    major_interval,
+                    proactive_range_chunk_size,
+                ),
             ))
         } else {
             None
@@ -663,7 +683,21 @@ where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
     {
-        stream::iter(range_chunks(range, self.range_chunk_size))
+        let chunk_size = self.range_chunk_size;
+        self.get_range_with_chunk_size(chunk_size, range)
+    }
+
+    /// Same as [`Self::get_range`], but uses the given chunk size instead of the default.
+    fn get_range_with_chunk_size<R, T>(
+        self: Arc<Self>,
+        chunk_size: usize,
+        range: R,
+    ) -> BoxStream<'static, Fetch<T>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+        T: RangedFetchable<Types>,
+    {
+        stream::iter(range_chunks(range, chunk_size))
             .then(move |chunk| self.clone().get_chunk(chunk))
             .flatten()
             .boxed()
@@ -820,7 +854,12 @@ where
     /// This function will proactively identify and retrieve blocks and leaves which are missing
     /// from storage. It will run until cancelled, thus, it is meant to be spawned as a background
     /// task rather than called synchronously.
-    async fn proactive_scan(self: Arc<Self>, minor_interval: Duration, major_interval: usize) {
+    async fn proactive_scan(
+        self: Arc<Self>,
+        minor_interval: Duration,
+        major_interval: usize,
+        chunk_size: usize,
+    ) {
         let mut prev_height = 0;
 
         for i in 0.. {
@@ -848,7 +887,10 @@ where
             // we don't starve out would-be writers.
             let mut blocks = self
                 .clone()
-                .get_range::<_, BlockQueryData<Types>>(start..block_height);
+                .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
+                    chunk_size,
+                    start..block_height,
+                );
             while blocks.next().await.is_some() {}
 
             tracing::info!("completed proactive scan {i} of blocks from {start}-{block_height}, will scan again in {minor_interval:?}");
