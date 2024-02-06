@@ -25,8 +25,8 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // (1) the number of nss indicated in the ns table
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
-        // The quantity (2) must exclude the prefix of the ns table because this prifix indicates only the length of the ns table, not an actual ns.
-        let ns_table = NameSpaceTable::<u64>::from_bytes(meta);
+        // The quantity (2) must exclude the prefix of the ns table because this prefix indicates only the length of the ns table, not an actual ns.
+        let ns_table = NameSpaceTable::<TxTableEntryWord>::from_bytes(meta);
         let ns_table_len = ns_table.len();
 
         // First, collect the offsets of all the nss
@@ -48,8 +48,8 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // that tx table len is the number of txs in that namespace
         // sum over these tx table lens
         let mut result = 0;
+        let tx_table = TxTable::<TxTableEntryWord>::from_bytes(&self.raw_payload);
         for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table = TxTable::<u32>::from_bytes(&self.raw_payload);
             let tx_table_len = tx_table.get_table_len(offset).try_into().unwrap_or(0);
             // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
             result += tx_table_len;
