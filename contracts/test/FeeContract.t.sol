@@ -49,36 +49,62 @@ contract FeeContractTest is Test {
         assertEq(address(feeContract).balance, amount);
     }
 
-    //test that depositing twice increases the user's baalance
-    function testFuzz_depositTwice(address user1, address user2, uint256 amount1, uint256 amount2)
-        public
-        payable
-    {
-        vm.assume(user1 != address(0) && user2 != address(0));
-        amount1 = bound(amount1, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
-        amount2 = bound(amount2, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
+    // test depositing for many users
+    function test_depositForManyDifferentUsers() public payable {
+        for (uint256 i = 0; i < 10; i++) {
+            address user = makeAddr(string(abi.encode(i)));
+            uint256 amount = i / 100 ether + feeContract.MIN_DEPOSIT_AMOUNT();
 
-        vm.prank(user1);
-        uint256 balanceBefore1 = feeContract.getBalance(user1);
+            //fund this account
+            vm.deal(user, amount);
 
-        //deposit for the user
-        feeContract.deposit{ value: amount1 }(user1);
+            //check the balance before
+            uint256 balanceBefore = feeContract.getBalance(user);
 
-        //get the balance for that user after the deposit
-        uint256 balanceAfter1 = feeContract.getBalance(user1);
-        assertEq(balanceAfter1, balanceBefore1 + amount1);
+            //prank as if the deposit is made by the user
+            vm.prank(user);
 
-        vm.prank(user2);
-        uint256 balanceBefore2 = feeContract.getBalance(user2);
+            //deposit for the user
+            feeContract.deposit{ value: amount }(user);
 
-        //deposit for the user
-        feeContract.deposit{ value: amount2 }(user2);
-
-        //get the balance for that user after the deposit
-        uint256 balanceAfter2 = feeContract.getBalance(user2);
-        assertEq(balanceAfter2, balanceBefore2 + amount2);
+            //get the balance for that user after the deposit
+            uint256 balanceAfter = feeContract.getBalance(user);
+            assertEq(balanceAfter, balanceBefore + amount);
+        }
     }
 
+    // test depositing for the same user many times
+    function test_depositManyTimesForTheSameUser() public payable {
+        address user = makeAddr("user");
+
+        //fund this account
+        vm.deal(user, 1 ether);
+
+        uint256 totalAmountDeposited = 0;
+
+        for (uint256 i = 0; i < 10; i++) {
+            uint256 amount = i / 100 ether + feeContract.MIN_DEPOSIT_AMOUNT();
+
+            //check the balance before
+            uint256 balanceBefore = feeContract.getBalance(user);
+
+            //prank as if the deposit is made by the user
+            vm.prank(user);
+
+            //deposit for the user
+            feeContract.deposit{ value: amount }(user);
+
+            //get the balance for that user after the deposit
+            uint256 balanceAfter = feeContract.getBalance(user);
+            assertEq(balanceAfter, balanceBefore + amount);
+            totalAmountDeposited += amount;
+        }
+
+        //affirm that the totalAmountDeposited is the user's current balance
+        assertEq(feeContract.getBalance(user), totalAmountDeposited);
+    }
+
+    // test calling no function with a payable amount is not successful
     function testFuzz_noFunction(uint256 amount) public payable {
         address fcAddress = address(feeContract);
         (bool success,) = fcAddress.call{ value: amount }("");
@@ -90,6 +116,7 @@ contract FeeContractTest is Test {
         assertEq(address(feeContract).balance, 0);
     }
 
+    // test calling a function that does not exist is not successful
     function testFuzz_nonExistentFunction(uint256 amount) public payable {
         address fcAddress = address(feeContract);
         (bool success,) =
@@ -135,6 +162,7 @@ contract FeeContractTest is Test {
         feeContract.deposit{ value: amount }(user);
     }
 
+    // test that new users have a zero balance
     function testFuzz_newUserHasZeroBalance(address user) public {
         vm.assume(user != address(0));
 
@@ -177,28 +205,62 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(balanceAfter, balanceBefore + amount);
     }
 
-    //test that depositing twice increases the user's baalance
-    function testFuzz_depositTwice(address user) public payable {
-        if (msg.value == 0) return;
-        vm.prank(user);
-        uint256 balanceBefore = feeContractProxy.getBalance(user);
+    // test depositing for many users
+    function test_depositForManyDifferentUsers() public payable {
+        for (uint256 i = 0; i < 10; i++) {
+            address user = makeAddr(string(abi.encode(i)));
+            uint256 amount = i / 100 ether + feeContractProxy.MIN_DEPOSIT_AMOUNT();
 
-        uint256 depositAmount = msg.value / 2;
-        //deposit for the user
-        feeContractProxy.deposit{ value: depositAmount }(user);
+            //fund this account
+            vm.deal(user, amount);
 
-        //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContractProxy.getBalance(user);
-        assertEq(balanceAfter, balanceBefore + depositAmount);
+            //check the balance before
+            uint256 balanceBefore = feeContractProxy.getBalance(user);
 
-        //deposit the remainder for the user
-        feeContractProxy.deposit{ value: depositAmount }(user);
+            //prank as if the deposit is made by the user
+            vm.prank(user);
 
-        //get the balance for that user after the 2nd deposit
-        uint256 balanceAfter2 = feeContractProxy.getBalance(user);
-        assertEq(balanceAfter2, balanceAfter + depositAmount);
+            //deposit for the user
+            feeContractProxy.deposit{ value: amount }(user);
+
+            //get the balance for that user after the deposit
+            uint256 balanceAfter = feeContractProxy.getBalance(user);
+            assertEq(balanceAfter, balanceBefore + amount);
+        }
     }
 
+    // test depositing for the same user many times
+    function test_depositManyTimesForTheSameUser() public payable {
+        address user = makeAddr("user");
+
+        //fund this account
+        vm.deal(user, 1 ether);
+
+        uint256 totalAmountDeposited = 0;
+
+        for (uint256 i = 0; i < 10; i++) {
+            uint256 amount = i / 100 ether + feeContractProxy.MIN_DEPOSIT_AMOUNT();
+
+            //check the balance before
+            uint256 balanceBefore = feeContractProxy.getBalance(user);
+
+            //prank as if the deposit is made by the user
+            vm.prank(user);
+
+            //deposit for the user
+            feeContractProxy.deposit{ value: amount }(user);
+
+            //get the balance for that user after the deposit
+            uint256 balanceAfter = feeContractProxy.getBalance(user);
+            assertEq(balanceAfter, balanceBefore + amount);
+            totalAmountDeposited += amount;
+        }
+
+        //affirm that the totalAmountDeposited is the user's current balance
+        assertEq(feeContractProxy.getBalance(user), totalAmountDeposited);
+    }
+
+    // test calling no function with a payable amount is not successful
     function testFuzz_noFunction(uint256 amount) public payable {
         address fcAddress = address(feeContractProxy);
         (bool success,) = fcAddress.call{ value: amount }("");
@@ -210,6 +272,7 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(address(feeContractProxy).balance, 0);
     }
 
+    // test calling a function that does not exist  is not successful
     function testFuzz_nonExistentFunction(uint256 amount) public payable {
         address fcAddress = address(feeContractProxy);
         (bool success,) =
@@ -222,6 +285,7 @@ contract FeeContractUpgradabilityTest is Test {
         assertEq(address(feeContractProxy).balance, 0);
     }
 
+    // test upgrading with admin account succeeds
     function testUpgradeTo() public {
         FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
@@ -233,6 +297,7 @@ contract FeeContractUpgradabilityTest is Test {
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
 
+    // test upgrading with wrong user account does not succeed
     function testUpgradeToWithWrongAdmin() public {
         FeeContractV2Test feeContractV2 = new FeeContractV2Test();
 
