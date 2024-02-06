@@ -32,10 +32,15 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install just command runner
+        run: |
+          sudo snap install --edge --classic just
+          just --version
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2

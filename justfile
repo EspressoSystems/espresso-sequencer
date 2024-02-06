@@ -78,6 +78,7 @@ sol-test:
 
 # Develop contracts to local blockchain for development and testing
 dev-deploy url="http://localhost:8545":
+    forge build
     forge script contracts/script/LightClientTest.s.sol \
     --fork-url {{url}} --broadcast \
     --mnemonics "test test test test test test test test test test test junk"
