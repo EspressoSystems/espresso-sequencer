@@ -716,6 +716,8 @@ where
         let storage = self.storage.read().await;
         let ts = T::load_range(&storage, chunk.clone())
             .await
+            .context(format!("when fetching items in range {chunk:?}"))
+            .ok_or_trace()
             .unwrap_or_default();
         // Log and discard error information; we want a list of Option where None indicates an
         // object that needs to be fetched.
