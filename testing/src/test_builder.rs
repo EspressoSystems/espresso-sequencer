@@ -68,7 +68,7 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 1500,
+            next_view_timeout: 2500,
             timeout_ratio: (11, 10),
             round_start_delay: 100,
             start_delay: 100,
@@ -184,7 +184,7 @@ impl Default for TestMetadata {
             },
             overall_safety_properties: OverallSafetyPropertiesDescription::default(),
             // arbitrary, haven't done the math on this
-            txn_description: TxnTaskDescription::RoundRobinTimeBased(Duration::from_millis(10)),
+            txn_description: TxnTaskDescription::RoundRobinTimeBased(Duration::from_millis(100)),
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // TODO ED Put a configurable time here - 10 seconds for now

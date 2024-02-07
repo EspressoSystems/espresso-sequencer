@@ -29,7 +29,7 @@ use tracing::{error, info, warn};
 pub(crate) const NUM_REPLICATED_TO_TRUST: usize = 2;
 
 /// the maximum number of nodes to query in the DHT at any one time
-const MAX_DHT_QUERY_SIZE: usize = 5;
+const MAX_DHT_QUERY_SIZE: usize = 50;
 
 use self::cache::Cache;
 
@@ -249,9 +249,10 @@ impl DHTBehaviour {
         if let Some(entry) = async_block_on(self.cache.get(&key)) {
             // exists in cache
             if chan.send(entry.value().clone()).is_err() {
-                warn!("Get DHT: channel closed before get record request result could be sent");
+                error!("Get DHT: channel closed before get record request result could be sent");
             }
         } else {
+            tracing::debug!("DHT cache miss, key: {:?}", key);
             // doesn't exist in cache, actually propagate request
             let qid = self.kadem.get_record(key.clone().into());
             let query = KadGetQuery {
@@ -268,17 +269,27 @@ impl DHTBehaviour {
     }
 
     /// update state based on recv-ed get query
-    fn handle_get_query(&mut self, record_results: GetRecordResult, id: QueryId, last: bool) {
+    fn handle_get_query(&mut self, record_results: GetRecordResult, id: QueryId, mut last: bool) {
         if let Some(query) = self.in_progress_get_record_queries.get_mut(&id) {
-            if let Ok(GetRecordOk::FoundRecord(record)) = record_results {
-                match query.records.entry(record.record.value) {
-                    std::collections::hash_map::Entry::Occupied(mut o) => {
-                        let num_entries = o.get_mut();
-                        *num_entries += 1;
+            match record_results {
+                Ok(results) => match results {
+                    GetRecordOk::FoundRecord(record) => {
+                        match query.records.entry(record.record.value) {
+                            std::collections::hash_map::Entry::Occupied(mut o) => {
+                                let num_entries = o.get_mut();
+                                *num_entries += 1;
+                            }
+                            std::collections::hash_map::Entry::Vacant(v) => {
+                                v.insert(1);
+                            }
+                        }
                     }
-                    std::collections::hash_map::Entry::Vacant(v) => {
-                        v.insert(1);
-                    }
+                    GetRecordOk::FinishedWithNoAdditionalRecord {
+                        cache_candidates: _,
+                    } => last = true,
+                },
+                Err(err) => {
+                    error!("GOT ERROR IN KAD QUERY {:?}", err);
                 }
             }
         } else {
@@ -286,6 +297,7 @@ impl DHTBehaviour {
             return;
         }
 
+        // BUG
         if last {
             if let Some(KadGetQuery {
                 backoff,
@@ -315,17 +327,17 @@ impl DHTBehaviour {
 
                     // return value
                     if notify.send(r).is_err() {
-                        warn!("Get DHT: channel closed before get record request result could be sent");
+                        error!("Get DHT: channel closed before get record request result could be sent");
                     }
                 }
                 // lack of replication => error
                 else if records_len < NUM_REPLICATED_TO_TRUST {
-                    warn!("Get DHT: Record not replicated enough for {:?}! requerying with more nodes", progress);
+                    error!("Get DHT: Record not replicated enough for {:?}! requerying with more nodes", progress);
                     self.get_record(key, notify, num_replicas, backoff, retry_count);
                 }
                 // many records that don't match => disagreement
                 else if records_len > MAX_DHT_QUERY_SIZE {
-                    warn!(
+                    error!(
                         "Get DHT: Record disagreed upon; {:?}! requerying with more nodes",
                         progress
                     );
@@ -339,7 +351,7 @@ impl DHTBehaviour {
                         NonZeroUsize::new(num_replicas.get() + 1).unwrap_or(num_replicas);
 
                     self.get_record(key, notify, new_factor, backoff, retry_count);
-                    warn!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes", progress);
+                    error!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes", progress);
                 }
             }
         }
@@ -605,6 +617,7 @@ impl NetworkBehaviour for DHTBehaviour {
                 self.queued_get_record_queries.push_back(req);
             }
         }
+
         while let Some(req) = self.queued_put_record_queries.pop_front() {
             if req.backoff.is_expired() {
                 self.put_record(req);

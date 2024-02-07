@@ -373,7 +373,7 @@ impl<S> NetworkNodeHandle<S> {
         key: &impl Serialize,
         timeout: Duration,
     ) -> Result<V, NetworkNodeHandleError> {
-        let result = async_timeout(timeout, self.get_record(key, 1)).await;
+        let result = async_timeout(timeout, self.get_record(key, 3)).await;
         match result {
             Err(e) => Err(e).context(TimeoutSnafu),
             Ok(r) => r,

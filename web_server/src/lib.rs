@@ -273,7 +273,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 if proposal.1.is_empty() {
                     Err(ServerError {
                         status: StatusCode::NotImplemented,
-                        message: format!("Proposal not found for view {view_number}"),
+                        message: format!("Proposal empty for view {view_number}"),
                     })
                 } else {
                     Ok(Some(vec![proposal.1.clone()]))
