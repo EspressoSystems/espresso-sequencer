@@ -20,6 +20,8 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     type Transaction = Transaction;
     type Metadata = Vec<u8>;
 
+    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
+    // https://github.com/EspressoSystems/HotShot/issues/2115
     type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
     /// Returns (Self, metadata).
