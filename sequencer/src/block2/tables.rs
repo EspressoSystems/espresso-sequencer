@@ -1,5 +1,5 @@
 use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::{Payload, TableWordTraits};
+use crate::block2::payload::TableWordTraits;
 use crate::{BlockBuildingSnafu, Error, VmId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -196,54 +196,41 @@ impl TxTable {
         TxTableEntry::from_bytes_array(entry_bytes)
     }
 }
+#[cfg(test)]
+pub(super) mod test {
+    use crate::block2::entry::TxTableEntry;
+    use crate::block2::payload::TableWordTraits;
+    use crate::block2::tables::{Table, TxTable};
+    use std::marker::PhantomData;
 
-pub struct TxTableTest<TableWord: TableWordTraits> {
-    raw_payload: Vec<u8>,
-    phantom: PhantomData<TableWord>,
-}
-
-impl<TableWord: TableWordTraits> Table<TableWord> for TxTableTest<TableWord> {
-    fn get_table_len(&self, offset: usize) -> TxTableEntry {
-        TxTable::get_len(&self.raw_payload, offset)
+    pub struct TxTableTest<TableWord: TableWordTraits> {
+        raw_payload: Vec<u8>,
+        phantom: PhantomData<TableWord>,
     }
 
-    fn get_payload(&self) -> Vec<u8> {
-        self.raw_payload.clone()
-    }
-}
-impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
-    #[cfg(test)]
-    pub fn from_entries(entries: &[usize]) -> Self {
-        let tx_table_byte_len = entries.len() + 1;
-        let mut tx_table = Vec::with_capacity(tx_table_byte_len);
-        tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
-        for entry in entries {
-            tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+    impl<TableWord: TableWordTraits> Table<TableWord> for TxTableTest<TableWord> {
+        fn get_table_len(&self, offset: usize) -> TxTableEntry {
+            TxTable::get_len(&self.raw_payload, offset)
         }
 
-        Self {
-            raw_payload: tx_table,
-            phantom: Default::default(),
+        fn get_payload(&self) -> Vec<u8> {
+            self.raw_payload.clone()
         }
     }
-}
-// TODO currently unused but contains code that might get re-used in the near future.
-fn _get_tx_table_entry(
-    ns_offset: usize,
-    block_payload: &Payload<u32>,
-    block_payload_len: usize,
-    tx_index: usize,
-) -> TxTableEntry {
-    let start = ns_offset.saturating_add((tx_index + 1) * TxTableEntry::byte_len());
+    impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
+        #[cfg(test)]
+        pub fn from_entries(entries: &[usize]) -> Self {
+            let tx_table_byte_len = entries.len() + 1;
+            let mut tx_table = Vec::with_capacity(tx_table_byte_len);
+            tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
+            for entry in entries {
+                tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+            }
 
-    let end = std::cmp::min(
-        start.saturating_add(TxTableEntry::byte_len()),
-        block_payload_len,
-    );
-    // todo: clamp offsets
-    let tx_id_range = start..end;
-    let mut tx_id_bytes = [0u8; TxTableEntry::byte_len()];
-    tx_id_bytes[..tx_id_range.len()].copy_from_slice(&block_payload.raw_payload[tx_id_range]);
-
-    TxTableEntry::from_bytes(&tx_id_bytes).unwrap_or(TxTableEntry::zero())
+            Self {
+                raw_payload: tx_table,
+                phantom: Default::default(),
+            }
+        }
+    }
 }

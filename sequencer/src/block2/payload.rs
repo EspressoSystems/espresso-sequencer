@@ -292,7 +292,7 @@ mod test {
 
     use super::test_vid_factory;
     use crate::block2::payload::{Payload, TableWordTraits};
-    use crate::block2::tables::{Table, TxTableTest};
+    use crate::block2::tables::Table;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -304,6 +304,7 @@ mod test {
 
     use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
     use crate::block2::queryable;
+    use crate::block2::tables::test::TxTableTest;
     use crate::block2::tx_iterator::TxIndex;
     use crate::Transaction;
     use rand::RngCore;
@@ -861,7 +862,7 @@ mod test {
     mod helpers {
         use crate::block2::entry::TxTableEntry;
         use crate::block2::payload::TableWordTraits;
-        use crate::block2::tables::{NameSpaceTable, Table, TxTableTest};
+        use crate::block2::tables::{test::TxTableTest, NameSpaceTable, Table};
         use crate::VmId;
         use rand::RngCore;
 
