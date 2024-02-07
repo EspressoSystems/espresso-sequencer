@@ -55,8 +55,8 @@ pub(super) struct NamespaceInfo {
     // https://github.com/EspressoSystems/espresso-sequencer/issues/757
     pub(crate) tx_table: Vec<u8>,
     pub(crate) tx_bodies: Vec<u8>, // concatenation of all tx payloads
-    pub(crate) tx_bytes_end: TxTableEntry,
-    pub(crate) tx_table_len: TxTableEntry,
+    pub(crate) tx_bytes_end: TxTableEntry, // TODO make this field a usize instead
+    pub(crate) tx_table_len: TxTableEntry, // TODO make this field a usize instead
 }
 
 #[allow(dead_code)] // TODO temporary
