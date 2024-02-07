@@ -6,7 +6,8 @@ use std::mem::size_of;
 // Use newtype pattern so that tx table entires cannot be confused with other types.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Default)]
 pub struct TxTableEntry(TxTableEntryWord);
-// TODO we might use const generics in order to parametrize the set of functions below with u32,u64  etc...
+// TODO Get rid of TxTableEntryWord. We might use const generics in order to parametrize the set of functions below with u32,u64  etc...
+// See https://github.com/EspressoSystems/espresso-sequencer/issues/1076
 pub type TxTableEntryWord = u32;
 
 impl TxTableEntry {
