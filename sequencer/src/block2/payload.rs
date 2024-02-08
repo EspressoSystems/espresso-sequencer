@@ -460,7 +460,6 @@ mod test {
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
-            let mut txs = Vec::new();
             let mut derived_nss = HashMap::new();
             let mut total_num_txs = 0;
             for (n, tx_lengths) in test_case.iter().enumerate() {
@@ -513,12 +512,6 @@ mod test {
                 };
 
                 let ns_id = crate::VmId(n.try_into().unwrap());
-                txs.extend(
-                    tx_payloads
-                        .iter()
-                        .cloned()
-                        .map(|tx_payload| Transaction::new(ns_id, tx_payload)),
-                );
                 let already_exists = derived_nss.insert(
                     ns_id,
                     NamespaceInfo {
@@ -532,7 +525,12 @@ mod test {
             assert_eq!(derived_nss.len(), test_case.len());
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
-            let (block, actual_ns_table) = Payload::from_transactions(txs).unwrap();
+            let all_txs_iter = derived_nss.iter().flat_map(|(ns_id, ns)| {
+                ns.tx_payloads
+                    .iter()
+                    .map(|p| Transaction::new(*ns_id, p.clone()))
+            });
+            let (block, actual_ns_table) = Payload::from_transactions(all_txs_iter).unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
@@ -563,6 +561,8 @@ mod test {
             let mut derived_block_payload = Vec::new();
             for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableWord>(&actual_ns_table).enumerate()
             {
+                // warning! ns_id may not equal VmId(ns_idx) due to HashMap nondeterminism
+
                 let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
                 // test ns iterator
