@@ -98,7 +98,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         &self,
         meta: &[u8], //&<Self as hotshot_types::traits::BlockPayload>::Metadata, TODO
         ns_index: usize,
-    ) -> Option<(Vec<u8>, NamespaceProof)> {
+    ) -> Option<(Vec<u8>, JellyfishNamespaceProof)> {
         let ns_table = NameSpaceTable::<TableWord>::from_bytes(meta);
         if ns_index >= ns_table.len() {
             return None; // error: index out of bounds
@@ -284,7 +284,7 @@ pub(super) type RangeProof =
 /// LargeRangeProof<KzgEval<Bls12_281>>
 /// ```
 /// but that's still pretty crufty.
-pub type NamespaceProof =
+pub type JellyfishNamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 
 #[cfg(test)]
