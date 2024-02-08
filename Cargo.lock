@@ -7358,6 +7358,7 @@ dependencies = [
  "jf-primitives",
  "jf-utils",
  "lazy_static",
+ "num-traits",
  "portpicker",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -7374,6 +7375,7 @@ dependencies = [
  "tokio-postgres",
  "toml 0.8.8",
  "tracing",
+ "trait-set",
  "typenum",
  "url",
 ]
@@ -8843,6 +8845,17 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "trait-set"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b79e2e9c9ab44c6d7c20d5976961b47e8f49ac199154daa514b77cd1ab536625"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
