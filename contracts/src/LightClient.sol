@@ -13,8 +13,8 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// Rollup contracts on L1 (Ethereum).
 /// This state is submitted by any state-prover with evidence which is
 /// a SNARK proof that proves consensus.
-/// This contract also keeps track of the current epoch and stake table.
-/// For Decaf, both the stake table and the epoch are not used. <br>
+/// This contract also keeps track of the current epoch.
+/// For Decaf, the epoch is not used. <br>
 /// The light client state primarily consists of:<br>
 /// - the merkle root of finalized block committments,<br>
 /// - the fee ledger committment and <br>
@@ -36,7 +36,7 @@ contract LightClient {
     // === Storage ===
     //
     /// @notice genesis block commitment
-    /// @dev the genesis block contains a single Genesis transaction
+    /// @dev the genesis block contains an empty block merkle tree and empty fee ledger state
     LightClientState public genesisState;
     /// @notice global storage of the finalized HotShot's light client state
     LightClientState public finalizedState;
@@ -124,12 +124,14 @@ contract LightClient {
 
     // === State Modifying APIs ===
     //
-    /// @notice Update the latest finalized light client state. It is expected to be updated
-    /// periodically, especially an update for the last block for every epoch has to be submitted
+    /// @notice Update the latest finalized light client state. It must be updated
+    /// periodically (atleast once per epoch), especially an update for the last block for every
+    /// epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     /// @dev in Decaf, only a permissioned prover doing the computations
     /// will call this function
+    ///
     /// @param newState new light client state
     /// @param proof PlonkProof
     function newFinalizedState(
