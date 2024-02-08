@@ -419,6 +419,7 @@ pub mod persistence_tests {
         Leaf,
     };
     use commit::Committable;
+    use hotshot_testing::state_types::TestInstanceState;
     use hotshot_types::simple_certificate::QuorumCertificate;
 
     #[async_std::test]
@@ -430,7 +431,7 @@ pub mod persistence_tests {
 
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis();
-        let mut leaf = Leaf::<MockTypes>::genesis();
+        let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header.block_number += 1;
@@ -460,7 +461,7 @@ pub mod persistence_tests {
             NodeDataSource::<MockTypes>::block_height(&ds)
                 .await
                 .unwrap(),
-            1
+            0
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.try_resolve().unwrap_err();
@@ -475,7 +476,7 @@ pub mod persistence_tests {
 
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis();
-        let mut leaf = Leaf::<MockTypes>::genesis();
+        let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header.block_number += 1;
@@ -508,7 +509,7 @@ pub mod persistence_tests {
             NodeDataSource::<MockTypes>::block_height(&ds)
                 .await
                 .unwrap(),
-            1
+            0
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.try_resolve().unwrap_err();
@@ -726,11 +727,11 @@ pub mod status_tests {
 
         {
             let ds = ds.read().await;
-            // Check that block height is initially one (for the genesis block).
-            assert_eq!(ds.block_height().await.unwrap(), 1);
-            // With consensus paused, check that the success rate returns infinity (since the block
-            // height, the numerator, is 1, and the view number, the denominator, is 0).
-            assert_eq!(ds.success_rate().await.unwrap(), f64::INFINITY);
+            // Check that block height is initially zero.
+            assert_eq!(ds.block_height().await.unwrap(), 0);
+            // With consensus paused, check that the success rate returns NAN (since the block
+            // height, the numerator, is 0, and the view number, the denominator, is 0).
+            assert!(ds.success_rate().await.unwrap().is_nan());
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.

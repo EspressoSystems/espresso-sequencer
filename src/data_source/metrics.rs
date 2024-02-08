@@ -64,18 +64,7 @@ impl StatusDataSource for MetricsDataSource {
                 message: err.to_string(),
             })?
             .get();
-        if last_synced_height == 0 {
-            // The block height must always be at least one, since the genesis block is assumed to
-            // exist by default. We need to specially handle the case where we havent received any
-            // decide events yet, since in this case the height will be 0, and the genesis block
-            // itself does not trigger a decide event.
-            //
-            // This is required for consistency with the other data sources, which insert the
-            // genesis block at data source creation time, so that their block height is never 0.
-            Ok(1)
-        } else {
-            Ok(last_synced_height)
-        }
+        Ok(last_synced_height)
     }
 
     fn metrics(&self) -> &PrometheusMetrics {

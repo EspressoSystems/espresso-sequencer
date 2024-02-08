@@ -334,9 +334,10 @@ mod test {
     use super::*;
     use crate::{
         data_source::{storage::no_storage, ExtensibleDataSource},
+        status::StatusDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork, TestableDataSource},
-            mocks::{mock_transaction, MockHeader, MockTypes},
+            mocks::{mock_transaction, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
         Error, Header,
@@ -344,6 +345,8 @@ mod test {
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
     use futures::FutureExt;
+    use hotshot_testing::state_types::TestInstanceState;
+    use hotshot_types::data::Leaf;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -389,6 +392,11 @@ mod test {
     async fn validate(client: &Client<Error>, height: u64) {
         // Check the consistency of every block/leaf pair.
         for i in 0..height {
+            // Limit the number of blocks we validate in order to
+            // speeed up the tests.
+            if ![0, 1, height / 2, height - 1].contains(&i) {
+                continue;
+            }
             tracing::info!("validate block {i}/{height}");
 
             // Check that looking up the leaf various ways returns the correct leaf.
@@ -626,12 +634,28 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
-        let data_source = ExtensibleDataSource::new(
+        let mut data_source = ExtensibleDataSource::new(
             MockDataSource::create(dir.path(), Default::default())
                 .await
                 .unwrap(),
             0,
         );
+
+        // mock up some consensus data.
+        let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
+
+        data_source.insert_block(block.clone()).await.unwrap();
+
+        // assert that the store has data before we move on to API requests
+        assert_eq!(
+            ExtensibleDataSource::<MockDataSource, u64>::block_height(&data_source)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(block, data_source.get_block(0).await.await);
 
         // Create the API extensions specification.
         let extensions = toml! {

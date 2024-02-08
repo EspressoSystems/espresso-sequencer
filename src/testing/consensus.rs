@@ -32,6 +32,7 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_testing::state_types::TestInstanceState;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -147,7 +148,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             MemoryStorage::empty(),
                             memberships,
                             networks,
-                            HotShotInitializer::from_genesis().unwrap(),
+                            HotShotInitializer::from_genesis(&TestInstanceState {}).unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                         )
                         .await

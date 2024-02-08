@@ -513,21 +513,23 @@ mod test {
     use crate::{
         availability::{
             AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-            PayloadQueryData, TransactionHash, TransactionIndex,
+            PayloadQueryData, TransactionHash, TransactionIndex, UpdateAvailabilityData,
         },
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus},
         status::StatusDataSource,
         testing::{
             consensus::MockDataSource,
-            mocks::{MockHeader, MockTypes},
+            mocks::{MockHeader, MockPayload, MockTypes},
         },
     };
     use async_std::{sync::RwLock, task::spawn};
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
+
     use futures::FutureExt;
     use hotshot::types::SignatureKey as _;
+    use hotshot_testing::state_types::TestInstanceState;
     use hotshot_types::signature_key::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
@@ -644,9 +646,15 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
+        let mut hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
             .await
             .unwrap();
+
+        // Mock up some data and add a block to the store.
+        let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
+        hotshot_qs.insert_block(block.clone()).await.unwrap();
+
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();
         let state = CompositeState {

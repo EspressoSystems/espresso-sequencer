@@ -18,17 +18,16 @@ use hotshot::traits::{
 };
 use hotshot_testing::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::TestState,
+    state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     signature_key::BLSPubKey,
-    traits::node_implementation::{ChannelMaps, NodeType},
+    traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-pub type MockState = TestState;
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
 pub type MockTransaction = TestTransaction;
@@ -71,7 +70,8 @@ impl NodeType for MockTypes {
     type SignatureKey = BLSPubKey;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = MockState;
+    type InstanceState = TestInstanceState;
+    type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
 }
 
@@ -90,10 +90,4 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes>;
     type QuorumNetwork = MockQuorumNetwork;
     type CommitteeNetwork = MockDANetwork;
-
-    fn new_channel_maps(
-        start_view: ViewNumber,
-    ) -> (ChannelMaps<MockTypes>, Option<ChannelMaps<MockTypes>>) {
-        (ChannelMaps::new(start_view), None)
-    }
 }
