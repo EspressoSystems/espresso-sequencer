@@ -15,7 +15,7 @@ pub mod tasks;
 use crate::{
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
-        add_transaction_task, add_view_sync_task,
+        add_transaction_task, add_upgrade_task, add_view_sync_task,
     },
     traits::{NodeImplementation, Storage},
     types::{Event, SystemContextHandle},
@@ -419,7 +419,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         Ok((handle, internal_event_stream))
     }
-
     /// return the timeout for a view for `self`
     #[must_use]
     pub fn get_next_view_timeout(&self) -> u64 {
@@ -521,6 +520,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             add_transaction_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         let task_runner =
             add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
+        let task_runner =
+            add_upgrade_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
             let _ = task_runner.launch().await;
             info!("Task runner exited!");

@@ -22,6 +22,7 @@ use hotshot_task_impls::{
         NetworkMessageTaskTypes, NetworkTaskKind,
     },
     transactions::{TransactionTaskState, TransactionsTaskTypes},
+    upgrade::{UpgradeTaskState, UpgradeTaskTypes},
     vid::{VIDTaskState, VIDTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
@@ -374,6 +375,63 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     let vid_task_id = vid_task_builder.get_task_id().unwrap();
     let vid_task = VIDTaskTypes::build(vid_task_builder).launch();
     task_runner.add_task(vid_task_id, vid_name.to_string(), vid_task)
+}
+
+/// add the Upgrade task.
+///
+/// # Panics
+///
+/// Uses .unwrap(), though this should never panic.
+pub async fn add_upgrade_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    task_runner: TaskRunner,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    handle: SystemContextHandle<TYPES, I>,
+) -> TaskRunner {
+    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let registry = task_runner.registry.clone();
+    let upgrade_state = UpgradeTaskState {
+        api: c_api.clone(),
+        registry: registry.clone(),
+        cur_view: TYPES::Time::new(0),
+        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        quorum_network: c_api.inner.networks.quorum_network.clone().into(),
+        should_vote: |_upgrade_proposal| false,
+        vote_collector: None.into(),
+        event_stream: event_stream.clone(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
+        id: handle.hotshot.inner.id,
+    };
+    let upgrade_event_handler = HandleEvent(Arc::new(
+        move |event, mut state: UpgradeTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
+            async move {
+                let completion_status = state.handle_event(event).await;
+                (completion_status, state)
+            }
+            .boxed()
+        },
+    ));
+    let upgrade_name = "Upgrade Task";
+    let upgrade_event_filter = FilterEvent(Arc::new(
+        UpgradeTaskState::<TYPES, I, HotShotConsensusApi<TYPES, I>>::filter,
+    ));
+
+    let upgrade_task_builder = TaskBuilder::<
+        UpgradeTaskTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>,
+    >::new(upgrade_name.to_string())
+    .register_event_stream(event_stream.clone(), upgrade_event_filter)
+    .await
+    .register_registry(&mut registry.clone())
+    .await
+    .register_state(upgrade_state)
+    .register_event_handler(upgrade_event_handler);
+    // impossible for unwrap to fail
+    // we *just* registered
+    let upgrade_task_id = upgrade_task_builder.get_task_id().unwrap();
+    let upgrade_task = UpgradeTaskTypes::build(upgrade_task_builder).launch();
+    task_runner.add_task(upgrade_task_id, upgrade_name.to_string(), upgrade_task)
 }
 
 /// add the Data Availability task

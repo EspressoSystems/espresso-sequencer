@@ -1,7 +1,7 @@
 //! Events that a `HotShot` instance can emit
 
 use crate::{
-    data::{DAProposal, Leaf, QuorumProposal},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal},
     error::HotShotError,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -84,6 +84,14 @@ pub enum EventType<TYPES: NodeType> {
     QuorumProposal {
         /// Contents of the proposal
         proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
+        /// Public key of the leader submitting the proposal
+        sender: TYPES::SignatureKey,
+    },
+    /// Upgrade proposal was received from the network
+    /// or submitted to the network by us
+    UpgradeProposal {
+        /// Contents of the proposal
+        proposal: Proposal<TYPES, UpgradeProposal<TYPES>>,
         /// Public key of the leader submitting the proposal
         sender: TYPES::SignatureKey,
     },

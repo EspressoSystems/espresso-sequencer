@@ -11,11 +11,11 @@ use hotshot_task::{
 };
 use hotshot_types::{
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncCommitCertificate2,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DAVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{election::Membership, node_implementation::NodeType},
@@ -233,6 +233,9 @@ type DAVoteState<TYPES> = VoteCollectionTaskState<TYPES, DAVote<TYPES>, DACertif
 /// Alias for Timeout vote accumulator
 type TimeoutVoteState<TYPES> =
     VoteCollectionTaskState<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>;
+/// Alias for upgrade vote accumulator
+type UpgradeVoteState<TYPES> =
+    VoteCollectionTaskState<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>;
 /// Alias for View Sync Pre Commit vote accumulator
 type ViewSyncPreCommitState<TYPES> = VoteCollectionTaskState<
     TYPES,
@@ -260,6 +263,20 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote<TYPES>, QuorumCertifica
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
         HotShotEvent::QCFormed(Left(certificate))
+    }
+}
+
+impl<TYPES: NodeType> AggregatableVote<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>
+    for UpgradeVote<TYPES>
+{
+    fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
+        membership.get_leader(self.get_view_number())
+    }
+    fn make_cert_event(
+        certificate: UpgradeCertificate<TYPES>,
+        _key: &TYPES::SignatureKey,
+    ) -> HotShotEvent<TYPES> {
+        HotShotEvent::UpgradeCertificateFormed(certificate)
     }
 }
 
@@ -352,6 +369,25 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificat
     }
     fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(event, HotShotEvent::QuorumVoteRecv(_))
+    }
+}
+
+// Handlers for all vote accumulators
+#[async_trait]
+impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>
+    for UpgradeVoteState<TYPES>
+{
+    async fn handle_event(
+        self,
+        event: HotShotEvent<TYPES>,
+    ) -> (Option<HotShotTaskCompleted>, UpgradeVoteState<TYPES>) {
+        match event {
+            HotShotEvent::UpgradeVoteRecv(vote) => self.accumulate_vote(&vote).await,
+            _ => (None, self),
+        }
+    }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::UpgradeVoteRecv(_))
     }
 }
 

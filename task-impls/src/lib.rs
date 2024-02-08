@@ -28,5 +28,8 @@ pub mod vid;
 /// Generic task for collecting votes
 pub mod vote;
 
+/// Task for handling upgrades
+pub mod upgrade;
+
 /// Helper functions used by any task
 mod helpers;
