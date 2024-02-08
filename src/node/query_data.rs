@@ -10,4 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use serde::{Deserialize, Serialize};
+
 pub use crate::availability::LeafQueryData;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+pub struct SyncStatus {
+    pub missing_blocks: usize,
+    pub missing_leaves: usize,
+}

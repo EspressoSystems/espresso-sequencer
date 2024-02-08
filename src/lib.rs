@@ -264,7 +264,7 @@
 //! #   PayloadQueryData, TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
-//! # use hotshot_query_service::node::NodeDataSource;
+//! # use hotshot_query_service::node::{NodeDataSource, SyncStatus};
 //! # use hotshot_query_service::status::StatusDataSource;
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
@@ -334,6 +334,10 @@
 //!
 //!     async fn count_proposals(&self, id: &SignatureKey<AppTypes>) -> QueryResult<usize> {
 //!         self.hotshot_qs.count_proposals(id).await
+//!     }
+//!
+//!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
+//!         self.hotshot_qs.sync_status().await
 //!     }
 //! }
 //!
@@ -512,7 +516,7 @@ mod test {
             PayloadQueryData, TransactionHash, TransactionIndex,
         },
         metrics::PrometheusMetrics,
-        node::NodeDataSource,
+        node::{NodeDataSource, SyncStatus},
         status::StatusDataSource,
         testing::{
             consensus::MockDataSource,
@@ -619,6 +623,9 @@ mod test {
         }
         async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
             self.hotshot_qs.count_proposals(proposer).await
+        }
+        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+            self.hotshot_qs.sync_status().await
         }
     }
 

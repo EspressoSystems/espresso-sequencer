@@ -86,7 +86,7 @@ use crate::{
         Callback, Provider,
     },
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus, UpdateNodeData},
     status::StatusDataSource,
     task::BackgroundTask,
     Header, NotFoundSnafu, Payload, QueryResult, SignatureKey,
@@ -509,6 +509,10 @@ where
 
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         self.storage().await.count_proposals(proposer).await
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        self.storage().await.sync_status().await
     }
 }
 

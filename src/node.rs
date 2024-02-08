@@ -73,6 +73,11 @@ pub enum Error {
     #[snafu(display("malformed signature key"))]
     #[from(ignore)]
     InvalidSignatureKey,
+    #[snafu(display("error getting sync status: {source}"))]
+    #[from(ignore)]
+    SyncStatus {
+        source: QueryError,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -90,7 +95,9 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
-            Self::Query { source, .. } | Self::QueryProposals { source, .. } => source.status(),
+            Self::Query { source, .. }
+            | Self::QueryProposals { source, .. }
+            | Self::SyncStatus { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
     }
@@ -134,6 +141,9 @@ where
                     })
             }
             .boxed()
+        })?
+        .get("sync_status", |_req, state| {
+            async move { state.sync_status().await.context(SyncStatusSnafu) }.boxed()
         })?;
     Ok(api)
 }
@@ -243,6 +253,15 @@ mod test {
                 .len(),
             0
         );
+
+        // In this simple test, the node should be fully synchronized.
+        let sync_status = client
+            .get::<SyncStatus>("sync-status")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(sync_status.missing_blocks, 0);
+        assert_eq!(sync_status.missing_leaves, 0);
 
         network.shut_down().await;
     }
