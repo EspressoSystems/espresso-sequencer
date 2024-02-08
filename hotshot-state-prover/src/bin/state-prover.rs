@@ -6,11 +6,9 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_state_prover::service::{
-    key_gen, run_prover_once, run_prover_service, StateProverConfig,
-};
+use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use snafu::Snafu;
-use std::{path::PathBuf, str::FromStr as _, time::Duration};
+use std::{str::FromStr as _, time::Duration};
 use url::Url;
 
 #[derive(Parser)]
@@ -18,19 +16,6 @@ struct Args {
     /// Start the prover service daemon
     #[clap(short, long, action)]
     daemon: bool,
-
-    /// Generate proving key and verification key from Aztec's SRS
-    #[clap(long = "key-gen", action)]
-    keygen: bool,
-
-    /// Path to the proving key
-    #[clap(
-        short = 'k',
-        long = "key",
-        default_value = "key",
-        env = "ESPRESSOS_STATE_PROVING_KEY"
-    )]
-    proving_key_path: PathBuf,
 
     /// Url of the state relay server
     #[clap(
@@ -120,7 +105,6 @@ async fn main() {
     let provider = Provider::<Http>::try_from(args.l1_provider.to_string()).unwrap();
     let chain_id = provider.get_chainid().await.unwrap().as_u64();
     let config = StateProverConfig {
-        proving_key_path: args.proving_key_path.clone(),
         relay_server: args.relay_server.clone(),
         update_interval: args.update_interval,
         l1_provider: args.l1_provider.clone(),
@@ -138,10 +122,7 @@ async fn main() {
         seed: args.keygen_seed,
     };
 
-    if args.keygen {
-        // Key gen route
-        key_gen(args.proving_key_path)
-    } else if args.daemon {
+    if args.daemon {
         // Launching the prover service daemon
         run_prover_service(config).await;
     } else {

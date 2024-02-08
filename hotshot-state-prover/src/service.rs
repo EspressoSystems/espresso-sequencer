@@ -2,7 +2,6 @@
 
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 use anyhow::anyhow;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_std::{
     sync::Arc,
     task::{sleep, spawn},
@@ -32,8 +31,6 @@ use hotshot_types::{
 use jf_plonk::errors::PlonkError;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::fs::File;
-use std::path::PathBuf;
 use std::time::Duration;
 use surf_disco::Client;
 use tide_disco::error::ServerError;
@@ -48,8 +45,6 @@ pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
 pub struct StateProverConfig {
-    /// Path to the proving key
-    pub proving_key_path: PathBuf,
     /// Url of the state relay server (a CDN that sequencers push their Schnorr signatures to)
     pub relay_server: Url,
     /// Interval between light client state update
@@ -85,10 +80,40 @@ pub async fn init_stake_table(
     st
 }
 
-pub fn load_proving_key(path: PathBuf) -> ProvingKey {
-    let f = File::open(path).unwrap_or_else(|err| panic!("{err}"));
-    <ProvingKey as CanonicalDeserialize>::deserialize_compressed_unchecked(f)
-        .unwrap_or_else(|err| panic!("{err}"))
+pub fn load_proving_key() -> ProvingKey {
+    let srs = {
+        let num_gates = crate::circuit::build_for_preprocessing::<
+            CircuitField,
+            ark_ed_on_bn254::EdwardsConfig,
+            STAKE_TABLE_CAPACITY,
+        >()
+        .unwrap()
+        .0
+        .num_gates();
+
+        std::println!("Loading SRS from Aztec's ceremony...");
+        let srs_timer = Instant::now();
+        let srs = crs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs_elapsed = srs_timer.elapsed();
+        std::println!("Done in {srs_elapsed:.3}");
+
+        // convert to Jellyfish type
+        // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
+        UnivariateUniversalParams {
+            powers_of_g: srs.powers_of_g,
+            h: srs.h,
+            beta_h: srs.beta_h,
+            powers_of_h: vec![srs.h, srs.beta_h],
+        }
+    };
+
+    std::println!("Generating proving key and verification key.");
+    let key_gen_timer = Instant::now();
+    let (pk, _) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        .expect("Fail to preprocess state prover circuit");
+    let key_gen_elapsed = key_gen_timer.elapsed();
+    std::println!("Done in {key_gen_elapsed:.3}");
+    pk
 }
 
 pub async fn fetch_latest_state(
@@ -205,57 +230,10 @@ pub async fn sync_state(
     Ok(())
 }
 
-pub fn key_gen(path: PathBuf) {
-    let srs = {
-        let num_gates = crate::circuit::build_for_preprocessing::<
-            CircuitField,
-            ark_ed_on_bn254::EdwardsConfig,
-            STAKE_TABLE_CAPACITY,
-        >()
-        .unwrap()
-        .0
-        .num_gates();
-
-        std::println!("Loading SRS from Aztec's ceremony...");
-        let srs_timer = Instant::now();
-        let srs = crs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
-        let srs_elapsed = srs_timer.elapsed();
-        std::println!("Done in {srs_elapsed:.3}");
-
-        // convert to Jellyfish type
-        // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
-        UnivariateUniversalParams {
-            powers_of_g: srs.powers_of_g,
-            h: srs.h,
-            beta_h: srs.beta_h,
-            powers_of_h: vec![srs.h, srs.beta_h],
-        }
-    };
-
-    std::println!("Generating proving key and verification key.");
-    let key_gen_timer = Instant::now();
-    let (pk, vk) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
-        .expect("Fail to preprocess state prover circuit");
-    let key_gen_elapsed = key_gen_timer.elapsed();
-    std::println!("Done in {key_gen_elapsed:.3}");
-
-    let mut vk_path = path.clone();
-    pk.serialize_compressed(File::create(&path).expect("Error creating file {path}."))
-        .expect("Error serializing the proving key");
-    vk_path.set_extension("pub");
-    vk.serialize_compressed(File::create(&vk_path).expect("Error creating file {vk_path}."))
-        .expect("Error serializing the verification key");
-    std::println!(
-        "Proving key: {}\nVerification key: {}",
-        path.into_os_string().into_string().unwrap(),
-        vk_path.into_os_string().into_string().unwrap()
-    );
-}
-
 pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(init_stake_table(&config).await);
-    let proving_key = Arc::new(load_proving_key(config.proving_key_path.clone()));
+    let proving_key = Arc::new(load_proving_key());
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
     let update_interval = config.update_interval;
@@ -277,7 +255,7 @@ pub async fn run_prover_service(config: StateProverConfig) {
 /// Run light client state prover once
 pub async fn run_prover_once(config: StateProverConfig) {
     let st = init_stake_table(&config).await;
-    let proving_key = load_proving_key(config.proving_key_path.clone());
+    let proving_key = load_proving_key();
     let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
 
     sync_state(&st, &proving_key, &relay_server_client, &config)
@@ -494,7 +472,6 @@ mod test {
     impl Default for StateProverConfig {
         fn default() -> Self {
             Self {
-                proving_key_path: PathBuf::default(),
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
                 l1_provider: Url::parse("http://localhost").unwrap(),
