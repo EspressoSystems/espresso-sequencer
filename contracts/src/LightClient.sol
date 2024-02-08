@@ -125,7 +125,7 @@ contract LightClient {
     // === State Modifying APIs ===
     //
     /// @notice Update the latest finalized light client state. It must be updated
-    /// periodically (atleast once per epoch), especially an update for the last block for every
+    /// periodically (at least once per epoch), especially an update for the last block for every
     /// epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
