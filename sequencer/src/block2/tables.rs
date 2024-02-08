@@ -184,6 +184,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
 pub struct TxTable {}
 impl TxTable {
+    // Parse `TxTableEntry::byte_len()`` bytes from `raw_payload`` starting at `offset` into a `TxTableEntry`
     pub(crate) fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
@@ -194,6 +195,32 @@ impl TxTable {
         let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
         entry_bytes[..tx_table_len_range.len()].copy_from_slice(&raw_payload[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
+    }
+
+    // returns tx_offset
+    // if tx_index would reach beyond ns_bytes then return 0.
+    // tx_offset is not checked, could be anything
+    pub(crate) fn _get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
+        // get the range for tx_offset bytes in tx table
+        let tx_offset_range = {
+            let start = std::cmp::min(
+                tx_index
+                    .saturating_add(1)
+                    .saturating_mul(TxTableEntry::byte_len()),
+                ns_bytes.len(),
+            );
+            let end = std::cmp::min(
+                start.saturating_add(TxTableEntry::byte_len()),
+                ns_bytes.len(),
+            );
+            start..end
+        };
+
+        // parse tx_offset bytes from tx table
+        let mut tx_offset_bytes = [0u8; TxTableEntry::byte_len()];
+        tx_offset_bytes[..tx_offset_range.len()].copy_from_slice(&ns_bytes[tx_offset_range]);
+        usize::try_from(TxTableEntry::from_bytes(&tx_offset_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(0)
     }
 }
 #[cfg(test)]
