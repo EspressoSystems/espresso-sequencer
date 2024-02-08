@@ -1,8 +1,9 @@
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_query_service::data_source::VersionedDataSource;
 use sequencer::{
     api::data_source::{DataSourceOptions, SequencerDataSource},
-    persistence::{self},
+    persistence,
 };
 
 /// Reset the persistent storage of a sequencer.
@@ -19,10 +20,19 @@ enum Options {
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
+    setup_logging();
+    setup_backtrace();
+
     let opt = Options::parse();
     match opt {
-        Options::Fs(opt) => reset_storage(opt).await,
-        Options::Sql(opt) => reset_storage(opt).await,
+        Options::Fs(opt) => {
+            tracing::warn!("resetting file system storage {opt:?}");
+            reset_storage(opt).await
+        }
+        Options::Sql(opt) => {
+            tracing::warn!("resetting SQL storage {opt:?}");
+            reset_storage(opt).await
+        }
     }
 }
 
