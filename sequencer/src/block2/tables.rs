@@ -197,10 +197,21 @@ impl TxTable {
         TxTableEntry::from_bytes_array(entry_bytes)
     }
 
+    // Parse the table length from the beginning of the tx table inside `ns_bytes`.
+    //
+    // Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
+    // TODO tidy this is a sloppy wrapper for get_len
+    pub(crate) fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
+        std::cmp::min(
+            Self::get_len(ns_bytes, 0).try_into().unwrap_or(0),
+            (ns_bytes.len().saturating_sub(TxTableEntry::byte_len())) / TxTableEntry::byte_len(),
+        )
+    }
+
     // returns tx_offset
     // if tx_index would reach beyond ns_bytes then return 0.
     // tx_offset is not checked, could be anything
-    pub(crate) fn _get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
+    pub(crate) fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
         // get the range for tx_offset bytes in tx table
         let tx_offset_range = {
             let start = std::cmp::min(

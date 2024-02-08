@@ -1,6 +1,6 @@
 use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block2::payload;
-use crate::{BlockBuildingSnafu, Error, VmId};
+use crate::{BlockBuildingSnafu, Error, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
@@ -19,6 +19,8 @@ use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use crate::block2::tables::NameSpaceTable;
 use trait_set::trait_set;
+
+use super::tables::TxTable;
 
 trait_set! {
 
@@ -286,6 +288,33 @@ pub(super) type RangeProof =
 /// but that's still pretty crufty.
 pub type JellyfishNamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
+
+// TODO find a home for this function
+fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
+    let num_txs = TxTable::get_tx_table_len(ns_payload_flat);
+    let tx_bodies_offset = num_txs
+        .saturating_add(1)
+        .saturating_mul(TxTableEntry::byte_len());
+    let mut txs = Vec::with_capacity(num_txs);
+    let mut start = tx_bodies_offset;
+    for tx_index in 0..num_txs {
+        let end = std::cmp::min(
+            TxTable::get_table_entry(ns_payload_flat, tx_index).saturating_add(tx_bodies_offset),
+            ns_payload_flat.len(),
+        );
+        let tx_payload_range = Range {
+            start: std::cmp::min(start, end),
+            end,
+        };
+        txs.push(Transaction::new(
+            ns_id,
+            ns_payload_flat[tx_payload_range].to_vec(),
+        ));
+        start = end;
+    }
+
+    txs
+}
 
 #[cfg(test)]
 mod test {
