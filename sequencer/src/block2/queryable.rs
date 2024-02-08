@@ -13,6 +13,7 @@ use super::{
     tx_iterator::{TxIndex, TxIterator},
 };
 
+// TODO don't hard-code TxTableEntryWord generic param
 impl QueryablePayload for Payload<TxTableEntryWord> {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a, TxTableEntryWord>;

@@ -113,10 +113,10 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         std::cmp::min(left, right)
     }
 
-    // returns (ns_id, payload_offset)
-    // payload_offset is not checked, could be anything
+    // returns (ns_id, ns_offset)
+    // ns_offset is not checked, could be anything
     pub fn get_table_entry(&self, ns_index: usize) -> (VmId, usize) {
-        // range for ns_id bytes in ns table
+        // get the range for ns_id bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         let start = std::cmp::min(
             ns_index
@@ -139,7 +139,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
             VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
                 .unwrap_or(VmId(0));
 
-        // range for ns_offset bytes in ns table
+        // get the range for ns_offset bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         // TODO refactor range checking code
         let start = end;
