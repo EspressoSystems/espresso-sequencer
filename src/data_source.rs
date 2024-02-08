@@ -531,6 +531,7 @@ pub mod node_tests {
         },
     };
     use futures::stream::StreamExt;
+    use hotshot_testing::state_types::TestInstanceState;
     use std::collections::HashSet;
 
     async fn validate(ds: &impl TestableDataSource) {
@@ -622,9 +623,9 @@ pub mod node_tests {
         let mut ds = D::connect(&storage).await;
 
         // Generate some mock leaves and blocks to insert.
-        let mut leaves = vec![LeafQueryData::<MockTypes>::genesis()];
-        let mut blocks = vec![BlockQueryData::<MockTypes>::genesis()];
-        for i in 0..3 {
+        let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
+        let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
+        for i in 0..2 {
             let mut leaf = leaves[i].clone();
             leaf.leaf.block_header.block_number += 1;
             leaves.push(leaf);
@@ -645,7 +646,7 @@ pub mod node_tests {
 
         // Insert a leaf without the corresponding block, make sure we detect that the block is
         // missing.
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[1].clone())
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[0].clone())
             .await
             .unwrap();
         ds.commit().await.unwrap();
@@ -659,7 +660,7 @@ pub mod node_tests {
 
         // Insert a leaf whose height is not the successor of the previous leaf. We should now
         // detect that the leaf in between is missing (along with all _three_ corresponding blocks).
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[3].clone())
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[2].clone())
             .await
             .unwrap();
         ds.commit().await.unwrap();
@@ -672,18 +673,18 @@ pub mod node_tests {
         );
 
         // Rectify the missing data.
-        ds.insert_block(blocks[1].clone()).await.unwrap();
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[2].clone())
+        ds.insert_block(blocks[0].clone()).await.unwrap();
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[1].clone())
             .await
             .unwrap();
+        ds.insert_block(blocks[1].clone()).await.unwrap();
         ds.insert_block(blocks[2].clone()).await.unwrap();
-        ds.insert_block(blocks[3].clone()).await.unwrap();
         ds.commit().await.unwrap();
 
         // Some data sources (e.g. file system) don't support out-of-order insertion of missing
-        // data. These would have just ignored the insertion of `leaves[2]`. Detect if this is the
+        // data. These would have just ignored the insertion of `leaves[1]`. Detect if this is the
         // case; then we allow 1 missing leaf remaining.
-        let expected_missing_leaves = if ds.get_leaf(2).await.try_resolve().is_err() {
+        let expected_missing_leaves = if ds.get_leaf(1).await.try_resolve().is_err() {
             tracing::warn!(
                 "data source does not support out-of-order filling, allowing one missing leaf"
             );
