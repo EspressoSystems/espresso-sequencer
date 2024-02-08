@@ -9,7 +9,7 @@ use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 use jf_primitives::pcs::{checked_fft_size, PolynomialCommitmentScheme};
 use jf_primitives::vid::advz::payload_prover::{LargeRangeProof, SmallRangeProof};
 use jf_primitives::vid::advz::Advz;
-use jf_primitives::vid::payload_prover::PayloadProver;
+use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -288,6 +288,17 @@ pub(super) type RangeProof =
 /// but that's still pretty crufty.
 pub type JellyfishNamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct NamespaceProof<V>
+where
+    V: PayloadProver<JellyfishNamespaceProof>,
+{
+    ns_payload_flat: Vec<u8>,
+    ns_index: u32,
+    ns_proof: JellyfishNamespaceProof,
+    vid_common: <V as VidScheme>::Common,
+}
 
 // TODO find a home for this function
 fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
