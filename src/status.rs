@@ -171,8 +171,8 @@ mod test {
             );
             sleep(Duration::from_secs(1)).await;
         }
-        // The block height is initially 1 (for the genesis block).
-        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 1);
+        // The block height is initially zero.
+        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 0);
 
         // Test Prometheus export.
         let mut res = surf::get(&format!("{url}/metrics")).send().await.unwrap();
@@ -283,6 +283,6 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 1);
+        assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 0);
     }
 }

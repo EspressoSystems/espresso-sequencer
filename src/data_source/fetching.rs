@@ -299,27 +299,13 @@ where
             None
         };
 
-        let mut ds = Self {
+        let ds = Self {
             fetcher,
             scanner,
             metrics: Default::default(),
         };
 
-        if NodeDataSource::block_height(&ds).await? == 0 {
-            // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it
-            // is present.
-            ds.insert_genesis().await?;
-        }
-
         Ok(ds)
-    }
-
-    async fn insert_genesis(&mut self) -> anyhow::Result<()> {
-        UpdateAvailabilityData::insert_leaf(self, LeafQueryData::genesis()).await?;
-        UpdateNodeData::insert_leaf(self, LeafQueryData::genesis()).await?;
-        self.insert_block(BlockQueryData::genesis()).await?;
-        self.commit().await?;
-        Ok(())
     }
 }
 

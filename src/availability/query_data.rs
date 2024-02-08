@@ -206,20 +206,13 @@ impl<Types: NodeType> LeafQueryData<Types> {
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
-            qc.data.leaf_commit == leaf.commit(),
+            qc.is_genesis || qc.data.leaf_commit == leaf.commit(),
             InconsistentLeafSnafu {
                 leaf: leaf.commit(),
                 qc_leaf: qc.data.leaf_commit
             }
         );
         Ok(Self { leaf, qc })
-    }
-
-    pub fn genesis() -> Self {
-        Self {
-            leaf: Leaf::genesis(),
-            qc: QuorumCertificate::genesis(),
-        }
     }
 
     pub fn leaf(&self) -> &Leaf<Types> {
@@ -272,11 +265,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
             size: payload_size::<Types>(&payload),
             payload,
         }
-    }
-
-    pub fn genesis() -> Self {
-        let (header, payload, _) = Types::BlockHeader::genesis();
-        Self::new(header, payload)
     }
 
     pub fn header(&self) -> &Header<Types> {
