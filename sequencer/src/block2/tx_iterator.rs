@@ -12,6 +12,9 @@ pub struct TxIndex {
     pub tx_idx: usize,
 }
 
+/// TODO Decompose this iterator into
+/// - a tx iterator `T` over only 1 namespace
+/// - a namespace-tx iterator that reuses `T` over all namespaces
 pub struct TxIterator<'a, TableWord: TableWordTraits> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,

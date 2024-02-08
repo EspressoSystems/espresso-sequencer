@@ -113,10 +113,10 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         std::cmp::min(left, right)
     }
 
-    // returns (ns_id, payload_offset)
-    // payload_offset is not checked, could be anything
+    // returns (ns_id, ns_offset)
+    // ns_offset is not checked, could be anything
     pub fn get_table_entry(&self, ns_index: usize) -> (VmId, usize) {
-        // range for ns_id bytes in ns table
+        // get the range for ns_id bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         let start = std::cmp::min(
             ns_index
@@ -139,7 +139,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
             VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
                 .unwrap_or(VmId(0));
 
-        // range for ns_offset bytes in ns table
+        // get the range for ns_offset bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         // TODO refactor range checking code
         let start = end;
@@ -184,6 +184,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
 pub struct TxTable {}
 impl TxTable {
+    // Parse `TxTableEntry::byte_len()`` bytes from `raw_payload`` starting at `offset` into a `TxTableEntry`
     pub(crate) fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
@@ -194,6 +195,43 @@ impl TxTable {
         let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
         entry_bytes[..tx_table_len_range.len()].copy_from_slice(&raw_payload[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
+    }
+
+    // Parse the table length from the beginning of the tx table inside `ns_bytes`.
+    //
+    // Returned value is guaranteed to be no larger than the number of tx table entries that could possibly fit into `ns_bytes`.
+    // TODO tidy this is a sloppy wrapper for get_len
+    pub(crate) fn get_tx_table_len(ns_bytes: &[u8]) -> usize {
+        std::cmp::min(
+            Self::get_len(ns_bytes, 0).try_into().unwrap_or(0),
+            (ns_bytes.len().saturating_sub(TxTableEntry::byte_len())) / TxTableEntry::byte_len(),
+        )
+    }
+
+    // returns tx_offset
+    // if tx_index would reach beyond ns_bytes then return 0.
+    // tx_offset is not checked, could be anything
+    pub(crate) fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
+        // get the range for tx_offset bytes in tx table
+        let tx_offset_range = {
+            let start = std::cmp::min(
+                tx_index
+                    .saturating_add(1)
+                    .saturating_mul(TxTableEntry::byte_len()),
+                ns_bytes.len(),
+            );
+            let end = std::cmp::min(
+                start.saturating_add(TxTableEntry::byte_len()),
+                ns_bytes.len(),
+            );
+            start..end
+        };
+
+        // parse tx_offset bytes from tx table
+        let mut tx_offset_bytes = [0u8; TxTableEntry::byte_len()];
+        tx_offset_bytes[..tx_offset_range.len()].copy_from_slice(&ns_bytes[tx_offset_range]);
+        usize::try_from(TxTableEntry::from_bytes(&tx_offset_bytes).unwrap_or(TxTableEntry::zero()))
+            .unwrap_or(0)
     }
 }
 #[cfg(test)]
