@@ -716,7 +716,7 @@ where
         // Pad out to the end of the chunk with None, indicating that objects we don't have yet must
         // be fetched.
         if ts.len() < chunk.len() {
-            tracing::info!(
+            tracing::debug!(
                 "items {}-{} in chunk are not available, will be fetched",
                 ts.len(),
                 chunk.len()
@@ -1053,7 +1053,7 @@ fn fetch_leaf_with_callbacks<Types, S, P, I>(
                 // If the requested leaf has yet to be produced, based on the current block height,
                 // there is no point in requesting it. We will receive it passively once it is
                 // created.
-                tracing::info!("not fetching leaf {n} because height is only {height}");
+                tracing::debug!("not fetching leaf {n} because height is only {height}");
                 return;
             }
 
@@ -1068,7 +1068,7 @@ fn fetch_leaf_with_callbacks<Types, S, P, I>(
             // We don't actively fetch leaves when requested by hash, because we have no way of
             // knowing whether a leaf with such a hash actually exists, and we don't want to bother
             // peers with requests for non-existant leaves.
-            tracing::info!("not fetching unknown leaf {h}");
+            tracing::debug!("not fetching unknown leaf {h}");
         }
     }
 }
@@ -1205,15 +1205,26 @@ where
     {
         match req {
             BlockRequest::Id(id) => {
-                // First, check if at least the header is available in local storage. If it is, we
-                // benefit two ways:
+                // Bail early if we can tell that this block hasn't been produced yet.
+                if let BlockId::Number(n) = id {
+                    let height = storage.height as usize;
+                    if n >= height {
+                        tracing::debug!("not fetching block {n} because height is only {height}");
+                        return;
+                    }
+                }
+
+                // Check if at least the header is available in local storage. If it is, we benefit
+                // two ways:
                 // 1. We know for sure the corresponding block exists, so we can unconditionally
                 //    trigger an active fetch without unnecessarily bothering our peers.
                 // 2. We only need to fetch the payload, not the full block. Not only is this
                 //    marginally less data to download, there are some providers that may only be
                 //    able to provide payloads, not full blocks, such as HotShot DA committee
                 //    members.
-                if let Some(header) = load_header(&**storage, id)
+                if let Some(header) = storage
+                    .storage
+                    .get_header(id)
                     .await
                     .context(format!("loading header for block {id}"))
                     .ok_or_trace()
@@ -1239,13 +1250,13 @@ where
                         // Given only the hash, we cannot tell if the corresonding leaf actually
                         // exists, since we don't have a corresponding header. Therefore, we will
                         // not spawn an active fetch.
-                        tracing::info!("not fetching unknown block {h}");
+                        tracing::debug!("not fetching unknown block {h}");
                         return;
                     }
                     BlockId::PayloadHash(h) => {
                         // Same as above, we don't fetch a block with a payload that is not known to
                         // exist.
-                        tracing::info!("not fetching block with unknown payload {h}");
+                        tracing::debug!("not fetching block with unknown payload {h}");
                         return;
                     }
                 }
@@ -1255,7 +1266,7 @@ where
                 // block payload, we have no way of knowing whether a block with such a transaction
                 // actually exists, and we don't want to bother peers with requests for non-existant
                 // blocks.
-                tracing::info!("not fetching block with unknown transaction {h}");
+                tracing::debug!("not fetching block with unknown transaction {h}");
             }
         }
     }
@@ -1343,23 +1354,6 @@ where
     Ok(())
 }
 
-async fn load_header<Types, S>(
-    storage: &NotifyStorage<Types, S>,
-    id: BlockId<Types>,
-) -> QueryResult<Header<Types>>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload,
-    S: AvailabilityStorage<Types>,
-{
-    // Fail quickly, without touching storage, if the requested height is greater than the current
-    // height. In this case, we know we don't have the header.
-    if let BlockId::Number(n) = id {
-        ensure!((n as u64) < storage.height, NotFoundSnafu);
-    }
-    storage.storage.get_header(id).await
-}
-
 #[async_trait]
 impl<Types> Fetchable<Types> for (BlockQueryData<Types>, TransactionIndex<Types>)
 where
@@ -1407,7 +1401,7 @@ where
         // We don't actively fetch blocks when requested by transaction, because without the block
         // payload, we have no way of knowing whether a block with such a transaction actually
         // exists, and we don't want to bother peers with requests for non-existant blocks.
-        tracing::info!("not fetching block with unknown transaction {req}");
+        tracing::debug!("not fetching block with unknown transaction {req}");
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
