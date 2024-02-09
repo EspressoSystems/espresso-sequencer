@@ -739,11 +739,6 @@ mod test_headers {
                 FeeMerkleTree::from_kv_set(20, Vec::from([(recipient, amount)])).unwrap();
             let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
-            let _validated_state = ValidatedState {
-                block_merkle_tree,
-                fee_merkle_tree,
-            };
-
             let header = Header::from_info(
                 genesis.payload_commitment,
                 metadata,
@@ -891,7 +886,7 @@ mod test_headers {
     #[test]
     fn test_validate_proposal_error_cases() {
         let (mut header, ..) = Header::genesis(&NodeState {});
-        let mut validated_state = ValidatedState::from_header(&header);
+        let mut validated_state = ValidatedState::default();
         let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
 
         // Populate the tree with an initial `push`.
@@ -925,7 +920,7 @@ mod test_headers {
     fn test_validate_proposal_success() {
         let state = NodeState {};
         let (mut header, _, metadata) = Header::genesis(&state);
-        let mut parent_state = ValidatedState::from_header(&header);
+        let mut parent_state = ValidatedState::default();
         let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
 
         // Populate the tree with an initial `push`.
@@ -945,7 +940,7 @@ mod test_headers {
             metadata,
         );
 
-        let proposal_state = ValidatedState::from_header(&proposal);
+        let proposal_state = parent_state.clone();
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
         let result = proposal_state
