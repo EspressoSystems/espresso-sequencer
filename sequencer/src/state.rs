@@ -16,7 +16,7 @@ impl HotShotState for State {
     type Error = Error;
 
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<crate::block2::entry::TxTableEntryWord>; // TODO generic arg eww
 
     type Time = ViewNumber;
 

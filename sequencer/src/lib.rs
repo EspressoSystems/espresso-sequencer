@@ -57,7 +57,8 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::{Header, Payload};
+pub use block::Header;
+pub use block2::payload::Payload;
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NMT,
@@ -195,7 +196,7 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<block2::entry::TxTableEntryWord>; // TODO generic arg eww
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;

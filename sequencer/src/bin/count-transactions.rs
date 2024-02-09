@@ -4,7 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::sleep;
 use clap::Parser;
 use futures::future::join_all;
-use hotshot_query_service::availability::BlockQueryData;
+use hotshot_query_service::availability::{BlockQueryData, QueryablePayload};
 use sequencer::SeqTypes;
 use std::cmp::max;
 use std::collections::HashSet;
@@ -79,8 +79,8 @@ async fn main() {
                         }
                     }
                 };
-                for i in 0..block.len() {
-                    let txn = block.transaction(&(i as u64)).unwrap();
+                for t in block.payload().iter(&block.payload().ns_table.raw_payload) {
+                    let txn = block.transaction(&t).unwrap();
                     total += 1;
                     unique.insert(txn.hash());
                 }

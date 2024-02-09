@@ -4,7 +4,8 @@ use super::{
     data_source::{SequencerDataSource, StateSignatureDataSource, SubmitDataSource},
     AppState,
 };
-use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
+use crate::{network, Header, SeqTypes, Transaction};
+use ark_bls12_381::Bls12_381;
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use futures::FutureExt;
@@ -12,7 +13,7 @@ use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
     Error,
 };
-use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
+use jf_primitives::vid::{advz::Advz, VidScheme};
 use serde::{Deserialize, Serialize};
 use tide_disco::{
     method::{ReadState, WriteState},
@@ -21,7 +22,7 @@ use tide_disco::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProofType,
+    pub proof: crate::block2::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>,
     pub header: Header,
     pub transactions: Vec<Transaction>,
 }
@@ -65,9 +66,35 @@ where
                 resource: height.to_string(),
             })?;
 
-            let proof = block.payload().get_namespace_proof(namespace.into());
+            // TODO fake VidScheme construction
+            let vid = crate::block2::payload::test_vid_factory();
+            use hotshot::traits::BlockPayload;
+            let disperse_data = vid
+                .disperse(&block.payload().encode().unwrap().collect::<Vec<u8>>())
+                .unwrap();
+
+            let proof = block
+                .payload()
+                .namespace_with_proof(
+                    &block.payload().ns_table.raw_payload,
+                    namespace as usize,
+                    &vid,
+                    disperse_data.common,
+                )
+                .unwrap();
+
+            // TODO ugly hack to get a Vec<Transactions> for this namespace
+            let transactions = proof
+                .verify(
+                    &vid,
+                    &disperse_data.commit,
+                    &block.payload().ns_table.raw_payload,
+                )
+                .unwrap()
+                .0;
+
             Ok(NamespaceProofQueryData {
-                transactions: proof.get_namespace_leaves().into_iter().cloned().collect(),
+                transactions,
                 proof,
                 header: block.header().clone(),
             })

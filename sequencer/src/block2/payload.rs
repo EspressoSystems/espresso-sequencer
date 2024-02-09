@@ -66,12 +66,12 @@ pub(super) struct NamespaceInfo {
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub(super) struct Payload<TableWord: TableWordTraits> {
+pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
-    pub(super) raw_payload: Vec<u8>,
+    pub raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
-    pub(super) ns_table: NameSpaceTable<TableWord>,
+    pub ns_table: NameSpaceTable<TableWord>,
 
     // cache frequently used items
     //
@@ -270,7 +270,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// https://stackoverflow.com/a/52886787
 ///
 /// TODO temporary VID constructor.
-pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+pub(crate) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
     let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
@@ -306,6 +306,7 @@ pub type JellyfishNamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(bound = "")] // for V
 pub struct NamespaceProof<V>
 where
     V: PayloadProver<JellyfishNamespaceProof>,
@@ -388,6 +389,20 @@ fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
     }
 
     txs
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl hotshot_types::traits::state::TestableBlock
+    for Payload<crate::block2::entry::TxTableEntryWord>
+{
+    fn genesis() -> Self {
+        BlockPayload::genesis().0
+    }
+
+    fn txn_count(&self) -> u64 {
+        use hotshot_query_service::availability::QueryablePayload;
+        self.len(&self.ns_table.raw_payload) as u64
+    }
 }
 
 #[cfg(test)]

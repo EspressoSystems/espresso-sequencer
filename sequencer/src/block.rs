@@ -191,7 +191,8 @@ pub struct Header {
     pub l1_finalized: Option<L1BlockInfo>,
 
     pub payload_commitment: VidCommitment,
-    pub transactions_root: NMTRoot,
+    pub ns_table_temporary:
+        <crate::Payload<crate::block2::entry::TxTableEntryWord> as BlockPayload>::Metadata,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Root Commitment of `FeeMerkleTree`
@@ -217,7 +218,7 @@ impl Committable for Header {
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
             .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
-            .field("transactions_root", self.transactions_root.commit())
+            // .field("transactions_root", self.transactions_root.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
             .finalize()
@@ -248,7 +249,7 @@ impl Header {
     #[allow(clippy::too_many_arguments)]
     fn from_info(
         payload_commitment: VidCommitment,
-        transactions_root: NMTRoot,
+        transactions_root: <<Self as BlockHeader>::Payload as BlockPayload>::Metadata,
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
@@ -305,7 +306,7 @@ impl Header {
             l1_head: l1.head,
             l1_finalized: l1.finalized,
             payload_commitment,
-            transactions_root,
+            ns_table_temporary: transactions_root,
             fee_merkle_tree_root,
             block_merkle_tree_root,
             validated_state,
@@ -338,8 +339,12 @@ fn _validate_proposal(parent: &Header, proposal: &Header) -> anyhow::Result<Bloc
 }
 
 impl BlockHeader for Header {
-    type Payload = Payload;
-    fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
+    type Payload = crate::block2::payload::Payload<crate::block2::entry::TxTableEntryWord>;
+    fn new(
+        payload_commitment: VidCommitment,
+        transactions_root: <Self::Payload as BlockPayload>::Metadata,
+        parent: &Self,
+    ) -> Self {
         let ValidatedState {
             mut block_merkle_tree,
             mut fee_merkle_tree,
@@ -404,7 +409,7 @@ impl BlockHeader for Header {
         Self::Payload,
         <Self::Payload as BlockPayload>::Metadata,
     ) {
-        let (payload, transactions_root) = Payload::genesis();
+        let (payload, ns_table) = Self::Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let block_merkle_tree =
             BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
@@ -430,12 +435,12 @@ impl BlockHeader for Header {
             l1_head: 0,
             l1_finalized: None,
             payload_commitment,
-            transactions_root,
+            ns_table_temporary: ns_table.clone(),
             block_merkle_tree_root,
             fee_merkle_tree_root,
             validated_state,
         };
-        (header, payload, transactions_root)
+        (header, payload, ns_table)
     }
 
     fn block_number(&self) -> u64 {
@@ -446,8 +451,8 @@ impl BlockHeader for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &NMTRoot {
-        &self.transactions_root
+    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata {
+        &self.ns_table_temporary
     }
 }
 
@@ -573,7 +578,7 @@ impl Display for Payload {
 impl Payload {
     /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
     /// and the root of the NMT
-    pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
+    pub fn _get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
         self.transaction_nmt.get_namespace_proof(vm_id)
     }
 }
@@ -774,7 +779,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.payload_commitment,
-                genesis.transactions_root,
+                genesis.ns_table_temporary,
                 &parent,
                 L1Snapshot {
                     head: self.l1_head,
@@ -957,7 +962,11 @@ mod test_headers {
         let parent = header.clone();
 
         // get a proposal from a parent
-        let proposal = Header::new(parent.payload_commitment, parent.transactions_root, &parent);
+        let proposal = Header::new(
+            parent.payload_commitment,
+            parent.ns_table_temporary.clone(),
+            &parent,
+        );
 
         let mut block_merkle_tree = proposal.validated_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
