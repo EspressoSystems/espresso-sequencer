@@ -25,7 +25,7 @@ use crate::{
         },
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus, UpdateNodeData},
     Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
@@ -412,6 +412,14 @@ where
         Ok(match self.index_by_proposer_id.get(id) {
             Some(ids) => ids.len(),
             None => 0,
+        })
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        let height = self.block_height().await?;
+        Ok(SyncStatus {
+            missing_blocks: self.block_storage.missing(height),
+            missing_leaves: self.leaf_storage.missing(height),
         })
     }
 }

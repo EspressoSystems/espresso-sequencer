@@ -19,7 +19,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus, UpdateNodeData},
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_std::{
@@ -388,9 +388,7 @@ impl SqlStorage {
             kill: Some(kill),
         })
     }
-}
 
-impl SqlStorage {
     /// Access the transaction which is accumulating all uncommitted changes to the data source.
     pub async fn transaction(&mut self) -> QueryResult<Transaction<'_>> {
         if !self.tx_in_progress {
@@ -773,6 +771,62 @@ where
         let row = self.query_one(query, &[&proposer.to_string()]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        // A leaf can only be missing if there is no row for it in the database (all its columns are
+        // non-nullable). A block can be missing if its corresponding leaf is missing or if the
+        // block's `data` field is `NULL`. Thus we need to get the number of fully missing leaf rows
+        // and the number of present but null-payload block rows.
+        //
+        // Note that it should not be possible for a block's row to be missing (as opposed to
+        // present but having a `NULL` payload) if the corresponding leaf is present. The schema
+        // enforces this, since the payload table `REFERENCES` the corresponding leaf row. Thus,
+        // missing block rows should be a subset of missing leaf rows and do not need to be counted
+        // separately. This is very important: if we had to count the number of block rows that were
+        // missing whose corresponding leaf row was present, this would require an expensive join
+        // and table traversal.
+        //
+        // We can get the number of missing leaf rows very efficiently, by subtracting the total
+        // number of leaf rows from the block height (since the block height by definition is the
+        // height of the highest leaf we do have). We can also get the number of null payloads
+        // directly using an `IS NULL` filter.
+        //
+        // We will thus select these three quantities, using a single SQL statement to minimize
+        // latency to the database. We accomplish this using a UNION of a sub-select from `leaf` and
+        // one from `payload`. From each of these tables, we are selecting disjoint sets of numeric
+        // quanitities. A trick to combine these into a single query is to select NULL
+        // for each column we are _not_ selecting from each table, and then combine the unioned
+        // table into a single row using `sum` (where the NULL placeholders are ignored).
+        let row = self
+            .query_one_static(
+                "SELECT sum(h)::bigint AS max_height, sum(l)::bigint AS total_leaves, sum(p)::bigint AS null_payloads FROM (
+                    SELECT max(leaf.height) AS h, count(*) AS l, NULL     AS p FROM leaf UNION
+                    SELECT NULL             AS h, NULL     AS l, count(*) AS p FROM payload WHERE payload.data IS NULL
+                )"
+            )
+            .await?;
+        let block_height = match row.get::<_, Option<i64>>("max_height") {
+            Some(height) => {
+                // The height of the block is the number of blocks below it, so the total number of
+                // blocks is one more than the height of the highest block.
+                height as usize + 1
+            }
+            None => {
+                // If there are no blocks yet, the height is 0.
+                0
+            }
+        };
+        let total_leaves = row.get::<_, i64>("total_leaves") as usize;
+        let null_payloads = row.get::<_, i64>("null_payloads") as usize;
+
+        let missing_leaves = block_height.saturating_sub(total_leaves);
+        let missing_blocks = missing_leaves + null_payloads;
+
+        Ok(SyncStatus {
+            missing_leaves,
+            missing_blocks,
+        })
     }
 }
 

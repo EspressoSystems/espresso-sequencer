@@ -21,7 +21,8 @@ particular node. It provides access to information that the availability API doe
 information depends on the perspective of the node observing it, and may be subject to eventual
 consistency. For example, `/node/block-height` and `/node/proposals/:proposer_id/count` may both
 return smaller counts than expected, if the node being queried is not fully synced with the entire
-history of the chain. However, the node will _eventually_ sync and return the expected counts.
+history of the chain. However, the node will _eventually_ sync and return the expected counts. See
+`/node/sync-status` for information on how in or out of sync the node currently is.
 """
 
 [route.block_height]
@@ -38,6 +39,8 @@ PATH = ["proposals/:proposer_id/count"]
 DOC = """
 Get the number of committed blocks proposed by `proposer_id`, known to this node.
 
+Warning: count may be low if data is currently being indexed (see `sync-status`).
+
 Returns an integer.
 """
 
@@ -49,6 +52,8 @@ DOC = """
 Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
 the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
 return all the leaves from the proposer.
+
+Warning: response may be incomplete if data is currently being indexed (see `sync-status`).
 
 Returns a list of
 
@@ -62,6 +67,20 @@ Returns a list of
         "proposer_id": TaggedBase64,
     },
     "qc": QC,
+}
+```
+"""
+
+[route.sync_status]
+PATH = ["sync-status"]
+DOC = """
+Get the node's progress in syncing with the latest state of the blockchain.
+
+Returns
+```
+{
+	"missing_blocks": integer,
+	"missing_leaves": integer,
 }
 ```
 """

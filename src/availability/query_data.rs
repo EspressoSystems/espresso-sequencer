@@ -215,6 +215,13 @@ impl<Types: NodeType> LeafQueryData<Types> {
         Ok(Self { leaf, qc })
     }
 
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+        Self {
+            leaf: Leaf::genesis(instance_state),
+            qc: QuorumCertificate::genesis(),
+        }
+    }
+
     pub fn leaf(&self) -> &Leaf<Types> {
         &self.leaf
     }
@@ -265,6 +272,11 @@ impl<Types: NodeType> BlockQueryData<Types> {
             size: payload_size::<Types>(&payload),
             payload,
         }
+    }
+
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+        let (header, payload, _) = Types::BlockHeader::genesis(instance_state);
+        Self::new(header, payload)
     }
 
     pub fn header(&self) -> &Header<Types> {

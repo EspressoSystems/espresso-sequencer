@@ -32,6 +32,8 @@ pub(crate) struct LedgerLog<T: Serialize + DeserializeOwned> {
     // handled differently and `self.store.iter().len()` does not update until a new version is
     // committed.
     pending_inserts: usize,
+    // Track the number of missing objects, for health reporting.
+    missing: usize,
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
@@ -51,6 +53,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
                 1u64 << 20, // 1 MB
             )?,
             pending_inserts: 0,
+            missing: 0,
         })
     }
 
@@ -75,6 +78,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
             // 0 so that it does.
             0
         };
+        let mut missing = 0;
         let mut cache = store
             .iter()
             .skip(cache_start)
@@ -84,7 +88,11 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
                 }
                 // We treat missing objects and failed-to-load objects the same:
                 // if we failed to load a object, it is now missing!
-                r.ok().flatten()
+                let obj = r.ok().flatten();
+                if obj.is_none() {
+                    missing += 1;
+                }
+                obj
             })
             .collect::<VecDeque<_>>();
         cache.reserve_exact(cache_size - cache.len());
@@ -95,6 +103,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
             cache,
             store,
             pending_inserts: 0,
+            missing,
         })
     }
 
@@ -108,8 +117,12 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
     }
 
     pub(crate) fn store_resource(&mut self, resource: Option<T>) -> Result<(), PersistenceError> {
+        let missing = resource.is_none();
         self.store.store_resource(&resource)?;
         self.pending_inserts += 1;
+        if missing {
+            self.missing += 1;
+        }
         if self.cache.len() >= self.cache_size {
             self.cache.pop_front();
             self.cache_start += 1;
@@ -124,10 +137,10 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
     {
         // If there are missing objects between what we currently have and `object`, pad with
         // placeholders.
-        let len = self.store.iter().len();
+        let len = self.iter().len();
         let target_len = std::cmp::max(index, len);
         for i in len..target_len {
-            tracing::debug!("storing placeholders for position {}/{target_len}", len + i);
+            warn!("storing placeholders for position {i}/{target_len}");
             if let Err(err) = self.store_resource(None) {
                 warn!("Failed to store placeholder: {}", err);
                 return Err(err);
@@ -144,15 +157,20 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
             // This is an object earlier in the chain that we are now receiving asynchronously.
             // Update the placeholder with the actual contents of the object.
             // TODO update persistent storage once AppendLog supports updates.
+            // See: https://github.com/EspressoSystems/hotshot-query-service/issues/16
             warn!(
                 index,
                 len, target_len, "skipping out-of-order object; random inserts not yet supported"
             );
 
-            // Update the object in cache if necessary.
-            if index >= self.cache_start {
-                self.cache[index - self.cache_start] = Some(object);
-            }
+            // TODO Update the object in cache if necessary. Note that we could do this now, even
+            // without support for storing the object persistently. But this makes the cache out of
+            // sync with persistent storage, and it means we have an object available that will
+            // become unavailable once it drops out of cache, which is not really what we want.
+            // See: https://github.com/EspressoSystems/hotshot-query-service/issues/16
+            // if index >= self.cache_start {
+            //     self.cache[index - self.cache_start] = Some(object);
+            // }
         }
         Ok(())
     }
@@ -178,6 +196,12 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
 
         self.pending_inserts = 0;
         Ok(())
+    }
+
+    pub(crate) fn missing(&self, to_height: usize) -> usize {
+        // The number of missing objects is the number missing from the sequence we currently have,
+        // plus any extra objects at the end if this sequence is shorter than `to_height`.
+        self.missing + to_height.saturating_sub(self.iter().len())
     }
 }
 
@@ -300,16 +324,19 @@ mod test {
         log.insert(2, 3).unwrap();
         log.commit_version().await.unwrap();
         store.commit_version().unwrap();
-        assert_eq!(
-            log.iter().collect::<Vec<_>>(),
-            vec![Some(1), None, Some(3), None, Some(2)]
-        );
+        // TODO re-enable this check once AppendLog supports random access updates.
+        // See https://github.com/EspressoSystems/hotshot-query-service/issues/16
+        // assert_eq!(
+        //     log.iter().collect::<Vec<_>>(),
+        //     vec![Some(1), None, Some(3), None, Some(2)]
+        // );
 
         // Insert in middle (out of cache).
         log.insert(1, 4).unwrap();
         log.commit_version().await.unwrap();
         store.commit_version().unwrap();
         // TODO check results once AppendLog supports random access updates.
+        // See https://github.com/EspressoSystems/hotshot-query-service/issues/16
     }
 
     #[async_std::test]

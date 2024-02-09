@@ -19,7 +19,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus, UpdateNodeData},
     Header, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
@@ -138,6 +138,10 @@ where
     }
 
     async fn count_proposals(&self, _id: &SignatureKey<Types>) -> QueryResult<usize> {
+        Err(QueryError::Missing)
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
         Err(QueryError::Missing)
     }
 }
@@ -437,6 +441,13 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.count_proposals(proposer).await,
                 Self::NoStorage(data_source) => data_source.count_proposals(proposer).await,
+            }
+        }
+
+        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+            match self {
+                Self::Sql(data_source) => data_source.sync_status().await,
+                Self::NoStorage(data_source) => data_source.sync_status().await,
             }
         }
     }

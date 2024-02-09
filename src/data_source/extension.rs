@@ -18,7 +18,7 @@ use crate::{
         UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus, UpdateNodeData},
     status::StatusDataSource,
     Payload, QueryResult, SignatureKey,
 };
@@ -223,6 +223,9 @@ where
     }
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         self.data_source.count_proposals(proposer).await
+    }
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        self.data_source.sync_status().await
     }
 }
 

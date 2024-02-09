@@ -521,11 +521,17 @@ pub mod persistence_tests {
 #[espresso_macros::generic_tests]
 pub mod node_tests {
     use super::test_helpers::*;
-    use crate::testing::{
-        consensus::{MockNetwork, TestableDataSource},
-        setup_test,
+    use crate::{
+        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        node::SyncStatus,
+        testing::{
+            consensus::{MockNetwork, TestableDataSource},
+            mocks::MockTypes,
+            setup_test,
+        },
     };
     use futures::stream::StreamExt;
+    use hotshot_testing::state_types::TestInstanceState;
     use std::collections::HashSet;
 
     async fn validate(ds: &impl TestableDataSource) {
@@ -607,6 +613,93 @@ pub mod node_tests {
         let _ = ds.read().await;
         let storage = D::connect(network.storage()).await;
         validate(&storage).await;
+    }
+
+    #[async_std::test]
+    pub async fn test_sync_status<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        // Generate some mock leaves and blocks to insert.
+        let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
+        let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
+        for i in 0..2 {
+            let mut leaf = leaves[i].clone();
+            leaf.leaf.block_header.block_number += 1;
+            leaves.push(leaf);
+
+            let mut block = blocks[i].clone();
+            block.header.block_number += 1;
+            blocks.push(block);
+        }
+
+        // At first, the node is fully synced.
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 0,
+                missing_leaves: 0,
+            }
+        );
+
+        // Insert a leaf without the corresponding block, make sure we detect that the block is
+        // missing.
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[0].clone())
+            .await
+            .unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 1,
+                missing_leaves: 0,
+            }
+        );
+
+        // Insert a leaf whose height is not the successor of the previous leaf. We should now
+        // detect that the leaf in between is missing (along with all _three_ corresponding blocks).
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[2].clone())
+            .await
+            .unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 3,
+                missing_leaves: 1,
+            }
+        );
+
+        // Rectify the missing data.
+        ds.insert_block(blocks[0].clone()).await.unwrap();
+        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[1].clone())
+            .await
+            .unwrap();
+        ds.insert_block(blocks[1].clone()).await.unwrap();
+        ds.insert_block(blocks[2].clone()).await.unwrap();
+        ds.commit().await.unwrap();
+
+        // Some data sources (e.g. file system) don't support out-of-order insertion of missing
+        // data. These would have just ignored the insertion of `leaves[1]`. Detect if this is the
+        // case; then we allow 1 missing leaf remaining.
+        let expected_missing_leaves = if ds.get_leaf(1).await.try_resolve().is_err() {
+            tracing::warn!(
+                "data source does not support out-of-order filling, allowing one missing leaf"
+            );
+            1
+        } else {
+            0
+        };
+
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 0,
+                missing_leaves: expected_missing_leaves
+            }
+        );
     }
 }
 

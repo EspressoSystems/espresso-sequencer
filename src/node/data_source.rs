@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::query_data::LeafQueryData;
+use super::query_data::{LeafQueryData, SyncStatus};
 use crate::{QueryResult, SignatureKey};
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -26,6 +26,7 @@ pub trait NodeDataSource<Types: NodeType> {
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>>;
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
+    async fn sync_status(&self) -> QueryResult<SyncStatus>;
 }
 
 #[async_trait]
