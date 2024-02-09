@@ -100,7 +100,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         init();
     }
 
-    /// @dev Test the constructor has initialized the contract state properly, espeically genesis
+    /// @dev Test the constructor has initialized the contract state properly, especially genesis
     /// block.
     function test_CorrectInitialization() external {
         assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);

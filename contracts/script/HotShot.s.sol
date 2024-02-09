@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { HotShot } from "../src/HotShot.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
@@ -28,7 +29,14 @@ contract DeployHotShotScript is Script {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         LC.LightClientState memory genesis = state;
-        new LC(genesis, blocksPerEpoch);
+        LC lightClientContract = new LC();
+
+        // Encode the initializer function call
+        bytes memory data = abi.encodeWithSelector(LC.initialize.selector, genesis, blocksPerEpoch);
+
+        // TODO how to test this is really working?
+        // Proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(address(lightClientContract), data);
 
         //// Legacy HotShot contract deployment
         new HotShot();

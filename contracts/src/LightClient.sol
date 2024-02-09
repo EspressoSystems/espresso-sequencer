@@ -2,6 +2,12 @@
 
 pragma solidity ^0.8.0;
 
+import { OwnableUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
@@ -9,16 +15,19 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
-contract LightClient {
+contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
     // @notice Notify a new epoch is starting
     event EpochChanged(uint64);
 
+    /// @notice upgrade event when the proxy updates the implementation it's pointing to
+    event Upgrade(address implementation);
+
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    uint32 public immutable BLOCKS_PER_EPOCH;
+    uint32 public BLOCKS_PER_EPOCH; // TODO how to make this variable immmutable while using the UUPS pattern?
 
     // === Storage ===
     //
@@ -76,7 +85,29 @@ contract LightClient {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
-    constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
+    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @notice This contract is called by the proxy when you deploy this contract
+    function initialize(LightClientState memory genesis, uint32 numBlockPerEpoch)
+        public
+        initializer
+    {
+        __Ownable_init(msg.sender); //sets owner to msg.sender
+        __UUPSUpgradeable_init();
+        _initializeState(genesis, numBlockPerEpoch);
+    }
+
+    /// @notice only the owner can authorize an upgrade
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        emit Upgrade(newImplementation);
+    }
+
+    // TODO are the decorators of this function correctly set?
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal onlyOwner {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
