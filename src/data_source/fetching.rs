@@ -89,7 +89,7 @@ use crate::{
     node::{NodeDataSource, SyncStatus, UpdateNodeData},
     status::StatusDataSource,
     task::BackgroundTask,
-    Header, NotFoundSnafu, Payload, QueryResult, SignatureKey,
+    Header, Payload, QueryResult, SignatureKey,
 };
 use anyhow::Context;
 use async_std::{
@@ -104,7 +104,6 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use snafu::ensure;
 use std::{
     cmp::{min, Ordering},
     fmt::{Debug, Display},
@@ -451,7 +450,7 @@ where
         &self,
         hash: TransactionHash<Types>,
     ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        self.fetcher.get(hash).await
+        self.fetcher.get(TransactionRequest(hash)).await
     }
 }
 
@@ -653,8 +652,17 @@ where
         // necessary, since sending notifications requires a write lock. Hence, we will not miss a
         // notification.
         let storage = self.storage.read().await;
-        self.ok_or_fetch(&storage, req, T::load(&storage, req).await)
-            .await
+        // Fall back to fetching early and quietly if it is impossible for the object to exist.
+        if !req.might_exist(storage.height as usize) {
+            tracing::debug!(
+                "not loading object {req:?} that cannot exist at height {}",
+                storage.height
+            );
+            self.fetch(&storage, req).await
+        } else {
+            self.ok_or_fetch(&storage, req, T::load(&storage, req).await)
+                .await
+        }
     }
 
     /// Get a range of objects from local storage or a provider.
@@ -704,13 +712,33 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
-        let ts = T::load_range(&storage, chunk.clone())
-            .await
-            .context(format!("when fetching items in range {chunk:?}"))
-            .ok_or_trace()
-            .unwrap_or_default();
+        // We can avoid touching storage if it is not possible even for the first element in the
+        // requested range to exist given the current block height. In this case, we know storage
+        // would return an empty range.
+        let might_exist = match chunk.start_bound() {
+            Bound::Included(n) => T::Request::from(*n).might_exist(storage.height as usize),
+            Bound::Excluded(n) => T::Request::from(*n + 1).might_exist(storage.height as usize),
+            _ => true,
+        };
+        let ts = if might_exist {
+            T::load_range(&storage, chunk.clone())
+                .await
+                .context(format!("when fetching items in range {chunk:?}"))
+                .ok_or_trace()
+                .unwrap_or_default()
+        } else {
+            tracing::debug!(
+                "not loading chunk {chunk:?} which cannot exist at block height {}",
+                storage.height
+            );
+            vec![]
+        };
         // Log and discard error information; we want a list of Option where None indicates an
-        // object that needs to be fetched.
+        // object that needs to be fetched. Note that we don't use `FetchRequest::might_exit` to
+        // silence the logs here when an object is missing that is not expected to exist at all.
+        // When objects are not expected to exist, `load_range` should just return a truncated list
+        // rather than returning `Err` objects, so if there are errors in here they are unexpected
+        // and we do want to long them.
         let ts = ts.into_iter().map(ResultExt::ok_or_trace);
         // Storage may return fewer objects than asked for if we hit the end of the current chain.
         // Pad out to the end of the chunk with None, indicating that objects we don't have yet must
@@ -835,7 +863,14 @@ where
         //   can never release the _original_ read lock we had on `storage`, and so we can never
         //   unblock the task waiting for a write lock, which in turn means we can never become
         //   unblocked ourselves.
-        T::active_fetch(self.clone(), storage, req).await;
+        if req.might_exist(storage.height as usize) {
+            T::active_fetch(self.clone(), storage, req).await;
+        } else {
+            tracing::debug!(
+                "not fetching object {req:?} that cannot exist at height {}",
+                storage.height
+            );
+        }
 
         // Wait for the object to arrive.
         Fetch::Pending(fut.boxed())
@@ -904,6 +939,22 @@ impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
 {
 }
 
+trait FetchRequest: Copy + Debug + Send + Sync + 'static {
+    /// Indicate whether it is possible this object could exist.
+    ///
+    /// This can filter out requests quickly for objects that cannot possibly exist, such as
+    /// requests for objects with a height greater than the current block height. Not only does this
+    /// let us fail faster for such requests (without touching storage at all), it also helps keep
+    /// logging quieter when we fail to fetch an object because the user made a bad request, while
+    /// still being fairly loud when we fail to fetch an object that might have really existed.
+    ///
+    /// This method is conservative: it returns `true` if it cannot tell whether the given object
+    /// could exist or not.
+    fn might_exist(self, _block_height: usize) -> bool {
+        true
+    }
+}
+
 /// Objects which can be fetched from a remote DA provider and cached in local storage.
 ///
 /// This trait lets us abstract over leaves, blocks, and other types that can be fetched. Thus, the
@@ -916,7 +967,7 @@ where
     Payload<Types>: QueryablePayload,
 {
     /// A succinct specification of the object to be fetched.
-    type Request: Copy + Debug + Send + Sync + 'static;
+    type Request: FetchRequest;
 
     /// Does this object satisfy the given request?
     fn satisfies(&self, req: Self::Request) -> bool;
@@ -925,11 +976,10 @@ where
     ///
     /// An active fetch will only be triggered if:
     /// * There is not already an active fetch in progress for the same object
-    /// * The requested object is known to exist. For example, we will trigger a fetch of a block
-    ///   with a height less than the current block height, but not greater, since the latter might
-    ///   not exist yet, and we should receive it passively once it is produced. Or, we will fetch a
-    ///   leaf by height but not by hash, since we can't guarantee that a leaf with an arbitrary
-    ///   hash exists.
+    /// * The requested object is known to exist. For example, we will fetch a leaf by height but
+    ///   not by hash, since we can't guarantee that a leaf with an arbitrary hash exists. Note that
+    ///   this function assumes `req.might_exist()` has already been checked before calling it, and
+    ///   so may do unnecessary work if the caller does not ensure this.
     ///
     /// If we do trigger an active fetch for an object, the provided callback will be called if and
     /// when the fetch completes successfully. The callback should be responsible for notifying any
@@ -956,6 +1006,9 @@ where
         S: AvailabilityStorage<Types>;
 
     /// Load an object from local storage.
+    ///
+    /// This function assumes `req.might_exist()` has already been checked before calling it, and so
+    /// may do unnecessary work if the caller does not ensure this.
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>;
@@ -967,7 +1020,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type RangedRequest: From<usize> + Send;
+    type RangedRequest: FetchRequest + From<usize> + Send;
 
     /// Load a range of these objects from local storage.
     async fn load_range<S, R>(
@@ -977,6 +1030,19 @@ where
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static;
+}
+
+impl<Types> FetchRequest for LeafId<Types>
+where
+    Types: NodeType,
+{
+    fn might_exist(self, block_height: usize) -> bool {
+        if let LeafId::Number(n) = self {
+            n < block_height
+        } else {
+            true
+        }
+    }
 }
 
 #[async_trait]
@@ -1011,31 +1077,25 @@ where
 
     async fn active_fetch<S, P>(
         fetcher: Arc<Fetcher<Types, S, P>>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        _storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
     {
-        fetch_leaf_with_callbacks(fetcher, storage, req, None)
+        fetch_leaf_with_callbacks(fetcher, req, None)
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        // Fail quickly, without touching storage, if the requested height is greater than the
-        // current height. In this case, we know we don't have the leaf.
-        if let LeafId::Number(n) = req {
-            ensure!((n as u64) < storage.height, NotFoundSnafu);
-        }
         storage.storage.get_leaf(req).await
     }
 }
 
 fn fetch_leaf_with_callbacks<Types, S, P, I>(
     fetcher: Arc<Fetcher<Types, S, P>>,
-    storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
     req: LeafId<Types>,
     callbacks: I,
 ) where
@@ -1048,15 +1108,6 @@ fn fetch_leaf_with_callbacks<Types, S, P, I>(
 {
     match req {
         LeafId::Number(n) => {
-            let height = storage.height as usize;
-            if n >= height {
-                // If the requested leaf has yet to be produced, based on the current block height,
-                // there is no point in requesting it. We will receive it passively once it is
-                // created.
-                tracing::debug!("not fetching leaf {n} because height is only {height}");
-                return;
-            }
-
             let fetcher = fetcher.clone();
             fetcher.leaf_fetcher.clone().spawn_fetch(
                 n.into(),
@@ -1081,7 +1132,6 @@ where
     Types: NodeType,
     S: UpdateAvailabilityData<Types> + VersionedDataSource,
 {
-    tracing::info!("storing leaf");
     storage.insert_leaf(leaf).await?;
     storage.commit().await?;
     Ok(())
@@ -1103,13 +1153,6 @@ where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        // Return quickly, without touching storage, if the start of the requested range is greater
-        // than the current height. In this case, we know storage would return an empty range.
-        match range.start_bound() {
-            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
-            Bound::Excluded(n) if (*n as u64) + 1 >= storage.height => return Ok(vec![]),
-            _ => {}
-        }
         storage.storage.get_leaf_range(range).await
     }
 }
@@ -1163,6 +1206,32 @@ where
     }
 }
 
+impl<Types> FetchRequest for BlockId<Types>
+where
+    Types: NodeType,
+{
+    fn might_exist(self, block_height: usize) -> bool {
+        if let BlockId::Number(n) = self {
+            n < block_height
+        } else {
+            true
+        }
+    }
+}
+
+impl<Types> FetchRequest for BlockRequest<Types>
+where
+    Types: NodeType,
+{
+    fn might_exist(self, block_height: usize) -> bool {
+        if let BlockRequest::Id(id) = self {
+            id.might_exist(block_height)
+        } else {
+            true
+        }
+    }
+}
+
 #[async_trait]
 impl<Types> Fetchable<Types> for BlockQueryData<Types>
 where
@@ -1205,15 +1274,6 @@ where
     {
         match req {
             BlockRequest::Id(id) => {
-                // Bail early if we can tell that this block hasn't been produced yet.
-                if let BlockId::Number(n) = id {
-                    let height = storage.height as usize;
-                    if n >= height {
-                        tracing::debug!("not fetching block {n} because height is only {height}");
-                        return;
-                    }
-                }
-
                 // Check if at least the header is available in local storage. If it is, we benefit
                 // two ways:
                 // 1. We know for sure the corresponding block exists, so we can unconditionally
@@ -1241,7 +1301,6 @@ where
                     BlockId::Number(n) => {
                         fetch_leaf_with_callbacks(
                             fetcher.clone(),
-                            storage,
                             n.into(),
                             [LeafCallback::Block { fetcher }],
                         );
@@ -1276,14 +1335,7 @@ where
         S: AvailabilityStorage<Types>,
     {
         match req {
-            BlockRequest::Id(id) => {
-                // Fail quickly, without touching storage, if the requested height is greater than
-                // the current height. In this case, we know we don't have the block.
-                if let BlockId::Number(n) = id {
-                    ensure!((n as u64) < storage.height, NotFoundSnafu);
-                }
-                storage.storage.get_block(id).await
-            }
+            BlockRequest::Id(id) => storage.storage.get_block(id).await,
             BlockRequest::WithTransaction(h) => {
                 Ok(storage.storage.get_block_with_transaction(h).await?.0)
             }
@@ -1307,13 +1359,6 @@ where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        // Return quickly, without touching storage, if the start of the requested range is greater
-        // than the current height. In this case, we know storage would return an empty range.
-        match range.start_bound() {
-            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
-            Bound::Excluded(n) if (*n as u64 + 1) >= storage.height => return Ok(vec![]),
-            _ => {}
-        }
         storage.storage.get_block_range(range).await
     }
 }
@@ -1354,16 +1399,21 @@ where
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug)]
+struct TransactionRequest<Types: NodeType>(TransactionHash<Types>);
+
+impl<Types: NodeType> FetchRequest for TransactionRequest<Types> {}
+
 #[async_trait]
 impl<Types> Fetchable<Types> for (BlockQueryData<Types>, TransactionIndex<Types>)
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type Request = TransactionHash<Types>;
+    type Request = TransactionRequest<Types>;
 
     fn satisfies(&self, req: Self::Request) -> bool {
-        self.0.transaction_by_hash(req).is_some()
+        self.0.transaction_by_hash(req.0).is_some()
     }
 
     async fn passive_fetch<S>(
@@ -1375,7 +1425,7 @@ where
     {
         let wait_block = storage
             .block_notifier
-            .wait_for(move |block| block.satisfies(req.into()))
+            .wait_for(move |block| block.satisfies(req.0.into()))
             .await;
 
         async move {
@@ -1383,7 +1433,7 @@ where
 
             // This `unwrap` is safe, `wait_for` only returns blocks which satisfy the request, and
             // in this case that means the block must contain the requested transaction.
-            let ix = block.transaction_by_hash(req).unwrap();
+            let ix = block.transaction_by_hash(req.0).unwrap();
 
             Some((block, ix))
         }
@@ -1401,14 +1451,14 @@ where
         // We don't actively fetch blocks when requested by transaction, because without the block
         // payload, we have no way of knowing whether a block with such a transaction actually
         // exists, and we don't want to bother peers with requests for non-existant blocks.
-        tracing::debug!("not fetching block with unknown transaction {req}");
+        tracing::debug!("not fetching block with unknown transaction {req:?}");
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_block_with_transaction(req).await
+        storage.storage.get_block_with_transaction(req.0).await
     }
 }
 
@@ -1462,11 +1512,6 @@ where
     where
         S: AvailabilityStorage<Types>,
     {
-        // Fail quickly, without touching storage, if the requested height is greater than the
-        // current height. In this case, we know we don't have the payload.
-        if let BlockId::Number(n) = req {
-            ensure!((n as u64) < storage.height, NotFoundSnafu);
-        }
         storage.storage.get_payload(req).await
     }
 }
@@ -1487,13 +1532,6 @@ where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        // Return quickly, without touching storage, if the start of the requested range is greater
-        // than the current height. In this case, we know storage would return an empty range.
-        match range.start_bound() {
-            Bound::Included(n) if (*n as u64) >= storage.height => return Ok(vec![]),
-            Bound::Excluded(n) if (*n as u64 + 1) >= storage.height => return Ok(vec![]),
-            _ => {}
-        }
         storage.storage.get_payload_range(range).await
     }
 }
