@@ -2,6 +2,7 @@ use crate::{BlockBuildingSnafu, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
+use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 
@@ -78,7 +79,9 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
+
     /// Generate commitment that builders use to sign block options.
-    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {}
-    unimplemented!("TODO builder_commitment");
+    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+        unimplemented!("TODO builder_commitment");
+    }
 }
