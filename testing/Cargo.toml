@@ -20,7 +20,7 @@ either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", features = [
   "hotshot-testing",
-] }
+], default-features = false }
 hotshot-constants = { path = "../constants" }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }

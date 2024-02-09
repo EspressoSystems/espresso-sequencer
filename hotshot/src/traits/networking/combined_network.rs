@@ -42,7 +42,7 @@ use std::hash::Hash;
 /// A cache to keep track of the last n messages we've seen, avoids reprocessing duplicates
 /// from multiple networks
 #[derive(Clone, Debug)]
-pub struct Cache {
+struct Cache {
     /// The maximum number of items to store in the cache
     capacity: usize,
     /// The cache itself
@@ -53,8 +53,7 @@ pub struct Cache {
 
 impl Cache {
     /// Create a new cache with the given capacity
-    #[must_use]
-    pub fn new(capacity: usize) -> Self {
+    fn new(capacity: usize) -> Self {
         Self {
             capacity,
             inner: HashSet::with_capacity(capacity),
@@ -63,7 +62,7 @@ impl Cache {
     }
 
     /// Insert a hash into the cache
-    pub fn insert(&mut self, hash: u64) {
+    fn insert(&mut self, hash: u64) {
         if self.inner.contains(&hash) {
             return;
         }
@@ -82,26 +81,19 @@ impl Cache {
     }
 
     /// Check if the cache contains a hash
-    #[must_use]
-    pub fn contains(&self, hash: u64) -> bool {
+    fn contains(&self, hash: u64) -> bool {
         self.inner.contains(&hash)
     }
 
     /// Get the number of items in the cache
-    #[must_use]
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.inner.len()
-    }
-
-    /// True if the cache is empty false otherwise
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
     }
 }
 
 /// Helper function to calculate a hash of a type that implements Hash
-pub fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
+fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()
@@ -392,6 +384,8 @@ impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for CombinedCommChann
 
 #[cfg(test)]
 mod test {
+    use hotshot_testing::block_types::TestTransaction;
+
     use super::*;
     use tracing::instrument;
 
@@ -418,5 +412,45 @@ mod test {
         assert!(cache.hashes.contains(&2));
         assert!(cache.hashes.contains(&3));
         assert!(cache.hashes.contains(&4));
+    }
+
+    #[cfg_attr(
+        async_executor_impl = "tokio",
+        tokio::test(flavor = "multi_thread", worker_threads = 2)
+    )]
+    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[instrument]
+    async fn test_hash_calculation() {
+        let message1 = TestTransaction(vec![0; 32]);
+        let message2 = TestTransaction(vec![1; 32]);
+
+        assert_eq!(calculate_hash_of(&message1), calculate_hash_of(&message1));
+        assert_ne!(calculate_hash_of(&message1), calculate_hash_of(&message2));
+    }
+
+    #[cfg_attr(
+        async_executor_impl = "tokio",
+        tokio::test(flavor = "multi_thread", worker_threads = 2)
+    )]
+    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[instrument]
+    async fn test_cache_integrity() {
+        let message1 = TestTransaction(vec![0; 32]);
+        let message2 = TestTransaction(vec![1; 32]);
+
+        let mut cache = Cache::new(3);
+
+        // test insertion integrity
+        cache.insert(calculate_hash_of(&message1));
+        cache.insert(calculate_hash_of(&message2));
+
+        assert!(cache.contains(calculate_hash_of(&message1)));
+        assert!(cache.contains(calculate_hash_of(&message2)));
+
+        // check that the cache is not modified on duplicate entries
+        cache.insert(calculate_hash_of(&message1));
+        assert!(cache.contains(calculate_hash_of(&message1)));
+        assert!(cache.contains(calculate_hash_of(&message2)));
+        assert_eq!(cache.len(), 2);
     }
 }

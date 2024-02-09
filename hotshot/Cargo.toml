@@ -19,6 +19,65 @@ doc-images = []
 hotshot-testing = []
 randomized-leader-election = []
 
+# libp2p
+[[example]]
+name = "validator-libp2p"
+path = "examples/libp2p/validator.rs"
+
+[[example]]
+name = "multi-validator-libp2p"
+path = "examples/libp2p/multi-validator.rs"
+
+[[example]]
+name = "orchestrator-libp2p"
+path = "examples/libp2p/orchestrator.rs"
+
+[[example]]
+name = "all-libp2p"
+path = "examples/libp2p/all.rs"
+
+# webserver
+[[example]]
+name = "webserver"
+path = "examples/webserver/webserver.rs"
+
+[[example]]
+name = "orchestrator-webserver"
+path = "examples/webserver/orchestrator.rs"
+
+[[example]]
+name = "validator-webserver"
+path = "examples/webserver/validator.rs"
+
+[[example]]
+name = "multi-validator-webserver"
+path = "examples/webserver/multi-validator.rs"
+
+[[example]]
+name = "multi-webserver"
+path = "examples/webserver/multi-webserver.rs"
+
+[[example]]
+name = "all-webserver"
+path = "examples/webserver/all.rs"
+
+# combined
+[[example]]
+name = "all-combined"
+path = "examples/combined/all.rs"
+
+[[example]]
+name = "multi-validator-combined"
+path = "examples/combined/multi-validator.rs"
+
+[[example]]
+name = "validator-combined"
+path = "examples/combined/validator.rs"
+
+[[example]]
+name = "orchestrator-combined"
+path = "examples/combined/orchestrator.rs"
+
 [dependencies]
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
@@ -63,6 +122,7 @@ clap = { version = "4.4", features = ["derive", "env"] }
 toml = { workspace = true }
 blake3 = { workspace = true }
 local-ip-address = "0.5.7"
+hotshot-testing = { path = "../testing" }
 
 [lints]
 workspace = true

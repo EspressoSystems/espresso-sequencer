@@ -13,7 +13,7 @@ pub use storage::{Result as StorageResult, Storage};
 pub mod implementations {
     pub use super::{
         networking::{
-            combined_network::{calculate_hash_of, Cache, CombinedCommChannel, CombinedNetworks},
+            combined_network::{CombinedCommChannel, CombinedNetworks},
             libp2p_network::{Libp2pCommChannel, Libp2pNetwork, PeerInfoVec},
             memory_network::{MasterMap, MemoryCommChannel, MemoryNetwork},
             web_server_network::{WebCommChannel, WebServerNetwork},
