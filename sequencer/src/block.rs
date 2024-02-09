@@ -724,7 +724,7 @@ mod test_headers {
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
             let state = NodeState {};
-            let (mut genesis, _, metadata) = Header::genesis(&state);
+            let (genesis, _, metadata) = Header::genesis(&state);
 
             let mut parent = genesis.clone();
             parent.timestamp = self.parent_timestamp;
@@ -739,7 +739,7 @@ mod test_headers {
                 FeeMerkleTree::from_kv_set(20, Vec::from([(recipient, amount)])).unwrap();
             let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
-            let validated_state = ValidatedState {
+            let _validated_state = ValidatedState {
                 block_merkle_tree,
                 fee_merkle_tree,
             };
@@ -945,7 +945,7 @@ mod test_headers {
             metadata,
         );
 
-        let mut proposal_state = ValidatedState::from_header(&proposal);
+        let proposal_state = ValidatedState::from_header(&proposal);
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
         let result = proposal_state

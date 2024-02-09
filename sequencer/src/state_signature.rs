@@ -2,7 +2,7 @@
 
 use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
@@ -12,7 +12,7 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
-use serde::{Deserialize, Serialize};
+
 use std::collections::{HashMap, VecDeque};
 
 /// Types related to the underlying signature schemes.
