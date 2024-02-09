@@ -65,6 +65,8 @@ impl Default for Cache {
 }
 
 /// key value cache
+
+#[derive(Clone)]
 pub struct Cache {
     /// the cache's config
     config: Config,

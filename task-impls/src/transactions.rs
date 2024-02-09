@@ -270,10 +270,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
-    async fn wait_for_transactions(
-        &self,
-        _parent_leaf: Leaf<TYPES>,
-    ) -> Option<Vec<TYPES::Transaction>> {
+    async fn wait_for_transactions(&self, _: Leaf<TYPES>) -> Option<Vec<TYPES::Transaction>> {
         let task_start_time = Instant::now();
 
         // TODO (Keyao) Investigate the use of transaction hash

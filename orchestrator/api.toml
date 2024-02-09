@@ -3,15 +3,6 @@ NAME = "orchestrator"
 DESCRIPTION = "Orchestrator for HotShot"
 FORMAT_VERSION = "0.1.0"
 
-# POST node's identity
-[route.postidentity]
-PATH = ["identity/:identity"]
-METHOD = "POST"
-":identity" = "Literal"
-DOC = """
-POST a node's identity (IP address) to the orchestrator.  Returns the node's node_index
-"""
-
 # POST retrieve the network configuration
 [route.post_getconfig]
 PATH = ["config/:node_index"]

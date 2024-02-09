@@ -317,7 +317,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                     }
                     return false;
                 }
-                MessagePurpose::Vote => {
+                MessagePurpose::Vote | MessagePurpose::ViewSyncVote => {
                     let vote = deserialized_message.clone();
                     *vote_index += 1;
                     direct_poll_queue.write().await.push(vote);
@@ -349,13 +349,6 @@ impl<TYPES: NodeType> Inner<TYPES> {
 
                     // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                     return true;
-                }
-                MessagePurpose::ViewSyncVote => {
-                    let vote = deserialized_message.clone();
-                    *vote_index += 1;
-                    direct_poll_queue.write().await.push(vote);
-
-                    return false;
                 }
                 MessagePurpose::ViewSyncCertificate => {
                     // TODO ED Special case this for view sync

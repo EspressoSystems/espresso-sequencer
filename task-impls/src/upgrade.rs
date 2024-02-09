@@ -88,10 +88,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let should_vote = self.should_vote;
                 // If the proposal does not match our upgrade target, we immediately exit.
                 if !should_vote(proposal.data.upgrade_proposal.clone()) {
-                    warn!(
-                        "Received unexpected upgrade proposal:\n{:?}",
-                        proposal.data
-                    );
+                    warn!("Received unexpected upgrade proposal:\n{:?}", proposal.data);
                     return None;
                 }
 

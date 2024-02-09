@@ -61,11 +61,11 @@ async fn libp2p_network_failures_2() {
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::new(240, 0),
+                duration: Duration::from_secs(240),
             },
         ),
         timing_data: TimingData {
-            next_view_timeout: 25000,
+            next_view_timeout: 4000,
             propose_max_round_time: Duration::from_millis(100),
             ..Default::default()
         },

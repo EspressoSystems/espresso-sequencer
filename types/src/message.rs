@@ -353,7 +353,9 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     GeneralConsensusMessage::ViewSyncFinalizeCertificate(message) => {
                         message.get_view_number()
                     }
-                    GeneralConsensusMessage::UpgradeProposal(message) => message.data.get_view_number(),
+                    GeneralConsensusMessage::UpgradeProposal(message) => {
+                        message.data.get_view_number()
+                    }
                     GeneralConsensusMessage::UpgradeVote(message) => message.get_view_number(),
                 }
             }

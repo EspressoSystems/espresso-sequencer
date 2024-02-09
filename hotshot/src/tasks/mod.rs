@@ -381,7 +381,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 ///
 /// # Panics
 ///
-/// Uses .unwrap(), though this should never panic.
+/// Uses .`unwrap()`, though this should never panic.
 pub async fn add_upgrade_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
