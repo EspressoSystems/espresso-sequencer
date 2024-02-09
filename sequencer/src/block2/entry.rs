@@ -4,9 +4,11 @@ use core::fmt;
 use std::mem::size_of;
 
 // Use newtype pattern so that tx table entires cannot be confused with other types.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Default)]
 pub struct TxTableEntry(TxTableEntryWord);
-type TxTableEntryWord = u32;
+// TODO Get rid of TxTableEntryWord. We might use const generics in order to parametrize the set of functions below with u32,u64  etc...
+// See https://github.com/EspressoSystems/espresso-sequencer/issues/1076
+pub type TxTableEntryWord = u32;
 
 impl TxTableEntry {
     pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
@@ -38,7 +40,6 @@ impl TxTableEntry {
         size_of::<TxTableEntryWord>()
     }
 
-    #[cfg(test)]
     pub fn from_usize(val: usize) -> Self {
         Self(
             val.try_into()
