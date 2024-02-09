@@ -1,15 +1,13 @@
 use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
+    state::{fetch_fee_receipts, BlockMerkleCommitment, FeeMerkleCommitment, FeeReceipt},
     L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, ValidatedState, VmId,
     MAX_NMT_DEPTH,
 };
-use ark_serialize::{
-    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
-};
+use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use derive_more::Add;
-use ethers::{abi::Address, types::U256};
+
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     data::VidCommitment,
@@ -29,116 +27,6 @@ use std::{
     time::Duration,
 };
 use time::OffsetDateTime;
-use typenum::Unsigned;
-
-pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
-pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
-
-// New Type for `U256` in order to implement `CanonicalSerialize` and
-// `CanonicalDeserialize`
-#[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add)]
-pub struct FeeAmount(U256);
-// New Type for `Address` in order to implement `CanonicalSerialize` and
-// `CanonicalDeserialize`
-#[derive(
-    Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub struct FeeAccount(Address);
-
-impl Valid for FeeAmount {
-    fn check(&self) -> Result<(), SerializationError> {
-        Ok(())
-    }
-}
-
-impl Valid for FeeAccount {
-    fn check(&self) -> Result<(), SerializationError> {
-        Ok(())
-    }
-}
-
-impl CanonicalSerialize for FeeAmount {
-    fn serialize_with_mode<W: std::io::prelude::Write>(
-        &self,
-        mut writer: W,
-        _compress: Compress,
-    ) -> Result<(), SerializationError> {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        Ok(writer.write_all(&bytes)?)
-    }
-
-    fn serialized_size(&self, _compress: Compress) -> usize {
-        core::mem::size_of::<U256>()
-    }
-}
-impl CanonicalDeserialize for FeeAmount {
-    fn deserialize_with_mode<R: Read>(
-        mut reader: R,
-        _compress: Compress,
-        _validate: Validate,
-    ) -> Result<Self, SerializationError> {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        reader.read_exact(&mut bytes)?;
-        let value = U256::from_little_endian(&bytes);
-        Ok(Self(value))
-    }
-}
-impl CanonicalSerialize for FeeAccount {
-    fn serialize_with_mode<W: std::io::prelude::Write>(
-        &self,
-        mut writer: W,
-        _compress: Compress,
-    ) -> Result<(), SerializationError> {
-        Ok(writer.write_all(self.0.as_bytes())?)
-    }
-
-    fn serialized_size(&self, _compress: Compress) -> usize {
-        core::mem::size_of::<Address>()
-    }
-}
-impl CanonicalDeserialize for FeeAccount {
-    fn deserialize_with_mode<R: Read>(
-        mut reader: R,
-        _compress: Compress,
-        _validate: Validate,
-    ) -> Result<Self, SerializationError> {
-        let mut bytes = [0u8; core::mem::size_of::<Address>()];
-        reader.read_exact(&mut bytes)?;
-        let value = Address::from_slice(&bytes);
-        Ok(Self(value))
-    }
-}
-impl std::convert::From<u64> for FeeAccount {
-    fn from(item: u64) -> Self {
-        FeeAccount(Address::from_low_u64_le(item))
-    }
-}
-
-impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
-    fn to_traversal_path(&self, height: usize) -> Vec<usize> {
-        Address::to_fixed_bytes(self.0)
-            .into_iter()
-            .take(height)
-            .map(|i| i as usize)
-            .collect()
-    }
-}
-
-#[derive(Default, Hash, Clone, CanonicalDeserialize)]
-struct FeeReceipt {
-    recipient: FeeAccount,
-    amount: FeeAmount,
-}
-/// Fetch fee receitps from l1. Currently a mock function to be
-/// implemented in the future.
-fn fetch_fee_receipts(_parent: &Header) -> Vec<FeeReceipt> {
-    Vec::from([FeeReceipt::default()])
-}
-
-pub type FeeMerkleTree =
-    UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, typenum::U256, Sha3Node>;
-pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -328,7 +216,6 @@ impl BlockHeader for Header {
 
         // fetch receipts from the l1
         let receipts = fetch_fee_receipts(parent_header);
-
         for FeeReceipt { recipient, amount } in receipts {
             // Get the balance in order to add amount, ignoring the proof.
             match fee_merkle_tree.universal_lookup(recipient) {
@@ -336,7 +223,7 @@ impl BlockHeader for Header {
                     .update(recipient, balance.add(amount))
                     .unwrap(),
                 // Handle `NotFound` and `NotInMemory` by initializing
-                // state. Should these be handled in different ways?
+                // state.
                 _ => fee_merkle_tree.update(recipient, amount).unwrap(),
             };
         }
@@ -689,7 +576,10 @@ mod reference {
 
 #[cfg(test)]
 mod test_headers {
-    use crate::NodeState;
+    use crate::{
+        state::{BlockMerkleTree, FeeMerkleTree},
+        NodeState,
+    };
 
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -912,7 +802,7 @@ mod test_headers {
             .validate_proposal(&parent.clone(), &proposal)
             .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
-        assert!(format!("{}", result.root_cause()).contains("Invalid Root Error"));
+        assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
 
     #[test]
