@@ -10,7 +10,53 @@ use hotshot_testing::{
 use rand::Rng;
 use tracing::instrument;
 
+use hotshot::traits::implementations::{calculate_hash_of, Cache};
+use hotshot_testing::block_types::TestTransaction;
+
+#[cfg(test)]
+#[cfg_attr(
+    async_executor_impl = "tokio",
+    tokio::test(flavor = "multi_thread", worker_threads = 2)
+)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[instrument]
+async fn test_hash_calculation() {
+    let message1 = TestTransaction(vec![0; 32]);
+    let message2 = TestTransaction(vec![1; 32]);
+
+    assert_eq!(calculate_hash_of(&message1), calculate_hash_of(&message1));
+    assert_ne!(calculate_hash_of(&message1), calculate_hash_of(&message2));
+}
+
+#[cfg(test)]
+#[cfg_attr(
+    async_executor_impl = "tokio",
+    tokio::test(flavor = "multi_thread", worker_threads = 2)
+)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[instrument]
+async fn test_cache_integrity() {
+    let message1 = TestTransaction(vec![0; 32]);
+    let message2 = TestTransaction(vec![1; 32]);
+
+    let mut cache = Cache::new(3);
+
+    // test insertion integrity
+    cache.insert(calculate_hash_of(&message1));
+    cache.insert(calculate_hash_of(&message2));
+
+    assert!(cache.contains(calculate_hash_of(&message1)));
+    assert!(cache.contains(calculate_hash_of(&message2)));
+
+    // check that the cache is not modified on duplicate entries
+    cache.insert(calculate_hash_of(&message1));
+    assert!(cache.contains(calculate_hash_of(&message1)));
+    assert!(cache.contains(calculate_hash_of(&message2)));
+    assert_eq!(cache.len(), 2);
+}
+
 /// A run with both the webserver and libp2p functioning properly
+#[cfg(test)]
 #[cfg_attr(
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
