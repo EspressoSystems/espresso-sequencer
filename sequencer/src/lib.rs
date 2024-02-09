@@ -38,9 +38,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{
-        metrics::Metrics,
-        network::CommunicationChannel,
-        node_implementation::{ChannelMaps, NodeType},
+        metrics::Metrics, network::CommunicationChannel, node_implementation::NodeType,
         states::InstanceState,
     },
     HotShotConfig, ValidatorConfig,
@@ -185,12 +183,6 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type Storage = Storage;
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
-
-    fn new_channel_maps(
-        start_view: ViewNumber,
-    ) -> (ChannelMaps<SeqTypes>, Option<ChannelMaps<SeqTypes>>) {
-        (ChannelMaps::new(start_view), None)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -234,6 +226,7 @@ pub enum Error {
     BlockBuilding,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
@@ -242,6 +235,7 @@ async fn init_hotshot<N: network::Type>(
     networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
     metrics: &dyn Metrics,
+    instance_state: &NodeState,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
     let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
     let memberships = Memberships {
@@ -259,7 +253,7 @@ async fn init_hotshot<N: network::Type>(
         Storage::empty(),
         memberships,
         networks,
-        HotShotInitializer::from_genesis().unwrap(),
+        HotShotInitializer::from_genesis(instance_state).unwrap(),
         ConsensusMetricsValue::new(metrics),
     )
     .await
@@ -346,6 +340,7 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
+    let instance_state = &NodeState {};
     let hotshot = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
@@ -354,6 +349,7 @@ pub async fn init_node(
         networks,
         config.config,
         metrics,
+        instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(
@@ -384,6 +380,7 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::EventType::Decide;
+
     use hotshot_types::{
         light_client::StateKeyPair,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
@@ -461,7 +458,7 @@ pub mod testing {
                 quorum_network: MemoryCommChannel::new(network),
                 _pd: Default::default(),
             };
-
+            let instance_state = &NodeState {};
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
@@ -470,6 +467,7 @@ pub mod testing {
                 networks,
                 config,
                 metrics,
+                instance_state,
             )
             .await;
 
@@ -517,7 +515,8 @@ mod test {
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_testing::{
-        overall_safety_task::OverallSafetyPropertiesDescription, test_builder::TestMetadata,
+        overall_safety_task::OverallSafetyPropertiesDescription, state_types::TestTypes,
+        test_builder::TestMetadata,
     };
     use hotshot_types::traits::block_contents::BlockHeader;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
@@ -577,7 +576,7 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
-        let mut parent = Header::genesis().0;
+        let mut parent = Header::genesis(&NodeState {}).0;
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {

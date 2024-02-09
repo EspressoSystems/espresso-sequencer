@@ -1,11 +1,11 @@
 use crate::state_signature::{
-    LightClientState, StakeTableCommitmentType, StateKeyPair, StateSignature,
-    StateSignatureRequestBody, StateSignatureScheme,
+    LightClientState, StakeTableCommitmentType, StateKeyPair, StateSignature, StateSignatureScheme,
 };
 use async_std::sync::{Arc, RwLock};
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
 use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_types::light_client::StateSignatureRequestBody;
 use hotshot_types::light_client::StateVerKey;
 use jf_primitives::signatures::SignatureScheme;
 use surf_disco::Client;

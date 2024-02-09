@@ -3,7 +3,7 @@ use ark_bls12_381::Bls12_381;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::BlockPayload;
+use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use jf_primitives::{
     pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     vid::{
@@ -249,6 +249,11 @@ impl BlockPayload for Payload {
 
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
+    }
+
+    /// Generate commitment that builders use to sign block options.
+    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+        unimplemented!("TODO builder_commitment");
     }
 }
 impl Display for Payload {

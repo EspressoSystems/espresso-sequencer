@@ -6,8 +6,10 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::light_client::StateSignatureRequestBody;
 use hotshot_types::light_client::StateVerKey;
 use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
 use serde::{Deserialize, Serialize};
@@ -86,14 +88,6 @@ fn form_light_client_state(
         fee_ledger_comm: FieldType::default(),
         stake_table_comm: *stake_table_comm,
     }
-}
-
-/// Request body to send to the state relay server
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize)]
-pub struct StateSignatureRequestBody {
-    pub key: StateVerKey,
-    pub state: LightClientState,
-    pub signature: StateSignature,
 }
 
 /// A rolling in-memory storage for the most recent light client state signatures.

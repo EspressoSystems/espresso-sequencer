@@ -1,15 +1,13 @@
 use crate::{
     block::{BlockMerkleTree, FeeAccount, FeeAmount, FeeMerkleTree},
-    Header, Payload,
+    Header, NodeState, Payload,
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
-use jf_primitives::merkle_tree::{
-    AppendableMerkleTreeScheme, MerkleTreeScheme, UniversalMerkleTreeScheme,
-};
+use hotshot_types::traits::block_contents::BlockHeader;
+use jf_primitives::merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -22,7 +20,7 @@ pub struct ValidatedState {
 impl Default for ValidatedState {
     fn default() -> Self {
         let block_merkle_tree =
-            BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
+            BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
 
         // Words of wisdom from @mrain: "capacity = arity^height"
         // "For index space 2^160, arity 256 (2^8),
@@ -37,7 +35,7 @@ impl Default for ValidatedState {
 }
 
 impl ValidatedState {
-    fn validate_proposal(&self, parent: &Header, proposal: &Header) -> anyhow::Result<Self> {
+    pub fn validate_proposal(&self, parent: &Header, proposal: &Header) -> anyhow::Result<Self> {
         // validate height
         anyhow::ensure!(
             proposal.height == parent.height + 1,
@@ -49,7 +47,7 @@ impl ValidatedState {
         );
 
         // validate parent fee merkle tree root against state
-        let fee_merkle_tree = self.fee_merkle_tree;
+        let fee_merkle_tree = self.fee_merkle_tree.clone();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
         anyhow::ensure!(
             parent.fee_merkle_tree_root == fee_merkle_tree_root,
@@ -94,7 +92,7 @@ impl ValidatedState {
 
 impl HotShotState for ValidatedState {
     type Error = BlockError;
-
+    type Instance = NodeState;
     type BlockHeader = Header;
     type BlockPayload = Payload;
 
@@ -105,18 +103,29 @@ impl HotShotState for ValidatedState {
     /// proposal descends from parent. Returns updated `ValidatedState`.
     fn validate_and_apply_header(
         &self,
-        proposed_header: &Self::BlockHeader,
+        _instance: &Self::Instance,
         parent_header: &Self::BlockHeader,
-        _view_number: &Self::Time,
+        proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
         match self.validate_proposal(parent_header, proposed_header) {
             // Note that currently only block state is updated.
             Ok(validated_state) => Ok(validated_state),
             Err(e) => {
-                debug!("Invalid Proposal: {}", e);
+                tracing::warn!("Invalid Proposal: {}", e);
                 Err(BlockError::InvalidBlockHeader)
             }
         }
+    }
+    /// Construct the state with the given block header.
+    ///
+    /// This can also be used to rebuild the state for catchup.
+    fn from_header(_block_header: &Self::BlockHeader) -> Self {
+        ValidatedState::default()
+    }
+    /// Construct a genesis validated state.
+    #[must_use]
+    fn genesis(instance: &Self::Instance) -> Self {
+        Self::from_header(&Self::BlockHeader::genesis(instance).0)
     }
 }
 
