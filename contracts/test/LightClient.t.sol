@@ -21,6 +21,11 @@ contract LightClientCommonTest is Test {
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
 
+    function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
+        lc = new LCTest();
+        lc.initializeForTests(_genesis, _blocksPerEpoch);
+    }
+
     /// @dev initialized ledger like genesis and system params
     function init() public {
         string[] memory cmds = new string[](4);
@@ -34,7 +39,7 @@ contract LightClientCommonTest is Test {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         genesis = state;
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
         assertEq(frozenSTComm, expectedStakeTableComm);
@@ -103,7 +108,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     /// @dev Test the constructor has initialized the contract state properly, especially genesis
     /// block.
     function test_CorrectInitialization() external {
-        assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);
+        assert(lc.blocksPerEpoch() == BLOCKS_PER_EPOCH_TEST);
         assertEq(abi.encode(getGenesisState()), abi.encode(genesis));
         assertEq(abi.encode(getFinalizedState()), abi.encode(genesis));
         assert(lc.currentEpoch() == 0);
@@ -115,44 +120,47 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         assertEq(lc.frozenThreshold(), genesis.threshold);
     }
 
+    // @dev helper function to be able to initialize the contract and capture the revert error
+    function initWithExpectRevert(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch)
+        private
+    {
+        lc = new LCTest();
+        vm.expectRevert(LC.InvalidArgs.selector);
+        lc.initializeForTests(_genesis, _blocksPerEpoch);
+    }
+
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
         badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
         badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
 
         // zero-valued threshold would revert
         badGenesis.threshold = 0;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.threshold = genesis.threshold; // revert to correct
 
         // zero-valued BLOCK_PER_EPOCH would revert
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(genesis, 0);
+        initWithExpectRevert(genesis, 0);
     }
 }
 
@@ -186,7 +194,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
 
         // Generating a few consecutive states and proofs
         cmds = new string[](6);
@@ -243,7 +251,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
-        lc = new LCTest(genesis, numBlockPerEpoch);
+        initLC(genesis, numBlockPerEpoch);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";

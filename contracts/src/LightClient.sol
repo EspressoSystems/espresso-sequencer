@@ -27,7 +27,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    uint32 public BLOCKS_PER_EPOCH; // TODO how to make this variable immmutable while using the UUPS pattern?
+    uint32 public blocksPerEpoch; // TODO how to make this variable immmutable while using the
+        // UUPS pattern?
 
     // === Storage ===
     //
@@ -92,13 +93,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize(LightClientState memory genesis, uint32 numBlockPerEpoch)
-        public
-        initializer
-    {
+    function initialize() public initializer {
         __Ownable_init(msg.sender); //sets owner to msg.sender
         __UUPSUpgradeable_init();
-        _initializeState(genesis, numBlockPerEpoch);
     }
 
     /// @notice only the owner can authorize an upgrade
@@ -107,7 +104,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // TODO are the decorators of this function correctly set?
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal onlyOwner {
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal 
+    // TODO should we add onlyOwner?
+    {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -126,7 +125,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         finalizedState = genesis;
         currentEpoch = 0;
 
-        BLOCKS_PER_EPOCH = numBlockPerEpoch;
+        blocksPerEpoch = numBlockPerEpoch;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
@@ -151,7 +150,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * BLOCKS_PER_EPOCH;
+        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
         bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
