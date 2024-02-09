@@ -756,9 +756,8 @@ mod test_headers {
             assert_eq!(header.l1_head, self.expected_l1_head);
             assert_eq!(header.l1_finalized, self.expected_l1_finalized);
 
-            let validated_state = ValidatedState::from_header(&header);
             assert_eq!(
-                validated_state.block_merkle_tree,
+                block_merkle_tree,
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap()
             );
         }
