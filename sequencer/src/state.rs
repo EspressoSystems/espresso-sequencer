@@ -6,7 +6,9 @@ use commit::{Commitment, Committable};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
 use hotshot_types::traits::block_contents::BlockHeader;
-use jf_primitives::merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
+use jf_primitives::merkle_tree::{
+    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, MerkleTreeScheme,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -46,30 +48,8 @@ impl ValidatedState {
             )
         );
 
-        // validate parent fee merkle tree root against state
         let fee_merkle_tree = self.fee_merkle_tree.clone();
-        let fee_merkle_tree_root = fee_merkle_tree.commitment();
-        anyhow::ensure!(
-            parent.fee_merkle_tree_root == fee_merkle_tree_root,
-            anyhow::anyhow!(
-                "Invalid Fee Merkle Tree Error: {}, {}",
-                parent.fee_merkle_tree_root,
-                fee_merkle_tree_root
-            )
-        );
-
-        // validate parent block merkle tree root against state
-        // `clone` to avoid possible side-effects
         let mut block_merkle_tree = self.block_merkle_tree.clone();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        anyhow::ensure!(
-            parent.block_merkle_tree_root == block_merkle_tree_root,
-            anyhow::anyhow!(
-                "Invalid Block Merkle Tree Error: {}, {}",
-                parent.block_merkle_tree_root,
-                block_merkle_tree_root
-            )
-        );
 
         // validate proposal is descendent of parent by appending to parent
         block_merkle_tree.push(parent.commit()).unwrap();
@@ -77,7 +57,7 @@ impl ValidatedState {
         anyhow::ensure!(
             proposal.block_merkle_tree_root == block_merkle_tree_root,
             anyhow::anyhow!(
-                "Invalid Block Merkle Tree Error: {}, {}",
+                "Invalid Root Error: {}, {}",
                 block_merkle_tree_root,
                 proposal.block_merkle_tree_root
             )
@@ -119,24 +99,18 @@ impl HotShotState for ValidatedState {
     /// Construct the state with the given block header.
     ///
     /// This can also be used to rebuild the state for catchup.
-    fn from_header(_block_header: &Self::BlockHeader) -> Self {
-        ValidatedState::default()
+    fn from_header(block_header: &Self::BlockHeader) -> Self {
+        let fee_merkle_tree = FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
+        let block_merkle_tree = BlockMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
+        Self {
+            fee_merkle_tree,
+            block_merkle_tree,
+        }
     }
     /// Construct a genesis validated state.
     #[must_use]
     fn genesis(instance: &Self::Instance) -> Self {
         Self::from_header(&Self::BlockHeader::genesis(instance).0)
-    }
-}
-
-// FIXME remove when `Commitable` is removed from the trait
-impl Committable for ValidatedState {
-    fn commit(&self) -> Commitment<Self> {
-        unimplemented!("temporary implementation");
-    }
-
-    fn tag() -> String {
-        "VALIDATED_STATE".to_string()
     }
 }
 
