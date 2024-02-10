@@ -11,10 +11,12 @@ use std::collections::HashMap;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_task() {
-    use hotshot::tasks::add_view_sync_task;
     use hotshot_task_impls::harness::run_harness;
+    use hotshot_task_impls::view_sync::ViewSyncTaskState;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::simple_vote::ViewSyncPreCommitData;
+    use hotshot_types::traits::consensus_api::ConsensusApi;
+    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -39,7 +41,6 @@ async fn test_view_sync_task() {
 
     tracing::error!("Vote in test is {:?}", vote.clone());
 
-    // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
@@ -48,16 +49,25 @@ async fn test_view_sync_task() {
 
     input.push(HotShotEvent::Shutdown);
 
-    output.insert(HotShotEvent::Timeout(ViewNumber::new(2)), 1);
-    output.insert(HotShotEvent::Timeout(ViewNumber::new(3)), 1);
-
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()), 1);
 
-    output.insert(HotShotEvent::Shutdown, 1);
-
-    let build_fn =
-        |task_runner, event_stream| add_view_sync_task(task_runner, event_stream, handle);
-
-    run_harness(input, output, None, build_fn, false).await;
+    let view_sync_state = ViewSyncTaskState {
+        current_view: ViewNumber::new(0),
+        next_view: ViewNumber::new(0),
+        network: api.inner.networks.quorum_network.clone().into(),
+        membership: api.inner.memberships.view_sync_membership.clone().into(),
+        public_key: *api.public_key(),
+        private_key: api.private_key().clone(),
+        api,
+        num_timeouts_tracked: 0,
+        replica_task_map: HashMap::default().into(),
+        pre_commit_relay_map: HashMap::default().into(),
+        commit_relay_map: HashMap::default().into(),
+        finalize_relay_map: HashMap::default().into(),
+        view_sync_timeout: Duration::new(10, 0),
+        id: handle.hotshot.inner.id,
+        last_garbage_collected_view: ViewNumber::new(0),
+    };
+    run_harness(input, output, view_sync_state, false).await;
 }

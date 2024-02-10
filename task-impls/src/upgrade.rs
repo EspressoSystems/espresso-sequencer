@@ -1,15 +1,12 @@
 use crate::{
-    events::HotShotEvent,
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::broadcast_event,
     vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
+use async_broadcast::Sender;
 use async_lock::RwLock;
 
-use hotshot_task::{
-    event_stream::{ChannelStream, EventStream},
-    global_registry::GlobalRegistry,
-    task::{HotShotTaskCompleted, TS},
-    task_impls::HSTWithEvent,
-};
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     event::{Event, EventType},
     simple_certificate::UpgradeCertificate,
@@ -43,9 +40,6 @@ pub struct UpgradeTaskState<
 > {
     /// The state's api
     pub api: A,
-    /// Global registry task for the state
-    pub registry: GlobalRegistry,
-
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
@@ -60,9 +54,6 @@ pub struct UpgradeTaskState<
     /// The current vote collection task, if there is one.
     pub vote_collector:
         RwLock<VoteCollectorOption<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>>,
-
-    /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -79,9 +70,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Upgrade Task", level = "error")]
-    pub async fn handle_event(
+    pub async fn handle(
         &mut self,
         event: HotShotEvent<TYPES>,
+        tx: Sender<HotShotEvent<TYPES>>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::UpgradeProposalRecv(proposal, sender) => {
@@ -149,9 +141,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 };
                 debug!("Sending upgrade vote {:?}", vote.get_view_number());
-                self.event_stream
-                    .publish(HotShotEvent::UpgradeVoteSend(vote))
-                    .await;
+                broadcast_event(HotShotEvent::UpgradeVoteSend(vote), &tx).await;
             }
             HotShotEvent::UpgradeVoteRecv(ref vote) => {
                 debug!("Upgrade vote recv, Main Task {:?}", vote.get_view_number());
@@ -167,34 +157,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
                 let mut collector = self.vote_collector.write().await;
 
-                let maybe_task = collector.take();
-
-                if maybe_task.is_none()
-                    || vote.get_view_number() > maybe_task.as_ref().unwrap().view
+                if collector.is_none() || vote.get_view_number() > collector.as_ref().unwrap().view
                 {
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
                         membership: self.quorum_membership.clone(),
                         view: vote.get_view_number(),
-                        event_stream: self.event_stream.clone(),
                         id: self.id,
-                        registry: self.registry.clone(),
                     };
                     *collector = create_vote_accumulator::<
                         TYPES,
                         UpgradeVote<TYPES>,
                         UpgradeCertificate<TYPES>,
-                    >(&info, vote.clone(), event)
+                    >(&info, vote.clone(), event, &tx)
                     .await;
                 } else {
-                    let result = maybe_task.unwrap().handle_event(event.clone()).await;
+                    let result = collector
+                        .as_mut()
+                        .unwrap()
+                        .handle_event(event.clone(), &tx)
+                        .await;
 
-                    if result.0 == Some(HotShotTaskCompleted::ShutDown) {
+                    if result == Some(HotShotTaskCompleted) {
+                        *collector = None;
                         // The protocol has finished
                         return None;
                     }
-                    *collector = Some(result.1);
                 }
             }
             HotShotEvent::ViewChange(view) => {
@@ -211,7 +200,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
             HotShotEvent::Shutdown => {
                 error!("Shutting down because of shutdown signal!");
-                return Some(HotShotTaskCompleted::ShutDown);
+                return Some(HotShotTaskCompleted);
             }
             _ => {
                 error!("unexpected event {:?}", event);
@@ -219,10 +208,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
         None
     }
+}
 
-    /// Filter the upgrade event.
-    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
+/// task state implementation for DA Task
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
+    for UpgradeTaskState<TYPES, I, A>
+{
+    type Event = HotShotEvent<TYPES>;
+
+    type Output = HotShotTaskCompleted;
+
+    async fn handle_event(
+        event: Self::Event,
+        task: &mut hotshot_task::task::Task<Self>,
+    ) -> Option<Self::Output> {
+        let sender = task.clone_sender();
+        tracing::trace!("sender queue len {}", sender.len());
+        task.state_mut().handle(event, sender).await
+    }
+
+    fn should_shutdown(event: &Self::Event) -> bool {
+        matches!(event, HotShotEvent::Shutdown)
+    }
+
+    fn filter(&self, event: &Self::Event) -> bool {
+        !matches!(
             event,
             HotShotEvent::UpgradeProposalRecv(_, _)
                 | HotShotEvent::UpgradeVoteRecv(_)
@@ -232,17 +242,3 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         )
     }
 }
-
-/// task state implementation for DA Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
-    for UpgradeTaskState<TYPES, I, A>
-{
-}
-
-/// Type alias for DA Task Types
-pub type UpgradeTaskTypes<TYPES, I, A> = HSTWithEvent<
-    ConsensusTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    UpgradeTaskState<TYPES, I, A>,
->;

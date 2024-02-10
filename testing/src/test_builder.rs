@@ -216,12 +216,8 @@ impl TestMetadata {
             min_transactions,
             timing_data,
             da_committee_size,
-            txn_description,
-            completion_task_description,
-            overall_safety_properties,
-            spinning_properties,
+
             unreliable_network,
-            view_sync_properties,
             ..
         } = self.clone();
 
@@ -286,11 +282,6 @@ impl TestMetadata {
                 a.propose_max_round_time = propose_max_round_time;
             };
 
-        let txn_task_generator = txn_description.build();
-        let completion_task_generator = completion_task_description.build_and_launch();
-        let overall_safety_task_generator = overall_safety_properties.build();
-        let spinning_task_generator = spinning_properties.build();
-        let view_sync_task_generator = view_sync_properties.build();
         TestLauncher {
             resource_generator: ResourceGenerators {
                 channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
@@ -303,12 +294,6 @@ impl TestMetadata {
                 config,
             },
             metadata: self,
-            txn_task_generator,
-            overall_safety_task_generator,
-            completion_task_generator,
-            spinning_task_generator,
-            view_sync_task_generator,
-            hooks: vec![],
         }
         .modify_default_config(mod_config)
     }

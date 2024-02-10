@@ -6,7 +6,6 @@ use async_compatibility_layer::art::async_sleep;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::future::TimeoutError;
 use dyn_clone::DynClone;
-use hotshot_task::{boxed_sync, BoxSyncFuture};
 use libp2p_networking::network::NetworkNodeHandleError;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::time::error::Elapsed as TimeoutError;
@@ -16,6 +15,7 @@ use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{
     data::ViewNumber,
     message::{Message, MessagePurpose},
+    BoxSyncFuture,
 };
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
@@ -451,7 +451,7 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send + DynClone + 'sta
                 }
             }
         };
-        boxed_sync(closure)
+        Box::pin(closure)
     }
 }
 

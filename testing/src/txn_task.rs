@@ -1,21 +1,18 @@
-use crate::test_runner::Node;
-use async_compatibility_layer::art::{async_sleep, async_timeout};
-use futures::FutureExt;
+use crate::test_runner::{HotShotTaskCompleted, Node};
+use async_broadcast::{Receiver, TryRecvError};
+use async_compatibility_layer::art::{async_sleep, async_spawn};
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use hotshot::traits::TestableNodeImplementation;
-use hotshot_task::{
-    boxed_sync,
-    event_stream::ChannelStream,
-    task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEventAndMessage, TaskBuilder},
-    GeneratedStream,
-};
-use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use rand::thread_rng;
 use snafu::Snafu;
-use std::{sync::Arc, time::Duration};
-use tracing::error;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
 
-use super::{test_launcher::TaskGenerator, GlobalTestEvent};
+use std::time::Duration;
+
+use super::GlobalTestEvent;
 
 // the obvious idea here is to pass in a "stream" that completes every `n` seconds
 // the stream construction can definitely be fancier but that's the baseline idea
@@ -31,19 +28,58 @@ pub struct TxnTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub handles: Vec<Node<TYPES, I>>,
     /// Optional index of the next node.
     pub next_node_idx: Option<usize>,
+    /// time to wait between txns
+    pub duration: Duration,
+    ///
+    pub shutdown_chan: Receiver<GlobalTestEvent>,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for TxnTask<TYPES, I> {}
-
-/// types for task that deices when things are completed
-pub type TxnTaskTypes<TYPES, I> = HSTWithEventAndMessage<
-    TxnTaskErr,
-    GlobalTestEvent,
-    ChannelStream<GlobalTestEvent>,
-    (),
-    GeneratedStream<()>,
-    TxnTask<TYPES, I>,
->;
+impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TxnTask<TYPES, I> {
+    pub fn run(mut self) -> JoinHandle<HotShotTaskCompleted> {
+        async_spawn(async move {
+            async_sleep(Duration::from_millis(100)).await;
+            loop {
+                async_sleep(self.duration).await;
+                match self.shutdown_chan.try_recv() {
+                    Ok(_event) => {
+                        return HotShotTaskCompleted::ShutDown;
+                    }
+                    Err(TryRecvError::Empty) => {}
+                    Err(_) => {
+                        return HotShotTaskCompleted::StreamsDied;
+                    }
+                }
+                self.submit_tx().await;
+            }
+        })
+    }
+    async fn submit_tx(&mut self) {
+        if let Some(idx) = self.next_node_idx {
+            // submit to idx handle
+            // increment state
+            self.next_node_idx = Some((idx + 1) % self.handles.len());
+            match self.handles.get(idx) {
+                None => {
+                    tracing::error!("couldn't get node in txn task");
+                    // should do error
+                    unimplemented!()
+                }
+                Some(node) => {
+                    // use rand::seq::IteratorRandom;
+                    // we're assuming all nodes have the same leaf.
+                    // If they don't match, this is probably fine since
+                    // it should be caught by an assertion (and the txn will be rejected anyway)
+                    let leaf = node.handle.get_decided_leaf().await;
+                    let txn = I::leaf_create_random_transaction(&leaf, &mut thread_rng(), 0);
+                    node.handle
+                        .submit_transaction(txn.clone())
+                        .await
+                        .expect("Could not send transaction");
+                }
+            }
+        }
+    }
+}
 
 /// build the transaction task
 #[derive(Clone, Debug)]
@@ -53,121 +89,4 @@ pub enum TxnTaskDescription {
     RoundRobinTimeBased(Duration),
     /// TODO
     DistributionBased, // others?
-}
-
-impl TxnTaskDescription {
-    /// build a task
-    /// # Panics
-    /// if unable to get task id
-    #[must_use]
-    pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
-        self,
-    ) -> TaskGenerator<TxnTask<TYPES, I>>
-    where
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-    {
-        Box::new(move |state, mut registry, test_event_stream| {
-            async move {
-                // consistency check
-                match self {
-                    TxnTaskDescription::RoundRobinTimeBased(_) => {
-                        assert!(state.next_node_idx.is_some());
-                    }
-                    TxnTaskDescription::DistributionBased => assert!(state.next_node_idx.is_none()),
-                }
-                // TODO we'll possibly want multiple criterion including:
-                // - certain number of txns committed
-                // - anchor of certain depth
-                // - some other stuff? probably?
-                let event_handler =
-                    HandleEvent::<TxnTaskTypes<TYPES, I>>(Arc::new(move |event, state| {
-                        async move {
-                            match event {
-                                GlobalTestEvent::ShutDown => {
-                                    (Some(HotShotTaskCompleted::ShutDown), state)
-                                }
-                            }
-                        }
-                        .boxed()
-                    }));
-                let message_handler =
-                    HandleMessage::<TxnTaskTypes<TYPES, I>>(Arc::new(move |(), mut state| {
-                        async move {
-                            if let Some(idx) = state.next_node_idx {
-                                // submit to idx handle
-                                // increment state
-                                state.next_node_idx = Some((idx + 1) % state.handles.len());
-                                match state.handles.get(idx) {
-                                    None => {
-                                        // should do error
-                                        unimplemented!()
-                                    }
-                                    Some(node) => {
-                                        // use rand::seq::IteratorRandom;
-                                        // we're assuming all nodes have the same leaf.
-                                        // If they don't match, this is probably fine since
-                                        // it should be caught by an assertion (and the txn will be rejected anyway)
-
-                                        // Attempts to grab the most recently decided leaf. On failure, we don't
-                                        // send a transaction. This is to prevent deadlock.
-                                        if let Some(leaf) = node.handle.try_get_decided_leaf() {
-                                            let txn = I::leaf_create_random_transaction(
-                                                &leaf,
-                                                &mut thread_rng(),
-                                                0,
-                                            );
-
-                                            // Time out if we can't get a lock on consensus in a reasonable time. This is to
-                                            // prevent deadlock.
-                                            if let Err(err) = async_timeout(
-                                                Duration::from_secs(1),
-                                                node.handle.submit_transaction(txn.clone()),
-                                            )
-                                            .await
-                                            {
-                                                error!("Failed to send test transaction: {err}");
-                                            };
-                                        }
-
-                                        (None, state)
-                                    }
-                                }
-                            } else {
-                                // TODO make an issue
-                                // in the case that this is random
-                                // which I haven't implemented yet
-                                unimplemented!()
-                            }
-                        }
-                        .boxed()
-                    }));
-                let stream_generator = match self {
-                    TxnTaskDescription::RoundRobinTimeBased(duration) => {
-                        GeneratedStream::new(Arc::new(move || {
-                            let fut = async move {
-                                async_sleep(duration).await;
-                            };
-                            Some(boxed_sync(fut))
-                        }))
-                    }
-                    TxnTaskDescription::DistributionBased => unimplemented!(),
-                };
-                let builder = TaskBuilder::<TxnTaskTypes<TYPES, I>>::new(
-                    "Test Transaction Submission Task".to_string(),
-                )
-                .register_event_stream(test_event_stream, FilterEvent::default())
-                .await
-                .register_registry(&mut registry)
-                .await
-                .register_state(state)
-                .register_event_handler(event_handler)
-                .register_message_handler(message_handler)
-                .register_message_stream(stream_generator);
-                let task_id = builder.get_task_id().unwrap();
-                (task_id, TxnTaskTypes::build(builder).launch())
-            }
-            .boxed()
-        })
-    }
 }

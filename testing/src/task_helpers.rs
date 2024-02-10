@@ -13,7 +13,6 @@ use hotshot::{
     types::{BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -32,6 +31,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
+use async_broadcast::{Receiver, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use bitvec::bitvec;
 use hotshot_types::simple_vote::QuorumData;
@@ -51,7 +51,8 @@ pub async fn build_system_handle(
     node_id: u64,
 ) -> (
     SystemContextHandle<TestTypes, MemoryImpl>,
-    ChannelStream<HotShotEvent<TestTypes>>,
+    Sender<HotShotEvent<TestTypes>>,
+    Receiver<HotShotEvent<TestTypes>>,
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 

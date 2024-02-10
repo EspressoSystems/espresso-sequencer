@@ -1,27 +1,22 @@
 [package]
 authors = ["Espresso Systems <hello@espressosys.com>"]
-description = "Async task abstraction for use in consensus"
-edition = "2021"
 name = "hotshot-task"
 version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-compatibility-layer = { workspace = true }
-async-trait = { workspace = true }
-either = { workspace = true }
-futures = { workspace = true }
-serde = { workspace = true }
-snafu = { workspace = true }
-async-lock = { workspace = true }
+
+futures = "0.3.30"
+async-broadcast = "0.6.0"
 tracing = { workspace = true }
-atomic_enum = "0.2.0"
-pin-project = "1.1.4"
+async-compatibility-layer = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
-tokio = { workspace = true }
-
+tokio = { workspace= true, features = ["time", "rt-multi-thread", "macros", "sync"] }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
-async-std = { workspace = true }
+async-std = { workspace= true,  features = ["attributes"] }
 
 [lints]
 workspace = true

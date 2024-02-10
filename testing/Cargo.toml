@@ -11,6 +11,7 @@ default = []
 slow-tests = []
 
 [dependencies]
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 sha3 = "^0.10"
 bincode = { workspace = true }
@@ -24,7 +25,6 @@ hotshot-constants = { path = "../constants" }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
 rand = { workspace = true }
 snafu = { workspace = true }
@@ -34,11 +34,10 @@ sha2 = { workspace = true }
 async-lock = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }
+hotshot-task = { path = "../task" }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
 
-[lints]
-workspace = true

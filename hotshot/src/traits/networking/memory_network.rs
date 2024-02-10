@@ -13,8 +13,8 @@ use async_trait::async_trait;
 use bincode::Options;
 use dashmap::DashMap;
 use futures::StreamExt;
-use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
+    boxed_sync,
     message::{Message, MessageKind},
     traits::{
         election::Membership,
@@ -25,6 +25,7 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
+    BoxSyncFuture,
 };
 use hotshot_utils::bincode::bincode_opts;
 use rand::Rng;
@@ -300,7 +301,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
         message: M,
         recipients: BTreeSet<K>,
     ) -> Result<(), NetworkError> {
-        debug!(?message, "Broadcasting message");
+        trace!(?message, "Broadcasting message");
         // Bincode the message
         let vec = bincode_opts()
             .serialize(&message)
@@ -348,7 +349,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
 
     #[instrument(name = "MemoryNetwork::direct_message")]
     async fn direct_message(&self, message: M, recipient: K) -> Result<(), NetworkError> {
-        debug!(?message, ?recipient, "Sending direct message");
+        // debug!(?message, ?recipient, "Sending direct message");
         // Bincode the message
         let vec = bincode_opts()
             .serialize(&message)

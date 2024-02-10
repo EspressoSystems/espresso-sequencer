@@ -15,6 +15,10 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, BlockPayload},
 };
 
+/// Marker that the task completed
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct HotShotTaskCompleted;
+
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub enum HotShotEvent<TYPES: NodeType> {

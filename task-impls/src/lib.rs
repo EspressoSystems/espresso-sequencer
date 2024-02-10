@@ -32,4 +32,4 @@ pub mod vote;
 pub mod upgrade;
 
 /// Helper functions used by any task
-mod helpers;
+pub mod helpers;

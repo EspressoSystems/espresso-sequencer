@@ -79,6 +79,7 @@ name = "orchestrator-combined"
 path = "examples/combined/orchestrator.rs"
 
 [dependencies]
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
@@ -96,7 +97,6 @@ hotshot-web-server = { version = "0.1.1", path = "../web_server", default-featur
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
 hotshot-types = { path = "../types", version = "0.1.0", default-features = false }
 hotshot-utils = { path = "../utils" }
-hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
@@ -108,6 +108,7 @@ time = { workspace = true }
 derive_more = "0.99.17"
 portpicker = "0.1.1"
 lru = "0.12.2"
+hotshot-task = { path = "../task" }
 
 tracing = { workspace = true }
 

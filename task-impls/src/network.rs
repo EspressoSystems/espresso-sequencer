@@ -1,16 +1,15 @@
-use crate::events::HotShotEvent;
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::broadcast_event,
+};
+use async_broadcast::Sender;
 use either::Either::{self, Left, Right};
 use hotshot_constants::VERSION_0_1;
-use hotshot_task::{
-    event_stream::{ChannelStream, EventStream},
-    task::{FilterEvent, HotShotTaskCompleted, TS},
-    task_impls::{HSTWithEvent, HSTWithMessage},
-    GeneratedStream, Merge,
-};
+
+use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     message::{
-        CommitteeConsensusMessage, GeneralConsensusMessage, Message, MessageKind, Messages,
-        SequencingMessage,
+        CommitteeConsensusMessage, GeneralConsensusMessage, Message, MessageKind, SequencingMessage,
     },
     traits::{
         election::Membership,
@@ -19,31 +18,82 @@ use hotshot_types::{
     },
     vote::{HasViewNumber, Vote},
 };
-use snafu::Snafu;
-use std::sync::Arc;
 use tracing::error;
 use tracing::instrument;
 
-/// the type of network task
-#[derive(Clone, Copy, Debug)]
-pub enum NetworkTaskKind {
-    /// quorum: the normal "everyone" committee
-    Quorum,
-    /// da committee
-    Committee,
-    /// view sync
-    ViewSync,
-    /// vid
-    VID,
+/// quorum filter
+pub fn quorum_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> bool {
+    !matches!(
+        event,
+        HotShotEvent::QuorumProposalSend(_, _)
+            | HotShotEvent::QuorumVoteSend(_)
+            | HotShotEvent::Shutdown
+            | HotShotEvent::DACSend(_, _)
+            | HotShotEvent::ViewChange(_)
+            | HotShotEvent::TimeoutVoteSend(_)
+    )
 }
 
+/// committee filter
+pub fn committee_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> bool {
+    !matches!(
+        event,
+        HotShotEvent::DAProposalSend(_, _)
+            | HotShotEvent::DAVoteSend(_)
+            | HotShotEvent::Shutdown
+            | HotShotEvent::ViewChange(_)
+    )
+}
+
+/// vid filter
+pub fn vid_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> bool {
+    !matches!(
+        event,
+        HotShotEvent::Shutdown | HotShotEvent::VidDisperseSend(_, _) | HotShotEvent::ViewChange(_)
+    )
+}
+
+/// view sync filter
+pub fn view_sync_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> bool {
+    !matches!(
+        event,
+        HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
+            | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
+            | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
+            | HotShotEvent::ViewSyncPreCommitVoteSend(_)
+            | HotShotEvent::ViewSyncCommitVoteSend(_)
+            | HotShotEvent::ViewSyncFinalizeVoteSend(_)
+            | HotShotEvent::Shutdown
+            | HotShotEvent::ViewChange(_)
+    )
+}
 /// the network message task state
+#[derive(Clone)]
 pub struct NetworkMessageTaskState<TYPES: NodeType> {
-    /// event stream (used for publishing)
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    /// Sender to send internal events this task generates to other tasks
+    pub event_stream: Sender<HotShotEvent<TYPES>>,
 }
 
-impl<TYPES: NodeType> TS for NetworkMessageTaskState<TYPES> {}
+impl<TYPES: NodeType> TaskState for NetworkMessageTaskState<TYPES> {
+    type Event = Vec<Message<TYPES>>;
+    type Output = ();
+
+    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
+    where
+        Self: Sized,
+    {
+        task.state_mut().handle_messages(event).await;
+        None
+    }
+
+    fn filter(&self, _event: &Self::Event) -> bool {
+        false
+    }
+
+    fn should_shutdown(_event: &Self::Event) -> bool {
+        false
+    }
+}
 
 impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
     /// Handle the message.
@@ -111,7 +161,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                     // TODO (Keyao benchmarking) Update these event variants (similar to the
                     // `TransactionsRecv` event) so we can send one event for a vector of messages.
                     // <https://github.com/EspressoSystems/HotShot/issues/1428>
-                    self.event_stream.publish(event).await;
+                    broadcast_event(event, &self.event_stream).await;
                 }
                 MessageKind::Data(message) => match message {
                     hotshot_types::message::DataMessage::SubmitTransaction(transaction, _) => {
@@ -121,9 +171,11 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
             };
         }
         if !transactions.is_empty() {
-            self.event_stream
-                .publish(HotShotEvent::TransactionsRecv(transactions))
-                .await;
+            broadcast_event(
+                HotShotEvent::TransactionsRecv(transactions),
+                &self.event_stream,
+            )
+            .await;
         }
     }
 }
@@ -132,16 +184,41 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 pub struct NetworkEventTaskState<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> {
     /// comm channel
     pub channel: COMMCHANNEL,
-    /// event stream
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// view number
     pub view: TYPES::Time,
+    /// membership for the channel
+    pub membership: TYPES::Membership,
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
+    /// Filter which returns false for the events that this specific network task cares about
+    pub filter: fn(&HotShotEvent<TYPES>) -> bool,
 }
 
-impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> TS
+impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> TaskState
     for NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
+    type Event = HotShotEvent<TYPES>;
+
+    type Output = HotShotTaskCompleted;
+
+    async fn handle_event(
+        event: Self::Event,
+        task: &mut Task<Self>,
+    ) -> Option<HotShotTaskCompleted> {
+        let membership = task.state_mut().membership.clone();
+        task.state_mut().handle_event(event, &membership).await
+    }
+
+    fn should_shutdown(event: &Self::Event) -> bool {
+        if matches!(event, HotShotEvent::Shutdown) {
+            error!("Network Task received Shutdown event");
+            return true;
+        }
+        false
+    }
+
+    fn filter(&self, event: &Self::Event) -> bool {
+        (self.filter)(event)
+    }
 }
 
 impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
@@ -275,7 +352,7 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             }
             HotShotEvent::Shutdown => {
                 error!("Networking task shutting down");
-                return Some(HotShotTaskCompleted::ShutDown);
+                return Some(HotShotTaskCompleted);
             }
             event => {
                 error!("Receieved unexpected message in network task {:?}", event);
@@ -303,84 +380,4 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
 
         None
     }
-
-    /// network filter
-    pub fn filter(task_kind: NetworkTaskKind) -> FilterEvent<HotShotEvent<TYPES>> {
-        match task_kind {
-            NetworkTaskKind::Quorum => FilterEvent(Arc::new(Self::quorum_filter)),
-            NetworkTaskKind::Committee => FilterEvent(Arc::new(Self::committee_filter)),
-            NetworkTaskKind::ViewSync => FilterEvent(Arc::new(Self::view_sync_filter)),
-            NetworkTaskKind::VID => FilterEvent(Arc::new(Self::vid_filter)),
-        }
-    }
-
-    /// quorum filter
-    fn quorum_filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
-            event,
-            HotShotEvent::QuorumProposalSend(_, _)
-                | HotShotEvent::QuorumVoteSend(_)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::DACSend(_, _)
-                | HotShotEvent::ViewChange(_)
-                | HotShotEvent::TimeoutVoteSend(_)
-        )
-    }
-
-    /// committee filter
-    fn committee_filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
-            event,
-            HotShotEvent::DAProposalSend(_, _)
-                | HotShotEvent::DAVoteSend(_)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::ViewChange(_)
-        )
-    }
-
-    /// vid filter
-    fn vid_filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
-            event,
-            HotShotEvent::Shutdown
-                | HotShotEvent::VidDisperseSend(_, _)
-                | HotShotEvent::ViewChange(_)
-        )
-    }
-
-    /// view sync filter
-    fn view_sync_filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
-            event,
-            HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
-                | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
-                | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
-                | HotShotEvent::ViewSyncPreCommitVoteSend(_)
-                | HotShotEvent::ViewSyncCommitVoteSend(_)
-                | HotShotEvent::ViewSyncFinalizeVoteSend(_)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::ViewChange(_)
-        )
-    }
 }
-
-/// network error (no errors right now, only stub)
-#[derive(Snafu, Debug)]
-pub struct NetworkTaskError {}
-
-/// networking message task types
-pub type NetworkMessageTaskTypes<TYPES> = HSTWithMessage<
-    NetworkTaskError,
-    Either<Messages<TYPES>, Messages<TYPES>>,
-    // A combination of broadcast and direct streams.
-    Merge<GeneratedStream<Messages<TYPES>>, GeneratedStream<Messages<TYPES>>>,
-    NetworkMessageTaskState<TYPES>,
->;
-
-/// network event task types
-pub type NetworkEventTaskTypes<TYPES, COMMCHANNEL> = HSTWithEvent<
-    NetworkTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    NetworkEventTaskState<TYPES, COMMCHANNEL>,
->;

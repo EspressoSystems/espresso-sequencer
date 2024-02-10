@@ -13,8 +13,8 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use derive_more::{Deref, DerefMut};
 use hotshot_constants::VERSION_0_1;
-use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
+    boxed_sync,
     message::{Message, MessagePurpose},
     traits::{
         network::{
@@ -25,6 +25,7 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
+    BoxSyncFuture,
 };
 use hotshot_utils::version::read_version;
 use hotshot_web_server::{self, config};

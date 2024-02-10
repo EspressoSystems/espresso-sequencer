@@ -1,13 +1,11 @@
-use crate::events::HotShotEvent;
+use crate::events::{HotShotEvent, HotShotTaskCompleted};
+use crate::helpers::broadcast_event;
+use async_broadcast::Sender;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::spawn_blocking;
-use hotshot_task::{
-    event_stream::ChannelStream,
-    global_registry::GlobalRegistry,
-    task::{HotShotTaskCompleted, TS},
-    task_impls::HSTWithEvent,
-};
+
+use hotshot_task::task::{Task, TaskState};
 use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::Consensus,
@@ -27,7 +25,6 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 
-use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -45,8 +42,6 @@ pub struct VIDTaskState<
 > {
     /// The state's api
     pub api: A,
-    /// Global registry task for the state
-    pub registry: GlobalRegistry,
 
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
@@ -63,10 +58,6 @@ pub struct VIDTaskState<
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// The view and ID of the current vote collection task, if there is one.
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
-
-    /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
-
     /// This state's ID
     pub id: u64,
 }
@@ -76,9 +67,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
-    pub async fn handle_event(
+    pub async fn handle(
         &mut self,
         event: HotShotEvent<TYPES>,
+        event_stream: Sender<HotShotEvent<TYPES>>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
@@ -104,21 +96,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Unwrap here will just propogate any panic from the spawned task, it's not a new place we can panic.
                 let vid_disperse = vid_disperse.unwrap();
                 // send the commitment and metadata to consensus for block building
-                self.event_stream
-                    .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
+                broadcast_event(
+                    HotShotEvent::SendPayloadCommitmentAndMetadata(
                         vid_disperse.commit,
                         metadata,
                         view_number,
-                    ))
-                    .await;
+                    ),
+                    &event_stream,
+                )
+                .await;
 
                 // send the block to the VID dispersal function
-                self.event_stream
-                    .publish(HotShotEvent::BlockReady(
+                broadcast_event(
+                    HotShotEvent::BlockReady(
                         VidDisperse::from_membership(view_number, vid_disperse, &self.membership),
                         view_number,
-                    ))
-                    .await;
+                    ),
+                    &event_stream,
+                )
+                .await;
             }
 
             HotShotEvent::BlockReady(vid_disperse, view_number) => {
@@ -130,16 +126,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 };
                 debug!("publishing VID disperse for view {}", *view_number);
-                self.event_stream
-                    .publish(HotShotEvent::VidDisperseSend(
+                broadcast_event(
+                    HotShotEvent::VidDisperseSend(
                         Proposal {
                             signature,
                             data: vid_disperse,
                             _pd: PhantomData,
                         },
                         self.public_key.clone(),
-                    ))
-                    .await;
+                    ),
+                    &event_stream,
+                )
+                .await;
             }
 
             HotShotEvent::ViewChange(view) => {
@@ -169,7 +167,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             HotShotEvent::Shutdown => {
-                return Some(HotShotTaskCompleted::ShutDown);
+                return Some(HotShotTaskCompleted);
             }
             _ => {
                 error!("unexpected event {:?}", event);
@@ -177,10 +175,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
         None
     }
+}
 
-    /// Filter the VID event.
-    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(
+/// task state implementation for VID Task
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
+    for VIDTaskState<TYPES, I, A>
+{
+    type Event = HotShotEvent<TYPES>;
+
+    type Output = HotShotTaskCompleted;
+
+    async fn handle_event(
+        event: Self::Event,
+        task: &mut Task<Self>,
+    ) -> Option<HotShotTaskCompleted> {
+        let sender = task.clone_sender();
+        task.state_mut().handle(event, sender).await;
+        None
+    }
+    fn filter(&self, event: &Self::Event) -> bool {
+        !matches!(
             event,
             HotShotEvent::Shutdown
                 | HotShotEvent::TransactionsSequenced(_, _, _)
@@ -188,18 +202,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 | HotShotEvent::ViewChange(_)
         )
     }
+    fn should_shutdown(event: &Self::Event) -> bool {
+        matches!(event, HotShotEvent::Shutdown)
+    }
 }
-
-/// task state implementation for VID Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
-    for VIDTaskState<TYPES, I, A>
-{
-}
-
-/// Type alias for VID Task Types
-pub type VIDTaskTypes<TYPES, I, A> = HSTWithEvent<
-    ConsensusTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    VIDTaskState<TYPES, I, A>,
->;

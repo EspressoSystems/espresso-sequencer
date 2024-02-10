@@ -1,15 +1,6 @@
-use async_compatibility_layer::channel::UnboundedStream;
-use either::Either;
-use futures::FutureExt;
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
-use hotshot_task::{
-    event_stream::ChannelStream,
-    task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEventAndMessage, TaskBuilder},
-    MergeN,
-};
-use hotshot_task::{event_stream::EventStream, Merge};
-use hotshot_task_impls::events::HotShotEvent;
+
+use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{
     data::{Leaf, VidCommitment},
     error::RoundTimedoutState,
@@ -24,7 +15,7 @@ use std::{
 };
 use tracing::error;
 
-use crate::{test_launcher::TaskGenerator, test_runner::Node};
+use crate::test_runner::{HotShotTaskCompleted, Node};
 /// convenience type alias for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 
@@ -77,11 +68,193 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
     pub handles: Vec<Node<TYPES, I>>,
     /// ctx
     pub ctx: RoundCtx<TYPES>,
-    /// event stream for publishing safety violations
-    pub test_event_stream: ChannelStream<GlobalTestEvent>,
+    /// configure properties
+    pub properties: OverallSafetyPropertiesDescription,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for OverallSafetyTask<TYPES, I> {}
+impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState
+    for OverallSafetyTask<TYPES, I>
+{
+    type Event = GlobalTestEvent;
+
+    type Output = HotShotTaskCompleted;
+
+    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<Self::Output> {
+        match event {
+            GlobalTestEvent::ShutDown => {
+                tracing::error!("Shutting down SafetyTask");
+                let state = task.state_mut();
+                let OverallSafetyPropertiesDescription {
+                    check_leaf: _,
+                    check_block: _,
+                    num_failed_views: num_failed_rounds_total,
+                    num_successful_views,
+                    threshold_calculator: _,
+                    transaction_threshold: _,
+                }: OverallSafetyPropertiesDescription = state.properties.clone();
+
+                let num_incomplete_views = state.ctx.round_results.len()
+                    - state.ctx.successful_views.len()
+                    - state.ctx.failed_views.len();
+
+                if state.ctx.successful_views.len() < num_successful_views {
+                    return Some(HotShotTaskCompleted::Error(Box::new(
+                        OverallSafetyTaskErr::<TYPES>::NotEnoughDecides {
+                            got: state.ctx.successful_views.len(),
+                            expected: num_successful_views,
+                        },
+                    )));
+                }
+
+                if state.ctx.failed_views.len() + num_incomplete_views >= num_failed_rounds_total {
+                    return Some(HotShotTaskCompleted::Error(Box::new(
+                        OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                            failed_views: state.ctx.failed_views.clone(),
+                        },
+                    )));
+                }
+                Some(HotShotTaskCompleted::ShutDown)
+            }
+        }
+    }
+
+    fn should_shutdown(_event: &Self::Event) -> bool {
+        false
+    }
+}
+
+impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
+    for OverallSafetyTask<TYPES, I>
+{
+    type Message = Event<TYPES>;
+
+    type Output = HotShotTaskCompleted;
+
+    type State = Self;
+
+    async fn handle_message(
+        message: Self::Message,
+        idx: usize,
+        task: &mut hotshot_task::task::TestTask<Self::State, Self>,
+    ) -> Option<Self::Output> {
+        let OverallSafetyPropertiesDescription {
+            check_leaf,
+            check_block,
+            num_failed_views,
+            num_successful_views,
+            threshold_calculator,
+            transaction_threshold,
+        }: OverallSafetyPropertiesDescription = task.state().properties.clone();
+        let Event { view_number, event } = message;
+        let key = match event {
+            EventType::Error { error } => {
+                task.state_mut()
+                    .ctx
+                    .insert_error_to_context(view_number, idx, error);
+                None
+            }
+            EventType::Decide {
+                leaf_chain,
+                qc,
+                block_size: maybe_block_size,
+            } => {
+                // Skip the genesis leaf.
+                if leaf_chain.len() == 1
+                    && leaf_chain[0].get_view_number() == TYPES::Time::genesis()
+                {
+                    return None;
+                }
+                let paired_up = (leaf_chain.to_vec(), (*qc).clone());
+                match task.state_mut().ctx.round_results.entry(view_number) {
+                    Entry::Occupied(mut o) => {
+                        o.get_mut()
+                            .insert_into_result(idx, paired_up, maybe_block_size)
+                    }
+                    Entry::Vacant(v) => {
+                        let mut round_result = RoundResult::default();
+                        let key = round_result.insert_into_result(idx, paired_up, maybe_block_size);
+                        v.insert(round_result);
+                        key
+                    }
+                }
+            }
+            EventType::ReplicaViewTimeout { view_number } => {
+                let error = Arc::new(HotShotError::<TYPES>::ViewTimeoutError {
+                    view_number,
+                    state: RoundTimedoutState::TestCollectRoundEventsTimedOut,
+                });
+                task.state_mut()
+                    .ctx
+                    .insert_error_to_context(view_number, idx, error);
+                None
+            }
+            _ => return None,
+        };
+
+        // update view count
+        let threshold =
+            (threshold_calculator)(task.state().handles.len(), task.state().handles.len());
+
+        let len = task.state().handles.len();
+        let view = task
+            .state_mut()
+            .ctx
+            .round_results
+            .get_mut(&view_number)
+            .unwrap();
+        if let Some(key) = key {
+            view.update_status(
+                threshold,
+                len,
+                &key,
+                check_leaf,
+                check_block,
+                transaction_threshold,
+            );
+            match view.status.clone() {
+                ViewStatus::Ok => {
+                    task.state_mut().ctx.successful_views.insert(view_number);
+                    if task.state_mut().ctx.successful_views.len() >= num_successful_views {
+                        task.send_event(GlobalTestEvent::ShutDown).await;
+                        return Some(HotShotTaskCompleted::ShutDown);
+                    }
+                    return None;
+                }
+                ViewStatus::Failed => {
+                    task.state_mut().ctx.failed_views.insert(view_number);
+                    if task.state_mut().ctx.failed_views.len() > num_failed_views {
+                        task.send_event(GlobalTestEvent::ShutDown).await;
+                        return Some(HotShotTaskCompleted::Error(Box::new(
+                            OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                failed_views: task.state_mut().ctx.failed_views.clone(),
+                            },
+                        )));
+                    }
+                    return None;
+                }
+                ViewStatus::Err(e) => {
+                    return Some(HotShotTaskCompleted::Error(Box::new(e)));
+                }
+                ViewStatus::InProgress => {
+                    return None;
+                }
+            }
+        } else if view.check_if_failed(threshold, len) {
+            view.status = ViewStatus::Failed;
+            task.state_mut().ctx.failed_views.insert(view_number);
+            if task.state_mut().ctx.failed_views.len() > num_failed_views {
+                task.send_event(GlobalTestEvent::ShutDown).await;
+                return Some(HotShotTaskCompleted::Error(Box::new(
+                    OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                        failed_views: task.state_mut().ctx.failed_views.clone(),
+                    },
+                )));
+            }
+            return None;
+        }
+        None
+    }
+}
 
 /// Result of running a round of consensus
 #[derive(Debug)]
@@ -365,249 +538,3 @@ impl Default for OverallSafetyPropertiesDescription {
         }
     }
 }
-
-impl OverallSafetyPropertiesDescription {
-    /// build a task
-    /// # Panics
-    /// if an internal variant that the prior views are filled is violated
-    #[must_use]
-    #[allow(clippy::too_many_lines)]
-    pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
-        self,
-    ) -> TaskGenerator<OverallSafetyTask<TYPES, I>> {
-        let Self {
-            check_leaf,
-            check_block,
-            num_failed_views: num_failed_rounds_total,
-            num_successful_views,
-            threshold_calculator,
-            transaction_threshold,
-        }: Self = self;
-
-        Box::new(move |mut state, mut registry, test_event_stream| {
-            async move {
-                let event_handler = HandleEvent::<OverallSafetyTaskTypes<TYPES, I>>(Arc::new(
-                    move |event, state| {
-                        async move {
-                            match event {
-                                GlobalTestEvent::ShutDown => {
-                                    let num_incomplete_views = state.ctx.round_results.len()
-                                        - state.ctx.successful_views.len()
-                                        - state.ctx.failed_views.len();
-
-                                    if state.ctx.successful_views.len() < num_successful_views {
-                                        return (
-                                            Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::<TYPES>::NotEnoughDecides {
-                                                    got: state.ctx.successful_views.len(),
-                                                    expected: num_successful_views,
-                                                },
-                                            ))),
-                                            state,
-                                        );
-                                    }
-
-                                    if state.ctx.failed_views.len() + num_incomplete_views
-                                        >= num_failed_rounds_total
-                                    {
-                                        return (
-                                            Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                                                    failed_views: state.ctx.failed_views.clone(),
-                                                },
-                                            ))),
-                                            state,
-                                        );
-                                    }
-                                    // TODO check if we got enough successful views
-                                    (Some(HotShotTaskCompleted::ShutDown), state)
-                                }
-                            }
-                        }
-                        .boxed()
-                    },
-                ));
-
-                let message_handler = HandleMessage::<OverallSafetyTaskTypes<TYPES, I>>(Arc::new(
-                    move |msg, mut state| {
-                        let threshold_calculator = threshold_calculator.clone();
-                        async move {
-
-                            let (idx, maybe_event ) : (usize, Either<_, _>)= msg;
-                            if let Either::Left(Event { view_number, event }) = maybe_event {
-                                let key = match event {
-                                    EventType::Error { error } => {
-                                        state.ctx.insert_error_to_context(view_number, idx, error);
-                                        None
-                                    }
-                                    EventType::Decide {
-                                        leaf_chain,
-                                        qc,
-                                        block_size: maybe_block_size,
-                                    } => {
-                                        // Skip the genesis leaf.
-                                        if leaf_chain.len() == 1 && leaf_chain[0].get_view_number() == TYPES::Time::genesis() {
-                                            return (None, state);
-                                        }
-                                        let paired_up = (leaf_chain.to_vec(), (*qc).clone());
-                                        match state.ctx.round_results.entry(view_number) {
-                                            Entry::Occupied(mut o) => o.get_mut().insert_into_result(
-                                                idx,
-                                                paired_up,
-                                                maybe_block_size,
-                                                ),
-                                            Entry::Vacant(v) => {
-                                                let mut round_result = RoundResult::default();
-                                                let key = round_result.insert_into_result(
-                                                    idx,
-                                                    paired_up,
-                                                    maybe_block_size,
-                                                    );
-                                                v.insert(round_result);
-                                                key
-                                            }
-                                        }
-                                    }
-                                    EventType::ReplicaViewTimeout { view_number } => {
-                                        let error = Arc::new(HotShotError::<TYPES>::ViewTimeoutError {
-                                            view_number,
-                                            state: RoundTimedoutState::TestCollectRoundEventsTimedOut,
-                                        });
-                                        state.ctx.insert_error_to_context(view_number, idx, error);
-                                        None
-                                    }
-                                    _ => return (None, state),
-                                };
-
-                                // update view count
-                                let threshold =
-                                    (threshold_calculator)(state.handles.len(), state.handles.len());
-
-                                let view = state.ctx.round_results.get_mut(&view_number).unwrap();
-
-                                if let Some(key) = key {
-                                    view.update_status(
-                                        threshold,
-                                        state.handles.len(),
-                                        &key,
-                                        check_leaf,
-                                        check_block,
-                                        transaction_threshold,
-                                        );
-                                    match view.status.clone() {
-                                        ViewStatus::Ok => {
-                                            state.ctx.successful_views.insert(view_number);
-                                            if state.ctx.successful_views.len()
-                                                >= self.num_successful_views
-                                                {
-                                                    state
-                                                        .test_event_stream
-                                                        .publish(GlobalTestEvent::ShutDown)
-                                                        .await;
-                                                    return (Some(HotShotTaskCompleted::ShutDown), state);
-                                                }
-                                            return (None, state);
-                                        }
-                                        ViewStatus::Failed => {
-                                            state.ctx.failed_views.insert(view_number);
-                                            if state.ctx.failed_views.len() > self.num_failed_views {
-                                                state
-                                                    .test_event_stream
-                                                    .publish(GlobalTestEvent::ShutDown)
-                                                    .await;
-                                                return (
-                                                    Some(HotShotTaskCompleted::Error(Box::new(
-                                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                                                                    failed_views: state.ctx.failed_views.clone(),
-                                                                },
-                                                                ))),
-                                                                state,
-                                                                );
-                                            }
-                                            return (None, state);
-                                        }
-                                        ViewStatus::Err(e) => {
-                                            return (
-                                                Some(HotShotTaskCompleted::Error(Box::new(e))),
-                                                state,
-                                                );
-                                        }
-                                        ViewStatus::InProgress => {
-                                            return (None, state);
-                                        }
-                                    }
-                                }
-                                else if view.check_if_failed(threshold, state.handles.len()) {
-                                        view.status = ViewStatus::Failed;
-                                        state.ctx.failed_views.insert(view_number);
-                                        if state.ctx.failed_views.len() > self.num_failed_views {
-                                            state
-                                                .test_event_stream
-                                                .publish(GlobalTestEvent::ShutDown)
-                                                .await;
-                                            return (
-                                                Some(HotShotTaskCompleted::Error(Box::new(
-                                                            OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                                                                failed_views: state.ctx.failed_views.clone(),
-                                                            },
-                                                            ))),
-                                                            state,
-                                                            );
-                                        }
-                                        return (None, state);
-                                    }
-
-                            }
-
-                            (None, state)
-                        }
-                        .boxed()
-                    },
-                ));
-
-                let mut streams = vec![];
-                for handle in &mut state.handles {
-                    let s1 =
-                        handle
-                            .handle
-                            .get_event_stream_known_impl(FilterEvent::default())
-                            .await
-                            .0;
-                    let s2 =
-                        handle
-                            .handle
-                            .get_internal_event_stream_known_impl(FilterEvent::default())
-                            .await
-                            .0;
-                    streams.push(
-                        Merge::new(s1, s2)
-                    );
-                }
-                let builder = TaskBuilder::<OverallSafetyTaskTypes<TYPES, I>>::new(
-                    "Test Overall Safety Task".to_string(),
-                )
-                .register_event_stream(test_event_stream, FilterEvent::default())
-                .await
-                .register_registry(&mut registry)
-                .await
-                .register_message_handler(message_handler)
-                .register_message_stream(MergeN::new(streams))
-                .register_event_handler(event_handler)
-                .register_state(state);
-                let task_id = builder.get_task_id().unwrap();
-                (task_id, OverallSafetyTaskTypes::build(builder).launch())
-            }
-            .boxed()
-        })
-    }
-}
-
-/// overall types for safety task
-pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
-    OverallSafetyTaskErr<TYPES>,
-    GlobalTestEvent,
-    ChannelStream<GlobalTestEvent>,
-    (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
-    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES>>>>,
-    OverallSafetyTask<TYPES, I>,
->;

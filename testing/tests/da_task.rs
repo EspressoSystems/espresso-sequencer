@@ -1,5 +1,5 @@
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
-use hotshot_task_impls::events::HotShotEvent;
+use hotshot_task_impls::{da::DATaskState, events::HotShotEvent};
 use hotshot_testing::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
@@ -23,7 +23,6 @@ use std::{collections::HashMap, marker::PhantomData};
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_da_task() {
-    use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::message::Proposal;
@@ -83,11 +82,6 @@ async fn test_da_task() {
 
     input.push(HotShotEvent::Shutdown);
 
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
-    output.insert(
-        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
-        1,
-    );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let da_vote = DAVote::create_signed_vote(
         DAData {
@@ -100,12 +94,17 @@ async fn test_da_task() {
     .expect("Failed to sign DAData");
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
-    output.insert(HotShotEvent::DAProposalRecv(message, pub_key), 1);
-
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
-    output.insert(HotShotEvent::Shutdown, 1);
-
-    let build_fn = |task_runner, event_stream| add_da_task(task_runner, event_stream, handle);
-
-    run_harness(input, output, None, build_fn, false).await;
+    let da_state = DATaskState {
+        api: api.clone(),
+        consensus: handle.hotshot.get_consensus(),
+        da_membership: api.inner.memberships.da_membership.clone().into(),
+        da_network: api.inner.networks.da_network.clone().into(),
+        quorum_membership: api.inner.memberships.quorum_membership.clone().into(),
+        cur_view: ViewNumber::new(0),
+        vote_collector: None.into(),
+        public_key: *api.public_key(),
+        private_key: api.private_key().clone(),
+        id: handle.hotshot.inner.id,
+    };
+    run_harness(input, output, da_state, false).await;
 }

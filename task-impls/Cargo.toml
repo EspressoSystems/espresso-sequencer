@@ -15,13 +15,14 @@ async-lock = { workspace = true }
 tracing = { workspace = true }
 hotshot-constants = { path = "../constants", default-features = false }
 hotshot-types = { path = "../types", default-features = false }
-hotshot-task = { path = "../task", default-features = false }
 hotshot-utils = { path = "../utils" }
 time = { workspace = true }
 commit = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
 sha2 = { workspace = true }
+hotshot-task = { path = "../task" }
+async-broadcast = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

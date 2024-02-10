@@ -1,36 +1,35 @@
-use crate::events::HotShotEvent;
-use async_compatibility_layer::art::async_spawn;
+use crate::events::{HotShotEvent, HotShotTaskCompleted};
+use async_broadcast::broadcast;
 
-use futures::FutureExt;
-use hotshot_task::{
-    event_stream::{ChannelStream, EventStream},
-    task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEvent, TaskBuilder},
-    task_launcher::TaskRunner,
-};
+use async_compatibility_layer::art::async_timeout;
+use hotshot_task::task::{Task, TaskRegistry, TaskState};
 use hotshot_types::traits::node_implementation::NodeType;
-use snafu::Snafu;
-use std::{collections::HashMap, future::Future, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 /// The state for the test harness task. Keeps track of which events and how many we expect to get
 pub struct TestHarnessState<TYPES: NodeType> {
     /// The expected events we get from the test.  Maps an event to the number of times we expect to see it
     expected_output: HashMap<HotShotEvent<TYPES>, usize>,
+    /// If true we won't fail the test if extra events come in
+    allow_extra_output: bool,
 }
 
-impl<TYPES: NodeType> TS for TestHarnessState<TYPES> {}
+impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
+    type Event = HotShotEvent<TYPES>;
+    type Output = HotShotTaskCompleted;
 
-/// Error emitted if the test harness task fails
-#[derive(Snafu, Debug)]
-pub struct TestHarnessTaskError {}
+    async fn handle_event(
+        event: Self::Event,
+        task: &mut Task<Self>,
+    ) -> Option<HotShotTaskCompleted> {
+        let extra = task.state_mut().allow_extra_output;
+        handle_event(event, task, extra)
+    }
 
-/// Type alias for the Test Harness Task
-pub type TestHarnessTaskTypes<TYPES> = HSTWithEvent<
-    TestHarnessTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    TestHarnessState<TYPES>,
->;
+    fn should_shutdown(event: &Self::Event) -> bool {
+        matches!(event, HotShotEvent::Shutdown)
+    }
+}
 
 /// Runs a test by building the task using `build_fn` and then passing it the `input` events
 /// and testing the make sure all of the `expected_output` events are seen
@@ -43,46 +42,47 @@ pub type TestHarnessTaskTypes<TYPES> = HSTWithEvent<
 /// # Panics
 /// Panics if any state the test expects is not set. Panicing causes a test failure
 #[allow(clippy::implicit_hasher)]
-pub async fn run_harness<TYPES, Fut>(
+#[allow(clippy::panic)]
+pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
     input: Vec<HotShotEvent<TYPES>>,
     expected_output: HashMap<HotShotEvent<TYPES>, usize>,
-    event_stream: Option<ChannelStream<HotShotEvent<TYPES>>>,
-    build_fn: impl FnOnce(TaskRunner, ChannelStream<HotShotEvent<TYPES>>) -> Fut,
+    state: S,
     allow_extra_output: bool,
 ) where
     TYPES: NodeType,
-    Fut: Future<Output = TaskRunner>,
+    S: Send + 'static,
 {
-    let task_runner = TaskRunner::new();
-    let registry = task_runner.registry.clone();
-    let event_stream = event_stream.unwrap_or_default();
-    let state = TestHarnessState { expected_output };
-    let handler = HandleEvent(Arc::new(move |event, state| {
-        async move { handle_event(event, state, allow_extra_output) }.boxed()
-    }));
-    let filter = FilterEvent::default();
-    let builder = TaskBuilder::<TestHarnessTaskTypes<TYPES>>::new("test_harness".to_string())
-        .register_event_stream(event_stream.clone(), filter)
-        .await
-        .register_registry(&mut registry.clone())
-        .await
-        .register_state(state)
-        .register_event_handler(handler);
+    let registry = Arc::new(TaskRegistry::default());
+    let mut tasks = vec![];
+    // set up two broadcast channels so the test sends to the task and the task back to the test
+    let (to_task, from_test) = broadcast(1024);
+    let (to_test, from_task) = broadcast(1024);
+    let test_state = TestHarnessState {
+        expected_output,
+        allow_extra_output,
+    };
 
-    let id = builder.get_task_id().unwrap();
+    let test_task = Task::new(
+        to_test.clone(),
+        from_task.clone(),
+        registry.clone(),
+        test_state,
+    );
+    let task = Task::new(to_test.clone(), from_test.clone(), registry.clone(), state);
 
-    let task = TestHarnessTaskTypes::build(builder).launch();
-
-    let task_runner = task_runner.add_task(id, "test_harness".to_string(), task);
-    let task_runner = build_fn(task_runner, event_stream.clone()).await;
-
-    let runner = async_spawn(async move { task_runner.launch().await });
+    tasks.push(test_task.run());
+    tasks.push(task.run());
 
     for event in input {
-        let () = event_stream.publish(event).await;
+        to_task.broadcast_direct(event).await.unwrap();
     }
 
-    let _ = runner.await;
+    if async_timeout(Duration::from_secs(2), futures::future::join_all(tasks))
+        .await
+        .is_err()
+    {
+        panic!("Test timeout out before all all expected outputs received");
+    }
 }
 
 /// Handles an event for the Test Harness Task.  If the event is expected, remove it from
@@ -97,12 +97,10 @@ pub async fn run_harness<TYPES, Fut>(
 #[allow(clippy::needless_pass_by_value)]
 pub fn handle_event<TYPES: NodeType>(
     event: HotShotEvent<TYPES>,
-    mut state: TestHarnessState<TYPES>,
+    task: &mut Task<TestHarnessState<TYPES>>,
     allow_extra_output: bool,
-) -> (
-    std::option::Option<HotShotTaskCompleted>,
-    TestHarnessState<TYPES>,
-) {
+) -> Option<HotShotTaskCompleted> {
+    let state = task.state_mut();
     // Check the output in either case:
     // * We allow outputs only in our expected output set.
     // * We haven't received all expected outputs yet.
@@ -121,8 +119,9 @@ pub fn handle_event<TYPES: NodeType>(
     }
 
     if state.expected_output.is_empty() {
-        return (Some(HotShotTaskCompleted::ShutDown), state);
+        tracing::error!("test harness task completed");
+        return Some(HotShotTaskCompleted);
     }
 
-    (None, state)
+    None
 }

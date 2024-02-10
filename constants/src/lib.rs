@@ -28,3 +28,6 @@ pub struct Version {
 
 /// Constant for protocol version 0.1.
 pub const VERSION_0_1: Version = Version { major: 0, minor: 1 };
+
+/// Default Channel Size for consensus event sharing
+pub const EVENT_CHANNEL_SIZE: usize = 100_000;
