@@ -518,25 +518,6 @@ mod test {
     use hotshot_types::traits::block_contents::BlockHeader;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
-    // Run a hotshot test with our types
-    #[async_std::test]
-    async fn hotshot_test() {
-        setup_logging();
-        setup_backtrace();
-        // TODO figure out what needs to be implementd for `SeqTypes`
-        // TestMetadata {
-        //     overall_safety_properties: OverallSafetyPropertiesDescription {
-        //         num_successful_views: 10,
-        //         ..Default::default()
-        //     },
-        //     ..Default::default()
-        // }
-        // .gen_launcher::<SeqTypes, Node<network::Memory>>(0)
-        // .launch()
-        // .run_test()
-        // .await;
-    }
-
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         setup_logging();
