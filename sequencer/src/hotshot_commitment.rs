@@ -277,7 +277,7 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Leaf;
+    use crate::{Leaf, NodeState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
@@ -330,7 +330,7 @@ mod test {
     }
 
     fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes> {
-        let mut leaf = Leaf::genesis();
+        let mut leaf = Leaf::genesis(&NodeState {});
         let mut qc = QuorumCertificate::genesis();
         leaf.block_header.height = height;
         qc.data.leaf_commit = leaf.commit();

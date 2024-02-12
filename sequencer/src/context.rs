@@ -1,11 +1,11 @@
 use async_std::sync::{Arc, RwLock};
 use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::light_client::{
     CircuitField, LightClientState, StateKeyPair, StateSignature, StateSignatureRequestBody,
     StateSignatureScheme, StateVerKey,
 };
-use hotshot_orchestrator::client::OrchestratorClient;
 use jf_primitives::signatures::SignatureScheme;
 use surf_disco::Client;
 use tide_disco::error::ServerError;

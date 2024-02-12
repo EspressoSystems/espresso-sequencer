@@ -50,6 +50,7 @@ tokio-postgres = { version = "0.7", default-features = false, features = [ # dis
 
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
+hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-task = { workspace = true }
 hotshot-types = { workspace = true }

@@ -9,6 +9,7 @@ use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
 };
 use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
 use hotshot_types::traits::state::ConsensusTime;

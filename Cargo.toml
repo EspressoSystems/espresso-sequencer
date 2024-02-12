@@ -37,16 +37,15 @@ clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.10" }
-
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "b7eb7e5" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
