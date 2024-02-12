@@ -143,8 +143,8 @@ impl HotShotState for ValidatedState {
     }
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis(instance: &Self::Instance) -> Self {
-        Self::from_header(&Self::BlockHeader::genesis(instance).0)
+    fn genesis(_instance: &Self::Instance) -> Self {
+        ValidatedState::default()
     }
 }
 
