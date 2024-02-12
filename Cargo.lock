@@ -6967,65 +6967,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
-name = "sequencer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ark-bls12-381",
- "ark-ed-on-bn254",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
- "async-compatibility-layer",
- "async-std",
- "async-trait",
- "bincode",
- "bytesize",
- "clap",
- "cld",
- "commit",
- "contract-bindings",
- "derivative",
- "derive_more",
- "espresso-macros",
- "ethers",
- "ethers-contract-derive",
- "futures",
- "hotshot",
- "hotshot-orchestrator",
- "hotshot-query-service",
- "hotshot-stake-table",
- "hotshot-task",
- "hotshot-testing",
- "hotshot-types",
- "hotshot-web-server",
- "include_dir",
- "itertools 0.12.0",
- "jf-primitives",
- "jf-utils",
- "lazy_static",
- "num-traits",
- "portpicker",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "rand_distr",
- "sequencer-utils",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "snafu",
- "surf-disco",
- "tempfile",
- "tide-disco",
- "time 0.3.31",
- "tokio-postgres",
- "toml 0.8.8",
- "tracing",
- "trait-set",
- "typenum",
- "url",
-]
-
-[[package]]
 name = "sequencer-utils"
 version = "0.1.0"
 dependencies = [
@@ -8393,28 +8334,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "trait-set"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b79e2e9c9ab44c6d7c20d5976961b47e8f49ac199154daa514b77cd1ab536625"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "trait-variant"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45e1a477061e97925d81a2f89fb73b2b8038e6baa5a0023bad380ac23b5f4fa6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
 ]
 
 [[package]]
