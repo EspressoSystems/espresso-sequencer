@@ -331,14 +331,14 @@ where
                 let id: usize = req.integer_param("height")?;
 
                 state
-                    .get_block(BlockId::Number(id))
+                    .get_block(id)
                     .await
                     .with_timeout(timeout)
                     .await
                     .context(FetchBlockSnafu {
                         resource: id.to_string(),
                     })
-                    .map(Into::<BlockSummaryQueryData<Types>>::into)
+                    .map(BlockSummaryQueryData::from)
             }
             .boxed()
         })?
@@ -351,12 +351,12 @@ where
                     .get_block_range(from..until)
                     .await
                     .enumerate()
-                    .map(|(index, fetch)| {
-                        fetch.context(FetchBlockSnafu {
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                             resource: (index + from).to_string(),
                         })
                     })
-                    .map(|result| result.map(|block| block.into()))
+                    .map(|result| result.map(BlockSummaryQueryData::from))
                     .try_collect()
                     .await?;
 
@@ -488,6 +488,30 @@ mod test {
                     .await
                     .unwrap(),
             );
+            let block_summary = client
+                .get(&format!("block/summary/{}", i))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                BlockSummaryQueryData::<MockTypes>::from(block.clone()),
+                block_summary,
+            );
+            assert_eq!(block_summary.header(), block.header());
+            assert_eq!(block_summary.hash(), block.hash());
+            assert_eq!(block_summary.size(), block.size());
+            assert_eq!(
+                block_summary.num_transactions(),
+                block.num_transactions() as u64
+            );
+
+            let block_summaries: Vec<BlockSummaryQueryData<MockTypes>> = client
+                .get(&format!("block/summaries/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(block_summaries.len() as u64, i);
+
             // We should be able to look up the block by payload hash. Note that for duplicate
             // payloads, these endpoints may return a different block with the same payload, which
             // is acceptable. Therefore, we don't check equivalence of the entire `BlockQueryData`
@@ -661,25 +685,8 @@ mod test {
                 block,
                 client.get(&format!("block/{}", i)).send().await.unwrap()
             );
-            let block_summary: BlockSummaryQueryData<MockTypes> = client
-                .get(&format!("block/summary/{}", i))
-                .send()
-                .await
-                .unwrap();
-
-            assert_eq!(block_summary.header(), block.header());
-            assert_eq!(block_summary.hash(), block.hash());
-            assert_eq!(block_summary.size(), block.size());
-            assert_eq!(block_summary.num_transactions(), 1);
 
             validate(&client, (i + 1) as u64).await;
-
-            let block_summaries: Vec<BlockSummaryQueryData<MockTypes>> = client
-                .get(&format!("block/summaries/{}/{}", i, i + 1))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(block_summaries.len(), 1);
         }
 
         network.shut_down().await;

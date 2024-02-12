@@ -15,8 +15,8 @@
 use super::AvailabilityStorage;
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus, UpdateNodeData},
@@ -1175,6 +1175,7 @@ const BLOCK_COLUMNS: &str =
 fn parse_block<Types>(row: Row) -> QueryResult<BlockQueryData<Types>>
 where
     Types: NodeType,
+    Payload<Types>: QueryablePayload,
 {
     // First, check if we have the payload for this block yet.
     let size: Option<i32> = row
@@ -1213,6 +1214,8 @@ where
     })?;
 
     Ok(BlockQueryData {
+        num_transactions: payload.len(header.metadata()) as u64,
+        proposer_id: get_proposer::<Types>(header.clone()),
         header,
         payload,
         size,
@@ -1225,6 +1228,7 @@ const PAYLOAD_COLUMNS: &str = BLOCK_COLUMNS;
 fn parse_payload<Types>(row: Row) -> QueryResult<PayloadQueryData<Types>>
 where
     Types: NodeType,
+    Payload<Types>: QueryablePayload,
 {
     parse_block(row).map(PayloadQueryData::from)
 }
