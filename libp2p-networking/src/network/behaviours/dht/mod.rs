@@ -10,6 +10,7 @@ mod cache;
 
 use async_compatibility_layer::art::{async_block_on, async_spawn};
 use futures::channel::oneshot::Sender;
+use lazy_static::lazy_static;
 use libp2p::kad::Behaviour as KademliaBehaviour;
 use libp2p::kad::Event as KademliaEvent;
 use libp2p::{
@@ -28,8 +29,10 @@ use tracing::{error, info, warn};
 /// in order to trust that the answer is correct when retrieving from the DHT
 pub(crate) const NUM_REPLICATED_TO_TRUST: usize = 2;
 
-/// the maximum number of nodes to query in the DHT at any one time
-const MAX_DHT_QUERY_SIZE: usize = 50;
+lazy_static! {
+    /// the maximum number of nodes to query in the DHT at any one time
+    static ref MAX_DHT_QUERY_SIZE: NonZeroUsize = NonZeroUsize::new(50).unwrap();
+}
 
 use self::cache::Cache;
 
@@ -270,8 +273,8 @@ impl DHTBehaviour {
 
     /// update state based on recv-ed get query
     fn handle_get_query(&mut self, record_results: GetRecordResult, id: QueryId, mut last: bool) {
-        let num = if let Some(query) = self.in_progress_get_record_queries.get_mut(&id) {
-            match record_results {
+        let num = match self.in_progress_get_record_queries.get_mut(&id) {
+            Some(query) => match record_results {
                 Ok(results) => match results {
                     GetRecordOk::FoundRecord(record) => {
                         match query.records.entry(record.record.value) {
@@ -298,14 +301,18 @@ impl DHTBehaviour {
                     error!("GOT ERROR IN KAD QUERY {:?}", err);
                     0
                 }
+            },
+            None => {
+                // We already finished the query (or it's been cancelled). Do nothing and exit the
+                // function.
+                return;
             }
-        } else {
-            // inactive entry
-            return;
         };
 
-        // BUG
-        if num > NUM_REPLICATED_TO_TRUST {
+        // if the query has completed and we need to retry
+        // or if the query has enoguh replicas to return to the client
+        // trigger retry or completion logic
+        if num >= NUM_REPLICATED_TO_TRUST || last {
             if let Some(KadGetQuery {
                 backoff,
                 progress,
@@ -321,10 +328,12 @@ impl DHTBehaviour {
                     return;
                 }
 
-                let records_len = records.iter().fold(0, |acc, (_k, v)| acc + v);
-
                 // NOTE case where multiple nodes agree on different
-                // values is not handles
+                // values is not handled because it can't be hit.
+                // We optimistically choose whichever record returns the most trusted entries first
+
+                // iterate through the records and find an value that has enough replicas
+                // to trust the value
                 if let Some((r, _)) = records
                     .into_iter()
                     .find(|(_, v)| *v >= NUM_REPLICATED_TO_TRUST)
@@ -341,41 +350,28 @@ impl DHTBehaviour {
                         error!("Get DHT: channel closed before get record request result could be sent");
                     }
                 }
-                // many records that don't match => disagreement
-                else if records_len > MAX_DHT_QUERY_SIZE {
-                    error!(
-                        "Get DHT: Record disagreed upon; {:?}! requerying with more nodes",
-                        progress
-                    );
-                    self.get_record(key, notify, num_replicas, backoff, retry_count);
-                }
                 // disagreement => query more nodes
                 else {
-                    // there is some internal disagreement.
+                    // there is some internal disagreement or not enough nodes returned
                     // Initiate new query that hits more replicas
-                    let new_factor =
-                        NonZeroUsize::new(num_replicas.get() + 1).unwrap_or(num_replicas);
-
-                    self.get_record(key, notify, new_factor, backoff, retry_count);
-                    error!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes", progress);
-                }
-            }
-        } else if last {
-            if let Some(KadGetQuery {
-                backoff,
-                progress,
-                notify,
-                num_replicas,
-                key,
-                retry_count,
-                records,
-            }) = self.in_progress_get_record_queries.remove(&id)
-            {
-                let records_len = records.iter().fold(0, |acc, (_k, v)| acc + v);
-                // lack of replication => error
-                if records_len < NUM_REPLICATED_TO_TRUST {
-                    error!("Get DHT: Record not replicated enough for {:?}! requerying with more nodes", progress);
-                    self.get_record(key, notify, num_replicas, backoff, retry_count);
+                    if retry_count > 0 {
+                        let new_retry_count = retry_count - 1;
+                        error!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes. {:?} retries left", progress, new_retry_count);
+                        let new_factor = NonZeroUsize::max(
+                            NonZeroUsize::new(num_replicas.get() + 1).unwrap_or(num_replicas),
+                            *MAX_DHT_QUERY_SIZE,
+                        );
+                        self.queued_get_record_queries.push_back(KadGetQuery {
+                            backoff,
+                            progress: DHTProgress::NotStarted,
+                            notify,
+                            num_replicas: new_factor,
+                            key,
+                            retry_count: new_retry_count,
+                            records: HashMap::default(),
+                        });
+                    }
+                    error!("Get DHT: Internal disagreement for get dht request {:?}! Giving up because out of retries. ", progress);
                 }
             }
         }
