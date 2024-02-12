@@ -133,4 +133,12 @@ contract LightClientUpgradeTest is Test {
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
         assertEq(lcV2Proxy.VERSION(), newVersion);
     }
+
+    function testMaliciousUpgradeFails() public {
+        address attacker = makeAddr("attacker");
+
+        //attempted upgrade as attacker will revert
+        vm.expectRevert();
+        lcV2Proxy = LCV2(upgrader.run(attacker, address(proxy)));
+    }
 }
