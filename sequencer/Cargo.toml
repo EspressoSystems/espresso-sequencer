@@ -59,6 +59,7 @@ hotshot-state-prover = { path = "../hotshot-state-prover" }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
+num-traits = "0.2.17"
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
@@ -74,3 +75,4 @@ url = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
+trait-set = "0.3.0"
