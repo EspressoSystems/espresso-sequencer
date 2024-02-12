@@ -86,16 +86,20 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
-    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
     constructor() {
         _disableInitializers();
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize() public initializer {
+    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch)
+        public
+        initializer
+    {
         __Ownable_init(msg.sender); //sets owner to msg.sender
         __UUPSUpgradeable_init();
+        _initializeState(genesis, numBlocksPerEpoch);
     }
 
     /// @notice only the owner can authorize an upgrade

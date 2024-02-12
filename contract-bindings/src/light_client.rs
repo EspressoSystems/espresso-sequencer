@@ -269,7 +269,33 @@ pub mod light_client {
                     ::std::borrow::ToOwned::to_owned("initialize"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("initialize"),
-                        inputs: ::std::vec![],
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("genesis"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ],),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "struct LightClient.LightClientState",
+                                    ),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("numBlocksPerEpoch"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint32"),
+                                ),
+                            },
+                        ],
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
@@ -850,10 +876,14 @@ pub mod light_client {
                 .method_hash([210, 77, 147, 61], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `initialize` (0x8129fc1c) function
-        pub fn initialize(&self) -> ::ethers::contract::builders::ContractCall<M, ()> {
+        ///Calls the contract's `initialize` (0x5420d15d) function
+        pub fn initialize(
+            &self,
+            genesis: LightClientState,
+            num_blocks_per_epoch: u32,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([129, 41, 252, 28], ())
+                .method_hash([84, 32, 209, 93], (genesis, num_blocks_per_epoch))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `newFinalizedState` (0x409939b7) function
@@ -1831,7 +1861,7 @@ pub mod light_client {
     )]
     #[ethcall(name = "genesisState", abi = "genesisState()")]
     pub struct GenesisStateCall;
-    ///Container type for all input parameters for the `initialize` function with signature `initialize()` and selector `0x8129fc1c`
+    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)` and selector `0x5420d15d`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -1844,8 +1874,14 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "initialize", abi = "initialize()")]
-    pub struct InitializeCall;
+    #[ethcall(
+        name = "initialize",
+        abi = "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)"
+    )]
+    pub struct InitializeCall {
+        pub genesis: LightClientState,
+        pub num_blocks_per_epoch: u32,
+    }
     ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x409939b7`
     #[derive(
         Clone,
