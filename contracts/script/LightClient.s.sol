@@ -14,15 +14,20 @@ contract DeployLightClientScript is Script {
         // For Decaf there will be only one epoch
         uint32 blocksPerEpoch = type(uint32).max;
 
-        // TODO for a production deployment provide the right genesis state
         uint64 viewNum = 0;
         uint64 blockHeight = 0;
-        BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(42);
+        BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(0);
         BN254.ScalarField feeLedgerComm = BN254.ScalarField.wrap(0);
-        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(42);
-        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(42);
-        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(42);
-        uint256 threshold = 10;
+        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(
+            21279528985922333501911071464328386841445872547720180015435547221260402565727
+        );
+        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(
+            7499525782104864821748149693309973670683978566054600186296438202262387687594
+        );
+        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(
+            17674948780218579510668373650995978278726151659230619414891977565353113435659
+        );
+        uint256 threshold = 3;
 
         LC.LightClientState memory genesis = LC.LightClientState(
             viewNum,

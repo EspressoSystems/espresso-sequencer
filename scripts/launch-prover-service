@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [[ -z "${ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS}" ]]; then
+  ./gen-demo-contract --contracts-root-dir="./contracts"
+  forge fmt
+  forge build
+  ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS=$(forge script contracts/script/LightClientTest.s.sol --fork-url $ESPRESSO_SEQUENCER_L1_PROVIDER --broadcast 2>/dev/null | grep "Contract Address:" | tail -1 | sed "s/^.*: //")
+fi
+
+echo $ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS
+
+./state-prover -d --light-client-address $ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS
