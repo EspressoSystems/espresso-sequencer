@@ -28,7 +28,7 @@ use hotshot_types::{
     },
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     marker::PhantomData,
     sync::Arc,
     time::Duration,
@@ -163,7 +163,7 @@ pub async fn create_consensus_state<TYPES: NodeType, I: NodeImplementation<TYPES
         timeout_task: None,
         timeout_cert: None,
         output_event_stream: output_stream,
-        vid_shares: HashMap::new(),
+        vid_shares: BTreeMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
         public_key: c_api.public_key().clone(),

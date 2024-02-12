@@ -1,7 +1,7 @@
 //! Events that a `HotShot` instance can emit
 
 use crate::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse},
     error::HotShotError,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -21,6 +21,8 @@ pub struct Event<TYPES: NodeType> {
     pub event: EventType<TYPES>,
 }
 
+/// The chain of leafs decided on with corresponding VID info if we have it
+pub type LeafChain<TYPES> = Vec<(Leaf<TYPES>, Option<VidDisperse<TYPES>>)>;
 /// The type and contents of a status event emitted by a `HotShot` instance
 ///
 /// This enum does not include metadata shared among all variants, such as the stage and view
@@ -41,7 +43,8 @@ pub enum EventType<TYPES: NodeType> {
         /// block first in the list.
         ///
         /// This list may be incomplete if the node is currently performing catchup.
-        leaf_chain: Arc<Vec<Leaf<TYPES>>>,
+        /// Vid Info for a decided view may be missing if this node never saw it's share.
+        leaf_chain: Arc<LeafChain<TYPES>>,
         /// The QC signing the most recent leaf in `leaf_chain`.
         ///
         /// Note that the QC for each additional leaf in the chain can be obtained from the leaf

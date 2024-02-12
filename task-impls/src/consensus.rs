@@ -39,7 +39,7 @@ use tracing::warn;
 use crate::vote::HandleVoteEvent;
 use snafu::Snafu;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     marker::PhantomData,
     sync::Arc,
 };
@@ -126,9 +126,8 @@ pub struct ConsensusTaskState<
     /// All the VID shares we've received for current and future views.
     /// In the future we will need a different struct similar to VidDisperse except
     /// it stores only one share.
-    /// TODO <https://github.com/EspressoSystems/HotShot/issues/2146>
     /// TODO <https://github.com/EspressoSystems/HotShot/issues/1732>
-    pub vid_shares: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
+    pub vid_shares: BTreeMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -243,17 +242,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
 
-            // TODO: re-enable this when HotShot/the sequencer needs the shares for something
-            // issue: https://github.com/EspressoSystems/HotShot/issues/2236
             // Only vote if you has seen the VID share for this view
-            // if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
-            // } else {
-            //     debug!(
-            //         "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
-            //         proposal.view_number
-            //     );
-            //     return false;
-            // }
+            if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
+            } else {
+                debug!(
+                    "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+                    proposal.view_number
+                );
+                return false;
+            }
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
@@ -514,7 +511,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 Event {
                                     view_number: TYPES::Time::genesis(),
                                     event: EventType::Decide {
-                                        leaf_chain: Arc::new(vec![leaf.clone()]),
+                                        leaf_chain: Arc::new(vec![(leaf.clone(), None)]),
                                         qc: Arc::new(justify_qc.clone()),
                                         block_size: None,
                                     },
@@ -743,7 +740,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     leaf.fill_block_payload_unchecked(payload);
                                 }
 
-                                leaf_views.push(leaf.clone());
+                                let vid = self
+                                    .vid_shares
+                                    .get(&leaf.get_view_number())
+                                    .map(|vid_proposal| vid_proposal.data.clone());
+                                leaf_views.push((leaf.clone(), vid));
                                 if let Some(ref payload) = leaf.block_payload {
                                     for txn in payload
                                         .transaction_commitments(leaf.get_block_header().metadata())
@@ -803,6 +804,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     consensus
                         .collect_garbage(old_anchor_view, new_anchor_view)
                         .await;
+                    self.vid_shares = self.vid_shares.split_off(&new_anchor_view);
                     consensus.last_decided_view = new_anchor_view;
                     consensus.metrics.invalid_qc.set(0);
                     consensus
@@ -1063,9 +1065,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
-                // TODO: re-enable this when HotShot/the sequencer needs the shares for something
-                // issue: https://github.com/EspressoSystems/HotShot/issues/2236
-                // self.vid_shares.insert(view, disperse);
+                self.vid_shares.insert(view, disperse);
+                self.vote_if_able(&event_stream).await;
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);

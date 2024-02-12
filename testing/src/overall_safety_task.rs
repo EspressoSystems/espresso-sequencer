@@ -2,9 +2,9 @@ use hotshot::{traits::TestableNodeImplementation, HotShotError};
 
 use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{
-    data::{Leaf, VidCommitment},
+    data::{Leaf, VidCommitment, VidDisperse},
     error::RoundTimedoutState,
-    event::{Event, EventType},
+    event::{Event, EventType, LeafChain},
     simple_certificate::QuorumCertificate,
     traits::node_implementation::{ConsensusTime, NodeType},
 };
@@ -160,7 +160,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             } => {
                 // Skip the genesis leaf.
                 if leaf_chain.len() == 1
-                    && leaf_chain[0].get_view_number() == TYPES::Time::genesis()
+                    && leaf_chain[0].0.get_view_number() == TYPES::Time::genesis()
                 {
                     return None;
                 }
@@ -206,7 +206,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             view.update_status(
                 threshold,
                 len,
-                &key,
+                &key.0,
                 check_leaf,
                 check_block,
                 transaction_threshold,
@@ -264,9 +264,7 @@ pub struct RoundResult<TYPES: NodeType> {
 
     /// Nodes that committed this round
     /// id -> (leaf, qc)
-    // TODO GG: isn't it infeasible to store a Vec<Leaf<TYPES>>?
-    #[allow(clippy::type_complexity)]
-    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>)>,
+    success_nodes: HashMap<u64, (LeafChain<TYPES>, QuorumCertificate<TYPES>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Arc<HotShotError<TYPES>>>,
@@ -358,13 +356,13 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>),
+        result: (LeafChain<TYPES>, QuorumCertificate<TYPES>),
         maybe_block_size: Option<u64>,
-    ) -> Option<Leaf<TYPES>> {
+    ) -> Option<(Leaf<TYPES>, Option<VidDisperse<TYPES>>)> {
         self.success_nodes.insert(idx as u64, result.clone());
 
-        let maybe_leaf: Option<Leaf<TYPES>> = result.0.into_iter().last();
-        if let Some(leaf) = maybe_leaf.clone() {
+        let maybe_leaf: Option<(Leaf<TYPES>, _)> = result.0.into_iter().last();
+        if let Some((leaf, _)) = maybe_leaf.clone() {
             match self.leaf_map.entry(leaf.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
@@ -477,7 +475,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         for (leaf_vec, _) in self.success_nodes.values() {
             let most_recent_leaf = leaf_vec.iter().last();
-            if let Some(leaf) = most_recent_leaf {
+            if let Some((leaf, _)) = most_recent_leaf {
                 match leaves.entry(leaf.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut o) => {
                         *o.get_mut() += 1;
