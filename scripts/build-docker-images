@@ -38,9 +38,9 @@ for ARCH in "amd64" "arm64"; do
 
   # Copy the contracts
   cp -r "${CONTRACTS_DIR}" ${WORKDIR}
-  cp "./foundry.toml" ${WORKDIR}
+  cp -v "./foundry.toml" ${WORKDIR}
   mkdir -p ${WORKDIR}/scripts
-  cp "./scripts/launch-prover-service" ${WORKDIR}/scripts
+  cp -v "./scripts/launch-prover-service" ${WORKDIR}/scripts
 done
 
 export DOCKER_BUILDKIT=1

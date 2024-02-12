@@ -3,7 +3,7 @@ FROM ghcr.io/foundry-rs/foundry:latest
 ARG TARGETARCH
 
 # copy the contracts
-RUN mkdir -p /usr/local/prover-service/contracts
+WORKDIR /usr/local/prover-service/contracts
 COPY foundry.toml /usr/local/prover-service/foundry.toml
 COPY contracts/ /usr/local/prover-service/contracts/
 # copy the binaries
