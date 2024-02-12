@@ -11,7 +11,6 @@ use ethers::{abi::Address, types::U256};
 use commit::{Commitment, Committable};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
-use hotshot_types::traits::block_contents::BlockHeader;
 use jf_primitives::merkle_tree::prelude::{LightWeightSHA3MerkleTree, Sha3Node};
 use jf_primitives::merkle_tree::{
     prelude::Sha3Digest, universal_merkle_tree::UniversalMerkleTree, AppendableMerkleTreeScheme,
