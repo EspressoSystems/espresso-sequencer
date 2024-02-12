@@ -210,7 +210,9 @@ impl BlockHeader for Header {
             mut fee_merkle_tree,
             ..
         } = parent_state.clone();
-        block_merkle_tree.push(parent_header.commit()).unwrap();
+        if let Err(e) = block_merkle_tree.push(parent_header.commit()) {
+            dbg!(e);
+        }
 
         let block_merkle_tree_root = block_merkle_tree.commitment();
 
