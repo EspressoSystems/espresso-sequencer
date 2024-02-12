@@ -62,9 +62,7 @@ impl ValidatedState {
         let mut block_merkle_tree = self.block_merkle_tree.clone();
 
         // validate proposal is descendent of parent by appending to parent
-        if let Err(e) = block_merkle_tree.push(parent.commit()) {
-            dbg!(e);
-        }
+        block_merkle_tree.push(parent.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         anyhow::ensure!(
             proposal.block_merkle_tree_root == block_merkle_tree_root,
