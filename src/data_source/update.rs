@@ -11,9 +11,12 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
-use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
+use crate::availability::{
+    BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
+};
 use crate::node::UpdateNodeData;
 use crate::status::UpdateStatusData;
+use crate::Payload;
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
@@ -59,6 +62,7 @@ where
         + UpdateNodeData<Types, Error = <Self as UpdateAvailabilityData<Types>>::Error>
         + UpdateStatusData
         + Send,
+    Payload<Types>: QueryablePayload,
 {
     async fn update(
         &mut self,

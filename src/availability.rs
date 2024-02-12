@@ -30,7 +30,7 @@ use crate::{api::load_api, Payload};
 use clap::Args;
 use cld::ClDuration;
 use derive_more::From;
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
@@ -325,6 +325,44 @@ where
                     .unwrap())
             }
             .boxed()
+        })?
+        .get("get_block_summary", move |req, state| {
+            async move {
+                let id: usize = req.integer_param("height")?;
+
+                state
+                    .get_block(id)
+                    .await
+                    .with_timeout(timeout)
+                    .await
+                    .context(FetchBlockSnafu {
+                        resource: id.to_string(),
+                    })
+                    .map(BlockSummaryQueryData::from)
+            }
+            .boxed()
+        })?
+        .get("get_block_summary_range", move |req, state| {
+            async move {
+                let from: usize = req.integer_param("from")?;
+                let until: usize = req.integer_param("until")?;
+
+                let result: Vec<BlockSummaryQueryData<Types>> = state
+                    .get_block_range(from..until)
+                    .await
+                    .enumerate()
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .map(|result| result.map(BlockSummaryQueryData::from))
+                    .try_collect()
+                    .await?;
+
+                Ok(result)
+            }
+            .boxed()
         })?;
     Ok(api)
 }
@@ -450,6 +488,27 @@ mod test {
                     .await
                     .unwrap(),
             );
+            let block_summary = client
+                .get(&format!("block/summary/{}", i))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                BlockSummaryQueryData::<MockTypes>::from(block.clone()),
+                block_summary,
+            );
+            assert_eq!(block_summary.header(), block.header());
+            assert_eq!(block_summary.hash(), block.hash());
+            assert_eq!(block_summary.size(), block.size());
+            assert_eq!(block_summary.num_transactions(), block.num_transactions());
+
+            let block_summaries: Vec<BlockSummaryQueryData<MockTypes>> = client
+                .get(&format!("block/summaries/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(block_summaries.len() as u64, i);
+
             // We should be able to look up the block by payload hash. Note that for duplicate
             // payloads, these endpoints may return a different block with the same payload, which
             // is acceptable. Therefore, we don't check equivalence of the entire `BlockQueryData`
@@ -623,6 +682,7 @@ mod test {
                 block,
                 client.get(&format!("block/{}", i)).send().await.unwrap()
             );
+
             validate(&client, (i + 1) as u64).await;
         }
 

@@ -262,19 +262,29 @@ pub struct BlockQueryData<Types: NodeType> {
     pub(crate) payload: Payload<Types>,
     pub(crate) hash: BlockHash<Types>,
     pub(crate) size: u64,
+    pub(crate) num_transactions: u64,
+    pub(crate) proposer_id: SignatureKey<Types>,
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
-    pub fn new(header: Header<Types>, payload: Payload<Types>) -> Self {
+    pub fn new(header: Header<Types>, payload: Payload<Types>) -> Self
+    where
+        Payload<Types>: QueryablePayload,
+    {
         Self {
             hash: header.commit(),
-            header,
             size: payload_size::<Types>(&payload),
+            num_transactions: payload.len(header.metadata()) as u64,
+            proposer_id: get_proposer::<Types>(header.clone()),
+            header,
             payload,
         }
     }
 
-    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self
+    where
+        Payload<Types>: QueryablePayload,
+    {
         let (header, payload, _) = Types::BlockHeader::genesis(instance_state);
         Self::new(header, payload)
     }
@@ -305,6 +315,14 @@ impl<Types: NodeType> BlockQueryData<Types> {
 
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    pub fn num_transactions(&self) -> u64 {
+        self.num_transactions
+    }
+
+    pub fn proposer(&self) -> SignatureKey<Types> {
+        self.proposer_id.clone()
     }
 }
 
@@ -427,5 +445,82 @@ pub(crate) fn payload_size<Types: NodeType>(payload: &Payload<Types>) -> u64 {
     match payload.encode() {
         Ok(iter) => iter.count() as u64,
         Err(_) => 0,
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct BlockSummaryQueryData<Types: NodeType> {
+    pub(crate) header: Header<Types>,
+    pub(crate) hash: BlockHash<Types>,
+    pub(crate) size: u64,
+    pub(crate) num_transactions: u64,
+    pub(crate) proposer_id: SignatureKey<Types>,
+}
+
+// Add some basic getters to the BlockSummaryQueryData type.
+impl<Types: NodeType> BlockSummaryQueryData<Types> {
+    pub fn header(&self) -> &Header<Types> {
+        &self.header
+    }
+
+    pub fn hash(&self) -> BlockHash<Types> {
+        self.hash
+    }
+
+    pub fn height(&self) -> u64 {
+        self.header.block_number()
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    pub fn num_transactions(&self) -> u64 {
+        self.num_transactions
+    }
+
+    pub fn proposer(&self) -> SignatureKey<Types> {
+        self.proposer_id.clone()
+    }
+}
+
+// Get the Proposer from the given header.  At the moment the proposer cannot
+// be determined from the header, however it is intended to in the future.
+// For now we will just generate one with dummy data.
+// TODO update this function to retrieve the proposer from the Header type once
+//      the Header type has been updated to include the proposer.
+pub(crate) fn get_proposer<Types: NodeType>(_header: Header<Types>) -> SignatureKey<Types> {
+    use hotshot::types::SignatureKey;
+    let (key, _) = SignatureKey::generated_from_seed_indexed([0; 32], 0);
+    key
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct TransactionSummaryQueryData<Types: NodeType> {
+    pub(crate) hash: TransactionHash<Types>,
+    pub(crate) header: Header<Types>,
+    // We want a way to determine a summary for each rollup entry, without
+    // the data directly, but rather a summary of the data.
+    // For now, we'll roll with the `Payload` itself.
+    pub(crate) transaction: Transaction<Types>,
+}
+
+// Since BlockSummaryQueryData can be derived entirely from BlockQueryData, we
+// implement the From trait to allow for a seamless conversion using rust
+// contentions.
+impl<Types: NodeType> From<BlockQueryData<Types>> for BlockSummaryQueryData<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    fn from(value: BlockQueryData<Types>) -> Self {
+        BlockSummaryQueryData {
+            header: value.header,
+            hash: value.hash,
+            size: value.size,
+            num_transactions: value.num_transactions,
+            proposer_id: value.proposer_id,
+        }
     }
 }
