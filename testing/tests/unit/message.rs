@@ -6,7 +6,7 @@ use either::Left;
 
 use hotshot_constants::Version;
 
-use hotshot_testing::node_types::TestTypes;
+use hotshot_example_types::node_types::TestTypes;
 
 use hotshot_utils::bincode::bincode_opts;
 

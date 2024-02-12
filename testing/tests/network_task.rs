@@ -1,9 +1,7 @@
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::{
-    node_types::{MemoryImpl, TestTypes},
-    task_helpers::{build_quorum_proposal, vid_init},
-};
+use hotshot_testing::task_helpers::{build_quorum_proposal, vid_init};
 use hotshot_types::{
     data::{DAProposal, VidSchemeTrait, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},

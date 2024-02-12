@@ -23,11 +23,11 @@ Easily overriding setup/correctness checks/hooks and launching is all done by an
 ```rust
 use std::sync::Arc;
 use futures::FutureExt;
-use hotshot_testing::test_types::StaticNodeImplType;
-use hotshot_testing::round::RoundHook;
-use hotshot_testing::test_types::StaticCommitteeTestTypes;
-use hotshot_testing::test_builder::TestBuilder;
-use hotshot_testing::test_builder::TestMetadata;
+use hotshot_example_types::test_types::StaticNodeImplType;
+use hotshot_example_types::round::RoundHook;
+use hotshot_example_types::test_types::StaticCommitteeTestTypes;
+use hotshot_example_types::test_builder::TestBuilder;
+use hotshot_example_types::test_builder::TestMetadata;
 
 async {
     // specify general characteristics of the test in TestMetadata

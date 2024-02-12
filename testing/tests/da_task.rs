@@ -1,9 +1,9 @@
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
-use hotshot_task_impls::{da::DATaskState, events::HotShotEvent};
-use hotshot_testing::{
+use hotshot_example_types::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
 };
+use hotshot_task_impls::{da::DATaskState, events::HotShotEvent};
 use hotshot_types::{
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},

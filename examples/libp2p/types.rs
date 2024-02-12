@@ -1,6 +1,6 @@
-use crate::infra::CombinedDARun;
-use hotshot::traits::implementations::{CombinedCommChannel, MemoryStorage};
-use hotshot_testing::state_types::TestTypes;
+use crate::infra::Libp2pDARun;
+use hotshot::traits::implementations::{Libp2pCommChannel, MemoryStorage};
+use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -10,13 +10,13 @@ use std::fmt::Debug;
 pub struct NodeImpl {}
 
 /// convenience type alias
-pub type DANetwork = CombinedCommChannel<TestTypes>;
+pub type DANetwork = Libp2pCommChannel<TestTypes>;
 /// convenience type alias
-pub type VIDNetwork = CombinedCommChannel<TestTypes>;
+pub type VIDNetwork = Libp2pCommChannel<TestTypes>;
 /// convenience type alias
-pub type QuorumNetwork = CombinedCommChannel<TestTypes>;
+pub type QuorumNetwork = Libp2pCommChannel<TestTypes>;
 /// convenience type alias
-pub type ViewSyncNetwork = CombinedCommChannel<TestTypes>;
+pub type ViewSyncNetwork = Libp2pCommChannel<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Storage = MemoryStorage<TestTypes>;
@@ -24,4 +24,4 @@ impl NodeImplementation<TestTypes> for NodeImpl {
     type CommitteeNetwork = DANetwork;
 }
 /// convenience type alias
-pub type ThisRun = CombinedDARun<TestTypes>;
+pub type ThisRun = Libp2pDARun<TestTypes>;

@@ -1,5 +1,5 @@
 [package]
-name = "hotshot-testing"
+name = "hotshot-example-types"
 version = "0.1.0"
 edition = "2021"
 description = "Types and traits for the HotShot consesus module"
@@ -18,9 +18,7 @@ bincode = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
-hotshot = { path = "../hotshot", features = [
-  "hotshot-testing",
-] }
+hotshot = { path = "../hotshot" }
 hotshot-constants = { path = "../constants" }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }
@@ -35,7 +33,6 @@ async-lock = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }
 hotshot-task = { path = "../task" }
-hotshot-example-types = { path = "../example-types" }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

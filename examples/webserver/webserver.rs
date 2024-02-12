@@ -1,5 +1,5 @@
 //! web server example
-use hotshot_testing::state_types::TestTypes;
+use hotshot_example_types::state_types::TestTypes;
 use std::sync::Arc;
 use surf_disco::Url;
 

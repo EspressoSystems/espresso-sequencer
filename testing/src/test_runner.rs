@@ -7,7 +7,6 @@ use super::{
 use crate::{
     completion_task::CompletionTaskDescription,
     spinning_task::{ChangeNode, SpinningTask, UpDown},
-    state_types::TestInstanceState,
     test_launcher::{Networks, TestLauncher},
     txn_task::TxnTaskDescription,
     view_sync_task::ViewSyncTask,
@@ -15,6 +14,7 @@ use crate::{
 use async_broadcast::broadcast;
 use futures::future::join_all;
 use hotshot::{types::SystemContextHandle, Memberships};
+use hotshot_example_types::state_types::TestInstanceState;
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 

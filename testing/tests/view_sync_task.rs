@@ -1,6 +1,6 @@
 use hotshot::HotShotConsensusApi;
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use std::collections::HashMap;
 

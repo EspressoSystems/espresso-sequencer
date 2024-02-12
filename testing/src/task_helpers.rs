@@ -1,12 +1,13 @@
 #![allow(clippy::panic)]
 use std::marker::PhantomData;
 
-use crate::{
+use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload},
     node_types::{MemoryImpl, TestTypes},
     state_types::{TestInstanceState, TestValidatedState},
-    test_builder::TestMetadata,
 };
+
+use crate::test_builder::TestMetadata;
 use commit::Committable;
 use ethereum_types::U256;
 use hotshot::{

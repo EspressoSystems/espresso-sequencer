@@ -17,15 +17,15 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
+use hotshot_example_types::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestInstanceState,
+};
 use hotshot_orchestrator::config::NetworkConfigSource;
 use hotshot_orchestrator::{
     self,
     client::{OrchestratorClient, ValidatorArgs},
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
-};
-use hotshot_testing::{
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::TestInstanceState,
 };
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;

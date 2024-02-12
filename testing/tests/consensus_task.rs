@@ -1,11 +1,9 @@
 #![allow(clippy::panic)]
 use commit::Committable;
 use hotshot::{types::SystemContextHandle, HotShotConsensusApi};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::{
-    node_types::{MemoryImpl, TestTypes},
-    task_helpers::{build_quorum_proposal, key_pair_for_id},
-};
+use hotshot_testing::task_helpers::{build_quorum_proposal, key_pair_for_id};
 use hotshot_types::simple_vote::QuorumVote;
 use hotshot_types::vote::Certificate;
 use hotshot_types::{
@@ -183,9 +181,9 @@ async fn test_consensus_vote() {
 async fn test_consensus_with_vid() {
     use hotshot::traits::BlockPayload;
     use hotshot::types::SignatureKey;
+    use hotshot_example_types::block_types::TestBlockPayload;
+    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::block_types::TestBlockPayload;
-    use hotshot_testing::block_types::TestTransaction;
     use hotshot_testing::task_helpers::build_cert;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;

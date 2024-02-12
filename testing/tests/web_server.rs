@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use async_compatibility_layer::logging::shutdown_logging;
+use hotshot_example_types::node_types::{TestTypes, WebImpl};
 use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-    node_types::{TestTypes, WebImpl},
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::{TestMetadata, TimingData},
 };

@@ -1,10 +1,10 @@
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
-use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
-use hotshot_testing::{
+use hotshot_example_types::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
-    task_helpers::vid_init,
 };
+use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
+use hotshot_testing::task_helpers::{build_system_handle, vid_init};
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
@@ -20,7 +20,6 @@ use std::marker::PhantomData;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_vid_task() {
     use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();

@@ -9,16 +9,15 @@
 async fn test_timeout_web() {
     use std::time::Duration;
 
-    use hotshot_testing::node_types::WebImpl;
+    use hotshot_example_types::node_types::WebImpl;
 
+    use hotshot_example_types::node_types::TestTypes;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::TestTypes,
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
     };
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
@@ -74,15 +73,16 @@ async fn test_timeout_web() {
 async fn test_timeout_libp2p() {
     use std::time::Duration;
 
-    use hotshot_testing::node_types::Libp2pImpl;
+    use hotshot_example_types::node_types::Libp2pImpl;
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::TestTypes,
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
     };
+
+    use hotshot_example_types::node_types::TestTypes;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();

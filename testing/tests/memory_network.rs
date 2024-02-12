@@ -10,8 +10,8 @@ use hotshot::traits::implementations::{
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
 use hotshot_constants::VERSION_0_1;
-use hotshot_testing::state_types::TestInstanceState;
-use hotshot_testing::{
+use hotshot_example_types::state_types::TestInstanceState;
+use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestValidatedState,
 };

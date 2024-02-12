@@ -6,9 +6,9 @@ use hotshot_types::traits::network::SynchronousNetwork;
 use std::time::Duration;
 use std::time::Instant;
 
+use hotshot_example_types::node_types::{Libp2pImpl, TestTypes};
 use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-    node_types::{Libp2pImpl, TestTypes},
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::TestMetadata,
 };
@@ -54,9 +54,9 @@ async fn libp2p_network_sync() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_sync() {
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -133,11 +133,12 @@ async fn libp2p_network_async() {
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_async() {
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
+
     use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
@@ -181,11 +182,12 @@ async fn test_memory_network_async() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_partially_sync() {
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
+
     use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
@@ -275,9 +277,9 @@ async fn libp2p_network_partially_sync() {
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_chaos() {
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;

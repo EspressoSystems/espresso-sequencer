@@ -1,11 +1,11 @@
-//! A multi-validator using both the web server libp2p
+//! A multi-validator using libp2p
 use async_compatibility_layer::{
     art::async_spawn,
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
+use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::{MultiValidatorArgs, ValidatorArgs};
-use hotshot_testing::state_types::TestTypes;
 use tracing::instrument;
 use types::VIDNetwork;
 
