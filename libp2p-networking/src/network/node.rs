@@ -22,7 +22,7 @@ use super::{
 use crate::network::behaviours::{
     dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
     direct_message::{DMBehaviour, DMEvent},
-    direct_message_codec::{DirectMessageProtocol, MAX_MSG_SIZE_DM},
+    direct_message_codec::{DirectMessageCodec, DirectMessageProtocol, MAX_MSG_SIZE_DM},
     exponential_backoff::ExponentialBackoff,
     gossip::GossipEvent,
 };
@@ -30,7 +30,6 @@ use async_compatibility_layer::{
     art::async_spawn,
     channel::{unbounded, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
-use either::Either;
 use futures::{select, FutureExt, StreamExt};
 use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use libp2p::core::transport::ListenerId;
@@ -56,7 +55,6 @@ use rand::{prelude::SliceRandom, thread_rng};
 use snafu::ResultExt;
 use std::{
     collections::{HashMap, HashSet},
-    io::Error,
     iter,
     num::{NonZeroU32, NonZeroUsize},
     time::Duration,
@@ -217,7 +215,12 @@ impl NetworkNode {
                 // Use the (blake3) hash of a message as its ID
                 .message_id_fn(message_id_fn)
                 .build()
-                .map_err(|s| GossipsubConfigSnafu { message: s }.build())?;
+                .map_err(|s| {
+                    GossipsubConfigSnafu {
+                        message: s.to_string(),
+                    }
+                    .build()
+                })?;
 
             // - Build a gossipsub network behavior
             let gossipsub: Gossipsub = Gossipsub::new(
@@ -263,10 +266,11 @@ impl NetworkNode {
 
             let rrconfig = RequestResponseConfig::default();
 
-            let request_response = RequestResponse::new(
-                [(DirectMessageProtocol(), ProtocolSupport::Full)].into_iter(),
-                rrconfig,
-            );
+            let request_response: libp2p::request_response::Behaviour<DirectMessageCodec> =
+                RequestResponse::new(
+                    [(DirectMessageProtocol(), ProtocolSupport::Full)].into_iter(),
+                    rrconfig,
+                );
 
             let network = NetworkDef::new(
                 GossipBehaviour::new(gossipsub),
@@ -440,10 +444,7 @@ impl NetworkNode {
     #[instrument(skip(self))]
     async fn handle_swarm_events(
         &mut self,
-        event: SwarmEvent<
-            NetworkEventInternal,
-            Either<Either<Either<void::Void, Error>, Error>, void::Void>,
-        >,
+        event: SwarmEvent<NetworkEventInternal>,
         send_to_client: &UnboundedSender<NetworkEvent>,
     ) -> Result<(), NetworkError> {
         // Make the match cleaner
@@ -503,6 +504,9 @@ impl NetworkNode {
                 listener_id: _,
                 address: _,
             }
+            | SwarmEvent::NewExternalAddrCandidate { .. }
+            | SwarmEvent::ExternalAddrConfirmed { .. }
+            | SwarmEvent::ExternalAddrExpired { .. }
             | SwarmEvent::IncomingConnection {
                 connection_id: _,
                 local_addr: _,
@@ -587,6 +591,12 @@ impl NetworkNode {
             }
             SwarmEvent::ListenerError { listener_id, error } => {
                 info!("LISTENER ERROR {:?} {:?}", listener_id, error);
+            }
+            _ => {
+                error!(
+                    "Unhandled swarm event {:?}. This should not be possible.",
+                    event
+                );
             }
         }
         Ok(())

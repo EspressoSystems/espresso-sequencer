@@ -5,7 +5,7 @@ use std::{
 
 use libp2p::{
     gossipsub::{Behaviour, Event, IdentTopic, PublishError::Duplicate, TopicHash},
-    swarm::{NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm},
+    swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
@@ -64,24 +64,20 @@ impl NetworkBehaviour for GossipBehaviour {
 
     type ToSwarm = GossipEvent;
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p::swarm::derive_prelude::FromSwarm<'_, Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: libp2p::swarm::derive_prelude::FromSwarm<'_>) {
         self.gossipsub.on_swarm_event(event);
     }
 
     fn poll(
         &mut self,
         cx: &mut std::task::Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<GossipEvent, THandlerInEvent<Self>>> {
         // retry sending shit
         if self.backoff.is_expired() {
             let published = self.drain_publish_gossips();
             self.backoff.start_next(published);
         }
-        if let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.gossipsub, cx, params) {
+        if let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.gossipsub, cx) {
             match ready {
                 ToSwarm::GenerateEvent(e) => {
                     // add event to event queue which will be subsequently popped off.
@@ -124,6 +120,9 @@ impl NetworkBehaviour for GossipBehaviour {
                 }
                 ToSwarm::ExternalAddrExpired(c) => {
                     return Poll::Ready(ToSwarm::ExternalAddrExpired(c));
+                }
+                e => {
+                    error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
                 }
             }
         }

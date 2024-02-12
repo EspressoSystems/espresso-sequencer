@@ -528,6 +528,9 @@ impl DHTBehaviour {
             e @ KademliaEvent::OutboundQueryProgressed { .. } => {
                 info!("Not handling dht event {:?}", e);
             }
+            e => {
+                error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
+            }
         }
     }
 }
@@ -591,7 +594,6 @@ impl NetworkBehaviour for DHTBehaviour {
     fn poll(
         &mut self,
         cx: &mut std::task::Context<'_>,
-        params: &mut impl libp2p::swarm::PollParameters,
     ) -> Poll<ToSwarm<DHTEvent, THandlerInEvent<Self>>> {
         if matches!(self.bootstrap_state.state, State::NotStarted)
             && self.bootstrap_state.backoff.is_expired()
@@ -647,7 +649,7 @@ impl NetworkBehaviour for DHTBehaviour {
         }
 
         // poll behaviour which is a passthrough and call inject event
-        while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.kadem, cx, params) {
+        while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.kadem, cx) {
             match ready {
                 ToSwarm::GenerateEvent(e) => {
                     self.dht_handle_event(e);
@@ -690,6 +692,9 @@ impl NetworkBehaviour for DHTBehaviour {
                 ToSwarm::ExternalAddrExpired(c) => {
                     return Poll::Ready(ToSwarm::ExternalAddrExpired(c));
                 }
+                e => {
+                    error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
+                }
             }
         }
         if !self.event_queue.is_empty() {
@@ -698,10 +703,7 @@ impl NetworkBehaviour for DHTBehaviour {
         Poll::Pending
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p::swarm::derive_prelude::FromSwarm<'_, Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: libp2p::swarm::derive_prelude::FromSwarm<'_>) {
         self.kadem.on_swarm_event(event);
     }
 

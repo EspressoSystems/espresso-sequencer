@@ -4,11 +4,12 @@ use std::{
 };
 
 use libp2p::{
-    request_response::{Behaviour, Event, Message, RequestId, ResponseChannel},
+    request_response::{Behaviour, Event, Message, OutboundRequestId, ResponseChannel},
     swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
+// use libp2p_request_response::Behaviour;
 use tracing::{error, info};
 
 use super::{
@@ -34,7 +35,7 @@ pub struct DMBehaviour {
     /// The wrapped behaviour
     request_response: Behaviour<DirectMessageCodec>,
     /// In progress queries
-    in_progress_rr: HashMap<RequestId, DMRequest>,
+    in_progress_rr: HashMap<OutboundRequestId, DMRequest>,
     /// Failed queries to be retried
     failed_rr: VecDeque<DMRequest>,
     /// lsit of out events for parent behaviour
@@ -56,17 +57,13 @@ impl DMBehaviour {
         match event {
             Event::InboundFailure {
                 peer,
-                request_id,
+                request_id: _,
                 error,
             } => {
                 error!(
                     "inbound failure to send message to {:?} with error {:?}",
                     peer, error
                 );
-                if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
-                    req.backoff.start_next(false);
-                    self.failed_rr.push_back(req);
-                }
             }
             Event::OutboundFailure {
                 peer,
@@ -122,10 +119,7 @@ impl NetworkBehaviour for DMBehaviour {
 
     type ToSwarm = DMEvent;
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p::swarm::derive_prelude::FromSwarm<'_, Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: libp2p::swarm::derive_prelude::FromSwarm<'_>) {
         self.request_response.on_swarm_event(event);
     }
 
@@ -142,7 +136,6 @@ impl NetworkBehaviour for DMBehaviour {
     fn poll(
         &mut self,
         cx: &mut std::task::Context<'_>,
-        params: &mut impl libp2p::swarm::PollParameters,
     ) -> Poll<ToSwarm<DMEvent, THandlerInEvent<Self>>> {
         while let Some(req) = self.failed_rr.pop_front() {
             if req.backoff.is_expired() {
@@ -151,9 +144,7 @@ impl NetworkBehaviour for DMBehaviour {
                 self.failed_rr.push_back(req);
             }
         }
-        while let Poll::Ready(ready) =
-            NetworkBehaviour::poll(&mut self.request_response, cx, params)
-        {
+        while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.request_response, cx) {
             match ready {
                 // NOTE: this generates request
                 ToSwarm::GenerateEvent(e) => {
@@ -196,6 +187,9 @@ impl NetworkBehaviour for DMBehaviour {
                 }
                 ToSwarm::ExternalAddrExpired(c) => {
                     return Poll::Ready(ToSwarm::ExternalAddrExpired(c));
+                }
+                e => {
+                    error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
                 }
             }
         }
