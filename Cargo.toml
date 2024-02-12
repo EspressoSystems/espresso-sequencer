@@ -72,7 +72,7 @@ commit = { git = "https://github.com/EspressoSystems/commit.git" }
 custom_debug = "0.6"
 derivative = "2.2"
 derive_more = "0.99"
-either = "1.8"
+either = "1.10"
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "3f4f488a" }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "3f4f488a" }
