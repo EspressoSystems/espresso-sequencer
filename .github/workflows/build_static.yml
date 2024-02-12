@@ -138,12 +138,12 @@ jobs:
           flavor: suffix=musl
 
       - name: Generate prover-service docker metadata
-      uses: docker/metadata-action@v5
-      id: prover-service
-      with:
-        images: ghcr.io/espressosystems/espresso-sequencer/prover-service
-        flavor: suffix=musl
-  
+        uses: docker/metadata-action@v5
+        id: prover-service
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/prover-service
+          flavor: suffix=musl
+
       - name: Generate orchestrator docker metadata
         uses: docker/metadata-action@v5
         id: orchestrator
