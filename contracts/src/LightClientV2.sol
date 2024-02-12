@@ -16,7 +16,7 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
-contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
     // @notice Notify a new epoch is starting
@@ -32,7 +32,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // UUPS pattern?
 
     /// @notice A simple way to track contract versions
-    uint32 public immutable version = 1;
+    uint32 public immutable version = 2;
 
     // === Storage ===
     //
@@ -73,6 +73,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
+        uint256 newField; // New field compared to LightClientState V1
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -179,6 +180,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // check plonk proof
         verifyProof(newState, proof);
+
+        // New condition to check w.r.t. LightClient contract V1
+        require(newState.newField == 0);
 
         // upon successful verification, update the latest finalized state
         finalizedState = newState;
