@@ -564,11 +564,11 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            'inner: for (i, leaf) in leaf_chain.iter().rev().enumerate() {
+            for (i, leaf) in leaf_chain.iter().rev().enumerate() {
                 let header = leaf.block_header.clone();
                 if i == 0 {
                     parent = header;
-                    continue 'inner;
+                    continue;
                 }
                 dbg!(header.height, parent.height);
                 assert_eq!(header.height, parent.height + 1);
