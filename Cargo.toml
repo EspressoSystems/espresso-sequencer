@@ -13,9 +13,7 @@ members = [
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
     "hotshot-state-prover",
-    # FIXME: uncomment this once https://github.com/EspressoSystems/espresso-sequencer/pull/1059 is merged
-    # and sequencer is up to date with lateset HotShot's `types/traits`
-    # "sequencer",
+    "sequencer",
     "utils"
 ]
 
