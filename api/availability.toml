@@ -197,3 +197,20 @@ Get the stake table after `:height` leaves or after `:view_number`.
 
 Returns a map from staking public keys to amounts.
 """
+
+
+[route.get_block_summary]
+PATH = ["block/summary/:height"]
+":height" = "Integer"
+DOC = """
+Get the Block Summary for a block based on its position in the ledger.
+"""
+
+[route.get_block_summary_range]
+PATH = ["block/summaries/:from/:until"]
+":from" = "Integer"
+":until" = "Integer"
+DOC = """
+Get the Block Summary entries for blocks based on their position in the ledger,
+the blocks are taken starting from the given :from up until the given :until.
+"""

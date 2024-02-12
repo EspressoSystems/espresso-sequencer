@@ -30,7 +30,7 @@ use crate::{api::load_api, Payload};
 use clap::Args;
 use cld::ClDuration;
 use derive_more::From;
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
@@ -323,6 +323,44 @@ where
                     .transaction(&index)
                     // The computation of `index` above should ensure that it is a valid index.
                     .unwrap())
+            }
+            .boxed()
+        })?
+        .get("get_block_summary", move |req, state| {
+            async move {
+                let id: usize = req.integer_param("height")?;
+
+                state
+                    .get_block(BlockId::Number(id))
+                    .await
+                    .with_timeout(timeout)
+                    .await
+                    .context(FetchBlockSnafu {
+                        resource: id.to_string(),
+                    })
+                    .map(Into::<BlockSummaryQueryData<Types>>::into)
+            }
+            .boxed()
+        })?
+        .get("get_block_summary_range", move |req, state| {
+            async move {
+                let from: usize = req.integer_param("from")?;
+                let until: usize = req.integer_param("until")?;
+
+                let result: Vec<BlockSummaryQueryData<Types>> = state
+                    .get_block_range(from..until)
+                    .await
+                    .enumerate()
+                    .map(|(index, fetch)| {
+                        fetch.context(FetchBlockSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .map(|result| result.map(|block| block.into()))
+                    .try_collect()
+                    .await?;
+
+                Ok(result)
             }
             .boxed()
         })?;
@@ -623,7 +661,25 @@ mod test {
                 block,
                 client.get(&format!("block/{}", i)).send().await.unwrap()
             );
+            let block_summary: BlockSummaryQueryData<MockTypes> = client
+                .get(&format!("block/summary/{}", i))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(block_summary.header(), block.header());
+            assert_eq!(block_summary.hash(), block.hash());
+            assert_eq!(block_summary.size(), block.size());
+            assert_eq!(block_summary.num_transactions(), 1);
+
             validate(&client, (i + 1) as u64).await;
+
+            let block_summaries: Vec<BlockSummaryQueryData<MockTypes>> = client
+                .get(&format!("block/summaries/{}/{}", i, i + 1))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(block_summaries.len(), 1);
         }
 
         network.shut_down().await;
