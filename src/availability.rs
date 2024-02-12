@@ -500,10 +500,7 @@ mod test {
             assert_eq!(block_summary.header(), block.header());
             assert_eq!(block_summary.hash(), block.hash());
             assert_eq!(block_summary.size(), block.size());
-            assert_eq!(
-                block_summary.num_transactions(),
-                block.num_transactions() as u64
-            );
+            assert_eq!(block_summary.num_transactions(), block.num_transactions());
 
             let block_summaries: Vec<BlockSummaryQueryData<MockTypes>> = client
                 .get(&format!("block/summaries/{}/{}", 0, i))
