@@ -28,9 +28,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    uint32 public blocksPerEpoch; // TODO how to make this variable immmutable while using the
-        // UUPS pattern?
-
+    /// @dev This variable cannot be made immutable due to how UUPS contracts work. See
+    /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
+    uint32 public blocksPerEpoch;
     /// @notice A simple way to track contract versions
     uint32 public immutable VERSION = 2;
 
@@ -116,9 +116,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Upgrade(newImplementation);
     }
 
-    // TODO are the decorators of this function correctly set?
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal 
-    // TODO should we add onlyOwner?
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch)
+        internal
+        onlyOwner
     {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.

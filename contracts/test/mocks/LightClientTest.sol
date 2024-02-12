@@ -11,7 +11,6 @@ import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateV
 contract LightClientTest is LC {
     constructor() LC() { }
 
-    // @dev TODO comment
     function initializeForTests(LC.LightClientState memory genesis, uint32 numBlockPerEpoch)
         public
     {

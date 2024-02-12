@@ -10,7 +10,7 @@ contract UpgradeLightClientScript is Script {
     /// @notice runs the upgrade
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy
-    /// TODO get th most recent deployment from the devops tooling
+    /// TODO get the most recent deployment from the devops tooling
 
     function run(address admin, address mostRecentlyDeployedProxy) external returns (address) {
         LCV2 newLC = new LCV2();
@@ -18,8 +18,8 @@ contract UpgradeLightClientScript is Script {
         return proxy;
     }
 
-    // TODO update documentation
-    /// @notice upgrades the box but calling the upgrade function the implementation contract via
+    /// @notice upgrades the light client contract by calling the upgrade function the
+    /// implementation contract via
     /// the proxy
     /// @param proxyAddress address of proxy
     /// @param newLightClient address of new implementation
