@@ -2,16 +2,17 @@
 
 use crate::context::SequencerContext;
 use crate::{network, Leaf, SeqTypes};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::{Event, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::light_client::StateSignatureRequestBody;
 use hotshot_types::light_client::StateVerKey;
 use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
-use hotshot_types::traits::state::ConsensusTime;
-use serde::{Deserialize, Serialize};
+
 use std::collections::{HashMap, VecDeque};
 
 /// Types related to the underlying signature schemes.
@@ -20,7 +21,7 @@ pub type StateSignatureScheme =
 pub use hotshot_stake_table::vec_based::config::FieldType;
 pub use hotshot_types::light_client::StateKeyPair;
 pub use hotshot_types::light_client::StateSignature;
-pub type LightClientState = hotshot_types::light_client::LightClientState<FieldType>;
+pub type LightClientState = hotshot_types::light_client::LightClientState;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -87,14 +88,6 @@ fn form_light_client_state(
         fee_ledger_comm: FieldType::default(),
         stake_table_comm: *stake_table_comm,
     }
-}
-
-/// Request body to send to the state relay server
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize)]
-pub struct StateSignatureRequestBody {
-    pub key: StateVerKey,
-    pub state: LightClientState,
-    pub signature: StateSignature,
 }
 
 /// A rolling in-memory storage for the most recent light client state signatures.

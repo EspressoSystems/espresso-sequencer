@@ -26,7 +26,6 @@ ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
 hex = "0.4.3"
 hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = "0.12.0"
 jf-plonk = { workspace = true }

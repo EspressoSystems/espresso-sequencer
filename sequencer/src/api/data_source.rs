@@ -4,11 +4,7 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{
-    network, persistence,
-    state_signature::{LightClientState, StateSignature, StateSignatureRequestBody},
-    Node, SeqTypes,
-};
+use crate::{network, persistence, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -18,6 +14,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
+use hotshot_types::light_client::{LightClientState, StateSignature, StateSignatureRequestBody};
 use tide_disco::Url;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
