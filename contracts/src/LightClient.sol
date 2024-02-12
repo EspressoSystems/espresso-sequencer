@@ -32,7 +32,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // UUPS pattern?
 
     /// @notice A simple way to track contract versions
-    uint32 public immutable version = 1;
+    uint32 public immutable VERSION = 1;
 
     // === Storage ===
     //

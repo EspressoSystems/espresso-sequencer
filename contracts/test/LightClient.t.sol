@@ -15,7 +15,7 @@ import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
-    LCTest lc;
+    LCTest public lc;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`

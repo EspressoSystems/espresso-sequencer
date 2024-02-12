@@ -24,6 +24,7 @@ pub mod ierc1822_proxiable;
 pub mod initializable;
 pub mod light_client;
 pub mod light_client_state_update_vk;
+pub mod light_client_v2;
 pub mod ownable_upgradeable;
 pub mod plonk_verifier;
 pub mod polynomial_eval;

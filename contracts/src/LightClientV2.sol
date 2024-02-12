@@ -32,7 +32,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // UUPS pattern?
 
     /// @notice A simple way to track contract versions
-    uint32 public immutable version = 2;
+    uint32 public immutable VERSION = 2;
 
     // === Storage ===
     //
@@ -52,6 +52,11 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public frozenStakeTableCommitment;
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
+
+    // TODO adding this field to the LightClientState struct does not seem to work. Why? See
+    // 8ba308fd9d613dd92b27baab2106e7401d4a0ec5
+    /// @notice new field for testing purposes
+    uint256 public newField;
 
     // === Data Structure ===
     //
@@ -73,7 +78,6 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
-        uint256 newField; // New field compared to LightClientState V1
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -182,7 +186,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         verifyProof(newState, proof);
 
         // New condition to check w.r.t. LightClient contract V1
-        require(newState.newField == 0);
+        require(newField == 0, "newField can only be set to 0");
 
         // upon successful verification, update the latest finalized state
         finalizedState = newState;

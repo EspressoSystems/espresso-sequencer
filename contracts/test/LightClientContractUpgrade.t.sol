@@ -16,7 +16,7 @@ contract LightClientUpgradeTest is Test {
     DeployLightClientContractScript public deployer = new DeployLightClientContractScript();
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
-    LCV1.LightClientState stateV1;
+    LCV1.LightClientState public stateV1;
 
     address public admin;
     address public proxy;
@@ -89,9 +89,14 @@ contract LightClientUpgradeTest is Test {
 
     // that the data remains the same after upgrading the implementation
     function testUpgradeSameData() public {
-        //upgrade LightClient and check that the genesis state is not change and that its
-        // corresponding newField is set to 0
+        // Upgrade LightClient and check that the genesis state is not changed and that the new
+        // field
+        // of the upgraded contract is set to 0
         lcV2Proxy = LCV2(upgrader.run(admin, proxy));
+
+        assertEq(lcV2Proxy.newField(), 0);
+        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
+        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         (
             uint64 viewNum,
@@ -101,10 +106,31 @@ contract LightClientUpgradeTest is Test {
             BN254.ScalarField stakeTableBlsKeyComm,
             BN254.ScalarField stakeTableSchnorrKeyComm,
             BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold,
-            uint256 newField
+            uint256 threshold
         ) = lcV2Proxy.finalizedState();
-        assert(lcV2Proxy.blocksPerEpoch() == 10);
-        assert(lcV2Proxy.currentEpoch() == 0);
+
+        LCV1.LightClientState memory expectedState = LCV1.LightClientState(
+            viewNum,
+            blockHeight,
+            blockCommRoot,
+            feeLedgerComm,
+            stakeTableBlsKeyComm,
+            stakeTableSchnorrKeyComm,
+            stakeTableAmountComm,
+            threshold
+        );
+        assertEq(abi.encode(expectedState), abi.encode(stateV1));
+    }
+
+    // check that the proxy address remains the same
+    function testUpgradesSameProxyAddress() public {
+        uint256 currentVersion = 1;
+        assertEq(lcV1Proxy.VERSION(), currentVersion);
+
+        //upgrade box
+        uint256 newVersion = 2;
+        lcV2Proxy = LCV2(upgrader.run(admin, proxy));
+        assertEq(address(lcV2Proxy), address(lcV1Proxy));
+        assertEq(lcV2Proxy.VERSION(), newVersion);
     }
 }
