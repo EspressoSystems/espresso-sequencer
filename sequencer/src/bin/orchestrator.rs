@@ -5,7 +5,7 @@ use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use sequencer::{options::parse_duration, PubKey, MAX_NMT_DEPTH};
+use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
@@ -195,7 +195,7 @@ async fn main() {
     config.config.known_nodes_with_stake = known_nodes_with_stake;
     config.config.max_transactions = args
         .max_transactions
-        .unwrap_or(NonZeroUsize::new(2_usize.pow(MAX_NMT_DEPTH as u32)).unwrap());
+        .unwrap_or(NonZeroUsize::new(1000).unwrap()); // TODO what to set here?
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;

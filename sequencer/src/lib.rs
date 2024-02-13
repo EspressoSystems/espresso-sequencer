@@ -61,9 +61,6 @@ pub use state::ValidatedState;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
-// Supports 1K transactions
-pub const MAX_NMT_DEPTH: usize = 10;
-
 /// Initialize the static variables for the sequencer
 ///
 /// Calling it early on startup makes it easier to catch errors.
