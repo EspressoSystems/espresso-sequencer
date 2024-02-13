@@ -25,7 +25,7 @@ use crate::{
         },
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus},
     Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
@@ -54,6 +54,8 @@ where
     index_by_payload_hash: HashMap<VidCommitment, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
+    num_transactions: usize,
+    payload_size: usize,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
     leaf_storage: LedgerLog<LeafQueryData<Types>>,
@@ -105,6 +107,8 @@ where
             index_by_payload_hash: Default::default(),
             index_by_txn_hash: Default::default(),
             index_by_proposer_id: Default::default(),
+            num_transactions: 0,
+            payload_size: 0,
             top_storage: None,
             leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
@@ -147,7 +151,12 @@ where
             .collect();
 
         let mut index_by_txn_hash = HashMap::new();
+        let mut num_transactions = 0;
+        let mut payload_size = 0;
         for block in block_storage.iter().flatten() {
+            num_transactions += block.len();
+            payload_size += block.size() as usize;
+
             let height = block.height();
             for (txn_ix, txn) in block.enumerate() {
                 update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
@@ -160,6 +169,8 @@ where
             index_by_payload_hash,
             index_by_txn_hash,
             index_by_proposer_id,
+            num_transactions,
+            payload_size,
             leaf_storage,
             block_storage,
             top_storage: None,
@@ -333,6 +344,10 @@ where
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
+        self.index_by_proposer_id
+            .entry(leaf.proposer())
+            .or_default()
+            .push(leaf.height());
         update_index_by_hash(
             &mut self.index_by_block_hash,
             leaf.block_hash(),
@@ -347,8 +362,15 @@ where
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        self.block_storage
-            .insert(block.height() as usize, block.clone())?;
+        if !self
+            .block_storage
+            .insert(block.height() as usize, block.clone())?
+        {
+            // The block was already present.
+            return Ok(());
+        }
+        self.num_transactions += block.len();
+        self.payload_size += block.size() as usize;
         for (txn_ix, txn) in block.enumerate() {
             update_index_by_hash(
                 &mut self.index_by_txn_hash,
@@ -415,27 +437,19 @@ where
         })
     }
 
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        Ok(self.num_transactions)
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        Ok(self.payload_size)
+    }
+
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         let height = self.block_height().await?;
         Ok(SyncStatus {
             missing_blocks: self.block_storage.missing(height),
             missing_leaves: self.leaf_storage.missing(height),
         })
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType> UpdateNodeData<Types> for FileSystemStorage<Types>
-where
-    Payload<Types>: QueryablePayload,
-{
-    type Error = PersistenceError;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        self.index_by_proposer_id
-            .entry(leaf.proposer())
-            .or_default()
-            .push(leaf.height());
-        Ok(())
     }
 }

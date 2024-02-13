@@ -19,7 +19,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus},
     Header, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_trait::async_trait;
@@ -141,20 +141,16 @@ where
         Err(QueryError::Missing)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn count_transactions(&self) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
-}
 
-#[async_trait]
-impl<Types: NodeType> UpdateNodeData<Types> for NoStorage
-where
-    Payload<Types>: QueryablePayload,
-{
-    type Error = Infallible;
+    async fn payload_size(&self) -> QueryResult<usize> {
+        Err(QueryError::Missing)
+    }
 
-    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        Ok(())
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        Err(QueryError::Missing)
     }
 }
 
@@ -169,7 +165,7 @@ pub mod testing {
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
         metrics::PrometheusMetrics,
-        node::{NodeDataSource, UpdateNodeData},
+        node::NodeDataSource,
         status::StatusDataSource,
         testing::{
             consensus::{DataSourceLifeCycle, MockNetwork},
@@ -393,13 +389,9 @@ pub mod testing {
 
         async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> Result<(), Self::Error> {
             match self {
-                Self::Sql(data_source) => UpdateAvailabilityData::insert_leaf(data_source, leaf)
-                    .await
-                    .map_err(err_msg),
+                Self::Sql(data_source) => data_source.insert_leaf(leaf).await.map_err(err_msg),
                 Self::NoStorage(data_source) => {
-                    UpdateAvailabilityData::insert_leaf(data_source, leaf)
-                        .await
-                        .map_err(err_msg)
+                    data_source.insert_leaf(leaf).await.map_err(err_msg)
                 }
             }
         }
@@ -444,26 +436,24 @@ pub mod testing {
             }
         }
 
+        async fn count_transactions(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => data_source.count_transactions().await,
+                Self::NoStorage(data_source) => data_source.count_transactions().await,
+            }
+        }
+
+        async fn payload_size(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => data_source.payload_size().await,
+                Self::NoStorage(data_source) => data_source.payload_size().await,
+            }
+        }
+
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             match self {
                 Self::Sql(data_source) => data_source.sync_status().await,
                 Self::NoStorage(data_source) => data_source.sync_status().await,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl UpdateNodeData<MockTypes> for DataSource {
-        type Error = QueryError;
-
-        async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> Result<(), Self::Error> {
-            match self {
-                Self::Sql(data_source) => UpdateNodeData::insert_leaf(data_source, leaf)
-                    .await
-                    .map_err(err_msg),
-                Self::NoStorage(data_source) => UpdateNodeData::insert_leaf(data_source, leaf)
-                    .await
-                    .map_err(err_msg),
             }
         }
     }

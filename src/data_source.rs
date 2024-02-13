@@ -409,7 +409,7 @@ pub mod availability_tests {
 #[espresso_macros::generic_tests]
 pub mod persistence_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        availability::{BlockQueryData, LeafQueryData},
         node::NodeDataSource,
         testing::{
             consensus::TestableDataSource,
@@ -441,9 +441,7 @@ pub mod persistence_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
-        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
-            .await
-            .unwrap();
+        ds.insert_leaf(leaf.clone()).await.unwrap();
         ds.insert_block(block.clone()).await.unwrap();
 
         assert_eq!(
@@ -486,9 +484,7 @@ pub mod persistence_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.
-        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
-            .await
-            .unwrap();
+        ds.insert_leaf(leaf.clone()).await.unwrap();
         ds.insert_block(block.clone()).await.unwrap();
         ds.commit().await.unwrap();
 
@@ -522,16 +518,20 @@ pub mod persistence_tests {
 pub mod node_tests {
     use super::test_helpers::*;
     use crate::{
-        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        availability::{BlockQueryData, LeafQueryData},
         node::SyncStatus,
         testing::{
             consensus::{MockNetwork, TestableDataSource},
-            mocks::MockTypes,
+            mocks::{mock_transaction, MockTypes},
             setup_test,
         },
     };
     use futures::stream::StreamExt;
-    use hotshot_testing::state_types::TestInstanceState;
+    use hotshot_testing::{
+        block_types::{TestBlockHeader, TestBlockPayload},
+        state_types::TestInstanceState,
+    };
+    use hotshot_types::traits::block_contents::{vid_commitment, BlockPayload};
     use std::collections::HashSet;
 
     async fn validate(ds: &impl TestableDataSource) {
@@ -646,9 +646,7 @@ pub mod node_tests {
 
         // Insert a leaf without the corresponding block, make sure we detect that the block is
         // missing.
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[0].clone())
-            .await
-            .unwrap();
+        ds.insert_leaf(leaves[0].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
@@ -660,9 +658,7 @@ pub mod node_tests {
 
         // Insert a leaf whose height is not the successor of the previous leaf. We should now
         // detect that the leaf in between is missing (along with all _three_ corresponding blocks).
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[2].clone())
-            .await
-            .unwrap();
+        ds.insert_leaf(leaves[2].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
@@ -674,9 +670,7 @@ pub mod node_tests {
 
         // Rectify the missing data.
         ds.insert_block(blocks[0].clone()).await.unwrap();
-        UpdateAvailabilityData::insert_leaf(&mut ds, leaves[1].clone())
-            .await
-            .unwrap();
+        ds.insert_leaf(leaves[1].clone()).await.unwrap();
         ds.insert_block(blocks[1].clone()).await.unwrap();
         ds.insert_block(blocks[2].clone()).await.unwrap();
         ds.commit().await.unwrap();
@@ -700,6 +694,51 @@ pub mod node_tests {
                 missing_leaves: expected_missing_leaves
             }
         );
+    }
+
+    #[async_std::test]
+    pub async fn test_counters<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        assert_eq!(ds.count_transactions().await.unwrap(), 0);
+        assert_eq!(ds.payload_size().await.unwrap(), 0);
+
+        // Insert some transactions. We insert the blocks out of order to check that the counters
+        // account for missing blocks fetched later.
+        let mut total_transactions = 0;
+        let mut total_size = 0;
+        for i in [0, 2, 1] {
+            // Using `i % 2` as the transaction data ensures we insert a duplicate transaction
+            // (since we insert more than 2 transactions total). The query service should still
+            // count these as separate transactions and should include both duplicates when
+            // computing the total size.
+            let payload =
+                TestBlockPayload::from_transactions([mock_transaction(vec![i as u8 % 2])])
+                    .unwrap()
+                    .0;
+            let encoded = payload.encode().unwrap().collect::<Vec<_>>();
+            let payload_commitment = vid_commitment(&encoded, 1);
+            let header = TestBlockHeader {
+                block_number: i,
+                payload_commitment,
+            };
+
+            let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+            leaf.leaf.block_header = header.clone();
+            let block = BlockQueryData::new(header, payload);
+            ds.insert_leaf(leaf).await.unwrap();
+            ds.insert_block(block).await.unwrap();
+            ds.commit().await.unwrap();
+
+            total_transactions += 1;
+            total_size += encoded.len();
+
+            assert_eq!(ds.count_transactions().await.unwrap(), total_transactions);
+            assert_eq!(ds.payload_size().await.unwrap(), total_size);
+        }
     }
 }
 

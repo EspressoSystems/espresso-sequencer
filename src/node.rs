@@ -60,7 +60,6 @@ pub enum Error {
         source: RequestError,
     },
     #[snafu(display("{source}"))]
-    #[from(ignore)]
     Query {
         source: QueryError,
     },
@@ -73,11 +72,6 @@ pub enum Error {
     #[snafu(display("malformed signature key"))]
     #[from(ignore)]
     InvalidSignatureKey,
-    #[snafu(display("error getting sync status: {source}"))]
-    #[from(ignore)]
-    SyncStatus {
-        source: QueryError,
-    },
     Custom {
         message: String,
         status: StatusCode,
@@ -95,9 +89,7 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
-            Self::Query { source, .. }
-            | Self::QueryProposals { source, .. }
-            | Self::SyncStatus { source, .. } => source.status(),
+            Self::Query { source, .. } | Self::QueryProposals { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
     }
@@ -142,8 +134,14 @@ where
             }
             .boxed()
         })?
+        .get("count_transactions", |_req, state| {
+            async move { Ok(state.count_transactions().await?) }.boxed()
+        })?
+        .get("payload_size", |_req, state| {
+            async move { Ok(state.payload_size().await?) }.boxed()
+        })?
         .get("sync_status", |_req, state| {
-            async move { state.sync_status().await.context(SyncStatusSnafu) }.boxed()
+            async move { Ok(state.sync_status().await?) }.boxed()
         })?;
     Ok(api)
 }
@@ -251,6 +249,25 @@ mod test {
                 .await
                 .unwrap()
                 .len(),
+            0
+        );
+
+        // We test these counters with non-trivial values in `data_source.rs`, here we just want to
+        // make sure the API handlers are working, so a response of 0 is fine.
+        assert_eq!(
+            client
+                .get::<u64>("transactions/count")
+                .send()
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            client
+                .get::<u64>("payloads/total-size")
+                .send()
+                .await
+                .unwrap(),
             0
         );
 

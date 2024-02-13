@@ -131,7 +131,11 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
         Ok(())
     }
 
-    pub(crate) fn insert(&mut self, index: usize, object: T) -> Result<(), PersistenceError>
+    /// Insert an object at position `index`.
+    ///
+    /// Returns whether the object was newly inserted; that is, returns `false` if and only if there
+    /// was already an object present at this index.
+    pub(crate) fn insert(&mut self, index: usize, object: T) -> Result<bool, PersistenceError>
     where
         T: Debug,
     {
@@ -153,6 +157,10 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
                 warn!("Failed to store object at index {}: {}", index, err);
                 return Err(err);
             }
+            Ok(true)
+        } else if matches!(self.iter().nth(index), Some(Some(_))) {
+            // This is a duplicate, we don't have to insert anything.
+            Ok(false)
         } else {
             // This is an object earlier in the chain that we are now receiving asynchronously.
             // Update the placeholder with the actual contents of the object.
@@ -171,8 +179,8 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
             // if index >= self.cache_start {
             //     self.cache[index - self.cache_start] = Some(object);
             // }
+            Ok(true)
         }
-        Ok(())
     }
 
     pub(crate) async fn commit_version(&mut self) -> Result<(), PersistenceError> {
