@@ -48,6 +48,7 @@ use postgres_native_tls::TlsConnector;
 use snafu::OptionExt;
 use std::{
     borrow::Cow,
+    fmt::Display,
     ops::{Bound, RangeBounds},
     pin::Pin,
     str::FromStr,
@@ -909,7 +910,7 @@ impl<'a> Transaction<'a> {
     /// Returns an error if the database is not modified.
     pub async fn execute_one<T, P>(&mut self, statement: &T, params: P) -> QueryResult<()>
     where
-        T: ?Sized + ToStatement,
+        T: ?Sized + ToStatement + Display,
         P: IntoIterator,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
@@ -920,7 +921,10 @@ impl<'a> Transaction<'a> {
             // _something_ happened and modified the database. So we don't necessarily want the
             // caller to retry. But we do log an error, because it seems the query did something
             // different than the caller intended.
-            tracing::error!("statement modified more rows ({nrows}) than expected (1)");
+            tracing::error!(
+                %statement,
+                "statement modified more rows ({nrows}) than expected (1)"
+            );
         }
         Ok(())
     }
@@ -934,7 +938,7 @@ impl<'a> Transaction<'a> {
         params: P,
     ) -> QueryResult<()>
     where
-        T: ?Sized + ToStatement,
+        T: ?Sized + ToStatement + Display,
         P: IntoIterator + Clone,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
@@ -943,7 +947,10 @@ impl<'a> Transaction<'a> {
         let mut retries = 5;
 
         while let Err(err) = self.execute_one(statement, params.clone()).await {
-            tracing::error!("error in statement execution ({retries} tries remaining): {err}");
+            tracing::error!(
+                %statement,
+                "error in statement execution ({retries} tries remaining): {err}"
+            );
             if retries == 0 {
                 return Err(err);
             }
@@ -959,7 +966,7 @@ impl<'a> Transaction<'a> {
     /// Returns an error if the database is not modified.
     pub async fn execute_many<T, P>(&mut self, statement: &T, params: P) -> QueryResult<u64>
     where
-        T: ?Sized + ToStatement,
+        T: ?Sized + ToStatement + Display,
         P: IntoIterator,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
@@ -967,7 +974,7 @@ impl<'a> Transaction<'a> {
         let nrows = self.execute(statement, params).await?;
         if nrows == 0 {
             return Err(QueryError::Error {
-                message: "statement failed: should have affected one row, but affected 0".into(),
+                message: format!("statement failed: 0 rows affected. Statement: {statement}"),
             });
         }
 
@@ -983,7 +990,7 @@ impl<'a> Transaction<'a> {
         params: P,
     ) -> QueryResult<u64>
     where
-        T: ?Sized + ToStatement,
+        T: ?Sized + ToStatement + Display,
         P: IntoIterator + Clone,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
@@ -996,6 +1003,7 @@ impl<'a> Transaction<'a> {
                 Ok(nrows) => return Ok(nrows),
                 Err(err) => {
                     tracing::error!(
+                        %statement,
                         "error in statement execution ({retries} tries remaining): {err}"
                     );
                     if retries == 0 {
@@ -1027,6 +1035,7 @@ impl<'a> Transaction<'a> {
 
         let mut values = vec![];
         let mut params = vec![];
+        let mut num_rows = 0;
         for (row, entries) in rows.into_iter().enumerate() {
             let start = row * N;
             let end = (row + 1) * N;
@@ -1034,15 +1043,29 @@ impl<'a> Transaction<'a> {
 
             values.push(format!("({row_params})"));
             params.extend(entries);
+            num_rows += 1;
         }
-        let values = values.into_iter().join(",");
 
+        if num_rows == 0 {
+            tracing::warn!("trying to upsert 0 rows, this has no effect");
+            return Ok(());
+        }
+        tracing::debug!("upserting {num_rows} rows");
+
+        let values = values.into_iter().join(",");
         let stmt = format!(
             "INSERT INTO {table} ({columns})
                   VALUES {values}
              ON CONFLICT ({pk}) DO UPDATE SET {set_columns}"
         );
-        self.execute_one_with_retries(&stmt, params).await
+        let rows_modified = self.execute_many_with_retries(&stmt, params).await?;
+        if rows_modified != num_rows {
+            tracing::error!(
+                stmt,
+                "unexpected number of rows modified: expected {num_rows} but got {rows_modified}"
+            );
+        }
+        Ok(())
     }
 }
 
