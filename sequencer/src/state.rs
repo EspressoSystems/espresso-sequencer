@@ -1,5 +1,6 @@
 use std::ops::Add;
 
+use crate::block2::entry::TxTableEntryWord;
 use crate::{Header, NodeState, Payload};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -107,7 +108,7 @@ impl HotShotState for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<TxTableEntryWord>;
 
     type Time = ViewNumber;
 

@@ -44,8 +44,7 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
-// TODO store only a reference to raw_payload.
-pub(super) struct NameSpaceTable<TableWord: TableWordTraits> {
+pub struct NameSpaceTable<TableWord: TableWordTraits> {
     pub(super) raw_payload: Vec<u8>,
     pub(super) phantom: PhantomData<TableWord>,
 }

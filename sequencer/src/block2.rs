@@ -9,7 +9,7 @@ use snafu::OptionExt;
 pub mod entry;
 pub mod payload;
 pub mod queryable;
-mod tables;
+pub mod tables;
 pub mod tx_iterator;
 
 use crate::block2::entry::TxTableEntryWord;

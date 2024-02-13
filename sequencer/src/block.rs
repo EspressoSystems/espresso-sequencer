@@ -134,7 +134,7 @@ impl Display for Payload {
 impl Payload {
     /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
     /// and the root of the NMT
-    pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
+    pub fn _get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
         self.transaction_nmt.get_namespace_proof(vm_id)
     }
 }
