@@ -1,6 +1,8 @@
 #!/bin/sh
+set -e
 
 if [[ -z "${ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS}" ]]; then
+  echo "Light client contract address not found, deploying it now."
   ./gen-demo-contract --contracts-root-dir="./contracts"
   forge fmt
   forge build
