@@ -65,6 +65,12 @@ struct Args {
     ///          In the future we should get the stake table from the contract.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
     keygen_seed: [u8; 32],
+
+    /// If daemon and provided, the service will run a basic HTTP server on the given port.
+    ///
+    /// The server provides healthcheck and version endpoints.
+    #[clap(short, long, env = "ESPRESSO_PROVER_SERVICE_PORT")]
+    pub port: Option<u16>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -120,6 +126,7 @@ async fn main() {
             .clone(),
         num_nodes: args.num_nodes,
         seed: args.keygen_seed,
+        port: args.port,
     };
 
     if args.daemon {

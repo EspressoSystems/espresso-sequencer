@@ -3,6 +3,7 @@
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 use anyhow::anyhow;
 use async_std::{
+    io,
     sync::Arc,
     task::{sleep, spawn},
 };
@@ -16,6 +17,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, U256},
 };
+use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
@@ -33,7 +35,7 @@ use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
 use std::time::Duration;
 use surf_disco::Client;
-use tide_disco::error::ServerError;
+use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
 
@@ -59,6 +61,10 @@ pub struct StateProverConfig {
     pub num_nodes: usize,
     /// Seed to generate keys
     pub seed: [u8; 32],
+    /// If daemon and provided, the service will run a basic HTTP server on the given port.
+    ///
+    /// The server provides healthcheck and version endpoints.
+    pub port: Option<u16>,
 }
 
 pub async fn init_stake_table(
@@ -230,6 +236,26 @@ pub async fn sync_state(
     Ok(())
 }
 
+fn start_http_server(port: u16, lightclient_address: Address) -> io::Result<()> {
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    let mut api = Api::<(), ServerError>::new(toml)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    api.get("getlightclientcontract", move |_, _| {
+        async move { Ok(lightclient_address) }.boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    app.register_module("api", api)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    spawn(app.serve(format!("0.0.0.0:{port}")));
+    Ok(())
+}
+
 pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(init_stake_table(&config).await);
@@ -237,6 +263,12 @@ pub async fn run_prover_service(config: StateProverConfig) {
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
     let update_interval = config.update_interval;
+
+    if let Some(port) = config.port {
+        if let Err(err) = start_http_server(port, config.light_client_address) {
+            tracing::error!("Error starting http server: {}", err);
+        }
+    }
 
     loop {
         let st = st.clone();
@@ -479,6 +511,7 @@ mod test {
                 eth_signing_key: SigningKey::random(&mut test_rng()),
                 num_nodes: 10,
                 seed: [0u8; 32],
+                port: None,
             }
         }
     }
