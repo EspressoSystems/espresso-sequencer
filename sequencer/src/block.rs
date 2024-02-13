@@ -12,8 +12,8 @@ pub mod queryable;
 pub mod tables;
 pub mod tx_iterator;
 
-use crate::block2::entry::TxTableEntryWord;
-use crate::block2::tables::NameSpaceTable;
+use crate::block::entry::TxTableEntryWord;
+use crate::block::tables::NameSpaceTable;
 use payload::Payload;
 
 impl BlockPayload for Payload<TxTableEntryWord> {

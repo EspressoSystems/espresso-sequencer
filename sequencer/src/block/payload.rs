@@ -1,5 +1,5 @@
-use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
-use crate::block2::payload;
+use crate::block::entry::{TxTableEntry, TxTableEntryWord};
+use crate::block::payload;
 use crate::{BlockBuildingSnafu, Error, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -19,7 +19,7 @@ use std::default::Default;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
-use crate::block2::tables::NameSpaceTable;
+use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
 
 use super::tables::TxTable;
@@ -394,7 +394,7 @@ fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
 
 #[cfg(any(test, feature = "testing"))]
 impl hotshot_types::traits::block_contents::TestableBlock
-    for Payload<crate::block2::entry::TxTableEntryWord>
+    for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
         BlockPayload::genesis().0
@@ -410,18 +410,18 @@ impl hotshot_types::traits::block_contents::TestableBlock
 mod test {
 
     use super::test_vid_factory;
-    use crate::block2::payload::{Payload, TableWordTraits};
-    use crate::block2::tables::{NameSpaceTable, Table};
+    use crate::block::payload::{Payload, TableWordTraits};
+    use crate::block::tables::{NameSpaceTable, Table};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
     use hotshot_types::traits::BlockPayload;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 
-    use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
-    use crate::block2::queryable;
-    use crate::block2::tables::test::TxTableTest;
-    use crate::block2::tx_iterator::TxIndex;
+    use crate::block::entry::{TxTableEntry, TxTableEntryWord};
+    use crate::block::queryable;
+    use crate::block::tables::test::TxTableTest;
+    use crate::block::tx_iterator::TxIndex;
     use crate::Transaction;
     use rand::RngCore;
     use std::marker::PhantomData;
@@ -990,9 +990,9 @@ mod test {
     }
 
     mod helpers {
-        use crate::block2::entry::TxTableEntry;
-        use crate::block2::payload::TableWordTraits;
-        use crate::block2::tables::{test::TxTableTest, NameSpaceTable, Table};
+        use crate::block::entry::TxTableEntry;
+        use crate::block::payload::TableWordTraits;
+        use crate::block::tables::{test::TxTableTest, NameSpaceTable, Table};
         use crate::VmId;
         use rand::RngCore;
 

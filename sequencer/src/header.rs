@@ -1,5 +1,5 @@
 use crate::{
-    block2::{entry::TxTableEntryWord, tables::NameSpaceTable},
+    block::{entry::TxTableEntryWord, tables::NameSpaceTable},
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     state::{fetch_fee_receipts, BlockMerkleCommitment, FeeMerkleCommitment, FeeReceipt},
     L1BlockInfo, NMTRoot, Payload, ValidatedState,

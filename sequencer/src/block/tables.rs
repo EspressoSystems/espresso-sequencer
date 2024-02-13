@@ -1,5 +1,5 @@
-use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::TableWordTraits;
+use crate::block::entry::TxTableEntry;
+use crate::block::payload::TableWordTraits;
 use crate::{BlockBuildingSnafu, Error, VmId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -235,9 +235,9 @@ impl TxTable {
 }
 #[cfg(test)]
 pub(super) mod test {
-    use crate::block2::entry::TxTableEntry;
-    use crate::block2::payload::TableWordTraits;
-    use crate::block2::tables::{Table, TxTable};
+    use crate::block::entry::TxTableEntry;
+    use crate::block::payload::TableWordTraits;
+    use crate::block::tables::{Table, TxTable};
     use std::marker::PhantomData;
 
     pub struct TxTableTest<TableWord: TableWordTraits> {

@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use crate::block2::entry::TxTableEntryWord;
+use crate::block::entry::TxTableEntryWord;
 use crate::{Header, NodeState, Payload};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,

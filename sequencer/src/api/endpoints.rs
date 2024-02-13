@@ -22,7 +22,7 @@ use tide_disco::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: crate::block2::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>,
+    pub proof: crate::block::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>,
     pub header: Header,
     pub transactions: Vec<Transaction>,
 }
@@ -67,7 +67,7 @@ where
             })?;
 
             // TODO fake VidScheme construction
-            let vid = crate::block2::payload::test_vid_factory();
+            let vid = crate::block::payload::test_vid_factory();
             use hotshot::traits::BlockPayload;
             let disperse_data = vid
                 .disperse(block.payload().encode().unwrap().collect::<Vec<u8>>())

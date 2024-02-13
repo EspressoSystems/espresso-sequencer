@@ -1,12 +1,12 @@
 pub mod api;
-mod block2;
+mod block;
 mod chain_variables;
 pub mod context;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
-use block2::entry::TxTableEntryWord;
+use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -57,7 +57,7 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block2::payload::Payload;
+pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
 pub use header::Header;
 use jf_primitives::merkle_tree::{
