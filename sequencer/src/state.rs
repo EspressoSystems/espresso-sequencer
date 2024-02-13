@@ -116,10 +116,30 @@ impl HotShotState for ValidatedState {
     /// proposal descends from parent. Returns updated `ValidatedState`.
     fn validate_and_apply_header(
         &self,
-        _instance: &Self::Instance,
+        instance: &Self::Instance,
         parent_header: &Self::BlockHeader,
         proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
+        // check header signagure
+        // in the signed message these are set to `None`.
+        let mut verifiable_header = proposed_header.clone();
+        verifiable_header.builder_address = None;
+        verifiable_header.builder_signature = None;
+        verifiable_header.builder_fee_amount = None;
+        let header_bytes = serde_json::to_string(&verifiable_header)
+            .unwrap()
+            .into_bytes();
+
+        if proposed_header
+            .builder_signature
+            .unwrap()
+            .verify(header_bytes, instance.builder_address.address())
+            .is_err()
+        {
+            tracing::warn!("Invalid Builder Signature");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         match self.validate_proposal(parent_header, proposed_header) {
             // Note that currently only block state is updated.
             Ok(validated_state) => Ok(validated_state),
