@@ -3,7 +3,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use commit::{Commitment, Committable};
-use derive_more::Add;
+use derive_more::{Add, Sub};
 use ethers::signers::Signer;
 use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
@@ -15,7 +15,7 @@ use jf_primitives::merkle_tree::{
 };
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
+use std::ops::{Add, Sub};
 use typenum::Unsigned;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -121,15 +121,16 @@ impl HotShotState for ValidatedState {
         // check header signagure
         // in the signed message these are set to `None`.
         let mut verifiable_header = proposed_header.clone();
-        let builder_signature = verifiable_header.builder_signature.take();
-        let _builder_address = verifiable_header.builder_address.take();
-        let _builder_fee_amount = verifiable_header.builder_fee_amount.take();
+        // These unraps should be safe since header must have been
+        // created before we can validated it.
+        let builder_signature = verifiable_header.builder_signature.take().unwrap();
+        let builder_address = verifiable_header.builder_address.take().unwrap();
+        let builder_fee_amount = verifiable_header.builder_fee_amount.take().unwrap();
         let header_bytes = serde_json::to_string(&verifiable_header)
             .unwrap()
             .into_bytes();
 
         if builder_signature
-            .unwrap()
             .verify(header_bytes, instance.builder_address.address())
             .is_err()
         {
@@ -137,8 +138,21 @@ impl HotShotState for ValidatedState {
             return Err(BlockError::InvalidBlockHeader);
         }
 
-        // TODO charge the fee to the builder
+        // charge the fee to the builder
+        match self.fee_merkle_tree.universal_lookup(builder_address) {
+            LookupResult::Ok(balance, _) => self
+                .fee_merkle_tree
+                .update(builder_address, balance.sub(builder_fee_amount))
+                .unwrap(),
+            // `NotFound` or `NotInMemory` is a ghost account that
+            // somehow signed the block so it must be a BUG.
+            _ => {
+                tracing::warn!("Invalid Builder Account");
+                return Err(BlockError::InvalidBlockHeader);
+            }
+        };
 
+        // validate proposed header against parent
         match self.validate_proposal(parent_header, proposed_header) {
             // Note that currently only block state is updated.
             Ok(validated_state) => Ok(validated_state),
@@ -190,7 +204,7 @@ pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitme
 
 // New Type for `U256` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
-#[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add)]
+#[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub)]
 pub struct FeeAmount(U256);
 // New Type for `Address` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
