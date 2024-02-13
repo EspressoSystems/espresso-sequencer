@@ -209,6 +209,8 @@ impl Header {
 
         let hash =
             ethers::utils::hash_message(serde_json::to_string(&header).unwrap().into_bytes());
+        // Sign Header with builder wallet from state and save the
+        // signature on the Header
         let header_signature = builder_address.sign_hash(hash).unwrap();
 
         Self {
