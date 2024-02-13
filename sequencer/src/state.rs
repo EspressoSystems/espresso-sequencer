@@ -42,103 +42,103 @@ impl Default for ValidatedState {
     }
 }
 
-impl ValidatedState {
-    pub fn validate_proposal(&self, parent: &Header, proposal: &Header) -> anyhow::Result<Self> {
-        // validate height
-        anyhow::ensure!(
-            proposal.height == parent.height + 1,
-            anyhow::anyhow!(
-                "Invalid Height Error: {}, {}",
-                parent.height,
-                proposal.height
-            )
-        );
+pub fn validate_proposal(
+    state: &mut ValidatedState,
+    parent: &Header,
+    proposal: &Header,
+) -> anyhow::Result<ValidatedState> {
+    // validate height
+    anyhow::ensure!(
+        proposal.height == parent.height + 1,
+        anyhow::anyhow!(
+            "Invalid Height Error: {}, {}",
+            parent.height,
+            proposal.height
+        )
+    );
 
-        let mut block_merkle_tree = self.block_merkle_tree.clone();
-        let fee_merkle_tree = self.update_balance(parent);
+    let mut block_merkle_tree = state.block_merkle_tree.clone();
+    let mut fee_merkle_tree = state.fee_merkle_tree.clone();
 
-        // validate proposal is descendent of parent by appending to parent
-        block_merkle_tree.push(parent.commit()).unwrap();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        anyhow::ensure!(
-            proposal.block_merkle_tree_root == block_merkle_tree_root,
-            anyhow::anyhow!(
-                "Invalid Block Root Error: {}, {}",
-                block_merkle_tree_root,
-                proposal.block_merkle_tree_root
-            )
-        );
+    // validate proposal is descendent of parent by appending to parent
+    block_merkle_tree.push(parent.commit()).unwrap();
+    let block_merkle_tree_root = block_merkle_tree.commitment();
+    anyhow::ensure!(
+        proposal.block_merkle_tree_root == block_merkle_tree_root,
+        anyhow::anyhow!(
+            "Invalid Block Root Error: {}, {}",
+            block_merkle_tree_root,
+            proposal.block_merkle_tree_root
+        )
+    );
 
-        let fee_merkle_tree_root = self.fee_merkle_tree.commitment();
-        anyhow::ensure!(
-            proposal.fee_merkle_tree_root == fee_merkle_tree_root,
-            anyhow::anyhow!(
-                "Invalid Fee Root Error: {}, {}",
-                fee_merkle_tree_root,
-                proposal.fee_merkle_tree_root
-            )
-        );
+    let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
+    anyhow::ensure!(
+        proposal.fee_merkle_tree_root == fee_merkle_tree_root,
+        anyhow::anyhow!(
+            "Invalid Fee Root Error: {}, {}",
+            fee_merkle_tree_root,
+            proposal.fee_merkle_tree_root
+        )
+    );
 
-        Ok(ValidatedState {
-            block_merkle_tree,
-            fee_merkle_tree,
-        })
-    }
+    Ok(ValidatedState {
+        block_merkle_tree,
+        fee_merkle_tree,
+    })
+}
 
-    /// Fetch receipts from the l1 and add them to local balance.
-    fn update_balance(&self, parent: &Header) -> FeeMerkleTree {
-        let mut fee_merkle_tree = self.fee_merkle_tree.clone();
-        let receipts = fetch_fee_receipts(parent);
-        for FeeReceipt { recipient, amount } in receipts {
-            // Get the balance in order to add amount, ignoring the proof.
-            match self.fee_merkle_tree.universal_lookup(recipient) {
-                LookupResult::Ok(balance, _) => fee_merkle_tree
-                    .update(recipient, balance.add(amount))
-                    .unwrap(),
-                // Handle `NotFound` and `NotInMemory` by initializing
-                // state.
-                _ => fee_merkle_tree.update(recipient, amount).unwrap(),
-            };
-        }
-        fee_merkle_tree
-    }
-    /// Validate builder account by verifiying signature and charging the account.
-    fn verify_builder(
-        &self,
-        instance: &<ValidatedState as HotShotState>::Instance,
-        proposed_header: &Header,
-    ) -> anyhow::Result<()> {
-        let mut verifiable_header = proposed_header.clone();
-        // These unraps should be safe since Header::new() must have
-        // set these fields.
-        let builder_signature = verifiable_header.builder_signature.take().unwrap();
-        let builder_address = verifiable_header.builder_address.take().unwrap();
-        let builder_fee_amount = verifiable_header.builder_fee_amount.take().unwrap();
-        let header_bytes = serde_json::to_string(&verifiable_header)
-            .unwrap()
-            .into_bytes();
-
-        anyhow::ensure!(
-            builder_signature
-                .verify(header_bytes, builder_address.address())
-                .is_ok(),
-            "Invalid Builder Signature"
-        );
-
-        // charge the fee to the builder
-        match self.fee_merkle_tree.universal_lookup(builder_address) {
-            LookupResult::Ok(balance, _) => self
-                .fee_merkle_tree
-                .update(builder_address, balance.sub(builder_fee_amount))
+/// Fetch receipts from the l1 and add them to local balance.
+fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header) {
+    let receipts = fetch_fee_receipts(parent);
+    for FeeReceipt { recipient, amount } in receipts {
+        // Get the balance in order to add amount, ignoring the proof.
+        match fee_merkle_tree.universal_lookup(recipient) {
+            LookupResult::Ok(balance, _) => fee_merkle_tree
+                .update(recipient, balance.add(amount))
                 .unwrap(),
-            // `NotFound` or `NotInMemory` is a ghost account that
-            // somehow signed the block so it must be a BUG.
-            _ => {
-                anyhow::bail!("Invalid Builder Account");
-            }
+            // Handle `NotFound` and `NotInMemory` by initializing
+            // state.
+            _ => fee_merkle_tree.update(recipient, amount).unwrap(),
         };
-        Ok(())
     }
+}
+/// Validate builder account by verifiying signature and charging the account.
+fn validate_builder(
+    fee_merkle_tree: &mut FeeMerkleTree,
+    proposed_header: &Header,
+) -> anyhow::Result<()> {
+    let mut verifiable_header = proposed_header.clone();
+    // These unraps should be safe since Header::new() must have
+    // set these fields.
+    let builder_signature = verifiable_header.builder_signature.take().unwrap();
+    let builder_address = verifiable_header.builder_address.take().unwrap();
+    let builder_fee_amount = verifiable_header.builder_fee_amount.take().unwrap();
+    let header_bytes = serde_json::to_string(&verifiable_header)
+        .unwrap()
+        .into_bytes();
+
+    // verify signature
+    anyhow::ensure!(
+        builder_signature
+            .verify(header_bytes, builder_address.address())
+            .is_ok(),
+        "Invalid Builder Signature"
+    );
+
+    // charge the fee to the builder
+    let mut fee_merkle_tree = fee_merkle_tree.clone();
+    match fee_merkle_tree.universal_lookup(builder_address) {
+        LookupResult::Ok(balance, _) => fee_merkle_tree
+            .update(builder_address, balance.sub(builder_fee_amount))
+            .unwrap(),
+        // `NotFound` or `NotInMemory` is a ghost account that
+        // somehow signed the block so it must be a BUG.
+        _ => {
+            anyhow::bail!("Invalid Builder Account");
+        }
+    };
+    Ok(())
 }
 
 impl HotShotState for ValidatedState {
@@ -158,21 +158,31 @@ impl HotShotState for ValidatedState {
         parent_header: &Self::BlockHeader,
         proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
-        // validate builder
-        if let Err(e) = self.verify_builder(instance, proposed_header) {
+        // Clone state to avoid mutation. Consumer can take update
+        // through returned value.
+        let mut validated_state = self.clone();
+
+        // validate proposed header against parent
+        let mut validated_state =
+            match validate_proposal(&mut validated_state, parent_header, proposed_header) {
+                // Note that currently only block state is updated.
+                Ok(validated_state) => validated_state,
+                Err(e) => {
+                    tracing::warn!("Invalid Proposal: {}", e);
+                    return Err(BlockError::InvalidBlockHeader);
+                }
+            };
+
+        // Update account balance from the l1
+        update_balance(&mut validated_state.fee_merkle_tree, &parent_header);
+
+        // Validate builder by verifying signature and charging account
+        if let Err(e) = validate_builder(&mut validated_state.fee_merkle_tree, parent_header) {
             tracing::warn!("Invalid Builder: {}", e);
             return Err(BlockError::InvalidBlockHeader);
         }
 
-        // validate proposed header against parent
-        match self.validate_proposal(parent_header, proposed_header) {
-            // Note that currently only block state is updated.
-            Ok(validated_state) => Ok(validated_state),
-            Err(e) => {
-                tracing::warn!("Invalid Proposal: {}", e);
-                Err(BlockError::InvalidBlockHeader)
-            }
-        }
+        Ok(validated_state)
     }
     /// Construct the state with the given block header.
     ///
