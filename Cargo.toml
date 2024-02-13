@@ -23,7 +23,7 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 ] }
 async-std = "1.12.0"
 async-trait = "0.1.77"
-clap = { version = "4.4", features = ["derive", "env"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
@@ -35,7 +35,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "b7eb7e5" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
