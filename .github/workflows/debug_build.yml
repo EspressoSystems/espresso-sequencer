@@ -12,9 +12,6 @@ jobs:
         RUST_LOG: info
         RUST_MIN_STACK: '3145728'
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: styfle/cancel-workflow-action@0.12.1
