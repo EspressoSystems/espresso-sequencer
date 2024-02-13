@@ -74,7 +74,7 @@ pub fn validate_proposal(
         )
     );
 
-    let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
+    let fee_merkle_tree_root = fee_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.fee_merkle_tree_root == fee_merkle_tree_root,
         anyhow::anyhow!(
