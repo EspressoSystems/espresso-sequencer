@@ -1,14 +1,11 @@
-use std::ops::Add;
-
 use crate::{Header, NodeState, Payload};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
-
-use derive_more::Add;
-use ethers::{abi::Address, types::U256};
-
 use commit::{Commitment, Committable};
+use derive_more::Add;
+use ethers::signers::Signer;
+use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
 use jf_primitives::merkle_tree::prelude::{LightWeightSHA3MerkleTree, Sha3Node};
@@ -18,6 +15,7 @@ use jf_primitives::merkle_tree::{
 };
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use typenum::Unsigned;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
