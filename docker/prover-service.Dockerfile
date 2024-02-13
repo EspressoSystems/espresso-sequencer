@@ -7,10 +7,8 @@ RUN apt-get update \
     &&  apt-get install -y curl git cargo\
     &&  rm -rf /var/lib/apt/lists/*
 RUN curl -L https://foundry.paradigm.xyz | bash
-RUN cat /root/.bashrc
 ENV PATH "$PATH:/root/.foundry/bin"
 RUN foundryup
-RUN forge --version
 
 # copy the contracts
 WORKDIR /usr/local/prover-service/contracts
