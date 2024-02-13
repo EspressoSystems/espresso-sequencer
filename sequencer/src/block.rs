@@ -10,7 +10,6 @@ use crate::{
 use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{Signer, Wallet},
