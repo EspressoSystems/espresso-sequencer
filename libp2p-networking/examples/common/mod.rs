@@ -20,7 +20,7 @@ use clap::{Args, Parser};
 use libp2p::{multiaddr, request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_networking::network::{
-    behaviours::direct_message_codec::DirectMessageResponse, deserialize_msg,
+    deserialize_msg,
     network_node_handle_error::NodeConfigSnafu, spin_up_swarm, NetworkEvent,
     NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeType,
 };
@@ -279,7 +279,7 @@ pub async fn handle_normal_msg(
     handle: Arc<NetworkNodeHandle<(CounterState, Option<PeerId>)>>,
     msg: NormalMessage,
     // in case we need to reply to direct message
-    chan: Option<ResponseChannel<DirectMessageResponse>>,
+    chan: Option<ResponseChannel<Vec<u8>>>,
 ) -> Result<(), NetworkNodeHandleError> {
     debug!("node={} handling normal msg {:?}", handle.id(), msg);
     // send reply logic

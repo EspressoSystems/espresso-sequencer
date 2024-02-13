@@ -17,10 +17,7 @@ pub use self::{
     },
 };
 
-use self::behaviours::{
-    dht::DHTEvent, direct_message::DMEvent, direct_message_codec::DirectMessageResponse,
-    gossip::GossipEvent,
-};
+use self::behaviours::{dht::DHTEvent, direct_message::DMEvent, gossip::GossipEvent};
 use bincode::Options;
 use futures::channel::oneshot::Sender;
 use hotshot_utils::bincode::bincode_opts;
@@ -125,7 +122,7 @@ pub enum ClientRequest {
         retry_count: u8,
     },
     /// client request to send a direct reply to a message
-    DirectResponse(ResponseChannel<DirectMessageResponse>, Vec<u8>),
+    DirectResponse(ResponseChannel<Vec<u8>>, Vec<u8>),
     /// prune a peer
     Prune(PeerId),
     /// add vec of known peers or addresses
@@ -169,7 +166,7 @@ pub enum NetworkEvent {
     /// Recv-ed a broadcast
     GossipMsg(Vec<u8>, TopicHash),
     /// Recv-ed a direct message from a node
-    DirectRequest(Vec<u8>, PeerId, ResponseChannel<DirectMessageResponse>),
+    DirectRequest(Vec<u8>, PeerId, ResponseChannel<Vec<u8>>),
     /// Recv-ed a direct response from a node (that hopefully was initiated by this node)
     DirectResponse(Vec<u8>, PeerId),
     /// Report that kademlia has successfully bootstrapped into the network

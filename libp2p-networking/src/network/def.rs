@@ -13,7 +13,6 @@ use super::{
     behaviours::{
         dht::{DHTBehaviour, DHTEvent, KadPutQuery},
         direct_message::{DMBehaviour, DMEvent, DMRequest},
-        direct_message_codec::DirectMessageResponse,
         exponential_backoff::ExponentialBackoff,
         gossip::{GossipBehaviour, GossipEvent},
     },
@@ -145,11 +144,7 @@ impl NetworkDef {
     }
 
     /// Add a direct response for a channel
-    pub fn add_direct_response(
-        &mut self,
-        chan: ResponseChannel<DirectMessageResponse>,
-        msg: Vec<u8>,
-    ) {
+    pub fn add_direct_response(&mut self, chan: ResponseChannel<Vec<u8>>, msg: Vec<u8>) {
         self.request_response.add_direct_response(chan, msg);
     }
 }

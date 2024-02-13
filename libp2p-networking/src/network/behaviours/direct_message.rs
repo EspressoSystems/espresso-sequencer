@@ -3,19 +3,16 @@ use std::{
     task::Poll,
 };
 
+use libp2p::request_response::cbor::Behaviour;
 use libp2p::{
-    request_response::{Behaviour, Event, Message, OutboundRequestId, ResponseChannel},
+    request_response::{Event, Message, OutboundRequestId, ResponseChannel},
     swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
-// use libp2p_request_response::Behaviour;
 use tracing::{error, info};
 
-use super::{
-    direct_message_codec::{DirectMessageCodec, DirectMessageRequest, DirectMessageResponse},
-    exponential_backoff::ExponentialBackoff,
-};
+use super::exponential_backoff::ExponentialBackoff;
 
 /// Request to direct message a peert
 pub struct DMRequest {
@@ -33,7 +30,7 @@ pub struct DMRequest {
 /// usage: direct message peer
 pub struct DMBehaviour {
     /// The wrapped behaviour
-    request_response: Behaviour<DirectMessageCodec>,
+    request_response: Behaviour<Vec<u8>, Vec<u8>>,
     /// In progress queries
     in_progress_rr: HashMap<OutboundRequestId, DMRequest>,
     /// Failed queries to be retried
@@ -46,14 +43,14 @@ pub struct DMBehaviour {
 #[derive(Debug)]
 pub enum DMEvent {
     /// We received as Direct Request
-    DirectRequest(Vec<u8>, PeerId, ResponseChannel<DirectMessageResponse>),
+    DirectRequest(Vec<u8>, PeerId, ResponseChannel<Vec<u8>>),
     /// We received a Direct Response
     DirectResponse(Vec<u8>, PeerId),
 }
 
 impl DMBehaviour {
     /// handle a direct message event
-    fn handle_dm_event(&mut self, event: Event<DirectMessageRequest, DirectMessageResponse>) {
+    fn handle_dm_event(&mut self, event: Event<Vec<u8>, Vec<u8>>) {
         match event {
             Event::InboundFailure {
                 peer,
@@ -83,7 +80,7 @@ impl DMBehaviour {
             }
             Event::Message { message, peer, .. } => match message {
                 Message::Request {
-                    request: DirectMessageRequest(msg),
+                    request: msg,
                     channel,
                     ..
                 } => {
@@ -95,7 +92,7 @@ impl DMBehaviour {
                 }
                 Message::Response {
                     request_id,
-                    response: DirectMessageResponse(msg),
+                    response: msg,
                 } => {
                     // success, finished.
                     if let Some(req) = self.in_progress_rr.remove(&request_id) {
@@ -115,7 +112,7 @@ impl DMBehaviour {
 }
 
 impl NetworkBehaviour for DMBehaviour {
-    type ConnectionHandler = <Behaviour<DirectMessageCodec> as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionHandler = <Behaviour<Vec<u8>, Vec<u8>> as NetworkBehaviour>::ConnectionHandler;
 
     type ToSwarm = DMEvent;
 
@@ -257,7 +254,7 @@ impl NetworkBehaviour for DMBehaviour {
 impl DMBehaviour {
     /// Create new behaviour based on request response
     #[must_use]
-    pub fn new(request_response: Behaviour<DirectMessageCodec>) -> Self {
+    pub fn new(request_response: Behaviour<Vec<u8>, Vec<u8>>) -> Self {
         Self {
             request_response,
             in_progress_rr: HashMap::default(),
@@ -286,21 +283,15 @@ impl DMBehaviour {
 
         let request_id = self
             .request_response
-            .send_request(&req.peer_id, DirectMessageRequest(req.data.clone()));
+            .send_request(&req.peer_id, req.data.clone());
         info!("direct message request with id {:?}", request_id);
 
         self.in_progress_rr.insert(request_id, req);
     }
 
     /// Add a direct response for a channel
-    pub fn add_direct_response(
-        &mut self,
-        chan: ResponseChannel<DirectMessageResponse>,
-        msg: Vec<u8>,
-    ) {
-        let res = self
-            .request_response
-            .send_response(chan, DirectMessageResponse(msg));
+    pub fn add_direct_response(&mut self, chan: ResponseChannel<Vec<u8>>, msg: Vec<u8>) {
+        let res = self.request_response.send_response(chan, msg);
         if let Err(e) = res {
             error!("Error replying to direct message. {:?}", e);
         }

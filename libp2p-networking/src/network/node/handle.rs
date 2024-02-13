@@ -1,7 +1,6 @@
 use crate::network::{
-    behaviours::direct_message_codec::DirectMessageResponse, error::DHTError, gen_multiaddr,
-    ClientRequest, NetworkError, NetworkEvent, NetworkNode, NetworkNodeConfig,
-    NetworkNodeConfigBuilderError,
+    error::DHTError, gen_multiaddr, ClientRequest, NetworkError, NetworkEvent, NetworkNode,
+    NetworkNodeConfig, NetworkNodeConfigBuilderError,
 };
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn, async_timeout, future::to, stream},
@@ -484,7 +483,7 @@ impl<S> NetworkNodeHandle<S> {
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize `msg`
     pub async fn direct_response(
         &self,
-        chan: ResponseChannel<DirectMessageResponse>,
+        chan: ResponseChannel<Vec<u8>>,
         msg: &impl Serialize,
     ) -> Result<(), NetworkNodeHandleError> {
         let serialized_msg = bincode_opts().serialize(msg).context(SerializationSnafu)?;
