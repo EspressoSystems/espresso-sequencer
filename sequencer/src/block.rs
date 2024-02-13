@@ -119,7 +119,7 @@ mod reference {
     }
 
     lazy_static! {
-        pub static ref NS_TABLE: Value = load_reference!("nmt_root");
+        pub static ref NS_TABLE: Value = load_reference!("ns_table");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
     }
