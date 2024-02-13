@@ -55,8 +55,8 @@ impl ValidatedState {
             )
         );
 
-        let mut fee_merkle_tree = self.fee_merkle_tree.clone();
         let mut block_merkle_tree = self.block_merkle_tree.clone();
+        self.update_balance(parent);
 
         // validate proposal is descendent of parent by appending to parent
         block_merkle_tree.push(parent.commit()).unwrap();
@@ -70,21 +70,7 @@ impl ValidatedState {
             )
         );
 
-        // fetch receipts from the l1
-        let receipts = fetch_fee_receipts(parent);
-        for FeeReceipt { recipient, amount } in receipts {
-            // Get the balance in order to add amount, ignoring the proof.
-            match fee_merkle_tree.universal_lookup(recipient) {
-                LookupResult::Ok(balance, _) => fee_merkle_tree
-                    .update(recipient, balance.add(amount))
-                    .unwrap(),
-                // Handle `NotFound` and `NotInMemory` by initializing
-                // state.
-                _ => fee_merkle_tree.update(recipient, amount).unwrap(),
-            };
-        }
-
-        let fee_merkle_tree_root = fee_merkle_tree.commitment();
+        let fee_merkle_tree_root = self.fee_merkle_tree.commitment();
         anyhow::ensure!(
             proposal.fee_merkle_tree_root == fee_merkle_tree_root,
             anyhow::anyhow!(
@@ -96,9 +82,33 @@ impl ValidatedState {
 
         Ok(ValidatedState {
             block_merkle_tree,
-            fee_merkle_tree,
+            fee_merkle_tree: self.fee_merkle_tree,
         })
     }
+
+    /// Fetch receipts from the l1 and add them to local balance.
+    fn update_balance(&self, parent: &Header) {
+        // Note that on previous iterations we were cloning the MT,
+        // performing operations on the clone and finally returning
+        // it. I removed that here b/c we ultimatly *do* want to
+        // update underlying state and the clone adds a layer of
+        // misdirection which may confuse the reader.
+        let receipts = fetch_fee_receipts(parent);
+        for FeeReceipt { recipient, amount } in receipts {
+            // Get the balance in order to add amount, ignoring the proof.
+            match self.fee_merkle_tree.universal_lookup(recipient) {
+                LookupResult::Ok(balance, _) => self
+                    .fee_merkle_tree
+                    .update(recipient, balance.add(amount))
+                    .unwrap(),
+                // Handle `NotFound` and `NotInMemory` by initializing
+                // state.
+                _ => self.fee_merkle_tree.update(recipient, amount).unwrap(),
+            };
+        }
+    }
+    /// Validate builder account by verifiying signature and charging the account.
+    fn verify_builder() {}
 }
 
 impl HotShotState for ValidatedState {
@@ -121,8 +131,8 @@ impl HotShotState for ValidatedState {
         // check header signagure
         // in the signed message these are set to `None`.
         let mut verifiable_header = proposed_header.clone();
-        // These unraps should be safe since header must have been
-        // created before we can validated it.
+        // These unraps should be safe since Header::new() must have
+        // set these fields.
         let builder_signature = verifiable_header.builder_signature.take().unwrap();
         let builder_address = verifiable_header.builder_address.take().unwrap();
         let builder_fee_amount = verifiable_header.builder_fee_amount.take().unwrap();
