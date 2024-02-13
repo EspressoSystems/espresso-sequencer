@@ -200,6 +200,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         file: Option<String>,
     ) -> (NetworkConfig<K, E>, NetworkConfigSource) {
         if let Some(file) = file {
+            error!("Retrieving config from the file");
             // if we pass in file, try there first
             match Self::from_file(file.clone()) {
                 Ok(config) => (config, NetworkConfigSource::File),

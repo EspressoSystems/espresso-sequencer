@@ -5,7 +5,10 @@ use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
 
-use hotshot_types::traits::{election::ElectionConfig, signature_key::SignatureKey};
+use hotshot_types::{
+    traits::{election::ElectionConfig, signature_key::SignatureKey},
+    ValidatorConfig,
+};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
 
@@ -136,10 +139,46 @@ impl OrchestratorClient {
         };
 
         let mut config = self.wait_for_fn_from_orchestrator(f).await;
-
         config.node_index = From::<u16>::from(node_index);
+        // The orchestrator will generate keys for validator if it doesn't load keys from file
+        config.config.my_own_validator_config =
+            ValidatorConfig::<K>::generated_from_seed_indexed(config.seed, config.node_index, 1);
 
         config
+    }
+
+    /// Sends my public key to the orchestrator so that it can collect all public keys
+    /// And get the updated config
+    /// Blocks until the orchestrator collects all peer's public keys/configs
+    /// # Panics
+    /// if unable to post
+    pub async fn post_and_wait_all_public_keys<K: SignatureKey, E: ElectionConfig>(
+        &self,
+        node_index: u64,
+        my_pub_key: K,
+    ) -> NetworkConfig<K, E> {
+        // send my public key
+        let _send_pubkey_ready_f: Result<(), ClientError> = self
+            .client
+            .post(&format!("api/pubkey/{node_index}"))
+            .body_binary(&my_pub_key.to_bytes())
+            .unwrap()
+            .send()
+            .await;
+
+        // wait for all nodes' public keys
+        let wait_for_all_nodes_pub_key = |client: Client<ClientError>| {
+            async move { client.get("api/peer_pub_ready").send().await }.boxed()
+        };
+        self.wait_for_fn_from_orchestrator::<_, _, ()>(wait_for_all_nodes_pub_key)
+            .await;
+
+        // get the newest updated config
+        self.client
+            .get("api/config_after_peer_collected")
+            .send()
+            .await
+            .expect("Unable to get the updated config")
     }
 
     /// Tells the orchestrator this validator is ready to start

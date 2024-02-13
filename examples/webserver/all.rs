@@ -29,9 +29,12 @@ use types::VIDNetwork;
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]
 async fn main() {
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    setup_logging();
+    setup_backtrace();
+
     // use configfile args
     let args = ConfigArgs::parse();
-
     // spawn web servers
     let (server_shutdown_sender_cdn, server_shutdown_cdn) = oneshot();
     let (server_shutdown_sender_da, server_shutdown_da) = oneshot();
@@ -96,7 +99,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                url: orchestrator_url,
+                url: orchestrator_url.clone(),
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
                 network_config_file: None,
             })

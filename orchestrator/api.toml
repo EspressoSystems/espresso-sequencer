@@ -3,6 +3,15 @@ NAME = "orchestrator"
 DESCRIPTION = "Orchestrator for HotShot"
 FORMAT_VERSION = "0.1.0"
 
+# POST node's identity
+[route.postidentity]
+PATH = ["identity/:identity"]
+METHOD = "POST"
+":identity" = "Literal"
+DOC = """
+POST a node's identity (IP address) to the orchestrator.  Returns the node's node_index.
+"""
+
 # POST retrieve the network configuration
 [route.post_getconfig]
 PATH = ["config/:node_index"]
@@ -12,6 +21,29 @@ DOC = """
 Get networking configuration needed for nodes to initialize HotShot and themselves. See `config.rs` for more information. 
 This must be a POST request so we can update the OrchestratorState in the server accordingly.  Must use the node_index previously 
 received from the 'identity' endpoint
+"""
+
+# POST the node's node index to generate public key for pubkey collection
+[route.postpubkey]
+PATH = ["pubkey/:node_index"]
+METHOD = "POST"
+":node_index" = "Integer"
+DOC = """
+Post a node's node_index so that its public key could be posted and collected by the orchestrator.
+"""
+
+# GET whether or not the config with all peers' public keys / configs are ready
+[route.peer_pubconfig_ready]
+PATH = ["peer_pub_ready"]
+DOC = """
+Get whether the node can collect the final config which includs all peer's public config/info like public keys, returns a boolean.
+"""
+
+# GET the updated config with all peers' public keys / configs
+[route.config_after_peer_collected]
+PATH = ["config_after_peer_collected"]
+DOC = """
+Get the updated config with all peers' public keys / configs, returns a NetworkConfig.
 """
 
 # POST whether the node is ready to begin the run
