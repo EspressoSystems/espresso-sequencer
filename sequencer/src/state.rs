@@ -178,7 +178,7 @@ pub struct FeeAmount(U256);
 #[derive(
     Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub struct FeeAccount(Address);
+pub struct FeeAccount(pub Address);
 
 impl Valid for FeeAmount {
     fn check(&self) -> Result<(), SerializationError> {

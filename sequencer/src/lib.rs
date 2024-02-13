@@ -7,8 +7,13 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 use context::SequencerContext;
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -186,7 +191,10 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 }
 
 #[derive(Clone, Debug)]
-pub struct NodeState {}
+pub struct NodeState {
+    validated_state: ValidatedState,
+    builder_address: Wallet<SigningKey>,
+}
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
@@ -273,6 +281,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
+    builder_mnemonic: String,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -340,7 +349,15 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let instance_state = &NodeState {};
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase::<&str>(&builder_mnemonic)
+        .build()
+        .unwrap();
+
+    let instance_state = NodeState {
+        builder_address: wallet,
+        validated_state: ValidatedState::default(),
+    };
     let hotshot = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
@@ -349,7 +366,7 @@ pub async fn init_node(
         networks,
         config.config,
         metrics,
-        instance_state,
+        &instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(

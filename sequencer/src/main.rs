@@ -55,6 +55,7 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
+    let builder_mnemonic = opt.eth_mnemonic;
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
@@ -83,7 +84,7 @@ where
             let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
                     async move {
-                        init_node(network_params, &*metrics, &mut storage)
+                        init_node(network_params, &*metrics, &mut storage, builder_mnemonic)
                             .await
                             .unwrap()
                     }
@@ -92,6 +93,6 @@ where
                 .await?;
             context
         }
-        None => init_node(network_params, &NoMetrics, &mut storage_opt.create().await?).await?,
+        None => init_node(network_params, &NoMetrics, &mut storage_opt.create().await?, builder_mnemonic).await?,
     })
 }
