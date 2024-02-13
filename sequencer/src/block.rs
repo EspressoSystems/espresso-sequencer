@@ -296,7 +296,7 @@ impl BlockHeader for Header {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
-        } = instance_state.validated_state.clone();
+        } = ValidatedState::genesis(instance_state);
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 

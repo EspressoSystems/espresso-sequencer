@@ -4,7 +4,6 @@ use ark_serialize::{
 };
 use commit::{Commitment, Committable};
 use derive_more::{Add, Sub};
-use ethers::signers::Signer;
 use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
