@@ -263,11 +263,6 @@ impl CanonicalDeserialize for FeeAccount {
         Ok(Self(value))
     }
 }
-impl std::convert::From<u64> for FeeAccount {
-    fn from(item: u64) -> Self {
-        FeeAccount(Address::from_low_u64_le(item))
-    }
-}
 
 impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
     fn to_traversal_path(&self, height: usize) -> Vec<usize> {
