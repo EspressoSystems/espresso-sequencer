@@ -209,11 +209,11 @@ impl Header {
 
         let hash =
             ethers::utils::hash_message(serde_json::to_string(&header).unwrap().into_bytes());
-        let sig = builder_address.sign_hash(hash).unwrap();
+        let header_signature = builder_address.sign_hash(hash).unwrap();
 
         Self {
             builder_address: Some(FeeAccount(builder_address.address())),
-            builder_signature: Some(sig),
+            builder_signature: Some(header_signature),
             ..header
         }
     }
