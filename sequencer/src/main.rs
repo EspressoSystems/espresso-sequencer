@@ -93,6 +93,14 @@ where
                 .await?;
             context
         }
-        None => init_node(network_params, &NoMetrics, &mut storage_opt.create().await?, builder_mnemonic).await?,
+        None => {
+            init_node(
+                network_params,
+                &NoMetrics,
+                &mut storage_opt.create().await?,
+                builder_mnemonic,
+            )
+            .await?
+        }
     })
 }

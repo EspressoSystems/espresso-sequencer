@@ -102,7 +102,6 @@ pub struct Options {
     /// It must be funded with ETH on the layer 1.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
     pub eth_mnemonic: String,
-
 }
 
 impl Options {
