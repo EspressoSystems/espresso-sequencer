@@ -46,7 +46,7 @@ pub fn validate_proposal(
     state: &mut ValidatedState,
     parent: &Header,
     proposal: &Header,
-) -> anyhow::Result<ValidatedState> {
+) -> anyhow::Result<()> {
     // validate height
     anyhow::ensure!(
         proposal.height == parent.height + 1,
@@ -57,8 +57,10 @@ pub fn validate_proposal(
         )
     );
 
-    let mut block_merkle_tree = state.block_merkle_tree.clone();
-    let mut fee_merkle_tree = state.fee_merkle_tree.clone();
+    let ValidatedState {
+        block_merkle_tree,
+        fee_merkle_tree,
+    } = state;
 
     // validate proposal is descendent of parent by appending to parent
     block_merkle_tree.push(parent.commit()).unwrap();
@@ -81,11 +83,7 @@ pub fn validate_proposal(
             proposal.fee_merkle_tree_root
         )
     );
-
-    Ok(ValidatedState {
-        block_merkle_tree,
-        fee_merkle_tree,
-    })
+    Ok(())
 }
 
 /// Fetch receipts from the l1 and add them to local balance.
@@ -154,7 +152,7 @@ impl HotShotState for ValidatedState {
     /// proposal descends from parent. Returns updated `ValidatedState`.
     fn validate_and_apply_header(
         &self,
-        instance: &Self::Instance,
+        _instance: &Self::Instance,
         parent_header: &Self::BlockHeader,
         proposed_header: &Self::BlockHeader,
     ) -> Result<Self, Self::Error> {
@@ -163,18 +161,17 @@ impl HotShotState for ValidatedState {
         let mut validated_state = self.clone();
 
         // validate proposed header against parent
-        let mut validated_state =
-            match validate_proposal(&mut validated_state, parent_header, proposed_header) {
-                // Note that currently only block state is updated.
-                Ok(validated_state) => validated_state,
-                Err(e) => {
-                    tracing::warn!("Invalid Proposal: {}", e);
-                    return Err(BlockError::InvalidBlockHeader);
-                }
-            };
+        match validate_proposal(&mut validated_state, parent_header, proposed_header) {
+            // Note that currently only block state is updated.
+            Ok(validated_state) => validated_state,
+            Err(e) => {
+                tracing::warn!("Invalid Proposal: {}", e);
+                return Err(BlockError::InvalidBlockHeader);
+            }
+        };
 
         // Update account balance from the l1
-        update_balance(&mut validated_state.fee_merkle_tree, &parent_header);
+        update_balance(&mut validated_state.fee_merkle_tree, parent_header);
 
         // Validate builder by verifying signature and charging account
         if let Err(e) = validate_builder(&mut validated_state.fee_merkle_tree, parent_header) {
