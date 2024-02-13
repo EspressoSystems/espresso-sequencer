@@ -20,12 +20,12 @@ pub struct TxIterator<'a, TableWord: TableWordTraits> {
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a Payload<TableWord>,
-    ns_table: NameSpaceTable<TableWord>,
+    ns_table: &'a NameSpaceTable<TableWord>,
 }
 
 impl<'a, TableWord: TableWordTraits> TxIterator<'a, TableWord> {
     pub(super) fn new(
-        ns_table: NameSpaceTable<TableWord>,
+        ns_table: &'a NameSpaceTable<TableWord>,
         block_payload: &'a Payload<TableWord>,
     ) -> Self {
         Self {

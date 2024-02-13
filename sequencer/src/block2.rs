@@ -19,7 +19,7 @@ use payload::Payload;
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = Vec<u8>;
+    type Metadata = NameSpaceTable<TxTableEntryWord>;
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
     // https://github.com/EspressoSystems/HotShot/issues/2115
@@ -48,13 +48,9 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let structured_payload = Payload::from_txs(txs)?;
-
-        Some((
-            structured_payload.clone(),
-            structured_payload.get_ns_table_bytes(),
-        ))
-        .context(BlockBuildingSnafu)
+        let payload = Payload::from_txs(txs)?;
+        let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
+        Some((payload, ns_table)).context(BlockBuildingSnafu)
     }
 
     fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
@@ -64,7 +60,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         Self {
             raw_payload: encoded_transactions.into_iter().collect(),
             tx_table_len_proof: Default::default(),
-            ns_table: NameSpaceTable::from_bytes(metadata),
+            ns_table: metadata.clone(), // TODO don't clone ns_table
         }
     }
 

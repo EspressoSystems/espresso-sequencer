@@ -163,8 +163,8 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .as_ref()
     }
 
-    pub fn get_ns_table_bytes(&self) -> Vec<u8> {
-        self.ns_table.get_bytes()
+    pub fn get_ns_table(&self) -> &NameSpaceTable<TableWord> {
+        &self.ns_table
     }
 
     pub fn from_txs(
@@ -395,7 +395,7 @@ mod test {
 
     use super::test_vid_factory;
     use crate::block2::payload::{Payload, TableWordTraits};
-    use crate::block2::tables::Table;
+    use crate::block2::tables::{NameSpaceTable, Table};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -544,7 +544,8 @@ mod test {
 
             // test namespace table length
             let actual_ns_table_len =
-                TxTableEntry::from_bytes(&actual_ns_table[..TxTableEntry::byte_len()]).unwrap();
+                TxTableEntry::from_bytes(&actual_ns_table.get_bytes()[..TxTableEntry::byte_len()])
+                    .unwrap();
             assert_eq!(
                 actual_ns_table_len,
                 TxTableEntry::try_from(test_case.len()).unwrap(),
@@ -559,7 +560,8 @@ mod test {
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableWord>(&actual_ns_table).enumerate()
+            for (ns_idx, (ns_id, entry)) in
+                ns_table_iter::<TableWord>(actual_ns_table.get_bytes()).enumerate()
             {
                 // warning! ns_id may not equal VmId(ns_idx) due to HashMap nondeterminism
 
@@ -587,7 +589,7 @@ mod test {
                 // test ns proof
                 let ns_proof = block
                     .namespace_with_proof(
-                        &actual_ns_table,
+                        actual_ns_table.get_bytes(),
                         ns_idx,
                         &vid,
                         disperse_data.common.clone(),
@@ -599,7 +601,7 @@ mod test {
                     ns_id.0,
                 );
                 let (ns_proof_txs, ns_proof_ns_id) = ns_proof
-                    .verify(&vid, &disperse_data.commit, &actual_ns_table)
+                    .verify(&vid, &disperse_data.commit, actual_ns_table.get_bytes())
                     .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id.0));
                 assert_eq!(ns_proof_ns_id, ns_id);
                 assert_eq!(
@@ -754,7 +756,11 @@ mod test {
                 payload_byte_len
             );
 
-            let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
+            // TODO don't initialize Payload with empty namespace table
+            let block = Payload::from_bytes(
+                test_case.payload.iter().cloned(),
+                &NameSpaceTable::from_vec(Vec::new()),
+            );
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
 
@@ -795,7 +801,12 @@ mod test {
 
         let mut rng = jf_utils::test_rng();
         let test_case = TestCase::<TableWord>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
-        let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
+
+        // TODO don't initialize Payload with empty namespace table
+        let block = Payload::from_bytes(
+            test_case.payload.iter().cloned(),
+            &NameSpaceTable::from_vec(Vec::new()),
+        );
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 

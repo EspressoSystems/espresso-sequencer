@@ -72,7 +72,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         Ok(ns_table)
     }
 
-    // TODO see how we can  avoid cloning the whole payload
+    // TODO don't clone the entire payload
     pub fn from_bytes(b: &[u8]) -> Self {
         Self {
             raw_payload: b.to_vec(),
@@ -80,8 +80,8 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         }
     }
 
-    pub fn get_bytes(&self) -> Vec<u8> {
-        self.raw_payload.clone()
+    pub fn get_bytes(&self) -> &Vec<u8> {
+        &self.raw_payload
     }
 
     fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
