@@ -86,7 +86,8 @@ impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
 mod test_helpers {
     use super::*;
     use crate::{
-        api::endpoints::AccountQueryData,
+        api::endpoints::{AccountQueryData, BlocksFrontier},
+        state::BlockMerkleTree,
         testing::{
             init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
         },
@@ -99,7 +100,7 @@ mod test_helpers {
     use futures::{FutureExt, StreamExt};
     use hotshot::types::{Event, EventType};
     use hotshot_types::traits::node_implementation::ConsensusTime;
-    use jf_primitives::merkle_tree::MerkleTreeScheme;
+    use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -384,6 +385,41 @@ mod test_helpers {
                 .unwrap(),
             0.into()
         );
+
+        // Decided block state.
+        let res = client
+            .get::<BlocksFrontier>("state/blocks")
+            .send()
+            .await
+            .unwrap();
+        let root = &node
+            .context
+            .consensus()
+            .get_decided_state()
+            .await
+            .block_merkle_tree
+            .commitment();
+        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
+            .unwrap()
+            .unwrap();
+
+        // Undecided block state.
+        let res = client
+            .get::<BlocksFrontier>(&format!("state/catchup/{}/blocks", view.get_u64()))
+            .send()
+            .await
+            .unwrap();
+        let root = &node
+            .context
+            .consensus()
+            .get_state(view)
+            .await
+            .unwrap()
+            .block_merkle_tree
+            .commitment();
+        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
+            .unwrap()
+            .unwrap();
     }
 }
 
