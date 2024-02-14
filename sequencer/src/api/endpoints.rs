@@ -7,6 +7,7 @@ use super::{
     AppState,
 };
 use crate::{
+    block::payload::{parse_ns_payload, NamespaceProof},
     network,
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
     Header, SeqTypes, Transaction, VmId,
@@ -33,7 +34,7 @@ use tide_disco::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: crate::block::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>,
+    pub proof: crate::block::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>, // TODO import VidScheme from hotshot
     pub header: Header,
     pub transactions: Vec<Transaction>,
 }
@@ -105,11 +106,15 @@ where
                 )
                 .unwrap();
 
-            // use NamespaceProof::verify to get a Vec<Transactions> for this namespace
-            let transactions = proof
-                .verify(&vid, &disperse_data.commit, block.payload().get_ns_table())
-                .unwrap()
-                .0;
+            let transactions = if let NamespaceProof::Existence {
+                ref ns_payload_flat,
+                ..
+            } = proof
+            {
+                parse_ns_payload(ns_payload_flat, ns_id)
+            } else {
+                Vec::new()
+            };
 
             Ok(NamespaceProofQueryData {
                 transactions,

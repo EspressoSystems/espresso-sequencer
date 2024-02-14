@@ -380,7 +380,7 @@ where
 }
 
 // TODO find a home for this function
-fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
+pub fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
     let num_txs = TxTable::get_tx_table_len(ns_payload_flat);
     let tx_bodies_offset = num_txs
         .saturating_add(1)
