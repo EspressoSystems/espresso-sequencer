@@ -86,6 +86,9 @@ where
             })?;
 
             // TODO fake VidScheme construction
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
+            // TODO do not disperse here!
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/1093
             let vid = crate::block::payload::test_vid_factory();
             use hotshot::traits::BlockPayload;
             let disperse_data = vid
