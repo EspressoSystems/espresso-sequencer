@@ -129,7 +129,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
 /// It checks that
-/// - the signer's accumulated weight exceeds the quorum threshold
+/// - the signers' accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all Schnorr signatures over the light client state are valid
 /// and returns
