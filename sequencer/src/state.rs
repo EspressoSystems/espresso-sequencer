@@ -98,7 +98,9 @@ fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header) {
                 .update(recipient, balance.add(amount))
                 .unwrap(),
             // Handle `NotFound` and `NotInMemory` by initializing
-            // state.
+            // state for now.
+            // TODO handle `NotInMemory` by looking up the value from
+            // a peer during catchup.
             _ => fee_merkle_tree.update(recipient, amount).unwrap(),
         };
     }
