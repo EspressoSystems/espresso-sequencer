@@ -194,8 +194,8 @@ impl HotShotState for ValidatedState {
     }
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis(_instance: &Self::Instance) -> Self {
-        ValidatedState::default()
+    fn genesis(instance: &Self::Instance) -> Self {
+        instance.genesis_state.clone()
     }
 }
 

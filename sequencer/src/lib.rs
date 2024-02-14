@@ -192,6 +192,7 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 
 #[derive(Clone, Debug)]
 pub struct NodeState {
+    genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
 }
 impl InstanceState for NodeState {}
@@ -355,6 +356,7 @@ pub async fn init_node(
 
     let instance_state = NodeState {
         builder_address: wallet,
+        genesis_state: ValidatedState::default(),
     };
     let hotshot = init_hotshot(
         pub_keys.clone(),
