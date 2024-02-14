@@ -3,8 +3,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::sleep;
 use clap::Parser;
+use commit::Committable;
 use futures::future::join_all;
-use hotshot_query_service::availability::{BlockQueryData, QueryablePayload};
+use hotshot_query_service::availability::BlockQueryData;
 use sequencer::SeqTypes;
 use std::cmp::max;
 use std::collections::HashSet;
@@ -79,10 +80,9 @@ async fn main() {
                         }
                     }
                 };
-                for t in block.payload().iter(block.payload().get_ns_table()) {
-                    let txn = block.transaction(&t).unwrap();
+                for (_, txn) in block.enumerate() {
                     total += 1;
-                    unique.insert(txn.hash());
+                    unique.insert(txn.commit());
                 }
             }
             (total, unique.len())
