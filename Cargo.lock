@@ -7387,6 +7387,7 @@ dependencies = [
  "toml 0.8.10",
  "tracing",
  "trait-set",
+ "trait-variant",
  "typenum",
  "url",
 ]

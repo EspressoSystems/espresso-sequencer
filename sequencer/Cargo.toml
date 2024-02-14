@@ -47,6 +47,7 @@ time = "0.3"
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
     "with-serde_json-1",
 ] }
+trait-variant = { workspace = true }
 
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
