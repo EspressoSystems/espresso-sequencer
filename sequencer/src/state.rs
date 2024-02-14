@@ -4,10 +4,7 @@ use ark_serialize::{
 };
 use commit::{Commitment, Committable};
 use derive_more::{Add, Sub};
-use ethers::core::k256::ecdsa::SigningKey;
-use ethers::core::k256::ecdsa::{signature::Signer, Signature};
-use ethers::core::k256::{ecdsa, Secp256k1};
-use ethers::signers::Wallet;
+
 use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};

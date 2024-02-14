@@ -211,7 +211,7 @@ impl Header {
         // Sign Header with builder wallet from state and save the
         // signature on the Header
         let signing_key: &SigningKey = builder_address.signer();
-        let header_signature: ecdsa::Signature = signing_key.sign(&header.commit().as_ref());
+        let header_signature: ecdsa::Signature = signing_key.sign(header.commit().as_ref());
 
         Self {
             builder_address: Some(FeeAccount(builder_address.address())),
