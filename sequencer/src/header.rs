@@ -1,9 +1,6 @@
 use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
-    state::{
-        fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo,
-        FeeMerkleCommitment, FeeReceipt,
-    },
+    state::{fetch_fee_receipts, BlockMerkleCommitment, FeeInfo, FeeMerkleCommitment, FeeReceipt},
     L1BlockInfo, NMTRoot, Payload, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
@@ -26,8 +23,6 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{env, fmt::Debug, ops::Add, time::Duration};
 use time::OffsetDateTime;
-use typenum::{Integer, U256, U3};
-use typenum::{U0, U265};
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]

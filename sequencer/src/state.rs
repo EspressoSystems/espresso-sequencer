@@ -18,7 +18,7 @@ use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
-use typenum::{Unsigned, U1};
+use typenum::Unsigned;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -94,6 +94,7 @@ fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header) {
     let receipts = fetch_fee_receipts(parent);
     for FeeReceipt { recipient, amount } in receipts {
         // Add `amount` to `balance`, if `balance` is `None` set it to `amount`
+        #[allow(clippy::single_match)]
         match fee_merkle_tree.update_with(recipient, |balance| {
             Some(balance.cloned().unwrap_or_default().add(amount))
         }) {
