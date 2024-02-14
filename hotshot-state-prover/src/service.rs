@@ -216,6 +216,12 @@ pub async fn sync_state(
         }
     });
 
+    if accumulated_weight < threshold {
+        return Err(ProverError::InvalidState(
+            "The signers' total weight doesn't reach the threshold.".to_string(),
+        ));
+    }
+
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = time::Instant::now();
     let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
@@ -298,7 +304,7 @@ pub async fn run_prover_once(config: StateProverConfig) {
 #[derive(Debug, Display)]
 pub enum ProverError {
     /// Invalid light client state or signatures
-    InvalidState,
+    InvalidState(String),
     /// Error when communicating with the smart contract: {0}
     ContractError(anyhow::Error),
     /// Error when communicating with the state relay server
