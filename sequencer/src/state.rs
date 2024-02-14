@@ -14,8 +14,9 @@ use jf_primitives::merkle_tree::{
     ForgetableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
 };
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
+use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::ops::{Add, Sub};
+use std::ops::Add;
 use typenum::Unsigned;
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -128,12 +129,16 @@ fn validate_builder(
     // charge the fee to the builder
     let mut fee_merkle_tree = fee_merkle_tree.clone();
     match fee_merkle_tree.universal_lookup(builder_address) {
-        LookupResult::Ok(balance, _) => fee_merkle_tree
-            .update(builder_address, balance.sub(builder_fee_amount))
-            .unwrap(),
-        // `NotFound` or `NotInMemory` is a ghost account that
-        // somehow signed the block so it must be a BUG.
-        _ => {
+        LookupResult::Ok(balance, _) => {
+            let updated = balance
+                .checked_sub(&builder_fee_amount)
+                .ok_or_else(|| anyhow::anyhow!("Insufficient funds"))?;
+            fee_merkle_tree.update(builder_address, updated).unwrap();
+        }
+        LookupResult::NotFound(_) => {
+            anyhow::bail!("Account Not Found");
+        }
+        LookupResult::NotInMemory => {
             anyhow::bail!("Invalid Builder Account");
         }
     };
@@ -226,6 +231,13 @@ pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitme
 // `CanonicalDeserialize`
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub)]
 pub struct FeeAmount(U256);
+
+impl CheckedSub for FeeAmount {
+    fn checked_sub(&self, v: &Self) -> Option<Self> {
+        self.0.checked_sub(v.0).map(FeeAmount)
+    }
+}
+
 // New Type for `Address` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
 #[derive(
