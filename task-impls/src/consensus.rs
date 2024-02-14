@@ -689,6 +689,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut new_decide_reached = false;
                 let mut new_decide_qc = None;
                 let mut leaf_views = Vec::new();
+                let mut leafs_decided = Vec::new();
                 let mut included_txns = HashSet::new();
                 let old_anchor_view = consensus.last_decided_view;
                 let parent_view = leaf.justify_qc.get_view_number();
@@ -749,7 +750,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     .vid_shares
                                     .get(&leaf.get_view_number())
                                     .map(|vid_proposal| vid_proposal.data.clone());
+
                                 leaf_views.push((leaf.clone(), vid));
+                                leafs_decided.push(leaf.clone());
                                 if let Some(ref payload) = leaf.block_payload {
                                     for txn in payload
                                         .transaction_commitments(leaf.get_block_header().metadata())
@@ -794,6 +797,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
                 #[allow(clippy::cast_precision_loss)]
                 if new_decide_reached {
+                    broadcast_event(HotShotEvent::LeafDecided(leafs_decided), &event_stream).await;
                     let decide_sent = broadcast_event(
                         Event {
                             view_number: consensus.last_decided_view,
