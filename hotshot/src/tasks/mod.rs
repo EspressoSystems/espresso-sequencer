@@ -4,6 +4,7 @@ use crate::{types::SystemContextHandle, HotShotConsensusApi};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 
+use hotshot_constants::VERSION_0_1;
 use hotshot_task::task::{Task, TaskRegistry};
 use hotshot_task_impls::{
     consensus::{CommitmentAndMetadata, ConsensusTaskState},
@@ -171,6 +172,9 @@ pub async fn create_consensus_state<TYPES: NodeType, I: NodeImplementation<TYPES
         timeout_vote_collector: None.into(),
         timeout_task: None,
         timeout_cert: None,
+        upgrade_cert: None,
+        decided_upgrade_cert: None,
+        current_network_version: VERSION_0_1,
         output_event_stream: output_stream,
         vid_shares: BTreeMap::new(),
         current_proposal: None,

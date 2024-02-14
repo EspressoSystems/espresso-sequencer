@@ -4,7 +4,7 @@
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
 use crate::{
-    simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
     simple_vote::UpgradeProposalData,
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
@@ -214,6 +214,9 @@ pub struct QuorumProposal<TYPES: NodeType> {
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
+
+    /// Possible upgrade certificate, which the leader may optionally attach.
+    pub upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 
     /// the propser id
     pub proposer_id: TYPES::SignatureKey,
