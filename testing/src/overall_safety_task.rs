@@ -419,7 +419,6 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     ) {
         let num_decided = self.success_nodes.len();
         let num_failed = self.failed_nodes.len();
-        let remaining_nodes = total_num_nodes - (num_decided + num_failed);
 
         if check_leaf && self.leaf_map.len() != 1 {
             error!("LEAF MAP (that is mismatched) IS: {:?}", self.leaf_map);
@@ -462,7 +461,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             }
         }
 
-        let is_success_possible = remaining_nodes + num_decided >= threshold;
+        let is_success_possible = total_num_nodes - num_failed >= threshold;
         if !is_success_possible {
             self.status = ViewStatus::Failed;
         }
