@@ -3,6 +3,7 @@ mod block;
 mod block2;
 mod chain_variables;
 pub mod context;
+mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
@@ -61,8 +62,9 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::{Header, Payload};
+pub use block::Payload;
 pub use chain_variables::ChainVariables;
+pub use header::Header;
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NMT,
     prelude::{Sha3Digest, Sha3Node},
@@ -83,7 +85,7 @@ pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::Na
 ///
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
-    lazy_static::initialize(&block::L1_CLIENT);
+    lazy_static::initialize(&header::L1_CLIENT);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
