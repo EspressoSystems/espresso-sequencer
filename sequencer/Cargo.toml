@@ -72,6 +72,7 @@ tokio-postgres = { version = "0.7", default-features = false, features = [ # dis
 toml = { workspace = true }
 tracing = { workspace = true }
 trait-set = "0.3.0"
+trait-variant = { workspace = true }
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
