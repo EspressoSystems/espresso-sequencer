@@ -1,8 +1,8 @@
 use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     state::{
-        fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeAmount, FeeMerkleCommitment,
-        FeeReceipt,
+        fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo,
+        FeeMerkleCommitment, FeeReceipt,
     },
     L1BlockInfo, NMTRoot, Payload, ValidatedState,
 };
@@ -26,6 +26,8 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{env, fmt::Debug, ops::Add, time::Duration};
 use time::OffsetDateTime;
+use typenum::{Integer, U256, U3};
+use typenum::{U0, U265};
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -81,9 +83,8 @@ pub struct Header {
     /// Root Commitment of `FeeMerkleTree`
     pub fee_merkle_tree_root: FeeMerkleCommitment,
     /// Account (etheruem address) of builder
-    pub builder_address: Option<FeeAccount>,
     pub builder_signature: Option<types::Signature>,
-    pub builder_fee_amount: Option<FeeAmount>,
+    pub fee_info: FeeInfo,
 }
 
 impl Committable for Header {
@@ -96,6 +97,9 @@ impl Committable for Header {
         self.fee_merkle_tree_root
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
+        let mut fee_info_bytes = vec![];
+        self.fee_info
+            .serialize_with_mode(&mut fee_info_bytes, ark_serialize::Compress::Yes);
         RawCommitmentBuilder::new(&Self::tag())
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
@@ -106,6 +110,7 @@ impl Committable for Header {
             .field("transactions_root", self.transactions_root.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
+            .var_size_field("fee_info", &fee_info_bytes)
             .finalize()
     }
 
@@ -195,9 +200,8 @@ impl Header {
             transactions_root,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            builder_address: None,
+            fee_info: parent.fee_info,
             builder_signature: None,
-            builder_fee_amount: None,
         };
 
         // Sign Header with builder wallet from state and save the
@@ -206,7 +210,6 @@ impl Header {
         let header_signature: ecdsa::Signature = signing_key.sign(header.commit().as_ref());
 
         Self {
-            builder_address: Some(builder_address.address().into()),
             builder_signature: Some(
                 types::Signature::try_from(&header_signature.to_vec()[..]).unwrap(),
             ),
@@ -307,9 +310,8 @@ impl BlockHeader for Header {
             transactions_root,
             block_merkle_tree_root,
             fee_merkle_tree_root,
-            builder_address: None,
+            fee_info: FeeInfo::new(instance_state.builder_address.address().into()),
             builder_signature: None,
-            builder_fee_amount: None,
         };
         (header, payload, transactions_root)
     }

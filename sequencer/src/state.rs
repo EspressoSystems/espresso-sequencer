@@ -17,7 +17,7 @@ use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
-use typenum::Unsigned;
+use typenum::{Unsigned, U1};
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -110,32 +110,31 @@ fn validate_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
     proposed_header: &Header,
 ) -> anyhow::Result<()> {
-    let mut verifiable_header = proposed_header.clone();
-    // These unraps should be safe since Header::new() must have
-    // set these fields.
-    let builder_signature = verifiable_header.builder_signature.take().unwrap();
-    let builder_address = verifiable_header.builder_address.take().unwrap();
-    let builder_fee_amount = verifiable_header.builder_fee_amount.take().unwrap();
-    let header_bytes = serde_json::to_string(&verifiable_header)
-        .unwrap()
-        .into_bytes();
+    // Beware of Malice!
+    let builder_signature = proposed_header
+        .builder_signature
+        .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
 
+    let fee_info = proposed_header.fee_info;
     // verify signature
     anyhow::ensure!(
         builder_signature
-            .verify(header_bytes, builder_address.address())
+            .verify(
+                AsRef::<[u8]>::as_ref(&proposed_header.commit()),
+                fee_info.account.address()
+            )
             .is_ok(),
         "Invalid Builder Signature"
     );
 
     // charge the fee to the builder
     let mut fee_merkle_tree = fee_merkle_tree.clone();
-    match fee_merkle_tree.universal_lookup(builder_address) {
+    match fee_merkle_tree.universal_lookup(fee_info.account) {
         LookupResult::Ok(balance, _) => {
             let updated = balance
-                .checked_sub(&builder_fee_amount)
+                .checked_sub(&fee_info.amount)
                 .ok_or_else(|| anyhow::anyhow!("Insufficient funds"))?;
-            fee_merkle_tree.update(builder_address, updated).unwrap();
+            fee_merkle_tree.update(fee_info.account, updated).unwrap();
         }
         LookupResult::NotFound(_) => {
             anyhow::bail!("Account Not Found");
@@ -167,7 +166,6 @@ impl HotShotState for ValidatedState {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
-
         // validate proposed header against parent
         match validate_proposal(&mut validated_state, parent_header, proposed_header) {
             // Note that currently only block state is updated.
@@ -229,9 +227,35 @@ impl hotshot_types::traits::states::TestableState for ValidatedState {
 pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
+#[derive(
+    Default,
+    Hash,
+    Copy,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+)]
+/// `FeeInfo` holds data related to builder fees.
+pub struct FeeInfo {
+    account: FeeAccount,
+    amount: FeeAmount,
+}
+impl FeeInfo {
+    pub fn new(account: FeeAccount) -> Self {
+        let amount = FeeAmount::default(); // TODO grab from config (instance_state?)
+        Self { account, amount }
+    }
+}
 // New Type for `U256` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
-#[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub)]
+#[derive(
+    Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
+)]
 pub struct FeeAmount(U256);
 
 impl CheckedSub for FeeAmount {
