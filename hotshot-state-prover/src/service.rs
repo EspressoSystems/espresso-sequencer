@@ -522,7 +522,9 @@ mod test {
         }
     }
 
+    // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
+    #[ignore]
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
@@ -545,7 +547,9 @@ mod test {
         Ok(())
     }
 
+    // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
+    #[ignore]
     async fn test_submit_state_and_proof() -> Result<()> {
         setup_logging();
         setup_backtrace();
