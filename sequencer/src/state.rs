@@ -93,17 +93,15 @@ pub fn validate_proposal(
 fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header) {
     let receipts = fetch_fee_receipts(parent);
     for FeeReceipt { recipient, amount } in receipts {
-        // Get the balance in order to add amount, ignoring the proof.
-        match fee_merkle_tree.universal_lookup(recipient) {
-            LookupResult::Ok(balance, _) => fee_merkle_tree
-                .update(recipient, balance.add(amount))
-                .unwrap(),
-            // Handle `NotFound` and `NotInMemory` by initializing
-            // state for now.
-            // TODO handle `NotInMemory` by looking up the value from
+        // Add `amount` to `balance`, if `balance` is `None` set it to `amount`
+        match fee_merkle_tree.update_with(recipient, |balance| {
+            Some(balance.cloned().unwrap_or_default().add(amount))
+        }) {
+            Ok(LookupResult::Ok(..)) => (),
+            // TODO handle `LookupResult::NotInMemory` by looking up the value from
             // a peer during catchup.
-            _ => fee_merkle_tree.update(recipient, amount).unwrap(),
-        };
+            _ => (),
+        }
     }
 }
 /// Validate builder account by verifiying signature and charging the account.
