@@ -60,8 +60,27 @@ services:
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_PORT
       - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
+      - RUST_LOG=warn
+      - RUST_LOG_FORMAT
+
+  prover-service:
+    image: ghcr.io/espressosystems/espresso-sequencer/prover-service:main
+    environment:
+      - ESPRESSO_STATE_RELAY_SERVER_URL
+      - ESPRESSO_ORCHESTRATOR_NUM_NODES
+      - ESPRESSO_ORCHESTRATOR_KEYGEN_SEED
+      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
+      - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
       - RUST_LOG_FORMAT
+    depends_on:
+      state-relay-server:
+        condition: service_healthy
+      demo-l1-network:
+        condition: service_healthy
 
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main

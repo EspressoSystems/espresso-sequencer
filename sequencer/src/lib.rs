@@ -14,7 +14,7 @@ use ethers::{
 };
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-
+use hotshot_types::light_client::StateKeyPair;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -41,7 +41,6 @@ use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{
         metrics::Metrics, network::CommunicationChannel, node_implementation::NodeType,
@@ -326,7 +325,7 @@ pub async fn init_node(
     let state_ver_keys = (0..num_nodes)
         .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
         .collect::<Vec<_>>();
-    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
+    let state_key_pair = StateKeyPair::generate_from_seed_indexed(config.seed, node_index);
 
     // Initialize networking.
     let networks = Networks {
@@ -401,7 +400,6 @@ pub mod testing {
     use hotshot::types::EventType::Decide;
 
     use hotshot_types::{
-        light_client::StateKeyPair,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, ValidatorConfig,
     };
@@ -463,7 +461,7 @@ pub mod testing {
                 public_key: pub_keys[node_id],
                 private_key: priv_keys[node_id].clone(),
                 stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
-                state_key_pair: StateKeyPair::generate(),
+                state_key_pair: Default::default(),
             };
 
             let network = Arc::new(MemoryNetwork::new(
