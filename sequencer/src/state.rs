@@ -3,7 +3,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use commit::{Commitment, Committable};
-use derive_more::{Add, Sub};
+use derive_more::{Add, From, Into, Sub};
 
 use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
@@ -243,11 +243,23 @@ impl CheckedSub for FeeAmount {
 // New Type for `Address` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
 #[derive(
-    Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord,
+    Default,
+    Hash,
+    Copy,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    From,
+    Into,
 )]
-pub struct FeeAccount(pub Address);
+pub struct FeeAccount(Address);
 impl FeeAccount {
-    fn address(&self) -> Address {
+    pub fn address(&self) -> Address {
         self.0
     }
 }

@@ -214,7 +214,7 @@ impl Header {
         let header_signature: ecdsa::Signature = signing_key.sign(header.commit().as_ref());
 
         Self {
-            builder_address: Some(FeeAccount(builder_address.address())),
+            builder_address: Some(builder_address.address().into()),
             builder_signature: Some(
                 types::Signature::try_from(&header_signature.to_vec()[..]).unwrap(),
             ),
