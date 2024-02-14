@@ -14,7 +14,7 @@ use jf_primitives::{
     rescue::RescueParameter,
     signatures::schnorr::{Signature, VerKey as SchnorrVerKey},
 };
-use jf_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
 
 /// Lossy conversion of a U256 into a field element.
 pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
@@ -129,6 +129,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
 /// It checks that
+/// - the vector that indicates who signed is a bit vector
 /// - the signers' accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all Schnorr signatures over the light client state are valid
@@ -151,7 +152,7 @@ where
     STIter::Item: Borrow<(SchnorrVerKey<P>, U256)>,
     STIter::IntoIter: ExactSizeIterator,
     BitIter: IntoIterator,
-    BitIter::Item: Borrow<bool>,
+    BitIter::Item: Borrow<F>,
     BitIter::IntoIter: ExactSizeIterator,
     SigIter: IntoIterator,
     SigIter::Item: Borrow<Signature<P>>,
@@ -230,9 +231,14 @@ where
 
     // creating Boolean variables for the bit vector
     let bit_vec_pad_len = STAKE_TABLE_CAPACITY - signer_bit_vec.len();
-    let mut signer_bit_vec_var = signer_bit_vec
-        .map(|b| circuit.create_boolean_variable(*b.borrow()))
-        .collect::<Result<Vec<_>, CircuitError>>()?;
+    let collect = signer_bit_vec
+        .map(|b| {
+            let var = circuit.create_variable(*b.borrow())?;
+            circuit.enforce_bool(var)?;
+            Ok(BoolVar(var))
+        })
+        .collect::<Result<Vec<_>, CircuitError>>();
+    let mut signer_bit_vec_var = collect?;
     signer_bit_vec_var.extend(
         (0..bit_vec_pad_len)
             .map(|_| circuit.create_boolean_variable(false))
@@ -428,6 +434,10 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
+        let bit_vec = bit_vec
+            .into_iter()
+            .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
+            .collect::<Vec<_>>();
         // good path
         let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
@@ -453,6 +463,20 @@ mod tests {
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
+        // bad path: feeding non-bit vector
+        let bit_vec = [F::from(2u64); 10];
+        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+            &entries,
+            &bit_vec,
+            &bit_masked_sigs,
+            &lightclient_state,
+            &U256::from(26u32),
+        )
+        .unwrap();
+        assert!(circuit
+            .check_circuit_satisfiability(public_inputs.as_ref())
+            .is_err());
+
         // bad path: total weight doesn't meet the threshold
         // bit vector with total weight 23
         let bad_bit_vec = [
@@ -468,6 +492,11 @@ mod tests {
                     Signature::<Config>::default()
                 }
             })
+            .collect::<Vec<_>>();
+
+        let bad_bit_vec = bad_bit_vec
+            .into_iter()
+            .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
         let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,

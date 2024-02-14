@@ -74,6 +74,13 @@ where
     SigIter::Item: Borrow<Signature<EdwardsConfig>>,
     SigIter::IntoIter: ExactSizeIterator,
 {
+    let signer_bit_vec = signer_bit_vec.into_iter().map(|b| {
+        if *b.borrow() {
+            CircuitField::from(1u64)
+        } else {
+            CircuitField::from(0u64)
+        }
+    });
     let (circuit, public_inputs) = crate::circuit::build::<_, _, _, _, _, STAKE_TABLE_CAPACITY>(
         stake_table_entries,
         signer_bit_vec,
