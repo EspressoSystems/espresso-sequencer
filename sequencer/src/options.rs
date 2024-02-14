@@ -99,7 +99,7 @@ pub struct Options {
     /// Mnemonic phrase for builder account.
     ///
     /// This is the address fees will be charged to.
-    /// It must be funded with ETH on the layer 1.
+    /// It must be funded with ETH in the Espresso fee ledger
     #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
     pub eth_mnemonic: String,
 }
