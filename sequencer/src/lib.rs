@@ -196,6 +196,22 @@ pub struct NodeState {
     genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
 }
+
+impl Default for NodeState {
+    fn default() -> Self {
+        let phrase = "test test test test test test test test test test test junk";
+        let wallet = MnemonicBuilder::<English>::default()
+            .phrase::<&str>(phrase)
+            .build()
+            .unwrap();
+
+        Self {
+            genesis_state: ValidatedState::default(),
+            builder_address: wallet,
+        }
+    }
+}
+
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
@@ -475,7 +491,7 @@ pub mod testing {
                 quorum_network: MemoryCommChannel::new(network),
                 _pd: Default::default(),
             };
-            let instance_state = &NodeState {};
+            let instance_state = &NodeState::default();
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
@@ -571,7 +587,7 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
-        let mut parent = Header::genesis(&NodeState {}).0;
+        let mut parent = Header::genesis(&NodeState::default()).0;
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {

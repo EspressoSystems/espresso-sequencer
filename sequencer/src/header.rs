@@ -373,7 +373,7 @@ lazy_static! {
 #[cfg(test)]
 mod test_headers {
     use crate::{
-        state::{BlockMerkleTree, FeeMerkleTree},
+        state::{validate_proposal, BlockMerkleTree, FeeMerkleTree},
         NodeState,
     };
 
@@ -409,7 +409,7 @@ mod test_headers {
             assert!(self.expected_l1_head >= self.parent_l1_head);
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
-            let state = NodeState {};
+            let state = NodeState::default();
             let (genesis, _, metadata) = Header::genesis(&state);
 
             let mut parent = genesis.clone();
@@ -436,6 +436,7 @@ mod test_headers {
                 self.timestamp,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
+                state.builder_address,
             );
             assert_eq!(header.height, parent.height + 1);
             assert_eq!(header.timestamp, self.expected_timestamp);
@@ -570,7 +571,7 @@ mod test_headers {
 
     #[test]
     fn test_validate_proposal_error_cases() {
-        let (mut header, ..) = Header::genesis(&NodeState {});
+        let (mut header, ..) = Header::genesis(&NodeState::default());
         let mut validated_state = ValidatedState::default();
         let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
 
@@ -583,9 +584,8 @@ mod test_headers {
         let mut proposal = parent.clone();
 
         // Advance `proposal.height` to trigger validation error.
-        let result = validated_state
-            .validate_proposal(&parent.clone(), &proposal)
-            .unwrap_err();
+        let result =
+            validate_proposal(&mut validated_state, &parent.clone(), &proposal).unwrap_err();
         assert_eq!(
             format!("{}", result.root_cause()),
             "Invalid Height Error: 0, 0"
@@ -594,16 +594,15 @@ mod test_headers {
         // proposed `Header` root should include parent +
         // parent.commit
         proposal.height += 1;
-        let result = validated_state
-            .validate_proposal(&parent.clone(), &proposal)
-            .unwrap_err();
+        let result =
+            validate_proposal(&mut validated_state, &parent.clone(), &proposal).unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
         assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
 
     #[test]
     fn test_validate_proposal_success() {
-        let state = NodeState {};
+        let state = NodeState::default();
         let (mut header, _, metadata) = Header::genesis(&state);
         let mut parent_state = ValidatedState::default();
         let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
@@ -625,14 +624,12 @@ mod test_headers {
             metadata,
         );
 
-        let proposal_state = parent_state.clone();
+        let mut proposal_state = parent_state.clone();
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
-        let result = proposal_state
-            .validate_proposal(&parent.clone(), &proposal.clone())
-            .unwrap();
+        validate_proposal(&mut proposal_state, &parent.clone(), &proposal.clone()).unwrap();
         assert_eq!(
-            result.block_merkle_tree.commitment(),
+            proposal_state.block_merkle_tree.commitment(),
             proposal.block_merkle_tree_root
         );
     }
