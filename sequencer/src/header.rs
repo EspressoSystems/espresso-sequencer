@@ -92,10 +92,6 @@ impl Committable for Header {
         self.fee_merkle_tree_root
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
-        let mut fee_info_bytes = vec![];
-        self.fee_info
-            .serialize_with_mode(&mut fee_info_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
@@ -106,7 +102,7 @@ impl Committable for Header {
             .field("transactions_root", self.transactions_root.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .var_size_field("fee_info", &fee_info_bytes)
+            .field("fee_info", self.fee_info.commit())
             .finalize()
     }
 

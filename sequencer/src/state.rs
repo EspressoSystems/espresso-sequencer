@@ -3,7 +3,7 @@ use anyhow::{ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
-use commit::{Commitment, Committable};
+use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Add, From, Into, Sub};
 use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
@@ -251,6 +251,21 @@ impl FeeInfo {
         Self { account, amount }
     }
 }
+
+impl Committable for FeeInfo {
+    fn commit(&self) -> Commitment<Self> {
+        let mut comm_bytes = vec![];
+        self.serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        RawCommitmentBuilder::new(&Self::tag())
+            .var_size_field("fee_info", &comm_bytes)
+            .finalize()
+    }
+    fn tag() -> String {
+        "FEE_INFO".into()
+    }
+}
+
 // New Type for `U256` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
 #[derive(
