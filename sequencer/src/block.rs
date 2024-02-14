@@ -12,9 +12,9 @@ pub mod queryable;
 pub mod tables;
 pub mod tx_iterator;
 
-use crate::block::entry::TxTableEntryWord;
-use crate::block::tables::NameSpaceTable;
+use entry::TxTableEntryWord;
 use payload::Payload;
+use tables::NameSpaceTable;
 
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
