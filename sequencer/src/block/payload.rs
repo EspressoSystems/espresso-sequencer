@@ -175,7 +175,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         let mut structured_payload = Self {
             raw_payload: vec![],
             ns_table: NameSpaceTable {
-                raw_payload: vec![],
+                bytes: vec![],
                 phantom: Default::default(),
             },
             tx_table_len_proof: Default::default(),
