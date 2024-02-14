@@ -1,12 +1,19 @@
 use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
-    state::{fetch_fee_receipts, BlockMerkleCommitment, FeeMerkleCommitment, FeeReceipt},
+    state::{
+        fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeAmount, FeeMerkleCommitment,
+        FeeReceipt,
+    },
     L1BlockInfo, NMTRoot, Payload, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-
+use ethers::{
+    core::k256::ecdsa::{self, signature::Signer, SigningKey},
+    signers::{Signer as _, Wallet},
+    types,
+};
 use hotshot_types::{
     data::VidCommitment,
     traits::{
@@ -73,6 +80,10 @@ pub struct Header {
     pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Root Commitment of `FeeMerkleTree`
     pub fee_merkle_tree_root: FeeMerkleCommitment,
+    /// Account (etheruem address) of builder
+    pub builder_address: Option<FeeAccount>,
+    pub builder_signature: Option<types::Signature>,
+    pub builder_fee_amount: Option<FeeAmount>,
 }
 
 impl Committable for Header {
@@ -130,6 +141,7 @@ impl Header {
         mut timestamp: u64,
         fee_merkle_tree_root: FeeMerkleCommitment,
         block_merkle_tree_root: BlockMerkleCommitment,
+        builder_address: Wallet<SigningKey>,
     ) -> Self {
         // Increment height.
         let height = parent.height + 1;
@@ -174,7 +186,7 @@ impl Header {
             }
         }
 
-        Self {
+        let header = Self {
             height,
             timestamp,
             l1_head: l1.head,
@@ -183,6 +195,22 @@ impl Header {
             transactions_root,
             fee_merkle_tree_root,
             block_merkle_tree_root,
+            builder_address: None,
+            builder_signature: None,
+            builder_fee_amount: None,
+        };
+
+        // Sign Header with builder wallet from state and save the
+        // signature on the Header
+        let signing_key: &SigningKey = builder_address.signer();
+        let header_signature: ecdsa::Signature = signing_key.sign(header.commit().as_ref());
+
+        Self {
+            builder_address: Some(builder_address.address().into()),
+            builder_signature: Some(
+                types::Signature::try_from(&header_signature.to_vec()[..]).unwrap(),
+            ),
+            ..header
         }
     }
 }
@@ -193,7 +221,7 @@ impl BlockHeader for Header {
 
     fn new(
         parent_state: &Self::State,
-        _instance_state: &<Self::State as HotShotState>::Instance,
+        instance_state: &<Self::State as HotShotState>::Instance,
         parent_header: &Self,
         payload_commitment: VidCommitment,
         metadata: <Self::Payload as BlockPayload>::Metadata,
@@ -248,11 +276,12 @@ impl BlockHeader for Header {
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             fee_merkle_tree_root,
             block_merkle_tree_root,
+            instance_state.builder_address.clone(),
         )
     }
 
     fn genesis(
-        _instance_state: &<Self::State as HotShotState>::Instance,
+        instance_state: &<Self::State as HotShotState>::Instance,
     ) -> (
         Self,
         Self::Payload,
@@ -263,7 +292,7 @@ impl BlockHeader for Header {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
-        } = ValidatedState::default();
+        } = ValidatedState::genesis(instance_state);
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
@@ -278,6 +307,9 @@ impl BlockHeader for Header {
             transactions_root,
             block_merkle_tree_root,
             fee_merkle_tree_root,
+            builder_address: None,
+            builder_signature: None,
+            builder_fee_amount: None,
         };
         (header, payload, transactions_root)
     }
