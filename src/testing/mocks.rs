@@ -16,7 +16,7 @@ use hotshot::traits::{
     implementations::{MemoryCommChannel, MemoryStorage},
     NodeImplementation,
 };
-use hotshot_testing::{
+use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
 };

@@ -27,6 +27,7 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_query_service::{
     data_source,
     fetching::provider::NoFetching,
@@ -38,7 +39,6 @@ use hotshot_query_service::{
     },
     Error,
 };
-use hotshot_testing::state_types::TestInstanceState;
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     ExecutionType, HotShotConfig, ValidatorConfig,
