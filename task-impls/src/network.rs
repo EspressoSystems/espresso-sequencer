@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
@@ -13,7 +15,7 @@ use hotshot_types::{
     },
     traits::{
         election::Membership,
-        network::{CommunicationChannel, TransmitType},
+        network::{ConnectedNetwork, TransmitType, ViewMessage},
         node_implementation::NodeType,
     },
     vote::{HasViewNumber, Vote},
@@ -181,9 +183,12 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 }
 
 /// network event task state
-pub struct NetworkEventTaskState<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> {
+pub struct NetworkEventTaskState<
+    TYPES: NodeType,
+    COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+> {
     /// comm channel
-    pub channel: COMMCHANNEL,
+    pub channel: Arc<COMMCHANNEL>,
     /// view number
     pub view: TYPES::Time,
     /// membership for the channel
@@ -193,7 +198,7 @@ pub struct NetworkEventTaskState<TYPES: NodeType, COMMCHANNEL: CommunicationChan
     pub filter: fn(&HotShotEvent<TYPES>) -> bool,
 }
 
-impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> TaskState
+impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>> TaskState
     for NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
     type Event = HotShotEvent<TYPES>;
@@ -221,7 +226,7 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> TaskState
     }
 }
 
-impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
+impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>
     NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
     /// Handle the given event.
@@ -364,13 +369,18 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             sender,
             kind: message_kind,
         };
+        let view = message.kind.get_view_number();
         let transmit_result = match transmit_type {
             TransmitType::Direct => {
                 self.channel
                     .direct_message(message, recipient.unwrap())
                     .await
             }
-            TransmitType::Broadcast => self.channel.broadcast_message(message, membership).await,
+            TransmitType::Broadcast => {
+                self.channel
+                    .broadcast_message(message, membership.get_committee(view))
+                    .await
+            }
         };
 
         match transmit_result {

@@ -98,7 +98,7 @@ async fn test_da_task() {
         api: api.clone(),
         consensus: handle.hotshot.get_consensus(),
         da_membership: api.inner.memberships.da_membership.clone().into(),
-        da_network: api.inner.networks.da_network.clone().into(),
+        da_network: api.inner.networks.da_network.clone(),
         quorum_membership: api.inner.memberships.quorum_membership.clone().into(),
         cur_view: ViewNumber::new(0),
         vote_collector: None.into(),

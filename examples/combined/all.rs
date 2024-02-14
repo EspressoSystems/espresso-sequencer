@@ -20,7 +20,7 @@ use tracing::{error, instrument};
 use crate::{
     infra::run_orchestrator,
     infra::{ConfigArgs, OrchestratorArgs},
-    types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork},
+    types::{DANetwork, NodeImpl, QuorumNetwork},
 };
 
 /// general infra used for this example
@@ -78,8 +78,6 @@ async fn main() {
         TestTypes,
         DANetwork,
         QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
         url: orchestrator_url.clone(),
@@ -96,19 +94,13 @@ async fn main() {
     for _ in 0..config.config.total_nodes.into() {
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
-            infra::main_entry_point::<
-                TestTypes,
-                DANetwork,
-                QuorumNetwork,
-                ViewSyncNetwork,
-                VIDNetwork,
-                NodeImpl,
-                ThisRun,
-            >(ValidatorArgs {
-                url: orchestrator_url,
-                public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-                network_config_file: None,
-            })
+            infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
+                ValidatorArgs {
+                    url: orchestrator_url,
+                    public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    network_config_file: None,
+                },
+            )
             .await;
         });
         nodes.push(node);

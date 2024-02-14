@@ -6,16 +6,17 @@
 use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
-    network::{CommunicationChannel, NetworkReliability, TestableNetworkingImplementation},
+    network::{ConnectedNetwork, NetworkReliability, TestableNetworkingImplementation},
     states::TestableState,
     storage::{StorageError, StorageState, TestableStorage},
     ValidatedState,
 };
 use crate::{
     data::{Leaf, TestableLeaf},
+    message::Message,
     traits::{
-        election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
-        states::InstanceState, storage::Storage, BlockPayload,
+        election::Membership, signature_key::SignatureKey, states::InstanceState, storage::Storage,
+        BlockPayload,
     },
 };
 use async_trait::async_trait;
@@ -44,9 +45,9 @@ pub trait NodeImplementation<TYPES: NodeType>:
     type Storage: Storage<TYPES> + Clone;
 
     /// Network for all nodes
-    type QuorumNetwork: CommunicationChannel<TYPES>;
+    type QuorumNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
     /// Network for those in the DA committee
-    type CommitteeNetwork: CommunicationChannel<TYPES>;
+    type CommitteeNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
 }
 
 /// extra functions required on a node implementation to be usable by hotshot-testing
@@ -94,12 +95,12 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
     async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES>;
 
     /// Generate the communication channels for testing
-    fn gen_comm_channels(
+    fn gen_networks(
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::QuorumNetwork)>;
+    ) -> Box<dyn Fn(u64) -> (Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)>;
 }
 
 #[async_trait]
@@ -108,12 +109,8 @@ where
     TYPES::ValidatedState: TestableState,
     TYPES::BlockPayload: TestableBlock,
     I::Storage: TestableStorage<TYPES>,
-    I::QuorumNetwork: TestableChannelImplementation<TYPES>,
-    I::CommitteeNetwork: TestableChannelImplementation<TYPES>,
-    <<I as NodeImplementation<TYPES>>::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK:
-        TestableNetworkingImplementation<TYPES>,
-    <<I as NodeImplementation<TYPES>>::CommitteeNetwork as CommunicationChannel<TYPES>>::NETWORK:
-        TestableNetworkingImplementation<TYPES>,
+    I::QuorumNetwork: TestableNetworkingImplementation<TYPES>,
+    I::CommitteeNetwork: TestableNetworkingImplementation<TYPES>,
 {
     type CommitteeElectionConfig = TYPES::ElectionConfigType;
 
@@ -153,38 +150,20 @@ where
     async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES> {
         <I::Storage as TestableStorage<TYPES>>::get_full_state(storage).await
     }
-    fn gen_comm_channels(
+    fn gen_networks(
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::QuorumNetwork)> {
-        let quorum_generator = <<I::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
-                expected_node_count,
-                num_bootstrap,
-                0,
-                da_committee_size,
-                false,
-                reliability_config.clone(),
-            );
-        let da_generator = <<I::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
+    ) -> Box<dyn Fn(u64) -> (Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)> {
+        <I::QuorumNetwork as TestableNetworkingImplementation<TYPES>>::generator(
             expected_node_count,
             num_bootstrap,
-            1,
+            0,
             da_committee_size,
             false,
-            reliability_config,
-        );
-
-        Box::new(move |id| {
-            let quorum = Arc::new(quorum_generator(id));
-            let da = Arc::new(da_generator(id));
-            let quorum_chan =
-                <I::QuorumNetwork as TestableChannelImplementation<_>>::generate_network()(quorum);
-            let committee_chan =
-                <I::QuorumNetwork as TestableChannelImplementation<_>>::generate_network()(da);
-            (quorum_chan, committee_chan)
-        })
+            reliability_config.clone(),
+        )
     }
 }
 

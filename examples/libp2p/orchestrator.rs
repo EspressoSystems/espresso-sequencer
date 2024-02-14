@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::infra::run_orchestrator;
 use crate::infra::OrchestratorArgs;
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork};
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork};
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]
@@ -27,8 +27,5 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<TestTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
-        args,
-    )
-    .await;
+    run_orchestrator::<TestTypes, DANetwork, QuorumNetwork, NodeImpl>(args).await;
 }

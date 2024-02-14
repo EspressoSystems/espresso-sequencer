@@ -20,10 +20,9 @@ use hotshot_types::{
     data::ViewNumber,
     message::{Message, MessageKind},
     traits::{
-        election::Membership,
         network::{
-            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
-            NetworkError, NetworkMsg, TestableChannelImplementation, TransmitType, ViewMessage,
+            ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu, NetworkError,
+            NetworkMsg, TransmitType, ViewMessage,
         },
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
@@ -51,7 +50,6 @@ use std::{collections::HashSet, num::NonZeroUsize, str::FromStr};
 use std::{
     collections::BTreeSet,
     fmt::Debug,
-    marker::PhantomData,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
@@ -166,7 +164,7 @@ where
         da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
+    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         assert!(
             da_committee_size <= expected_node_count,
             "DA committee size must be less than or equal to total # nodes"
@@ -252,7 +250,7 @@ where
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
                 let reliability_config_dup = reliability_config.clone();
-                async_block_on(async move {
+                let net = Arc::new(async_block_on(async move {
                     match Libp2pNetwork::new(
                         NetworkingMetricsValue::default(),
                         config,
@@ -273,7 +271,8 @@ where
                             panic!("Failed to create libp2p network: {err:?}");
                         }
                     }
-                })
+                }));
+                (net.clone(), net)
             }
         })
     }
@@ -629,6 +628,14 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         self.wait_for_ready().await;
     }
 
+    fn pause(&self) {
+        unimplemented!("Pausing not implemented for the Libp2p network");
+    }
+
+    fn resume(&self) {
+        unimplemented!("Resuming not implemented for the Libp2p network");
+    }
+
     #[instrument(name = "Libp2pNetwork::ready_nonblocking", skip_all)]
     async fn is_ready(&self) -> bool {
         self.inner.is_ready.load(Ordering::Relaxed)
@@ -884,155 +891,5 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
             _ => {}
         }
-    }
-}
-
-/// libp2p identity communication channel
-#[derive(Clone, Debug)]
-pub struct Libp2pCommChannel<TYPES: NodeType>(
-    Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>,
-    PhantomData<TYPES>,
-);
-
-impl<TYPES: NodeType> Libp2pCommChannel<TYPES> {
-    /// create a new libp2p communication channel
-    #[must_use]
-    pub fn new(network: Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
-        Self(network, PhantomData)
-    }
-}
-
-#[cfg(feature = "hotshot-testing")]
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for Libp2pCommChannel<TYPES>
-where
-    MessageKind<TYPES>: ViewMessage<TYPES>,
-{
-    /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
-    /// with the purpose of generating libp2p networks.
-    /// Generates `num_bootstrap` bootstrap nodes. The remainder of nodes are normal
-    /// nodes with sane defaults.
-    /// # Panics
-    /// Returned function may panic either:
-    /// - An invalid configuration
-    ///   (probably an issue with the defaults of this function)
-    /// - An inability to spin up the replica's network
-    fn generator(
-        expected_node_count: usize,
-        num_bootstrap: usize,
-        network_id: usize,
-        da_committee_size: usize,
-        is_da: bool,
-        reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <Libp2pNetwork<
-            Message<TYPES>,
-            TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_>>::generator(
-            expected_node_count,
-            num_bootstrap,
-            network_id,
-            da_committee_size,
-            is_da,
-            reliability_config
-        );
-        Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
-    }
-
-    fn in_flight_message_count(&self) -> Option<usize> {
-        None
-    }
-}
-
-// FIXME maybe we should macro this...? It's repeated at verbatum EXCEPT for impl generics at the
-// top
-// we don't really want to make this the default implementation because that forces it to require ConnectedNetwork to be implemented. The struct we implement over might use multiple ConnectedNetworks
-#[async_trait]
-impl<TYPES: NodeType> CommunicationChannel<TYPES> for Libp2pCommChannel<TYPES>
-where
-    MessageKind<TYPES>: ViewMessage<TYPES>,
-{
-    type NETWORK = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
-
-    fn pause(&self) {
-        unimplemented!("Pausing not implemented for the Libp2p network");
-    }
-
-    fn resume(&self) {
-        unimplemented!("Resuming not implemented for the Libp2p network");
-    }
-
-    async fn wait_for_ready(&self) {
-        self.0.wait_for_ready().await;
-    }
-
-    async fn is_ready(&self) -> bool {
-        self.0.is_ready().await
-    }
-
-    fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            self.0.shut_down().await;
-        };
-        boxed_sync(closure)
-    }
-
-    async fn broadcast_message(
-        &self,
-        message: Message<TYPES>,
-        membership: &TYPES::Membership,
-    ) -> Result<(), NetworkError> {
-        let recipients = <TYPES as NodeType>::Membership::get_committee(
-            membership,
-            message.kind.get_view_number(),
-        );
-        self.0.broadcast_message(message, recipients).await
-    }
-
-    async fn direct_message(
-        &self,
-        message: Message<TYPES>,
-        recipient: TYPES::SignatureKey,
-    ) -> Result<(), NetworkError> {
-        self.0.direct_message(message, recipient).await
-    }
-
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-        transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move { self.0.recv_msgs(transmit_type).await };
-        boxed_sync(closure)
-    }
-
-    async fn queue_node_lookup(
-        &self,
-        view_number: ViewNumber,
-        pk: TYPES::SignatureKey,
-    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
-        self.0.queue_node_lookup(view_number, pk).await
-    }
-
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
-        <Libp2pNetwork<_, _> as ConnectedNetwork<
-            Message<TYPES>,
-            TYPES::SignatureKey,
-        >>::inject_consensus_info(&self.0, event)
-        .await;
-    }
-}
-
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for Libp2pCommChannel<TYPES> {
-    fn generate_network(
-    ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
-    {
-        Box::new(move |network| Libp2pCommChannel::new(network))
     }
 }

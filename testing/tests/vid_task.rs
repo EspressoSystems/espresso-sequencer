@@ -105,7 +105,7 @@ async fn test_vid_task() {
         consensus: handle.hotshot.get_consensus(),
         cur_view: ViewNumber::new(0),
         vote_collector: None,
-        network: api.inner.networks.quorum_network.clone().into(),
+        network: api.inner.networks.quorum_network.clone(),
         membership: api.inner.memberships.vid_membership.clone().into(),
         public_key: *api.public_key(),
         private_key: api.private_key().clone(),

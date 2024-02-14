@@ -3,9 +3,8 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
 use tracing::{info, instrument};
-use types::VIDNetwork;
 
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork};
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun};
 
 use hotshot_orchestrator::client::ValidatorArgs;
 
@@ -27,14 +26,5 @@ async fn main() {
     setup_backtrace();
     let args = ValidatorArgs::parse();
     info!("connecting to orchestrator at {:?}", args.url);
-    infra::main_entry_point::<
-        TestTypes,
-        DANetwork,
-        QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
-        NodeImpl,
-        ThisRun,
-    >(args)
-    .await;
+    infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(args).await;
 }

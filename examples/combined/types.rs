@@ -1,5 +1,5 @@
 use crate::infra::CombinedDARun;
-use hotshot::traits::implementations::{CombinedCommChannel, MemoryStorage};
+use hotshot::traits::implementations::{CombinedNetworks, MemoryStorage};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
@@ -10,13 +10,13 @@ use std::fmt::Debug;
 pub struct NodeImpl {}
 
 /// convenience type alias
-pub type DANetwork = CombinedCommChannel<TestTypes>;
+pub type DANetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias
-pub type VIDNetwork = CombinedCommChannel<TestTypes>;
+pub type VIDNetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias
-pub type QuorumNetwork = CombinedCommChannel<TestTypes>;
+pub type QuorumNetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias
-pub type ViewSyncNetwork = CombinedCommChannel<TestTypes>;
+pub type ViewSyncNetwork = CombinedNetworks<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Storage = MemoryStorage<TestTypes>;

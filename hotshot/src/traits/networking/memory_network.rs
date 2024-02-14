@@ -15,13 +15,9 @@ use dashmap::DashMap;
 use futures::StreamExt;
 use hotshot_types::{
     boxed_sync,
-    message::{Message, MessageKind},
+    message::Message,
     traits::{
-        election::Membership,
-        network::{
-            CommunicationChannel, ConnectedNetwork, NetworkMsg, TestableChannelImplementation,
-            TestableNetworkingImplementation, TransmitType, ViewMessage,
-        },
+        network::{ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation, TransmitType},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -251,18 +247,19 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
+    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         let master: Arc<_> = MasterMap::new();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         Box::new(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            MemoryNetwork::new(
+            let net = MemoryNetwork::new(
                 pubkey,
                 NetworkingMetricsValue::default(),
                 master.clone(),
                 reliability_config.clone(),
-            )
+            );
+            (net.clone().into(), net.into())
         })
     }
 
@@ -276,6 +273,14 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
 impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for MemoryNetwork<M, K> {
     #[instrument(name = "MemoryNetwork::ready_blocking")]
     async fn wait_for_ready(&self) {}
+
+    fn pause(&self) {
+        unimplemented!("Pausing not implemented for the Memory network");
+    }
+
+    fn resume(&self) {
+        unimplemented!("Resuming not implemented for the Memory network");
+    }
 
     #[instrument(name = "MemoryNetwork::ready_nonblocking")]
     async fn is_ready(&self) -> bool {
@@ -448,125 +453,5 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             }
         };
         boxed_sync(closure)
-    }
-}
-
-/// memory identity communication channel
-#[derive(Clone, Debug)]
-pub struct MemoryCommChannel<TYPES: NodeType>(
-    Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>,
-);
-
-impl<TYPES: NodeType> MemoryCommChannel<TYPES> {
-    /// create new communication channel
-    #[must_use]
-    pub fn new(network: Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
-        Self(network)
-    }
-}
-
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for MemoryCommChannel<TYPES>
-where
-    MessageKind<TYPES>: ViewMessage<TYPES>,
-{
-    fn generator(
-        expected_node_count: usize,
-        num_bootstrap: usize,
-        network_id: usize,
-        da_committee_size: usize,
-        is_da: bool,
-        reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <MemoryNetwork<
-            Message<TYPES>,
-            TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_>>::generator(
-            expected_node_count,
-            num_bootstrap,
-            network_id,
-            da_committee_size,
-            is_da,
-            reliability_config,
-        );
-        Box::new(move |node_id| Self(generator(node_id).into()))
-    }
-
-    fn in_flight_message_count(&self) -> Option<usize> {
-        Some(self.0.inner.in_flight_message_count.load(Ordering::Relaxed))
-    }
-}
-
-#[async_trait]
-impl<TYPES: NodeType> CommunicationChannel<TYPES> for MemoryCommChannel<TYPES>
-where
-    MessageKind<TYPES>: ViewMessage<TYPES>,
-{
-    type NETWORK = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
-
-    fn pause(&self) {
-        unimplemented!("Pausing not implemented for the memory network");
-    }
-
-    fn resume(&self) {
-        unimplemented!("Resuming not implemented for the memory network");
-    }
-
-    async fn wait_for_ready(&self) {
-        self.0.wait_for_ready().await;
-    }
-
-    async fn is_ready(&self) -> bool {
-        self.0.is_ready().await
-    }
-
-    fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            self.0.shut_down().await;
-        };
-        boxed_sync(closure)
-    }
-
-    async fn broadcast_message(
-        &self,
-        message: Message<TYPES>,
-        election: &TYPES::Membership,
-    ) -> Result<(), NetworkError> {
-        let recipients = <TYPES as NodeType>::Membership::get_committee(
-            election,
-            message.kind.get_view_number(),
-        );
-        self.0.broadcast_message(message, recipients).await
-    }
-
-    async fn direct_message(
-        &self,
-        message: Message<TYPES>,
-        recipient: TYPES::SignatureKey,
-    ) -> Result<(), NetworkError> {
-        self.0.direct_message(message, recipient).await
-    }
-
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-        transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move { self.0.recv_msgs(transmit_type).await };
-        boxed_sync(closure)
-    }
-}
-
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for MemoryCommChannel<TYPES> {
-    fn generate_network(
-    ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
-    {
-        Box::new(move |network| MemoryCommChannel::new(network))
     }
 }

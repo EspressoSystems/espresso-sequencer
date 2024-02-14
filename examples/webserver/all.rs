@@ -7,7 +7,7 @@ use crate::infra::{ConfigArgs, OrchestratorArgs};
 use crate::types::ThisRun;
 use crate::{
     infra::run_orchestrator,
-    types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork},
+    types::{DANetwork, NodeImpl, QuorumNetwork},
 };
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
@@ -24,7 +24,6 @@ use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::Url;
 use tracing::error;
-use types::VIDNetwork;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]
@@ -73,8 +72,6 @@ async fn main() {
         TestTypes,
         DANetwork,
         QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
         url: orchestrator_url.clone(),
@@ -90,19 +87,13 @@ async fn main() {
     for _ in 0..(config.config.total_nodes.get()) {
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
-            infra::main_entry_point::<
-                TestTypes,
-                DANetwork,
-                QuorumNetwork,
-                ViewSyncNetwork,
-                VIDNetwork,
-                NodeImpl,
-                ThisRun,
-            >(ValidatorArgs {
-                url: orchestrator_url.clone(),
-                public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-                network_config_file: None,
-            })
+            infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
+                ValidatorArgs {
+                    url: orchestrator_url,
+                    public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    network_config_file: None,
+                },
+            )
             .await;
         });
         nodes.push(node);

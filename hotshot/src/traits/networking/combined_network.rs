@@ -8,7 +8,7 @@ use hotshot_constants::{
     COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
 };
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     hash::Hasher,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -26,11 +26,7 @@ use hotshot_types::{
     data::ViewNumber,
     message::Message,
     traits::{
-        election::Membership,
-        network::{
-            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent,
-            TestableChannelImplementation, TransmitType, ViewMessage,
-        },
+        network::{ConnectedNetwork, ConsensusIntentEvent, TransmitType},
         node_implementation::NodeType,
     },
     BoxSyncFuture,
@@ -110,9 +106,9 @@ pub fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
 /// A communication channel with 2 networks, where we can fall back to the slower network if the
 /// primary fails
 #[derive(Clone, Debug)]
-pub struct CombinedCommChannel<TYPES: NodeType> {
+pub struct CombinedNetworks<TYPES: NodeType> {
     /// The two networks we'll use for send/recv
-    networks: Arc<CombinedNetworks<TYPES>>,
+    networks: Arc<UnderlyingCombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
     message_cache: Arc<RwLock<Cache>>,
@@ -121,10 +117,10 @@ pub struct CombinedCommChannel<TYPES: NodeType> {
     primary_down: Arc<AtomicU64>,
 }
 
-impl<TYPES: NodeType> CombinedCommChannel<TYPES> {
+impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     /// Constructor
     #[must_use]
-    pub fn new(networks: Arc<CombinedNetworks<TYPES>>) -> Self {
+    pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>) -> Self {
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
@@ -149,7 +145,7 @@ impl<TYPES: NodeType> CombinedCommChannel<TYPES> {
 /// We need this so we can impl `TestableNetworkingImplementation`
 /// on the tuple
 #[derive(Debug, Clone)]
-pub struct CombinedNetworks<TYPES: NodeType>(
+pub struct UnderlyingCombinedNetworks<TYPES: NodeType>(
     pub WebServerNetwork<TYPES>,
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
 );
@@ -163,7 +159,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         da_committee_size: usize,
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
+    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         let generators = (
             <WebServerNetwork<
                 TYPES,
@@ -184,39 +180,30 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 reliability_config,
             )
         );
-        Box::new(move |node_id| CombinedNetworks(generators.0(node_id), generators.1(node_id)))
-    }
-
-    /// Get the number of messages in-flight.
-    ///
-    /// Some implementations will not be able to tell how many messages there are in-flight. These implementations should return `None`.
-    fn in_flight_message_count(&self) -> Option<usize> {
-        None
-    }
-}
-
-#[cfg(feature = "hotshot-testing")]
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommChannel<TYPES> {
-    fn generator(
-        expected_node_count: usize,
-        num_bootstrap: usize,
-        network_id: usize,
-        da_committee_size: usize,
-        is_da: bool,
-        reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <CombinedNetworks<TYPES> as TestableNetworkingImplementation<_>>::generator(
-            expected_node_count,
-            num_bootstrap,
-            network_id,
-            da_committee_size,
-            is_da,
-            reliability_config,
-        );
-        Box::new(move |node_id| Self {
-            networks: generator(node_id).into(),
-            message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
-            primary_down: Arc::new(AtomicU64::new(0)),
+        Box::new(move |node_id| {
+            let (quorum_web, da_web) = generators.0(node_id);
+            let (quorum_p2p, da_p2p) = generators.1(node_id);
+            let da_networks = UnderlyingCombinedNetworks(
+                Arc::<WebServerNetwork<TYPES>>::into_inner(da_web).unwrap(),
+                Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(da_p2p),
+            );
+            let quorum_networks = UnderlyingCombinedNetworks(
+                Arc::<WebServerNetwork<TYPES>>::into_inner(quorum_web).unwrap(),
+                Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
+                    quorum_p2p,
+                ),
+            );
+            let quorum_net = Self {
+                networks: Arc::new(quorum_networks),
+                message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
+                primary_down: Arc::new(AtomicU64::new(0)),
+            };
+            let da_net = Self {
+                networks: Arc::new(da_networks),
+                message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
+                primary_down: Arc::new(AtomicU64::new(0)),
+            };
+            (quorum_net.into(), da_net.into())
         })
     }
 
@@ -229,9 +216,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
 }
 
 #[async_trait]
-impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES> {
-    type NETWORK = CombinedNetworks<TYPES>;
-
+impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
+    for CombinedNetworks<TYPES>
+{
     fn pause(&self) {
         self.networks.0.pause();
     }
@@ -265,11 +252,8 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
     async fn broadcast_message(
         &self,
         message: Message<TYPES>,
-        election: &TYPES::Membership,
+        recipients: BTreeSet<TYPES::SignatureKey>,
     ) -> Result<(), NetworkError> {
-        let recipients =
-            <TYPES as NodeType>::Membership::get_committee(election, message.get_view_number());
-
         // broadcast optimistically on both networks, but if the primary network is down, skip it
         let primary_down = self.primary_down.load(Ordering::Relaxed);
         if primary_down < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
@@ -381,12 +365,6 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
 
         <Libp2pNetwork<_, _> as ConnectedNetwork<Message<TYPES>,TYPES::SignatureKey>>::
             inject_consensus_info(self.secondary(), event).await;
-    }
-}
-
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for CombinedCommChannel<TYPES> {
-    fn generate_network() -> Box<dyn Fn(Arc<Self::NETWORK>) -> Self + 'static> {
-        Box::new(move |network| CombinedCommChannel::new(network))
     }
 }
 

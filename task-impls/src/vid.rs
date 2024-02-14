@@ -6,7 +6,7 @@ use async_lock::RwLock;
 use async_std::task::spawn_blocking;
 
 use hotshot_task::task::{Task, TaskState};
-use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::{
     consensus::Consensus,
     data::VidDisperse,

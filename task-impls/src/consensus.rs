@@ -25,7 +25,7 @@ use hotshot_types::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::Membership,
-        network::{CommunicationChannel, ConsensusIntentEvent},
+        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,

@@ -8,12 +8,13 @@ use crate::{
 use hotshot::traits::{
     election::static_committee::{StaticCommittee, StaticElectionConfig},
     implementations::{
-        CombinedCommChannel, Libp2pCommChannel, MemoryCommChannel, MemoryStorage, WebCommChannel,
+        CombinedNetworks, Libp2pNetwork, MemoryNetwork, MemoryStorage, WebServerNetwork,
     },
     NodeImplementation,
 };
 use hotshot_types::{
-    data::ViewNumber, signature_key::BLSPubKey, traits::node_implementation::NodeType,
+    data::ViewNumber, message::Message, signature_key::BLSPubKey,
+    traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -65,34 +66,31 @@ pub struct CombinedImpl;
 pub type StaticMembership = StaticCommittee<TestTypes>;
 
 /// memory network
-pub type StaticMemoryDAComm = MemoryCommChannel<TestTypes>;
+pub type StaticMemoryDAComm =
+    MemoryNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 
 /// libp2p network
-type StaticLibp2pDAComm = Libp2pCommChannel<TestTypes>;
+type StaticLibp2pDAComm = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 
 /// web server network communication channel
-type StaticWebDAComm = WebCommChannel<TestTypes>;
+type StaticWebDAComm = WebServerNetwork<TestTypes>;
 
 /// combined network
-type StaticCombinedDAComm = CombinedCommChannel<TestTypes>;
+type StaticCombinedDAComm = CombinedNetworks<TestTypes>;
 
 /// memory comm channel
-pub type StaticMemoryQuorumComm = MemoryCommChannel<TestTypes>;
+pub type StaticMemoryQuorumComm =
+    MemoryNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 
 /// libp2p comm channel
-type StaticLibp2pQuorumComm = Libp2pCommChannel<TestTypes>;
+type StaticLibp2pQuorumComm =
+    Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 
 /// web server comm channel
-type StaticWebQuorumComm = WebCommChannel<TestTypes>;
+type StaticWebQuorumComm = WebServerNetwork<TestTypes>;
 
 /// combined network (libp2p + web server)
-type StaticCombinedQuorumComm = CombinedCommChannel<TestTypes>;
-
-/// memory network
-pub type StaticMemoryViewSyncComm = MemoryCommChannel<TestTypes>;
-
-/// memory network
-pub type StaticMemoryVIDComm = MemoryCommChannel<TestTypes>;
+type StaticCombinedQuorumComm = CombinedNetworks<TestTypes>;
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
     type Storage = MemoryStorage<TestTypes>;

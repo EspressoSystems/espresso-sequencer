@@ -12,11 +12,7 @@ use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{
-    data::ViewNumber,
-    message::{Message, MessagePurpose},
-    BoxSyncFuture,
-};
+use crate::{data::ViewNumber, message::MessagePurpose, BoxSyncFuture};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use rand::{
@@ -226,76 +222,6 @@ pub trait ViewMessage<TYPES: NodeType> {
     fn purpose(&self) -> MessagePurpose;
 }
 
-/// API for interacting directly with a consensus committee
-/// intended to be implemented for both DA and for validating consensus committees
-#[async_trait]
-pub trait CommunicationChannel<TYPES: NodeType>: Clone + Debug + Send + Sync + 'static {
-    /// Underlying Network implementation's type
-    type NETWORK;
-    /// Blocks until node is successfully initialized
-    /// into the network
-    async fn wait_for_ready(&self);
-
-    /// Pauses the underlying network
-    fn pause(&self);
-
-    /// Resumes the underlying network
-    fn resume(&self);
-
-    /// checks if the network is ready
-    /// nonblocking
-    async fn is_ready(&self) -> bool;
-
-    /// Shut down this network. Afterwards this network should no longer be used.
-    ///
-    /// This should also cause other functions to immediately return with a [`NetworkError`]
-    fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
-    where
-        'a: 'b,
-        Self: 'b;
-
-    /// broadcast message to those listening on the communication channel
-    /// blocking
-    async fn broadcast_message(
-        &self,
-        message: Message<TYPES>,
-        election: &TYPES::Membership,
-    ) -> Result<(), NetworkError>;
-
-    /// Sends a direct message to a specific node
-    /// blocking
-    async fn direct_message(
-        &self,
-        message: Message<TYPES>,
-        recipient: TYPES::SignatureKey,
-    ) -> Result<(), NetworkError>;
-
-    /// Moves out the entire queue of received messages of 'transmit_type`
-    ///
-    /// Will unwrap the underlying `NetworkMessage`
-    /// blocking
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-        transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b;
-
-    /// queues looking up a node
-    async fn queue_node_lookup(
-        &self,
-        _view_number: ViewNumber,
-        _pk: TYPES::SignatureKey,
-    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
-        Ok(())
-    }
-
-    /// Injects consensus data such as view number into the networking implementation
-    /// blocking
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<TYPES::SignatureKey>) {}
-}
-
 /// represents a networking implmentration
 /// exposes low level API for interacting with a network
 /// intended to be implemented for libp2p, the centralized server,
@@ -304,6 +230,12 @@ pub trait CommunicationChannel<TYPES: NodeType>: Clone + Debug + Send + Sync + '
 pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     Clone + Send + Sync + 'static
 {
+    /// Pauses the underlying network
+    fn pause(&self);
+
+    /// Resumes the underlying network
+    fn resume(&self);
+
     /// Blocks until the network is successfully initialized
     async fn wait_for_ready(&self);
 
@@ -358,8 +290,12 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
 }
 
 /// Describes additional functionality needed by the test network implementation
-pub trait TestableNetworkingImplementation<TYPES: NodeType> {
+pub trait TestableNetworkingImplementation<TYPES: NodeType>
+where
+    Self: Sized,
+{
     /// generates a network given an expected node count
+    #[allow(clippy::type_complexity)]
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -367,19 +303,12 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType> {
         da_committee_size: usize,
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static>;
+    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static>;
 
     /// Get the number of messages in-flight.
     ///
     /// Some implementations will not be able to tell how many messages there are in-flight. These implementations should return `None`.
     fn in_flight_message_count(&self) -> Option<usize>;
-}
-/// Describes additional functionality needed by the test communication channel
-pub trait TestableChannelImplementation<TYPES: NodeType>: CommunicationChannel<TYPES> {
-    /// generates the `CommunicationChannel` given it's associated network type
-    #[allow(clippy::type_complexity)]
-    fn generate_network(
-    ) -> Box<dyn Fn(Arc<<Self as CommunicationChannel<TYPES>>::NETWORK>) -> Self + 'static>;
 }
 
 /// Changes that can occur in the network

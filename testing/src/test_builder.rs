@@ -284,7 +284,7 @@ impl TestMetadata {
 
         TestLauncher {
             resource_generator: ResourceGenerators {
-                channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
+                channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_networks(
                     total_nodes,
                     num_bootstrap_nodes,
                     da_committee_size,

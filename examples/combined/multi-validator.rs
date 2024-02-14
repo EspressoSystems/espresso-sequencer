@@ -7,9 +7,8 @@ use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::{MultiValidatorArgs, ValidatorArgs};
 use tracing::instrument;
-use types::VIDNetwork;
 
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork};
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun};
 
 /// types used for this example
 pub mod types;
@@ -34,15 +33,9 @@ async fn main() {
         let args = args.clone();
 
         let node = async_spawn(async move {
-            infra::main_entry_point::<
-                TestTypes,
-                DANetwork,
-                QuorumNetwork,
-                ViewSyncNetwork,
-                VIDNetwork,
-                NodeImpl,
-                ThisRun,
-            >(ValidatorArgs::from_multi_args(args, node_index))
+            infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
+                ValidatorArgs::from_multi_args(args, node_index),
+            )
             .await;
         });
         nodes.push(node);

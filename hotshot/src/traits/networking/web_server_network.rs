@@ -18,9 +18,8 @@ use hotshot_types::{
     message::{Message, MessagePurpose},
     traits::{
         network::{
-            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
-            TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
-            WebServerNetworkError,
+            ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
+            TestableNetworkingImplementation, TransmitType, WebServerNetworkError,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -51,18 +50,6 @@ use tracing::{debug, error, info, warn};
 
 /// convenience alias alias for the result of getting transactions from the web server
 pub type TxnResult = Result<Option<(u64, Vec<Vec<u8>>)>, ClientError>;
-
-/// Represents the communication channel abstraction for the web server
-#[derive(Clone, Debug)]
-pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
-
-impl<TYPES: NodeType> WebCommChannel<TYPES> {
-    /// Create new communication channel
-    #[must_use]
-    pub fn new(network: Arc<WebServerNetwork<TYPES>>) -> Self {
-        Self(network)
-    }
-}
 
 /// # Note
 ///
@@ -100,18 +87,6 @@ impl<TYPES: NodeType> WebServerNetwork<TYPES> {
         result.map_err(|_e| NetworkError::WebServer {
             source: WebServerNetworkError::ClientError,
         })
-    }
-
-    /// Pauses the underlying network
-    pub fn pause(&self) {
-        error!("Pausing CDN network");
-        self.inner.running.store(false, Ordering::Relaxed);
-    }
-
-    /// Resumes the underlying network
-    pub fn resume(&self) {
-        error!("Resuming CDN network");
-        self.inner.running.store(true, Ordering::Relaxed);
     }
 }
 
@@ -721,104 +696,59 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
         };
         Ok(network_msg)
     }
-}
 
-#[async_trait]
-impl<TYPES: NodeType> CommunicationChannel<TYPES> for WebCommChannel<TYPES> {
-    type NETWORK = WebServerNetwork<TYPES>;
-    /// Blocks until node is successfully initialized
-    /// into the network
-    async fn wait_for_ready(&self) {
-        <WebServerNetwork<_> as ConnectedNetwork<
-            Message<TYPES>,
-            TYPES::SignatureKey,
-        >>::wait_for_ready(&self.0)
-        .await;
-    }
+    /// Generates a single webserver network, for use in tests
+    fn single_generator(
+        expected_node_count: usize,
+        _num_bootstrap: usize,
+        _network_id: usize,
+        _da_committee_size: usize,
+        is_da: bool,
+        _reliability_config: &Option<Box<dyn NetworkReliability>>,
+    ) -> Box<dyn Fn(u64) -> Self + 'static> {
+        let (server_shutdown_sender, server_shutdown) = oneshot();
+        let sender = Arc::new(server_shutdown_sender);
 
-    fn pause(&self) {
-        self.0.pause();
-    }
+        // pick random, unused port
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
 
-    fn resume(&self) {
-        self.0.resume();
-    }
-
-    /// checks if the network is ready
-    /// nonblocking
-    async fn is_ready(&self) -> bool {
-        <WebServerNetwork<_> as ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>::is_ready(
-            &self.0,
-        )
-        .await
-    }
-
-    /// Shut down this network. Afterwards this network should no longer be used.
-    ///
-    /// This should also cause other functions to immediately return with a [`NetworkError`]
-    fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            <WebServerNetwork<_> as ConnectedNetwork<
-                Message<TYPES>,
-                TYPES::SignatureKey,
-            >>::shut_down(&self.0)
-            .await;
-        };
-        boxed_sync(closure)
-    }
-
-    /// broadcast message to those listening on the communication channel
-    /// blocking
-    async fn broadcast_message(
-        &self,
-        message: Message<TYPES>,
-        _election: &TYPES::Membership,
-    ) -> Result<(), NetworkError> {
-        self.0.broadcast_message(message, BTreeSet::new()).await
-    }
-
-    /// Sends a direct message to a specific node
-    /// blocking
-    async fn direct_message(
-        &self,
-        message: Message<TYPES>,
-        recipient: TYPES::SignatureKey,
-    ) -> Result<(), NetworkError> {
-        self.0.direct_message(message, recipient).await
-    }
-
-    /// Moves out the entire queue of received messages of 'transmit_type`
-    ///
-    /// Will unwrap the underlying `NetworkMessage`
-    /// blocking
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-        transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            <WebServerNetwork<_> as ConnectedNetwork<
-                Message<TYPES>,
-                TYPES::SignatureKey,
-            >>::recv_msgs(&self.0, transmit_type)
+        let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+        info!("Launching web server on port {port}");
+        // Start web server
+        async_spawn(async {
+            match hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
+                Some(server_shutdown),
+                url,
+            )
             .await
-        };
-        boxed_sync(closure)
-    }
+            {
+                Ok(()) => error!("Web server future finished unexpectedly"),
+                Err(e) => error!("Web server task failed: {e}"),
+            }
+        });
 
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
-        <WebServerNetwork<_> as ConnectedNetwork<
-            Message<TYPES>,
-            TYPES::SignatureKey,
-        >>::inject_consensus_info(&self.0, event)
-        .await;
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
+        let known_nodes = (0..expected_node_count as u64)
+            .map(|id| {
+                TYPES::SignatureKey::from_private(
+                    &TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], id).1,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // Start each node's web server client
+        Box::new(move |id| {
+            let sender = Arc::clone(&sender);
+            let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+            let mut network = WebServerNetwork::create(
+                url,
+                Duration::from_millis(100),
+                known_nodes[usize::try_from(id).unwrap()].clone(),
+                is_da,
+            );
+            network.server_shutdown_signal = Some(sender);
+            network
+        })
     }
 }
 
@@ -832,7 +762,15 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
             async_sleep(Duration::from_secs(1)).await;
         }
     }
+    fn pause(&self) {
+        error!("Pausing CDN network");
+        self.inner.running.store(false, Ordering::Relaxed);
+    }
 
+    fn resume(&self) {
+        error!("Resuming CDN network");
+        self.inner.running.store(true, Ordering::Relaxed);
+    }
     /// checks if the network is ready
     /// nonblocking
     async fn is_ready(&self) -> bool {
@@ -1341,91 +1279,33 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwork<TYPES> {
     fn generator(
         expected_node_count: usize,
-        _num_bootstrap: usize,
-        _network_id: usize,
-        _da_committee_size: usize,
-        is_da: bool,
-        _reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let (server_shutdown_sender, server_shutdown) = oneshot();
-        let sender = Arc::new(server_shutdown_sender);
-
-        // pick random, unused port
-        let port = portpicker::pick_unused_port().expect("Could not find an open port");
-
-        let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-        info!("Launching web server on port {port}");
-        // Start web server
-        async_spawn(async {
-            match hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
-                Some(server_shutdown),
-                url,
-            )
-            .await
-            {
-                Ok(()) => error!("Web server future finished unexpectedly"),
-                Err(e) => error!("Web server task failed: {e}"),
-            }
-        });
-
-        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
-        let known_nodes = (0..expected_node_count as u64)
-            .map(|id| {
-                TYPES::SignatureKey::from_private(
-                    &TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], id).1,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        // Start each node's web server client
-        Box::new(move |id| {
-            let sender = Arc::clone(&sender);
-            let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-            let mut network = WebServerNetwork::create(
-                url,
-                Duration::from_millis(100),
-                known_nodes[usize::try_from(id).unwrap()].clone(),
-                is_da,
-            );
-            network.server_shutdown_signal = Some(sender);
-            network
-        })
-    }
-
-    fn in_flight_message_count(&self) -> Option<usize> {
-        None
-    }
-}
-
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel<TYPES> {
-    fn generator(
-        expected_node_count: usize,
         num_bootstrap: usize,
         network_id: usize,
         da_committee_size: usize,
-        is_da: bool,
-        _reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <WebServerNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
+        _is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
+    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
+        let da_gen = Self::single_generator(
             expected_node_count,
             num_bootstrap,
             network_id,
             da_committee_size,
-            is_da,
-            // network reliability is a testing feature
-            // not yet implemented for webcommchannel
-            None,
+            true,
+            &reliability_config,
         );
-        Box::new(move |node_id| Self(generator(node_id).into()))
+        let quorum_gen = Self::single_generator(
+            expected_node_count,
+            num_bootstrap,
+            network_id,
+            da_committee_size,
+            false,
+            &reliability_config,
+        );
+        // Start each node's web server client
+        Box::new(move |id| (quorum_gen(id).into(), da_gen(id).into()))
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {
         None
-    }
-}
-
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for WebCommChannel<TYPES> {
-    fn generate_network() -> Box<dyn Fn(Arc<WebServerNetwork<TYPES>>) -> Self + 'static> {
-        Box::new(move |network| WebCommChannel::new(network))
     }
 }

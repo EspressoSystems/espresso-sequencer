@@ -13,10 +13,12 @@ pub use storage::{Result as StorageResult, Storage};
 pub mod implementations {
     pub use super::{
         networking::{
-            combined_network::{calculate_hash_of, Cache, CombinedCommChannel, CombinedNetworks},
-            libp2p_network::{Libp2pCommChannel, Libp2pNetwork, PeerInfoVec},
-            memory_network::{MasterMap, MemoryCommChannel, MemoryNetwork},
-            web_server_network::{WebCommChannel, WebServerNetwork},
+            combined_network::{
+                calculate_hash_of, Cache, CombinedNetworks, UnderlyingCombinedNetworks,
+            },
+            libp2p_network::{Libp2pNetwork, PeerInfoVec},
+            memory_network::{MasterMap, MemoryNetwork},
+            web_server_network::WebServerNetwork,
             NetworkingMetricsValue,
         },
         storage::memory_storage::MemoryStorage, // atomic_storage::AtomicStorage,

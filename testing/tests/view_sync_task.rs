@@ -55,7 +55,7 @@ async fn test_view_sync_task() {
     let view_sync_state = ViewSyncTaskState {
         current_view: ViewNumber::new(0),
         next_view: ViewNumber::new(0),
-        network: api.inner.networks.quorum_network.clone().into(),
+        network: api.inner.networks.quorum_network.clone(),
         membership: api.inner.memberships.view_sync_membership.clone().into(),
         public_key: *api.public_key(),
         private_key: api.private_key().clone(),

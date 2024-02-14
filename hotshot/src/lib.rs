@@ -42,7 +42,8 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     traits::{
         consensus_api::ConsensusApi,
-        network::CommunicationChannel,
+        election::Membership,
+        network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
@@ -78,10 +79,10 @@ pub const H_256: usize = 32;
 /// Bundle of the networks used in consensus
 pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Newtork for reaching all nodes
-    pub quorum_network: I::QuorumNetwork,
+    pub quorum_network: Arc<I::QuorumNetwork>,
 
     /// Network for reaching the DA committee
-    pub da_network: I::CommitteeNetwork,
+    pub da_network: Arc<I::CommitteeNetwork>,
 
     /// Phantom for TYPES and I
     pub _pd: PhantomData<(TYPES, I)>,
@@ -321,7 +322,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                             sender: api.inner.public_key.clone(),
                             kind: MessageKind::from(message),
                         },
-                        da_membership,
+                        da_membership.get_committee(TYPES::Time::new(0)),
                     ),
                 api
                     .send_external_event(Event {

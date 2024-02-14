@@ -6,7 +6,7 @@ use crate::test_runner::HotShotTaskCompleted;
 use crate::test_runner::LateStartNode;
 use crate::test_runner::Node;
 use hotshot_task::task::{Task, TaskState, TestTaskState};
-use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::{event::Event, traits::node_implementation::NodeType};
 use snafu::Snafu;
 use std::collections::BTreeMap;

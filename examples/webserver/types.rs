@@ -1,5 +1,5 @@
 use crate::infra::WebServerDARun;
-use hotshot::traits::implementations::{MemoryStorage, WebCommChannel};
+use hotshot::traits::implementations::{MemoryStorage, WebServerNetwork};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
@@ -10,13 +10,13 @@ use std::fmt::Debug;
 pub struct NodeImpl {}
 
 /// convenience type alias
-pub type DANetwork = WebCommChannel<TestTypes>;
+pub type DANetwork = WebServerNetwork<TestTypes>;
 /// convenience type alias
-pub type VIDNetwork = WebCommChannel<TestTypes>;
+pub type VIDNetwork = WebServerNetwork<TestTypes>;
 /// convenience type alias
-pub type QuorumNetwork = WebCommChannel<TestTypes>;
+pub type QuorumNetwork = WebServerNetwork<TestTypes>;
 /// convenience type alias
-pub type ViewSyncNetwork = WebCommChannel<TestTypes>;
+pub type ViewSyncNetwork = WebServerNetwork<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Storage = MemoryStorage<TestTypes>;
