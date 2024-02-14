@@ -12,8 +12,9 @@ use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{Signer, Wallet},
-    types::Signature,
+    core::k256::ecdsa::{self, signature::Signer},
+    signers::{Signer as _, Wallet},
+    types,
 };
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
@@ -90,7 +91,7 @@ pub struct Header {
     pub fee_merkle_tree_root: FeeMerkleCommitment,
     /// Account (etheruem address) of builder
     pub builder_address: Option<FeeAccount>,
-    pub builder_signature: Option<Signature>,
+    pub builder_signature: Option<types::Signature>,
     pub builder_fee_amount: Option<FeeAmount>,
 }
 
@@ -207,15 +208,16 @@ impl Header {
             builder_fee_amount: None,
         };
 
-        let hash =
-            ethers::utils::hash_message(serde_json::to_string(&header).unwrap().into_bytes());
         // Sign Header with builder wallet from state and save the
         // signature on the Header
-        let header_signature = builder_address.sign_hash(hash).unwrap();
+        let signing_key: &SigningKey = builder_address.signer();
+        let header_signature: ecdsa::Signature = signing_key.sign(&header.commit().as_ref());
 
         Self {
             builder_address: Some(FeeAccount(builder_address.address())),
-            builder_signature: Some(header_signature),
+            builder_signature: Some(
+                types::Signature::try_from(&header_signature.to_vec()[..]).unwrap(),
+            ),
             ..header
         }
     }
