@@ -4,7 +4,7 @@ use super::{
     data_source::{SequencerDataSource, StateSignatureDataSource, SubmitDataSource},
     AppState,
 };
-use crate::{network, Header, SeqTypes, Transaction};
+use crate::{network, Header, SeqTypes, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
@@ -61,7 +61,7 @@ where
     api.get("getnamespaceproof", |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let namespace: u64 = req.integer_param("namespace")?;
+            let ns_id = VmId(req.integer_param("namespace")?);
             let block = state.get_block(height).await.context(FetchBlockSnafu {
                 resource: height.to_string(),
             })?;
@@ -77,13 +77,13 @@ where
                 .payload()
                 .namespace_with_proof(
                     block.payload().get_ns_table(),
-                    namespace as usize,
+                    ns_id,
                     &vid,
                     disperse_data.common,
                 )
                 .unwrap();
 
-            // TODO ugly hack to get a Vec<Transactions> for this namespace
+            // use NamespaceProof::verify to get a Vec<Transactions> for this namespace
             let transactions = proof
                 .verify(&vid, &disperse_data.commit, block.payload().get_ns_table())
                 .unwrap()

@@ -83,6 +83,16 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         &self.raw_payload
     }
 
+    /// Find `ns_id` and return its index into this namespace table.
+    ///
+    /// TODO return Result or Option? Want to avoid catch-all Error type :(
+    pub fn lookup(&self, ns_id: VmId) -> Option<usize> {
+        // TODO don't use TxTable, need a new method
+        let ns_table_len = TxTable::get_tx_table_len(&self.raw_payload);
+
+        (0..ns_table_len).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
+    }
+
     fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
         self.raw_payload.extend(
             TxTableEntry::try_from(id)

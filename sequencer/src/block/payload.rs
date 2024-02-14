@@ -106,7 +106,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     pub fn namespace_with_proof<V>(
         &self,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
-        ns_index: usize,
+        ns_id: VmId,
         vid: &V,
         vid_common: <V as VidScheme>::Common,
     ) -> Option<NamespaceProof<V>>
@@ -117,21 +117,18 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             return None; // error: vid_common inconsistent with self
         }
 
-        // TODO don't use TxTable, need a new method
-        let ns_table_len = TxTable::get_tx_table_len(&ns_table.raw_payload);
-
-        if ns_index >= ns_table_len {
-            return Some(NamespaceProof::NonExistence {
-                ns_index: ns_index.try_into().ok()?,
-            });
-        }
+        let ns_index = if let Some(ns_index) = ns_table.lookup(ns_id) {
+            ns_index
+        } else {
+            return Some(NamespaceProof::NonExistence { ns_id });
+        };
 
         let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         // TODO log output for each `?`
         // fix this when we settle on an error handling pattern
         Some(NamespaceProof::Existence {
-            ns_index: ns_index.try_into().ok()?,
+            ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
             ns_proof: vid
                 .payload_proof(&self.raw_payload, ns_payload_range)
@@ -317,12 +314,12 @@ where
 {
     Existence {
         ns_payload_flat: Vec<u8>,
-        ns_index: u32,
+        ns_id: VmId,
         ns_proof: JellyfishNamespaceProof,
         vid_common: <V as VidScheme>::Common,
     },
     NonExistence {
-        ns_index: u32,
+        ns_id: VmId,
     },
 }
 
@@ -340,21 +337,14 @@ where
         commit: &<V as VidScheme>::Commit,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
-        // TODO don't use TxTable, need a new method
-        let ns_table_len = TxTable::get_tx_table_len(&ns_table.raw_payload);
-
         match self {
             NamespaceProof::Existence {
                 ns_payload_flat,
-                ns_index,
+                ns_id,
                 ns_proof,
                 vid_common,
             } => {
-                let ns_index = usize::try_from(*ns_index).ok()?;
-
-                if ns_index >= ns_table_len {
-                    return None; // error: index out of bounds
-                }
+                let ns_index = ns_table.lookup(*ns_id)?;
 
                 // TODO rework NameSpaceTable struct
                 // TODO merge get_ns_payload_range with get_ns_table_entry ?
@@ -379,12 +369,11 @@ where
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
                 Some((parse_ns_payload(ns_payload_flat, ns_id), ns_id))
             }
-            NamespaceProof::NonExistence { ns_index } => {
-                let ns_index = usize::try_from(*ns_index).ok()?;
-                if ns_index < ns_table_len {
-                    return None; // error: index in bounds, expect out of bounds
+            NamespaceProof::NonExistence { ns_id } => {
+                if ns_table.lookup(*ns_id).is_some() {
+                    return None; // error: expect not to find ns_id in ns_table
                 }
-                Some((Vec::new(), VmId(0))) // TODO no vmid to return here
+                Some((Vec::new(), *ns_id))
             }
         }
     }
@@ -631,7 +620,7 @@ mod test {
                 let ns_proof = block
                     .namespace_with_proof(
                         &actual_ns_table,
-                        ns_idx,
+                        ns_id,
                         &vid,
                         disperse_data.common.clone(),
                     )
