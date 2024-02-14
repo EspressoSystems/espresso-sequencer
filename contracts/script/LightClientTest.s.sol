@@ -6,7 +6,12 @@ import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
 
-contract DeployLightClientScript is Script {
+/// @notice deployment script for LightClientTest which is designed for testing purposes with
+/// verification key corresponding to smaller circuit, thus faster proof generation during tests.
+///
+/// @dev for production deployment script, please use `gen-light-client-deploy/main.rs` to
+/// generate `LightClient.s.sol` with proper genesis block values.
+contract DeployLightClientTestScript is Script {
     function run() external {
         string memory seedPhrase = vm.envString("MNEMONIC");
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
@@ -15,7 +20,6 @@ contract DeployLightClientScript is Script {
         // For Decaf there will be only one epoch
         uint32 blocksPerEpoch = type(uint32).max;
 
-        // TODO for a production deployment provide the right genesis state
         uint64 viewNum = 0;
         uint64 blockHeight = 0;
         BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(42);

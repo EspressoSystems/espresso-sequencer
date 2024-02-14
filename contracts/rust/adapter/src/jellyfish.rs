@@ -358,6 +358,18 @@ impl From<ParsedPlonkProof> for contract_bindings::i_plonk_verifier::PlonkProof 
     }
 }
 
+#[test]
+fn test_unsafe_plonk_proof_conversion() {
+    use ethers::abi::AbiEncode;
+    let mut rng = jf_utils::test_rng();
+    for _ in 0..10 {
+        let parsed_proof = ParsedPlonkProof::dummy(&mut rng);
+        let proof: contract_bindings::i_plonk_verifier::PlonkProof = parsed_proof.clone().into();
+        // this test abi.encode hex string of both struct which includes the types and values
+        assert_eq!(parsed_proof.encode_hex(), proof.encode_hex());
+    }
+}
+
 impl ParsedPlonkProof {
     /// return a dummy proof instance with random ProofEvaluations fields.
     pub fn dummy_with_rand_proof_evals<R: Rng>(rng: &mut R) -> Self {
