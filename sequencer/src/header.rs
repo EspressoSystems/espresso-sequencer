@@ -99,7 +99,8 @@ impl Committable for Header {
             .unwrap();
         let mut fee_info_bytes = vec![];
         self.fee_info
-            .serialize_with_mode(&mut fee_info_bytes, ark_serialize::Compress::Yes);
+            .serialize_with_mode(&mut fee_info_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
