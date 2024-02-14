@@ -131,7 +131,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// It checks that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
-/// - all signed Schnorr signatures are valid
+/// - all Schnorr signatures over the light client state are valid
 /// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
