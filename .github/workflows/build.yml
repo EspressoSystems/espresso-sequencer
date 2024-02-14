@@ -66,6 +66,8 @@ jobs:
             target/release/orchestrator
             target/release/web-server
             target/release/state-relay-server
+            target/release/state-prover
+            target/release/gen-demo-contract
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -104,6 +106,8 @@ jobs:
             target/release/orchestrator
             target/release/web-server
             target/release/state-relay-server
+            target/release/state-prover
+            target/release/gen-demo-contract
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -158,6 +162,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/state-relay-server
 
+      - name: Generate prover-service docker metadata
+        uses: docker/metadata-action@v5
+        id: prover-service
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/prover-service
+
       - name: Generate orchestrator docker metadata
         uses: docker/metadata-action@v5
         id: orchestrator
@@ -211,6 +221,16 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.state-relay-server.outputs.tags }}
           labels: ${{ steps.state-relay-server.outputs.labels }}
+
+      - name: Build and push prover-service docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/prover-service.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.prover-service.outputs.tags }}
+          labels: ${{ steps.prover-service.outputs.labels }}
 
       - name: Build and push orchestrator docker
         uses: docker/build-push-action@v5
