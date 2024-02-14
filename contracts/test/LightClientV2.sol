@@ -10,9 +10,9 @@ import { UUPSUpgradeable } from
     "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import { BN254 } from "bn254/BN254.sol";
-import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
-import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
+import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
+import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
+import { LightClientStateUpdateVK as VkLib } from "../src/libraries/LightClientStateUpdateVK.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.

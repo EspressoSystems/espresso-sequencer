@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import { Test } /*, console2*/ from "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
-import { LightClientV2 as LCV2 } from "../src/LightClientV2.sol";
+import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { DeployLightClientContractScript } from "../script/DeployLightContract.s.sol";
 import { UpgradeLightClientScript } from "../script/UpgradeLightClient.s.sol";
 
