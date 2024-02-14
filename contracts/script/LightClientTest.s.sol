@@ -24,15 +24,9 @@ contract DeployLightClientTestScript is Script {
         uint64 blockHeight = 0;
         BN254.ScalarField blockCommRoot = BN254.ScalarField.wrap(42);
         BN254.ScalarField feeLedgerComm = BN254.ScalarField.wrap(42);
-        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(
-            0x0d168a6fe13a8b344caea06d1fd2a2f1e62eeb7b2b00c6284e094a819a1f1790
-        );
-        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(
-            0x2e4036835adc3ea606c3cc76870d7ed9fb0ae1ff435d96d480ce42420dfb8026
-        );
-        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(
-            0x03be29d3caf0c790070faa48051d86bfd6ec8c4ad4eef24af477741a180ee2ce
-        );
+        BN254.ScalarField stakeTableBlsKeyComm = BN254.ScalarField.wrap(1);
+        BN254.ScalarField stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(1);
+        BN254.ScalarField stakeTableAmountComm = BN254.ScalarField.wrap(1);
         uint256 threshold = 36;
 
         LC.LightClientState memory genesis = LC.LightClientState(

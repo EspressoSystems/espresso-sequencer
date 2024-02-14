@@ -381,15 +381,15 @@ mod test {
         let st = stake_table_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &qc_keys, &state_keys);
         let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
-        let stake_table_comm = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        let _stake_table_comm = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         let genesis = ParsedLightClientState {
             view_num: 0,
             block_height: 0,
             block_comm_root: U256::from(42), // arbitrary value
             fee_ledger_comm: U256::from(42), // arbitrary value
-            bls_key_comm: field_to_u256(stake_table_comm.0),
-            schnorr_key_comm: field_to_u256(stake_table_comm.1),
-            amount_comm: field_to_u256(stake_table_comm.2),
+            bls_key_comm: U256::from(1),
+            schnorr_key_comm: U256::from(1),
+            amount_comm: U256::from(1),
             threshold,
         };
 
@@ -562,11 +562,16 @@ mod test {
         let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 
+        let stake_table_comm = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+
         let mut new_state = genesis.clone();
         new_state.view_num = 5;
         new_state.block_height = 4;
         new_state.block_comm_root = U256::from(123);
         new_state.fee_ledger_comm = U256::from(456);
+        new_state.bls_key_comm = field_to_u256(stake_table_comm.0);
+        new_state.schnorr_key_comm = field_to_u256(stake_table_comm.1);
+        new_state.amount_comm = field_to_u256(stake_table_comm.2);
 
         let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
         tracing::info!("Successfully generated proof for new state.");
