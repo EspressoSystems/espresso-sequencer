@@ -20,6 +20,13 @@ CREATE TABLE payload
     data   BYTEA
 );
 
+CREATE TABLE vid
+(
+    height BIGINT PRIMARY KEY REFERENCES header (height),
+    common BYTEA  NOT NULL,
+    share  BYTEA
+);
+
 CREATE TABLE leaf
 (
     height     BIGINT  PRIMARY KEY REFERENCES header (height),

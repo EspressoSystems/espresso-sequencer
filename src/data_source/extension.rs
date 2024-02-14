@@ -15,12 +15,12 @@ use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
-        UpdateAvailabilityData,
+        UpdateAvailabilityData, VidCommonQueryData,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus},
     status::StatusDataSource,
-    Payload, QueryResult, SignatureKey,
+    Payload, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -141,6 +141,9 @@ where
     type PayloadRange<R> = D::PayloadRange<R>
     where
         R: RangeBounds<usize> + Send;
+    type VidCommonRange<R> = D::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send;
 
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
@@ -160,6 +163,12 @@ where
     {
         self.data_source.get_payload(id).await
     }
+    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_vid_common(id).await
+    }
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
@@ -177,6 +186,12 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_range(range).await
+    }
+    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_vid_common_range(range).await
     }
     async fn get_block_with_transaction(
         &self,
@@ -201,6 +216,14 @@ where
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.data_source.insert_block(block).await
+    }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), Self::Error> {
+        self.data_source.insert_vid(common, share).await
     }
 }
 
@@ -229,6 +252,12 @@ where
     }
     async fn payload_size(&self) -> QueryResult<usize> {
         self.data_source.payload_size().await
+    }
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.vid_share(id).await
     }
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.data_source.sync_status().await

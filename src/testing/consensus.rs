@@ -211,12 +211,12 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 impl<D: DataSourceLifeCycle> MockNetwork<D> {
     pub async fn start(&mut self) {
         // Spawn the update tasks.
-        for node in &mut self.nodes {
+        for (i, node) in self.nodes.iter_mut().enumerate() {
             let ds = node.data_source.clone();
             let mut events = node.hotshot.get_event_stream();
             spawn(async move {
                 while let Some(event) = events.next().await {
-                    tracing::info!("EVENT {:?}", event.event);
+                    tracing::info!(node = i, event = ?event.event, "EVENT");
                     let mut ds = ds.write().await;
                     ds.handle_event(&event).await;
                 }

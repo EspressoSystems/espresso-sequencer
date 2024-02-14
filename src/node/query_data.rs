@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::availability::LeafQueryData;
+pub use crate::availability::{BlockId, LeafQueryData};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct SyncStatus {

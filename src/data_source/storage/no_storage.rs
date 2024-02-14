@@ -16,11 +16,11 @@ use super::AvailabilityStorage;
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus},
-    Header, Payload, QueryError, QueryResult, SignatureKey,
+    Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -66,6 +66,10 @@ where
         Err(QueryError::Missing)
     }
 
+    async fn get_vid_common(&self, _id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+        Err(QueryError::Missing)
+    }
+
     async fn get_leaf_range<R>(
         &self,
         _range: R,
@@ -96,6 +100,16 @@ where
         Err(QueryError::Missing)
     }
 
+    async fn get_vid_common_range<R>(
+        &self,
+        _range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Err(QueryError::Missing)
+    }
+
     async fn get_block_with_transaction(
         &self,
         _hash: TransactionHash<Types>,
@@ -116,6 +130,14 @@ where
     }
 
     async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn insert_vid(
+        &mut self,
+        _common: VidCommonQueryData<Types>,
+        _share: Option<VidShare>,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -146,6 +168,13 @@ where
     }
 
     async fn payload_size(&self) -> QueryResult<usize> {
+        Err(QueryError::Missing)
+    }
+
+    async fn vid_share<ID>(&self, _id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
         Err(QueryError::Missing)
     }
 
@@ -309,6 +338,9 @@ pub mod testing {
         type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<MockTypes>>>
         where
             R: RangeBounds<usize> + Send;
+        type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
 
         async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
@@ -340,6 +372,16 @@ pub mod testing {
             }
         }
 
+        async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_vid_common(id).await,
+                Self::NoStorage(data_source) => data_source.get_vid_common(id).await,
+            }
+        }
+
         async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -367,6 +409,18 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.get_payload_range(range).await.boxed(),
                 Self::NoStorage(data_source) => data_source.get_payload_range(range).await.boxed(),
+            }
+        }
+
+        async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_vid_common_range(range).await.boxed(),
+                Self::NoStorage(data_source) => {
+                    data_source.get_vid_common_range(range).await.boxed()
+                }
             }
         }
 
@@ -404,6 +458,21 @@ pub mod testing {
                 Self::Sql(data_source) => data_source.insert_block(block).await.map_err(err_msg),
                 Self::NoStorage(data_source) => {
                     data_source.insert_block(block).await.map_err(err_msg)
+                }
+            }
+        }
+
+        async fn insert_vid(
+            &mut self,
+            common: VidCommonQueryData<MockTypes>,
+            share: Option<VidShare>,
+        ) -> Result<(), Self::Error> {
+            match self {
+                Self::Sql(data_source) => {
+                    data_source.insert_vid(common, share).await.map_err(err_msg)
+                }
+                Self::NoStorage(data_source) => {
+                    data_source.insert_vid(common, share).await.map_err(err_msg)
                 }
             }
         }
@@ -447,6 +516,16 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.payload_size().await,
                 Self::NoStorage(data_source) => data_source.payload_size().await,
+            }
+        }
+
+        async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.vid_share(id).await,
+                Self::NoStorage(data_source) => data_source.vid_share(id).await,
             }
         }
 

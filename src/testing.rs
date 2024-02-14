@@ -32,3 +32,14 @@ pub fn setup_test() {
         backtrace_on_stack_overflow::enable();
     }
 }
+
+/// Whether VID is expected for the given block height.
+///
+/// VID is skipped in HotShot for the genesis block.
+pub fn has_vid(height: usize) -> bool {
+    height >= FIRST_VID_VIEW
+}
+
+// Currently, HotShot also skips VID for view 1 (block 1). This should be fixed soon, but in the
+// meantime, we need to skip VID tests for this block.
+pub const FIRST_VID_VIEW: usize = 2;

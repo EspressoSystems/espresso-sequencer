@@ -91,6 +91,17 @@ Warning: size may be low if data is currently being indexed (see `sync-status`).
 Returns an integer.
 """
 
+[route.get_vid_share]
+PATH = ["vid/share/:height", "vid/share/hash/:hash", "vid/share/payload-hash/:payload-hash"]
+":height" = "Integer"
+":hash" = "TaggedBase64"
+":payload-hash" = "TaggedBase64"
+DOC = """
+Get information needed to run the VID reconstruction protocol for a block.
+
+Returns this node's VID share, if available.
+"""
+
 [route.sync_status]
 PATH = ["sync-status"]
 DOC = """

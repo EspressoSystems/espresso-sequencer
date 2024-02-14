@@ -152,6 +152,32 @@ Opens a WebSockets connection and sends a stream of the same data type returned 
 `payload/:height`.
 """
 
+[route.get_vid_common]
+PATH = ["vid/common/:height", "vid/common/hash/:hash", "vid/common/payload-hash/:payload-hash"]
+":height" = "Integer"
+":hash" = "TaggedBase64"
+":payload-hash" = "TaggedBase64"
+DOC = """
+Get common VID data.
+
+Only data common to all storage nodes is provided. This is _not_ a VID share and does not help in
+the reconstruction of a block. It is only useful to aid in the interpretation of other VID-related
+data, such as VID range proofs.
+
+To recover the VID share belonging to this node, see the `node` API endpoint `/node/vid/share`.
+"""
+
+[route.stream_vid_common]
+PATH = ["stream/vid/common/:height"]
+METHOD = "SOCKET"
+":height" = "Integer"
+DOC = """
+Subscribe to a stream of VID common data in the order they are sequenced, starting at `:height`.
+
+Opens a WebSockets connection and sends a stream of the same data type returned by
+`vid/common/:height`.
+"""
+
 [route.get_transaction]
 PATH = ["transaction/:height/:index", "transaction/hash/:hash"]
 ":height" = "Integer"

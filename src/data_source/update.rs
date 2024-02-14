@@ -12,7 +12,7 @@
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
 use crate::availability::{
-    BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
+    BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
 };
 use crate::status::UpdateStatusData;
 use crate::Payload;
@@ -73,13 +73,30 @@ where
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
-            for (qc, (leaf, _)) in qcs.zip(leaf_chain.iter().rev()) {
+            for (qc, (leaf, vid)) in qcs.zip(leaf_chain.iter().rev()) {
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
                 let leaf_data =
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
                 self.insert_leaf(leaf_data.clone()).await?;
+
+                if let Some(vid) = vid {
+                    self.insert_vid(
+                        VidCommonQueryData::new(leaf.block_header.clone(), vid.common.clone()),
+                        // TODO we should get just a single share from VID dispersal, but currently
+                        // HotShot sends us _all_ shares, and we don't know which one is for us. For
+                        // no we arbitrarily take the first share, this should be fixed in HotShot
+                        // soon.
+                        Some(vid.shares.first_key_value().unwrap().1.clone()),
+                    )
+                    .await?;
+                } else {
+                    tracing::error!(
+                        "VID info for block {} not available at decide",
+                        leaf.block_header.block_number()
+                    );
+                }
 
                 if let Some(block) = leaf.get_block_payload() {
                     self.insert_block(BlockQueryData::new(leaf.block_header.clone(), block))

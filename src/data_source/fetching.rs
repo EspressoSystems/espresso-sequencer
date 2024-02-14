@@ -78,7 +78,7 @@ use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
-        UpdateAvailabilityData,
+        UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{
         self,
@@ -89,7 +89,7 @@ use crate::{
     node::{NodeDataSource, SyncStatus},
     status::StatusDataSource,
     task::BackgroundTask,
-    Header, Payload, QueryResult, SignatureKey,
+    Header, Payload, QueryResult, SignatureKey, VidCommon, VidShare,
 };
 use anyhow::Context;
 use async_std::{
@@ -100,7 +100,7 @@ use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::{
-    future::{join_all, BoxFuture, FutureExt},
+    future::{self, join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
@@ -395,6 +395,9 @@ where
     type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
+    type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
 
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
@@ -417,6 +420,13 @@ where
         self.fetcher.get(id.into()).await
     }
 
+    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(VidCommonRequest(id.into())).await
+    }
+
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
@@ -432,6 +442,13 @@ where
     }
 
     async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -462,6 +479,19 @@ where
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.fetcher.storage.write().await.insert_block(block).await
+    }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), Self::Error> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .insert_vid(common, share)
+            .await
     }
 }
 
@@ -494,6 +524,13 @@ where
 
     async fn payload_size(&self) -> QueryResult<usize> {
         self.storage().await.payload_size().await
+    }
+
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.storage().await.vid_share(id).await
     }
 
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
@@ -529,6 +566,8 @@ where
     provider: Arc<P>,
     payload_fetcher: Arc<fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>>,
     leaf_fetcher: Arc<fetching::Fetcher<request::LeafRequest, LeafCallback<Types, S, P>>>,
+    vid_common_fetcher:
+        Arc<fetching::Fetcher<request::VidCommonRequest, VidCommonCallback<Types, S, P>>>,
     range_chunk_size: usize,
 }
 
@@ -543,6 +582,7 @@ where
     committed_height: u64,
     block_notifier: Notifier<BlockQueryData<Types>>,
     leaf_notifier: Notifier<LeafQueryData<Types>>,
+    vid_common_notifier: Notifier<VidCommonQueryData<Types>>,
 }
 
 impl<Types, S> NotifyStorage<Types, S>
@@ -564,6 +604,18 @@ where
             self.height = block.height() + 1;
         }
         self.storage.insert_block(block).await
+    }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), S::Error> {
+        self.vid_common_notifier.notify(&common);
+        if common.height() + 1 > self.height {
+            self.height = common.height() + 1;
+        }
+        self.storage.insert_vid(common, share).await
     }
 }
 
@@ -592,9 +644,11 @@ where
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
+        let mut vid_common_fetcher = fetching::Fetcher::default();
         if let Some(delay) = builder.retry_delay {
             payload_fetcher = payload_fetcher.with_retry_delay(delay);
             leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
+            vid_common_fetcher = vid_common_fetcher.with_retry_delay(delay);
         }
 
         let height = builder.storage.block_height().await? as u64;
@@ -605,10 +659,12 @@ where
                 storage: builder.storage,
                 block_notifier: Notifier::new(),
                 leaf_notifier: Notifier::new(),
+                vid_common_notifier: Notifier::new(),
             }),
             provider: Arc::new(builder.provider),
             payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
+            vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
         })
     }
@@ -692,15 +748,13 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
-        // We can avoid touching storage if it is not possible even for the first element in the
-        // requested range to exist given the current block height. In this case, we know storage
-        // would return an empty range.
-        let might_exist = match chunk.start_bound() {
-            Bound::Included(n) => T::Request::from(*n).might_exist(storage.height as usize),
-            Bound::Excluded(n) => T::Request::from(*n + 1).might_exist(storage.height as usize),
-            _ => true,
-        };
-        let ts = if might_exist {
+        // We can avoid touching storage if it is not possible for any entry in the entire range to
+        // exist given the current block height. In this case, we know storage would return an empty
+        // range.
+        let ts = if chunk
+            .clone()
+            .any(|i| T::Request::from(i).might_exist(storage.height as usize))
+        {
             T::load_range(&storage, chunk.clone())
                 .await
                 .context(format!("when fetching items in range {chunk:?}"))
@@ -714,29 +768,30 @@ where
             vec![]
         };
         // Log and discard error information; we want a list of Option where None indicates an
-        // object that needs to be fetched. Note that we don't use `FetchRequest::might_exit` to
+        // object that needs to be fetched. Note that we don't use `FetchRequest::might_exist` to
         // silence the logs here when an object is missing that is not expected to exist at all.
         // When objects are not expected to exist, `load_range` should just return a truncated list
         // rather than returning `Err` objects, so if there are errors in here they are unexpected
-        // and we do want to long them.
-        let ts = ts.into_iter().map(ResultExt::ok_or_trace);
-        // Storage may return fewer objects than asked for if we hit the end of the current chain.
-        // Pad out to the end of the chunk with None, indicating that objects we don't have yet must
-        // be fetched.
-        if ts.len() < chunk.len() {
-            tracing::debug!(
-                "items {}-{} in chunk are not available, will be fetched",
-                ts.len(),
-                chunk.len()
-            );
-        }
-        let padding = std::iter::repeat(None).take(chunk.len() - ts.len());
-        let ts = ts.chain(padding);
+        // and we do want to log them.
+        let ts = ts.into_iter().filter_map(ResultExt::ok_or_trace);
         // Kick off a fetch for each missing object.
-        let fetcher = &self;
-        let ts = ts
-            .enumerate()
-            .map(|(i, opt)| fetcher.some_or_fetch(&storage, chunk.start + i, opt));
+        let mut fetches = Vec::with_capacity(chunk.len());
+        for t in ts {
+            // Fetch missing objects that should come before `t`.
+            while chunk.start + fetches.len() < t.height() {
+                tracing::debug!(
+                    "item {} in chunk not available, will be fetched",
+                    fetches.len()
+                );
+                fetches.push(self.fetch(&storage, chunk.start + fetches.len()).boxed());
+            }
+            // `t` itself is already available, we don't have to trigger a fetch for it.
+            fetches.push(future::ready(Fetch::Ready(t)).boxed());
+        }
+        // Fetch missing objects from the end of the range.
+        while fetches.len() < chunk.len() {
+            fetches.push(self.fetch(&storage, chunk.start + fetches.len()).boxed());
+        }
 
         // We `join_all` here because we want this iterator to be evaluated eagerly for two reasons:
         // 1. It borrows from `self`, which is local to this future. This avoids having to clone
@@ -746,7 +801,7 @@ where
         //    load from storage and subscribe to notifications for missing objects all while we have
         //    a read lock on `self.storage`. No notifications can be sent during this time since
         //    sending a notification requires a write lock.
-        stream::iter(join_all(ts).await)
+        stream::iter(join_all(fetches).await)
     }
 
     async fn ok_or_fetch<R, T>(
@@ -887,7 +942,7 @@ where
             // without awaiting them is enough to trigger active fetches of missing blocks, since
             // we always trigger an active fetch when fetching by block number. Moreover, fetching
             // the block is enough to trigger an active fetch of the corresponding leaf if it too is
-            // missing, so this one loop takes care of all resources that might be missing.
+            // missing.
             //
             // The chunking behavior of `get_range` automatically ensures that, no matter how big
             // the range is, we will release the read lock on storage every `chunk_size` items, so
@@ -899,6 +954,15 @@ where
                     start..block_height,
                 );
             while blocks.next().await.is_some() {}
+            // We have to trigger a separate fetch of the VID data, since this is fetched
+            // independently of the block payload.
+            let mut vid = self
+                .clone()
+                .get_range_with_chunk_size::<_, VidCommonQueryData<Types>>(
+                    chunk_size,
+                    start..block_height,
+                );
+            while vid.next().await.is_some() {}
 
             tracing::info!("completed proactive scan {i} of blocks from {start}-{block_height}, will scan again in {minor_interval:?}");
             sleep(minor_interval).await;
@@ -908,12 +972,17 @@ where
 
 /// A provider which can be used as a fetcher by the availability service.
 pub trait AvailabilityProvider<Types: NodeType>:
-    Provider<Types, request::LeafRequest> + Provider<Types, request::PayloadRequest> + Sync + 'static
+    Provider<Types, request::LeafRequest>
+    + Provider<Types, request::PayloadRequest>
+    + Provider<Types, request::VidCommonRequest>
+    + Sync
+    + 'static
 {
 }
 impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
     P: Provider<Types, request::LeafRequest>
         + Provider<Types, request::PayloadRequest>
+        + Provider<Types, request::VidCommonRequest>
         + Sync
         + 'static
 {
@@ -1010,6 +1079,8 @@ where
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static;
+
+    fn height(&self) -> usize;
 }
 
 impl<Types> FetchRequest for LeafId<Types>
@@ -1135,6 +1206,10 @@ where
     {
         storage.storage.get_leaf_range(range).await
     }
+
+    fn height(&self) -> usize {
+        self.height() as usize
+    }
 }
 
 /// A request to fetch a block.
@@ -1252,62 +1327,7 @@ where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
     {
-        match req {
-            BlockRequest::Id(id) => {
-                // Check if at least the header is available in local storage. If it is, we benefit
-                // two ways:
-                // 1. We know for sure the corresponding block exists, so we can unconditionally
-                //    trigger an active fetch without unnecessarily bothering our peers.
-                // 2. We only need to fetch the payload, not the full block. Not only is this
-                //    marginally less data to download, there are some providers that may only be
-                //    able to provide payloads, not full blocks, such as HotShot DA committee
-                //    members.
-                if let Some(header) = storage
-                    .storage
-                    .get_header(id)
-                    .await
-                    .context(format!("loading header for block {id}"))
-                    .ok_or_trace()
-                {
-                    fetch_block_with_header(fetcher, header);
-                    return;
-                }
-
-                // If the header is _not_ present, we may still be able to fetch the block, but we
-                // need to fetch the header (in fact, the entire leaf) first. This is because we
-                // have an invariant that we should not store a block payload in the database unless
-                // we already have its corresponding header and leaf.
-                match id {
-                    BlockId::Number(n) => {
-                        fetch_leaf_with_callbacks(
-                            fetcher.clone(),
-                            n.into(),
-                            [LeafCallback::Block { fetcher }],
-                        );
-                    }
-                    BlockId::Hash(h) => {
-                        // Given only the hash, we cannot tell if the corresonding leaf actually
-                        // exists, since we don't have a corresponding header. Therefore, we will
-                        // not spawn an active fetch.
-                        tracing::debug!("not fetching unknown block {h}");
-                        return;
-                    }
-                    BlockId::PayloadHash(h) => {
-                        // Same as above, we don't fetch a block with a payload that is not known to
-                        // exist.
-                        tracing::debug!("not fetching block with unknown payload {h}");
-                        return;
-                    }
-                }
-            }
-            BlockRequest::WithTransaction(h) => {
-                // We don't actively fetch blocks when requested by transaction, because without the
-                // block payload, we have no way of knowing whether a block with such a transaction
-                // actually exists, and we don't want to bother peers with requests for non-existant
-                // blocks.
-                tracing::debug!("not fetching block with unknown transaction {h}");
-            }
-        }
+        fetch_header_and_then(storage, req, HeaderCallback::Payload { fetcher }).await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
@@ -1340,6 +1360,10 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         storage.storage.get_block_range(range).await
+    }
+
+    fn height(&self) -> usize {
+        self.height() as usize
     }
 }
 
@@ -1514,6 +1538,144 @@ where
     {
         storage.storage.get_payload_range(range).await
     }
+
+    fn height(&self) -> usize {
+        self.height() as usize
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct VidCommonRequest<Types: NodeType>(BlockId<Types>);
+
+impl<Types: NodeType> From<usize> for VidCommonRequest<Types> {
+    fn from(n: usize) -> Self {
+        Self(n.into())
+    }
+}
+
+impl<Types> FetchRequest for VidCommonRequest<Types>
+where
+    Types: NodeType,
+{
+    fn might_exist(self, block_height: usize) -> bool {
+        if let BlockId::Number(n) = self.0 {
+            n > 0 && n < block_height
+        } else {
+            true
+        }
+    }
+}
+
+#[async_trait]
+impl<Types> Fetchable<Types> for VidCommonQueryData<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+    type Request = VidCommonRequest<Types>;
+
+    fn satisfies(&self, req: Self::Request) -> bool {
+        match req.0 {
+            BlockId::Number(n) => self.height() == n as u64,
+            BlockId::Hash(h) => self.block_hash() == h,
+            BlockId::PayloadHash(h) => self.payload_hash() == h,
+        }
+    }
+
+    async fn passive_fetch<S>(
+        storage: &NotifyStorage<Types, S>,
+        req: Self::Request,
+    ) -> BoxFuture<'static, Option<Self>>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage
+            .vid_common_notifier
+            .wait_for(move |vid| vid.satisfies(req))
+            .await
+            .into_future()
+            .boxed()
+    }
+
+    async fn active_fetch<S, P>(
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        req: Self::Request,
+    ) where
+        S: AvailabilityStorage<Types> + 'static,
+        P: AvailabilityProvider<Types>,
+    {
+        fetch_header_and_then(storage, req.0.into(), HeaderCallback::VidCommon { fetcher }).await
+    }
+
+    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage.storage.get_vid_common(req.0).await
+    }
+}
+
+#[async_trait]
+impl<Types> RangedFetchable<Types> for VidCommonQueryData<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+    type RangedRequest = VidCommonRequest<Types>;
+
+    async fn load_range<S, R>(
+        storage: &NotifyStorage<Types, S>,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Self>>>
+    where
+        S: AvailabilityStorage<Types>,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        storage.storage.get_vid_common_range(range).await
+    }
+
+    fn height(&self) -> usize {
+        self.height() as usize
+    }
+}
+
+fn fetch_vid_common_with_header<Types, S, P>(
+    fetcher: Arc<Fetcher<Types, S, P>>,
+    header: Header<Types>,
+) where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    // Now that we have the header, we only need to retrieve the VID common data.
+    tracing::info!(
+        "spawned active fetch for VID common {:?} (height {})",
+        header.payload_commitment(),
+        header.block_number()
+    );
+    fetcher.vid_common_fetcher.spawn_fetch(
+        request::VidCommonRequest(header.payload_commitment()),
+        fetcher.provider.clone(),
+        once(VidCommonCallback {
+            header,
+            fetcher: fetcher.clone(),
+        }),
+    );
+}
+
+async fn store_vid_common<Types, S>(
+    storage: &mut NotifyStorage<Types, S>,
+    common: VidCommonQueryData<Types>,
+) -> anyhow::Result<()>
+where
+    Types: NodeType,
+    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+{
+    storage.insert_vid(common, None).await?;
+    storage.commit().await?;
+    Ok(())
 }
 
 #[derive(Derivative)]
@@ -1553,15 +1715,16 @@ where
     async fn run(self, payload: Payload<Types>) {
         tracing::info!("fetched payload {:?}", self.header.payload_commitment());
         let block = BlockQueryData::new(self.header, payload);
+        let height = block.height();
 
         // Store the block in local storage, so we can avoid fetching it in the future.
         {
             let mut storage = self.fetcher.storage.write().await;
-            if let Err(err) = store_block(&mut *storage, block.clone()).await {
+            if let Err(err) = store_block(&mut *storage, block).await {
                 // It is unfortunate if this fails, but we can still proceed by returning
                 // the block that we fetched, keeping it in memory. Simply log the error and
                 // move on.
-                tracing::warn!("failed to store fetched block {}: {err}", block.height());
+                tracing::warn!("failed to store fetched block {height}: {err}");
             }
         }
     }
@@ -1569,16 +1732,68 @@ where
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+struct VidCommonCallback<Types: NodeType, S, P> {
+    header: Header<Types>,
+    #[derivative(Debug = "ignore")]
+    fetcher: Arc<Fetcher<Types, S, P>>,
+}
+
+impl<Types: NodeType, S, P> PartialEq for VidCommonCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for VidCommonCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> Ord for VidCommonCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.header.block_number().cmp(&other.header.block_number())
+    }
+}
+
+impl<Types: NodeType, S, P> PartialOrd for VidCommonCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, P>
+where
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types>,
+    P: AvailabilityProvider<Types>,
+{
+    async fn run(self, common: VidCommon) {
+        tracing::info!("fetched VID common {:?}", self.header.payload_commitment());
+        let common = VidCommonQueryData::new(self.header, common);
+        let height = common.height();
+
+        // Store the data in local storage, so we can avoid fetching it in the future.
+        {
+            let mut storage = self.fetcher.storage.write().await;
+            if let Err(err) = store_vid_common(&mut *storage, common).await {
+                // It is unfortunate if this fails, but we can still proceed by returning
+                // the block that we fetched, keeping it in memory. Simply log the error and
+                // move on.
+                tracing::warn!("failed to store fetched VID common {height}: {err}");
+            }
+        }
+    }
+}
+
+#[derive(Derivative, From)]
+#[derivative(Debug(bound = ""))]
 enum LeafCallback<Types: NodeType, S, P> {
     /// Callback when fetching the leaf for its own sake.
+    #[from(ignore)]
     Leaf {
         #[derivative(Debug = "ignore")]
         fetcher: Arc<Fetcher<Types, S, P>>,
     },
-    /// Callback when fetching the leaf in order to then look up a block.
-    Block {
-        #[derivative(Debug = "ignore")]
-        fetcher: Arc<Fetcher<Types, S, P>>,
+    /// Callback when fetching the leaf in order to then look up something else.
+    Continuation {
+        callback: HeaderCallback<Types, S, P>,
     },
 }
 
@@ -1593,9 +1808,13 @@ impl<Types: NodeType, S, P> Eq for LeafCallback<Types, S, P> {}
 impl<Types: NodeType, S, P> Ord for LeafCallback<Types, S, P> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            // Store leaves in the database before storing blocks.
-            (Self::Leaf { .. }, Self::Block { .. }) => Ordering::Less,
-            (Self::Block { .. }, Self::Leaf { .. }) => Ordering::Greater,
+            // Store leaves in the database before storing derived objecs.
+            (Self::Leaf { .. }, Self::Continuation { .. }) => Ordering::Less,
+            (Self::Continuation { .. }, Self::Leaf { .. }) => Ordering::Greater,
+
+            (Self::Continuation { callback: cb1 }, Self::Continuation { callback: cb2 }) => {
+                cb1.cmp(cb2)
+            }
             _ => Ordering::Equal,
         }
     }
@@ -1626,10 +1845,148 @@ where
                     tracing::warn!("failed to store fetched leaf {height}: {err}");
                 }
             }
-            Self::Block { fetcher } => {
-                tracing::info!("fetched leaf {}, will now fetch payload", leaf.height());
-                fetch_block_with_header(fetcher, leaf.leaf.block_header);
+            Self::Continuation { callback } => callback.run(leaf.leaf.block_header),
+        }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum HeaderCallback<Types, S, P>
+where
+    Types: NodeType,
+{
+    /// Callback when fetching the leaf in order to then look up the corresponding block.
+    Payload {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+    /// Callback when fetching the leaf in order to then look up the corresopnding VID common data.
+    VidCommon {
+        #[derivative(Debug = "ignore")]
+        fetcher: Arc<Fetcher<Types, S, P>>,
+    },
+}
+
+impl<Types: NodeType, S, P> PartialEq for HeaderCallback<Types, S, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl<Types: NodeType, S, P> Eq for HeaderCallback<Types, S, P> {}
+
+impl<Types: NodeType, S, P> PartialOrd for HeaderCallback<Types, S, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Types: NodeType, S, P> Ord for HeaderCallback<Types, S, P> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Arbitrarily, we choose to run payload callbacks before VID callbacks.
+        match (self, other) {
+            (Self::Payload { .. }, Self::VidCommon { .. }) => Ordering::Less,
+            (Self::VidCommon { .. }, Self::Payload { .. }) => Ordering::Greater,
+            _ => Ordering::Equal,
+        }
+    }
+}
+
+impl<Types, S, P> HeaderCallback<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    fn fetcher(&self) -> Arc<Fetcher<Types, S, P>> {
+        match self {
+            Self::Payload { fetcher } => fetcher.clone(),
+            Self::VidCommon { fetcher } => fetcher.clone(),
+        }
+    }
+
+    fn run(self, header: Header<Types>) {
+        match self {
+            Self::Payload { fetcher } => {
+                tracing::info!(
+                    "fetched leaf {}, will now fetch payload",
+                    header.block_number()
+                );
+                fetch_block_with_header(fetcher, header);
             }
+            Self::VidCommon { fetcher } => {
+                tracing::info!(
+                    "fetched leaf {}, will now fetch VID common",
+                    header.block_number()
+                );
+                fetch_vid_common_with_header(fetcher, header);
+            }
+        }
+    }
+}
+
+async fn fetch_header_and_then<Types, S, P>(
+    storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+    req: BlockRequest<Types>,
+    callback: HeaderCallback<Types, S, P>,
+) where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    match req {
+        BlockRequest::Id(id) => {
+            // Check if at least the header is available in local storage. If it is, we benefit
+            // two ways:
+            // 1. We know for sure the corresponding block exists, so we can unconditionally
+            //    trigger an active fetch without unnecessarily bothering our peers.
+            // 2. We only need to fetch the missing data (e.g. payload or VID common), not the full
+            //    block. Not only is this marginally less data to download, there are some providers
+            //    that may only be able to provide certain data. For example, the HotShot DA
+            //    committee members may be able to provide paylaods, but not full blocks. Or, in the
+            //    case where VID recovery is needed, the VID common data may be available but the
+            //    full block may not exist anywhere.
+            if let Some(header) = storage
+                .storage
+                .get_header(id)
+                .await
+                .context(format!("loading header for block {id}"))
+                .ok_or_trace()
+            {
+                callback.run(header);
+                return;
+            }
+
+            // If the header is _not_ present, we may still be able to fetch the request, but we
+            // need to fetch the header (in fact, the entire leaf) first. This is because we have an
+            // invariant that we should not store derived objects in the database unless we already
+            // have the corresponding header and leaf.
+            match id {
+                BlockId::Number(n) => {
+                    fetch_leaf_with_callbacks(callback.fetcher(), n.into(), [callback.into()]);
+                }
+                BlockId::Hash(h) => {
+                    // Given only the hash, we cannot tell if the corresonding leaf actually exists,
+                    // since we don't have a corresponding header. Therefore, we will not spawn an
+                    // active fetch.
+                    tracing::debug!("not fetching unknown block {h}");
+                }
+                BlockId::PayloadHash(h) => {
+                    // Same as above, we don't fetch a block with a payload that is not known to
+                    // exist.
+                    tracing::debug!("not fetching block with unknown payload {h}");
+                }
+            }
+        }
+        BlockRequest::WithTransaction(h) => {
+            // We don't actively fetch blocks when requested by transaction, because without the
+            // block payload, we have no way of knowing whether a block with such a transaction
+            // actually exists, and we don't want to bother peers with requests for non-existant
+            // blocks.
+            tracing::debug!("not fetching block with unknown transaction {h}");
         }
     }
 }
