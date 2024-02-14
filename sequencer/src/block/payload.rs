@@ -98,7 +98,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
-    /// Returns the `ns_index`th namespace bytes, along with a proof of correctness for those bytes.
+    /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
     ///
     /// RPC-friendly proof contains:
     /// - the namespace bytes

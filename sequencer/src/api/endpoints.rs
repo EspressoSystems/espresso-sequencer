@@ -18,7 +18,7 @@ use commit::Committable;
 use ethers::prelude::U256;
 use futures::FutureExt;
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
+    availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
     Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
@@ -27,6 +27,7 @@ use jf_primitives::{
     vid::{advz::Advz, VidScheme},
 };
 use serde::{Deserialize, Serialize};
+use snafu::OptionExt;
 use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
@@ -93,8 +94,18 @@ where
             let vid = crate::block::payload::test_vid_factory();
             use hotshot::traits::BlockPayload;
             let disperse_data = vid
-                .disperse(block.payload().encode().unwrap().collect::<Vec<u8>>())
-                .unwrap();
+                .disperse(
+                    block
+                        .payload()
+                        .encode()
+                        .expect("should be infallible")
+                        .collect::<Vec<u8>>(),
+                )
+                .ok() // hack: VidError won't play with Snafu, so convert to Option
+                .context(CustomSnafu {
+                    message: format!("disperse failure for namespace {ns_id}"),
+                    status: StatusCode::InternalServerError,
+                })?;
 
             let proof = block
                 .payload()
@@ -104,7 +115,10 @@ where
                     &vid,
                     disperse_data.common,
                 )
-                .unwrap();
+                .context(CustomSnafu {
+                    message: format!("failed to make proof for namespace {ns_id}"),
+                    status: StatusCode::NotFound,
+                })?;
 
             let transactions = if let NamespaceProof::Existence {
                 ref ns_payload_flat,
