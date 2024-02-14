@@ -4,8 +4,7 @@
 # directories below.
 src = 'contracts/src'
 out = 'contracts/out'
-# Temporarily removed, will add back in #1041
-# test = 'contracts/test'
+test = 'contracts/test'
 libs = ['contracts/lib']
 script = "contracts/script"
 broadcast = "contracts/broadcast"

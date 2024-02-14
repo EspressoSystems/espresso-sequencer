@@ -2214,6 +2214,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff-test-hotshot"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-poly",
+ "ark-std 0.4.0",
+ "clap",
+ "crs",
+ "diff-test-bn254",
+ "digest 0.10.7",
+ "ethers",
+ "hotshot-contract-adapter",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "itertools 0.12.1",
+ "jf-plonk",
+ "jf-primitives",
+ "jf-relation",
+ "jf-utils",
+ "sha3",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3216,6 +3244,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen-vk-contract"
+version = "0.1.0"
+dependencies = [
+ "crs",
+ "hotshot-contract-adapter",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "jf-primitives",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3525,6 +3564,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-contract-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "contract-bindings",
+ "crs",
+ "diff-test-bn254",
+ "ethers",
+ "hotshot-stake-table",
+ "hotshot-types",
+ "jf-plonk",
+ "jf-primitives",
+ "jf-utils",
+ "num-bigint",
+ "num-traits",
+]
+
+[[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
 source = "git+https://github.com/EspressoSystems/hotshot?rev=3f4f488a#3f4f488a40d68998045e32756eff58518c478369"
@@ -3612,6 +3676,49 @@ dependencies = [
  "jf-utils",
  "serde",
  "tagged-base64",
+]
+
+[[package]]
+name = "hotshot-state-prover"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "async-compatibility-layer",
+ "async-std",
+ "async-trait",
+ "blake3",
+ "clap",
+ "cld",
+ "contract-bindings",
+ "crs",
+ "derive_more",
+ "displaydoc",
+ "ethers",
+ "futures",
+ "hotshot-contract-adapter",
+ "hotshot-stake-table",
+ "hotshot-types",
+ "jf-plonk",
+ "jf-primitives",
+ "jf-relation",
+ "jf-utils",
+ "rand_chacha 0.3.1",
+ "sequencer-utils",
+ "serde",
+ "snafu",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "time 0.3.34",
+ "toml 0.8.10",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -3759,42 +3866,6 @@ dependencies = [
  "tokio",
  "toml 0.8.10",
  "tracing",
-]
-
-[[package]]
-name = "hotshot_contract"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ed-on-bn254",
- "ark-ff",
- "ark-poly",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
- "async-std",
- "async-trait",
- "clap",
- "contract-bindings",
- "crs",
- "diff-test-bn254",
- "digest 0.10.7",
- "ethereum-types",
- "ethers",
- "ethers-providers",
- "hex",
- "hotshot-stake-table",
- "hotshot-types",
- "itertools 0.12.1",
- "jf-plonk",
- "jf-primitives",
- "jf-relation",
- "jf-utils",
- "num-bigint",
- "num-traits",
- "sequencer-utils",
- "sha3",
 ]
 
 [[package]]
@@ -7360,6 +7431,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
+ "hotshot-state-prover",
  "hotshot-task",
  "hotshot-testing",
  "hotshot-types",
