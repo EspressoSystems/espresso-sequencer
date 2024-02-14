@@ -308,14 +308,19 @@ pub type JellyfishNamespaceProof =
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "")] // for V
-pub struct NamespaceProof<V>
+pub enum NamespaceProof<V>
 where
     V: PayloadProver<JellyfishNamespaceProof>,
 {
-    ns_payload_flat: Vec<u8>,
-    ns_index: u32,
-    ns_proof: JellyfishNamespaceProof,
-    vid_common: <V as VidScheme>::Common,
+    Existence {
+        ns_payload_flat: Vec<u8>,
+        ns_index: u32,
+        ns_proof: JellyfishNamespaceProof,
+        vid_common: <V as VidScheme>::Common,
+    },
+    NonExistence {
+        ns_index: u32,
+    },
 }
 
 impl<V> NamespaceProof<V>
@@ -332,35 +337,53 @@ where
         commit: &<V as VidScheme>::Commit,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
-        let ns_index = usize::try_from(self.ns_index).ok()?;
-
         // TODO don't use TxTable, need a new method
-        if ns_index >= TxTable::get_tx_table_len(&ns_table.raw_payload) {
-            return None; // error: index out of bounds
+        let ns_table_len = TxTable::get_tx_table_len(&ns_table.raw_payload);
+
+        match self {
+            NamespaceProof::Existence {
+                ns_payload_flat,
+                ns_index,
+                ns_proof,
+                vid_common,
+            } => {
+                let ns_index = usize::try_from(*ns_index).ok()?;
+
+                if ns_index >= ns_table_len {
+                    return None; // error: index out of bounds
+                }
+
+                // TODO rework NameSpaceTable struct
+                // TODO merge get_ns_payload_range with get_ns_table_entry ?
+                let ns_payload_range =
+                    ns_table.get_payload_range(ns_index, V::get_payload_byte_len(vid_common));
+                let ns_id = ns_table.get_table_entry(ns_index).0;
+
+                // verify self against args
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: ns_payload_flat,
+                        range: ns_payload_range,
+                        commit,
+                        common: vid_common,
+                    },
+                    ns_proof,
+                )
+                .ok()?
+                .ok()?;
+
+                // verification succeeded, return some data
+                // we know ns_id is correct because the corresponding ns_payload_range passed verification
+                Some((parse_ns_payload(ns_payload_flat, ns_id), ns_id))
+            }
+            NamespaceProof::NonExistence { ns_index } => {
+                let ns_index = usize::try_from(*ns_index).ok()?;
+                if ns_index < ns_table_len {
+                    return None; // error: index in bounds, expect out of bounds
+                }
+                Some((Vec::new(), VmId(0))) // TODO no vmid to return here
+            }
         }
-
-        // TODO rework NameSpaceTable struct
-        // TODO merge get_ns_payload_range with get_ns_table_entry ?
-        let ns_payload_range =
-            ns_table.get_payload_range(ns_index, V::get_payload_byte_len(&self.vid_common));
-        let ns_id = ns_table.get_table_entry(ns_index).0;
-
-        // verify self against args
-        vid.payload_verify(
-            Statement {
-                payload_subslice: &self.ns_payload_flat,
-                range: ns_payload_range,
-                commit,
-                common: &self.vid_common,
-            },
-            &self.ns_proof,
-        )
-        .ok()?
-        .ok()?;
-
-        // verification succeeded, return some data
-        // we know ns_id is correct because the corresponding ns_payload_range passed verification
-        Some((parse_ns_payload(&self.ns_payload_flat, ns_id), ns_id))
     }
 }
 
