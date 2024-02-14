@@ -254,7 +254,7 @@ mod generic_tests {
     use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
-    use endpoints::TimeWindowQueryData;
+    use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
     use futures::FutureExt;
     use hotshot_query_service::availability::BlockQueryData;
     use portpicker::pick_unused_port;
@@ -279,6 +279,59 @@ mod generic_tests {
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create sequencer network.
+        let handles = init_hotshot_handles().await;
+
+        // Start query service.
+        let port = pick_unused_port().expect("No ports free");
+        let storage = D::create_storage().await;
+        let handle = handles[0].clone();
+        D::options(&storage, options::Http { port }.into())
+            .status(Default::default())
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(handle, 0, Default::default(), Default::default())
+                }
+                .boxed()
+            })
+            .await
+            .unwrap();
+
+        // Start consensus.
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        // Connect client.
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+
+        // Wait for a block
+        let mut block_height;
+        loop {
+            block_height = client
+                .get::<usize>("status/block-height")
+                .send()
+                .await
+                .unwrap();
+            if block_height > 0 {
+                break;
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
+        let _ns: NamespaceProofQueryData = client
+            .get("availability/block/0/namespace/0")
+            .send()
+            .await
+            .unwrap();
     }
 
     #[async_std::test]
