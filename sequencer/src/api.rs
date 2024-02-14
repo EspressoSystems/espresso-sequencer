@@ -370,7 +370,7 @@ mod generic_tests {
                 .await
                 .unwrap();
 
-            found_empty_block = ns_query_res.transactions.is_empty();
+            found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
 
             for txn in ns_query_res.transactions {
                 if txn.commit() == hash {
@@ -380,28 +380,7 @@ mod generic_tests {
             }
         }
         assert!(found_txn);
-
-        // If we didn't already verify an exclusion proof, do so now
-        if !found_empty_block {
-            loop {
-                let height = client
-                    .get::<usize>("status/block-height")
-                    .send()
-                    .await
-                    .unwrap();
-                let ns_query_res: NamespaceProofQueryData = client
-                    .get(&format!("availability/block/{height}/namespace/0"))
-                    .send()
-                    .await
-                    .unwrap();
-                if ns_query_res.transactions.is_empty() {
-                    // Break once we have found and verified a namespace proof corresponding
-                    // to an empty block
-                    break;
-                }
-                sleep(Duration::from_secs(1)).await;
-            }
-        }
+        assert!(found_empty_block);
     }
 
     #[async_std::test]
