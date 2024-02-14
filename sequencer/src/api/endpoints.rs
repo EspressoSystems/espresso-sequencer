@@ -76,7 +76,7 @@ where
             let proof = block
                 .payload()
                 .namespace_with_proof(
-                    block.payload().get_ns_table().get_bytes(), // TODO better API here?
+                    block.payload().get_ns_table(),
                     namespace as usize,
                     &vid,
                     disperse_data.common,

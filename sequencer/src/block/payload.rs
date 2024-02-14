@@ -105,7 +105,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
     pub fn namespace_with_proof<V>(
         &self,
-        ns_table: &[u8], //&<Self as BlockPayload>::Metadata, TODO
+        ns_table: &NameSpaceTable<TxTableEntryWord>,
         ns_index: usize,
         vid: &V,
         vid_common: <V as VidScheme>::Common,
@@ -113,21 +113,24 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     where
         V: PayloadProver<JellyfishNamespaceProof>,
     {
-        // TODO using TxTable instead of NameSpaceTable for convenience
-        if ns_index >= TxTable::get_tx_table_len(ns_table) {
-            return None; // error: index out of bounds
-        }
         if self.raw_payload.len() != V::get_payload_byte_len(&vid_common) {
             return None; // error: vid_common inconsistent with self
         }
 
-        // TODO rework NameSpaceTable struct
-        let ns_table_struct = NameSpaceTable::<TableWord>::from_bytes(ns_table);
-        let ns_payload_range = ns_table_struct.get_payload_range(ns_index, self.raw_payload.len());
+        // TODO don't use TxTable, need a new method
+        let ns_table_len = TxTable::get_tx_table_len(&ns_table.raw_payload);
+
+        if ns_index >= ns_table_len {
+            return Some(NamespaceProof::NonExistence {
+                ns_index: ns_index.try_into().ok()?,
+            });
+        }
+
+        let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         // TODO log output for each `?`
         // fix this when we settle on an error handling pattern
-        Some(NamespaceProof {
+        Some(NamespaceProof::Existence {
             ns_index: ns_index.try_into().ok()?,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
             ns_proof: vid
@@ -431,7 +434,7 @@ impl hotshot_types::traits::block_contents::TestableBlock
 #[cfg(test)]
 mod test {
 
-    use super::test_vid_factory;
+    use super::{test_vid_factory, NamespaceProof};
     use crate::block::payload::{Payload, TableWordTraits};
     use crate::block::tables::{NameSpaceTable, Table};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -627,17 +630,28 @@ mod test {
                 // test ns proof
                 let ns_proof = block
                     .namespace_with_proof(
-                        actual_ns_table.get_bytes(),
+                        &actual_ns_table,
                         ns_idx,
                         &vid,
                         disperse_data.common.clone(),
                     )
                     .unwrap();
-                assert_eq!(
-                    ns_proof.ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes returned from namespace_with_proof",
-                    ns_id.0,
-                );
+
+                if let NamespaceProof::Existence {
+                    ref ns_payload_flat,
+                    ..
+                } = ns_proof
+                {
+                    assert_eq!(
+                        ns_payload_flat, &derived_ns.payload_flat,
+                        "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                        ns_id.0,
+                    );
+                } else {
+                    // TODO test for non-existence
+                    panic!("expect NamespaceProof::Existence variant");
+                };
+
                 let (ns_proof_txs, ns_proof_ns_id) = ns_proof
                     .verify(&vid, &disperse_data.commit, &actual_ns_table)
                     .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id.0));
