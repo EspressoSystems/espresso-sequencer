@@ -330,21 +330,20 @@ where
         &self,
         vid: &V,
         commit: &<V as VidScheme>::Commit,
-        ns_table: &[u8], //&<Payload as BlockPayload>::Metadata, TODO
+        ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
         let ns_index = usize::try_from(self.ns_index).ok()?;
 
-        // TODO using TxTable instead of NameSpaceTable for convenience
-        if ns_index >= TxTable::get_tx_table_len(ns_table) {
+        // TODO don't use TxTable, need a new method
+        if ns_index >= TxTable::get_tx_table_len(&ns_table.raw_payload) {
             return None; // error: index out of bounds
         }
 
         // TODO rework NameSpaceTable struct
         // TODO merge get_ns_payload_range with get_ns_table_entry ?
-        let ns_table_struct = NameSpaceTable::<TxTableEntryWord>::from_bytes(ns_table);
         let ns_payload_range =
-            ns_table_struct.get_payload_range(ns_index, V::get_payload_byte_len(&self.vid_common));
-        let ns_id = ns_table_struct.get_table_entry(ns_index).0;
+            ns_table.get_payload_range(ns_index, V::get_payload_byte_len(&self.vid_common));
+        let ns_id = ns_table.get_table_entry(ns_index).0;
 
         // verify self against args
         vid.payload_verify(
@@ -617,7 +616,7 @@ mod test {
                     ns_id.0,
                 );
                 let (ns_proof_txs, ns_proof_ns_id) = ns_proof
-                    .verify(&vid, &disperse_data.commit, actual_ns_table.get_bytes())
+                    .verify(&vid, &disperse_data.commit, &actual_ns_table)
                     .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id.0));
                 assert_eq!(ns_proof_ns_id, ns_id);
                 assert_eq!(

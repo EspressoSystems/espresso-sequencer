@@ -85,11 +85,7 @@ where
 
             // TODO ugly hack to get a Vec<Transactions> for this namespace
             let transactions = proof
-                .verify(
-                    &vid,
-                    &disperse_data.commit,
-                    block.payload().get_ns_table().get_bytes(), // TODO better API here?
-                )
+                .verify(&vid, &disperse_data.commit, block.payload().get_ns_table())
                 .unwrap()
                 .0;
 
