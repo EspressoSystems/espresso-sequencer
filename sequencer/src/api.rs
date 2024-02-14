@@ -249,7 +249,10 @@ mod test_helpers {
 #[espresso_macros::generic_tests]
 mod generic_tests {
     use super::{test_helpers::state_signature_test_helper, *};
-    use crate::{testing::init_hotshot_handles, Header};
+    use crate::{
+        testing::{init_hotshot_handles, wait_for_decide_on_handle},
+        Header, Transaction, VmId,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
@@ -286,6 +289,8 @@ mod generic_tests {
         setup_logging();
         setup_backtrace();
 
+        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+
         // Create sequencer network.
         let handles = init_hotshot_handles().await;
 
@@ -295,6 +300,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
+            .submit(Default::default())
             .serve(|_| {
                 async move {
                     SequencerContext::new(handle, 0, Default::default(), Default::default())
@@ -309,29 +315,93 @@ mod generic_tests {
             handle.hotshot.start_consensus().await;
         }
 
+        let options = Options::from(options::Http { port })
+            .submit(Default::default())
+            .status(Default::default());
+        let SequencerNode { mut context, .. } = options
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
+            })
+            .await
+            .unwrap();
+        let mut events = context
+            .consensus_mut()
+            .get_event_stream(Default::default())
+            .await
+            .0;
+
         // Connect client.
         let client: Client<ServerError> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
-        // Wait for a block
-        let mut block_height;
-        loop {
-            block_height = client
-                .get::<usize>("status/block-height")
-                .send()
-                .await
-                .unwrap();
-            if block_height > 0 {
-                break;
-            }
-            sleep(Duration::from_secs(1)).await;
-        }
-        let _ns: NamespaceProofQueryData = client
-            .get("availability/block/0/namespace/0")
+        let hash = client
+            .post("submit/submit")
+            .body_json(&txn)
+            .unwrap()
             .send()
             .await
             .unwrap();
+        assert_eq!(txn.commit(), hash);
+
+        // Wait for a Decide event containing transaction matching the one we sent
+        wait_for_decide_on_handle(&mut events, &txn).await.unwrap();
+        let mut found_txn = false;
+        let mut found_empty_block = false;
+
+        let block_height = client
+            .get::<usize>("status/block-height")
+            .send()
+            .await
+            .unwrap();
+
+        for block_num in 0..block_height {
+            let ns_query_res: NamespaceProofQueryData = client
+                .get(&format!("availability/block/{block_num}/namespace/0"))
+                .send()
+                .await
+                .unwrap();
+
+            found_empty_block = ns_query_res.transactions.is_empty();
+
+            for txn in ns_query_res.transactions {
+                if txn.commit() == hash {
+                    // Ensure that we validate an inclusion proof
+                    found_txn = true;
+                }
+            }
+        }
+        assert!(found_txn);
+
+        // If we didn't already verify an exclusion proof, do so now
+        if !found_empty_block {
+            loop {
+                let height = client
+                    .get::<usize>("status/block-height")
+                    .send()
+                    .await
+                    .unwrap();
+                let ns_query_res: NamespaceProofQueryData = client
+                    .get(&format!("availability/block/{height}/namespace/0"))
+                    .send()
+                    .await
+                    .unwrap();
+                if ns_query_res.transactions.is_empty() {
+                    // Break once we have found and verified a namespace proof corresponding
+                    // to an empty block
+                    break;
+                }
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 
     #[async_std::test]
