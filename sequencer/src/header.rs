@@ -196,15 +196,18 @@ impl Header {
             builder_signature: None,
         };
 
-        // Sign Header with builder wallet from state and save the
-        // signature on the Header
+        // Sign Header with builder wallet from state
         let signing_key: &SigningKey = builder_address.signer();
         let header_signature: ecdsa::Signature = signing_key.sign(header.commit().as_ref());
+        // In order to use `type::Signature` for verification we do a
+        // `TryFrom` conversion on the signature. But first we need to
+        // append Etherium's `Electurm` value (can be 27 or 28). There
+        // must be a better way to do this.
+        let header_signature = [header_signature.to_vec(), vec![27]].concat();
 
+        // Finally store the signature on the Header
         Self {
-            builder_signature: Some(
-                types::Signature::try_from(&header_signature.to_vec()[..]).unwrap(),
-            ),
+            builder_signature: Some(types::Signature::try_from(header_signature.as_ref()).unwrap()),
             ..header
         }
     }
