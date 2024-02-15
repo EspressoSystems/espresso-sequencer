@@ -20,6 +20,7 @@ tempfile = "3.9.0"
 anyhow = { workspace = true }
 ark-bls12-381 = "0.4"
 ark-ed-on-bn254 = { workspace = true }
+ark-ff = "0.4"
 ark-serialize = { workspace = true, features = ["derive"] }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
