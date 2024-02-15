@@ -40,7 +40,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
     light_client::StateKeyPair,
-    signature_key::BLSPubKey,
+    signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics, network::CommunicationChannel, node_implementation::NodeType,
         states::InstanceState,
@@ -273,6 +273,7 @@ pub struct NetworkParams {
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
+    pub private_staking_key: BLSPrivKey,
 }
 
 pub async fn init_node(
@@ -290,6 +291,9 @@ pub async fn init_node(
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
+    let private_staking_key = network_params.private_staking_key;
+    let public_staking_key = BLSPubKey::from_private(&private_staking_key);
+
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
@@ -300,35 +304,32 @@ pub async fn init_node(
             let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
                 orchestrator_client.get_config(public_ip.to_string()).await;
 
+            // Get updated config from orchestrator containing all peer's public keys
             config = orchestrator_client
-                .post_and_wait_all_public_keys(
-                    config.node_index,
-                    config.config.my_own_validator_config.public_key,
-                )
+                .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
+
             tracing::info!("loaded config, we are node {}", config.node_index);
             persistence.save_config(&config).await?;
             (config, true)
         }
     };
     let node_index = config.node_index;
-
-    // Generate node's private keys.
-    //
-    // These are deterministic keys suitable *only* for testing and demo purposes.
-
-    let priv_key = config.config.my_own_validator_config.private_key.clone();
     let num_nodes = config.config.total_nodes.get();
 
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
         config.config.known_nodes_with_stake.clone();
+
     let pub_keys = known_nodes_with_stake
         .iter()
         .map(|entry| entry.stake_key)
         .collect::<Vec<_>>();
+
+    // TODO: fetch from orchestrator?
     let state_ver_keys = (0..num_nodes)
         .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
         .collect::<Vec<_>>();
+
     let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
@@ -359,7 +360,7 @@ pub async fn init_node(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
         node_index as usize,
-        priv_key,
+        private_staking_key,
         networks,
         config.config,
         metrics,
