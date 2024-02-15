@@ -12,8 +12,7 @@ contract UpgradeLightClientScript is Script {
     /// @return address of the proxy
     /// TODO get the most recent deployment from the devops tooling
     function run(address admin, address mostRecentlyDeployedProxy) external returns (address) {
-        LCV2 newLC = new LCV2();
-        address proxy = upgradeLightClient(admin, mostRecentlyDeployedProxy, address(newLC));
+        address proxy = upgradeLightClient(admin, mostRecentlyDeployedProxy, address(new LCV2()));
         return proxy;
     }
 
