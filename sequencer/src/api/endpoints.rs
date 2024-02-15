@@ -12,7 +12,6 @@ use crate::{
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
     Header, SeqTypes, Transaction, VmId,
 };
-use ark_bls12_381::Bls12_381;
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use ethers::prelude::U256;
@@ -22,10 +21,7 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use jf_primitives::{
-    merkle_tree::MerkleTreeScheme,
-    vid::{advz::Advz, VidScheme},
-};
+use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tide_disco::{
@@ -35,7 +31,7 @@ use tide_disco::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: crate::block::payload::NamespaceProof<Advz<Bls12_381, sha2::Sha256>>, // TODO import VidScheme from hotshot
+    pub proof: NamespaceProof,
     pub header: Header,
     pub transactions: Vec<Transaction>,
 }

@@ -6,12 +6,15 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
-use jf_primitives::pcs::prelude::UnivariateKzgPCS;
-use jf_primitives::pcs::{checked_fft_size, PolynomialCommitmentScheme};
-use jf_primitives::vid::advz::payload_prover::{LargeRangeProof, SmallRangeProof};
-use jf_primitives::vid::advz::Advz;
-use jf_primitives::vid::payload_prover::Statement;
-use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+use hotshot_types::data::VidScheme;
+use jf_primitives::{
+    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::{
+        advz::payload_prover::{LargeRangeProof, SmallRangeProof},
+        payload_prover::{PayloadProver, Statement},
+        VidScheme as VidSchemeTrait,
+    },
+};
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -103,17 +106,14 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     /// RPC-friendly proof contains:
     /// - the namespace bytes
     /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
-    pub fn namespace_with_proof<V>(
+    pub fn namespace_with_proof(
         &self,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
         ns_id: VmId,
-        vid: &V,
-        vid_common: <V as VidScheme>::Common,
-    ) -> Option<NamespaceProof<V>>
-    where
-        V: PayloadProver<JellyfishNamespaceProof>,
-    {
-        if self.raw_payload.len() != V::get_payload_byte_len(&vid_common) {
+        vid: &VidScheme,
+        vid_common: <VidScheme as VidSchemeTrait>::Common,
+    ) -> Option<NamespaceProof> {
+        if self.raw_payload.len() != VidScheme::get_payload_byte_len(&vid_common) {
             return None; // error: vid_common inconsistent with self
         }
 
@@ -271,7 +271,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// https://stackoverflow.com/a/52886787
 ///
 /// TODO temporary VID constructor.
-pub(crate) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+pub(crate) fn test_vid_factory() -> VidScheme {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
     let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
@@ -281,7 +281,7 @@ pub(crate) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
         checked_fft_size(payload_chunk_size - 1).unwrap(),
     )
     .unwrap();
-    Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+    VidScheme::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
 }
 
 // TODO type alias needed only because nested impl Trait is not allowed
@@ -308,33 +308,27 @@ pub type JellyfishNamespaceProof =
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "")] // for V
-pub enum NamespaceProof<V>
-where
-    V: PayloadProver<JellyfishNamespaceProof>,
-{
+pub enum NamespaceProof {
     Existence {
         ns_payload_flat: Vec<u8>,
         ns_id: VmId,
         ns_proof: JellyfishNamespaceProof,
-        vid_common: <V as VidScheme>::Common,
+        vid_common: <VidScheme as VidSchemeTrait>::Common,
     },
     NonExistence {
         ns_id: VmId,
     },
 }
 
-impl<V> NamespaceProof<V>
-where
-    V: PayloadProver<JellyfishNamespaceProof>,
-{
+impl NamespaceProof {
     /// Verify a [`NamespaceProof`].
     ///
     /// All args must be available to the verifier in the block header.
     #[allow(dead_code)] // TODO temporary
     pub fn verify(
         &self,
-        vid: &V,
-        commit: &<V as VidScheme>::Commit,
+        vid: &VidScheme,
+        commit: &<VidScheme as VidSchemeTrait>::Commit,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
         match self {
@@ -348,8 +342,8 @@ where
 
                 // TODO rework NameSpaceTable struct
                 // TODO merge get_ns_payload_range with get_ns_table_entry ?
-                let ns_payload_range =
-                    ns_table.get_payload_range(ns_index, V::get_payload_byte_len(vid_common));
+                let ns_payload_range = ns_table
+                    .get_payload_range(ns_index, VidScheme::get_payload_byte_len(vid_common));
                 let ns_id = ns_table.get_table_entry(ns_index).0;
 
                 // verify self against args
