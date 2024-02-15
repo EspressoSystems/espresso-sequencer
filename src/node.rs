@@ -186,7 +186,7 @@ mod test {
             consensus::{MockDataSource, MockNetwork},
             has_vid,
             mocks::MockTypes,
-            setup_test,
+            setup_test, FIRST_VID_VIEW,
         },
         Error, VidShare,
     };
@@ -226,10 +226,12 @@ mod test {
             Client::<Error>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
-        // Wait for each node to propose a block.
+        // Wait until the block height is high enough that:
+        // * each node has proposed a block
+        // * there is more than one block for which VID is available
         let block_height = loop {
             let block_height = client.get::<usize>("block-height").send().await.unwrap();
-            if block_height > network.num_nodes() {
+            if block_height > network.num_nodes() && block_height > FIRST_VID_VIEW + 1 {
                 break block_height;
             }
             sleep(Duration::from_secs(1)).await;
@@ -302,6 +304,7 @@ mod test {
         );
 
         // Get VID share for each block.
+        tracing::info!(block_height, "checking VID shares");
         'outer: while let Some(event) = events.next().await {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
@@ -311,6 +314,10 @@ mod test {
                     // Skip the genesis leaf, it has no VID.
                     continue;
                 }
+                if leaf.block_header.block_number >= block_height as u64 {
+                    break 'outer;
+                }
+                tracing::info!(height = leaf.block_header.block_number, "checking share");
 
                 let share = client
                     .get::<VidShare>(&format!("vid/share/{}", leaf.block_header.block_number))
@@ -342,10 +349,6 @@ mod test {
                         .await
                         .unwrap()
                 );
-
-                if leaf.block_header.block_number >= block_height as u64 {
-                    break 'outer;
-                }
             }
         }
 
