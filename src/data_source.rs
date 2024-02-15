@@ -564,11 +564,12 @@ pub mod node_tests {
         node::{BlockId, SyncStatus},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
-            mocks::{mock_transaction, MockTypes},
+            mocks::{mock_transaction, MockPayload, MockTypes},
             setup_test, FIRST_VID_VIEW,
         },
+        VidShare,
     };
-    use futures::stream::StreamExt;
+    use futures::{future::join_all, stream::StreamExt};
     use hotshot_example_types::{
         block_types::{TestBlockHeader, TestBlockPayload},
         state_types::TestInstanceState,
@@ -895,6 +896,66 @@ pub mod node_tests {
             ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
             disperse.shares[0]
         );
+    }
+
+    // This test is currently ignored, as all nodes are temporarily storing the same share, so
+    // recovery is not possible. This will be fixed when HotShot is updated to send a unique share
+    // to each node. See https://github.com/EspressoSystems/HotShot/issues/1696.
+    #[ignore]
+    #[async_std::test]
+    pub async fn test_vid_recovery<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        network.start().await;
+
+        // Submit a transaction so we can try to recover a non-empty block.
+        let mut blocks = { ds.read().await.subscribe_blocks(0).await };
+        let txn = mock_transaction(vec![1, 2, 3]);
+        network.submit_transaction(txn.clone()).await;
+
+        // Wait for the transaction to be finalized.
+        let block = loop {
+            tracing::info!("waiting for transaction");
+            let block = blocks.next().await.unwrap();
+            if !block.is_empty() {
+                break block;
+            }
+            tracing::info!(height = block.height(), "empty block");
+        };
+        let height = block.height() as usize;
+        let commit = block.payload_hash();
+
+        // Set up a test VID scheme.
+        let num_nodes = network.num_nodes();
+        let vid = VidScheme::new(num_nodes, num_nodes, test_srs(num_nodes)).unwrap();
+
+        // Get VID common data and verify it.
+        tracing::info!("fetching common data");
+        let common = { ds.read().await.get_vid_common(height).await.await };
+        let common = common.common();
+        VidScheme::is_consistent(&commit, common).unwrap();
+
+        // Collect shares from each node.
+        tracing::info!("fetching shares");
+        let network = &network;
+        let vid = &vid;
+        let shares: Vec<VidShare> = join_all((0..network.num_nodes()).map(|i| async move {
+            let ds = network.data_source_index(i);
+            let share = ds.read().await.vid_share(height).await.unwrap();
+            vid.verify_share(&share, common, &commit).unwrap().unwrap();
+            share
+        }))
+        .await;
+
+        // Recover payload.
+        tracing::info!("recovering payload");
+        let bytes = vid.recover_payload(&shares, common).unwrap();
+        let recovered = MockPayload::from_bytes(bytes.into_iter(), &());
+        assert_eq!(recovered, *block.payload());
+        assert_eq!(recovered.transactions, vec![txn]);
     }
 }
 

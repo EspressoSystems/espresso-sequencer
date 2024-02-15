@@ -405,3 +405,58 @@ mod generic_test {
 
     instantiate_data_source_tests!(SqlDataSource<MockTypes, NoFetching>);
 }
+
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+    use super::*;
+    use crate::{
+        availability::{
+            AvailabilityDataSource, LeafQueryData, UpdateAvailabilityData, VidCommonQueryData,
+        },
+        data_source::VersionedDataSource,
+        fetching::provider::NoFetching,
+        node::NodeDataSource,
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test, FIRST_VID_VIEW},
+    };
+    use hotshot_example_types::state_types::TestInstanceState;
+    use hotshot_types::data::{test_srs, VidScheme, VidSchemeTrait};
+
+    type D = SqlDataSource<MockTypes, NoFetching>;
+
+    // This function should be generic, but the file system data source does not currently support
+    // storing VID common and later the corresponding share.
+    #[async_std::test]
+    pub async fn test_vid_monotonicity() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
+
+        // Generate some test VID data.
+        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+        let disperse = vid.disperse([]).unwrap();
+
+        // Insert test data with VID common but no share. We use height `FIRST_VID_VIEW` to avoid
+        // confusing the data source, which assumes VID cannot exist at lower heights.
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        leaf.leaf.block_header.block_number = FIRST_VID_VIEW as u64;
+        let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
+        ds.insert_leaf(leaf).await.unwrap();
+        ds.insert_vid(common.clone(), None).await.unwrap();
+        ds.commit().await.unwrap();
+
+        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
+        ds.vid_share(FIRST_VID_VIEW).await.unwrap_err();
+
+        // Re-insert the common data with the share.
+        ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
+            .await
+            .unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
+        assert_eq!(
+            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
+            disperse.shares[0]
+        );
+    }
+}
