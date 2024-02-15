@@ -22,8 +22,7 @@ contract LightClientCommonTest is Test {
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
 
     function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
-        lc = new LCTest();
-        lc.initializeForTests(_genesis, _blocksPerEpoch);
+        lc = new LCTest(_genesis, _blocksPerEpoch);
     }
 
     /// @dev initialized ledger like genesis and system params
@@ -124,9 +123,8 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     function initWithExpectRevert(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch)
         private
     {
-        lc = new LCTest();
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc.initializeForTests(_genesis, _blocksPerEpoch);
+        lc = new LCTest(_genesis, _blocksPerEpoch);
     }
 
     function test_RevertWhen_InvalidGenesis() external {

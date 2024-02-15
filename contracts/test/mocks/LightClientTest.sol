@@ -9,11 +9,7 @@ import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientTest is LC {
-    constructor() LC() { }
-
-    function initializeForTests(LC.LightClientState memory genesis, uint32 numBlockPerEpoch)
-        public
-    {
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
         _initializeState(genesis, numBlockPerEpoch);
     }
 

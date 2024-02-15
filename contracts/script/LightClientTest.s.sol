@@ -45,9 +45,7 @@ contract DeployLightClientTestScript is Script {
             stakeTableAmountComm,
             threshold
         );
-        LCTest lc = new LCTest();
-        lc.initializeForTests(genesis, blocksPerEpoch);
-
+        new LCTest(genesis, blocksPerEpoch);
         vm.stopBroadcast();
     }
 }

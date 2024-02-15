@@ -278,8 +278,7 @@ contract StakeTableInvariant_Tests is Test {
         });
         uint32 numBlocksPerEpoch = 4;
         uint64 churnRate = 10;
-        lightClientContract = new LightClientTest();
-        lightClientContract.initializeForTests(genesis, numBlocksPerEpoch);
+        lightClientContract = new LightClientTest(genesis, numBlocksPerEpoch);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
         handler =
             new StakeTableHandlerTest(stakeTable, exampleTokenCreator, token, lightClientContract);
