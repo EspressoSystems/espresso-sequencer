@@ -254,13 +254,9 @@ impl FeeInfo {
 
 impl Committable for FeeInfo {
     fn commit(&self) -> Commitment<Self> {
-        let mut amount_bytes = vec![];
-        self.account
-            .serialize_with_mode(&mut amount_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
-            .var_size_field("account", self.account.as_bytes())
-            .var_size_field("amount", &amount_bytes)
+            .fixed_size_field("account", &self.account.to_fixed_bytes())
+            .fixed_size_field("amount", &self.amount.to_fixed_bytes())
             .finalize()
     }
     fn tag() -> String {
@@ -274,6 +270,14 @@ impl Committable for FeeInfo {
     Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
 )]
 pub struct FeeAmount(U256);
+impl FeeAmount {
+    /// Return array containing underlying bytes of inner `U256` type
+    fn to_fixed_bytes(self) -> [u8; 32] {
+        let mut bytes = [0u8; core::mem::size_of::<U256>()];
+        self.0.to_little_endian(&mut bytes);
+        bytes
+    }
+}
 
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
@@ -300,11 +304,17 @@ impl CheckedSub for FeeAmount {
 )]
 pub struct FeeAccount(Address);
 impl FeeAccount {
+    /// Return inner `Address`
     pub fn address(&self) -> Address {
         self.0
     }
+    /// Return byte slice representation of inner `Address` type
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
+    }
+    /// Return array containing underlying bytes of inner `Address` type
+    pub fn to_fixed_bytes(self) -> [u8; 20] {
+        self.0.to_fixed_bytes()
     }
 }
 
@@ -326,9 +336,7 @@ impl CanonicalSerialize for FeeAmount {
         mut writer: W,
         _compress: Compress,
     ) -> Result<(), SerializationError> {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        Ok(writer.write_all(&bytes)?)
+        Ok(writer.write_all(&self.to_fixed_bytes())?)
     }
 
     fn serialized_size(&self, _compress: Compress) -> usize {
@@ -353,7 +361,7 @@ impl CanonicalSerialize for FeeAccount {
         mut writer: W,
         _compress: Compress,
     ) -> Result<(), SerializationError> {
-        Ok(writer.write_all(self.0.as_bytes())?)
+        Ok(writer.write_all(&self.0.to_fixed_bytes())?)
     }
 
     fn serialized_size(&self, _compress: Compress) -> usize {
@@ -375,7 +383,8 @@ impl CanonicalDeserialize for FeeAccount {
 
 impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
     fn to_traversal_path(&self, height: usize) -> Vec<usize> {
-        Address::to_fixed_bytes(self.0)
+        self.0
+            .to_fixed_bytes()
             .into_iter()
             .take(height)
             .map(|i| i as usize)
