@@ -1,0 +1,13 @@
+[package]
+name = "gen-vk-contract"
+description = "Executable for generating SNARK verification key contract"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+crs = { git = "https://github.com/alxiong/crs" }
+hotshot-contract-adapter = { path = "../adapter" }
+hotshot-stake-table = { workspace = true }
+hotshot-state-prover = { path = "../../../hotshot-state-prover" }
+jf-primitives = { workspace = true }

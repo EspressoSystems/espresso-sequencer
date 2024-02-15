@@ -11,6 +11,7 @@ contract DeployHotShotScript is Script {
         vm.startBroadcast(privateKey);
 
         //// Legacy HotShot contract deployment
+
         new HotShot();
 
         vm.stopBroadcast();

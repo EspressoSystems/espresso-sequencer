@@ -4,11 +4,8 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{
-    network, persistence,
-    state_signature::{LightClientState, StateSignature, StateSignatureRequestBody},
-    Node, SeqTypes,
-};
+use crate::{network, persistence, state::ValidatedState, Node, SeqTypes};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -17,6 +14,10 @@ use hotshot_query_service::{
     fetching::provider::{AnyProvider, QueryServiceProvider},
     status::StatusDataSource,
     QueryResult,
+};
+use hotshot_types::{
+    data::ViewNumber,
+    light_client::{LightClientState, StateSignature, StateSignatureRequestBody},
 };
 use tide_disco::Url;
 
@@ -97,6 +98,12 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 
     async fn sign_new_state(&self, state: &LightClientState) -> StateSignature;
+}
+
+#[trait_variant::make(StateDataSource: Send)]
+pub(crate) trait LocalStateDataSource {
+    async fn get_decided_state(&self) -> Arc<ValidatedState>;
+    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
 }
 
 #[cfg(test)]

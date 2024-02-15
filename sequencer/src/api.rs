@@ -1,16 +1,16 @@
 use self::data_source::StateSignatureDataSource;
 use crate::{
-    context::SequencerContext,
-    network,
-    state_signature::{self, LightClientState, StateSignatureRequestBody},
-    Node, SeqTypes,
+    context::SequencerContext, network, state::ValidatedState, state_signature, Node, SeqTypes,
 };
-use async_std::task::JoinHandle;
+use async_std::{sync::Arc, task::JoinHandle};
 use async_trait::async_trait;
-use data_source::SubmitDataSource;
+use data_source::{StateDataSource, SubmitDataSource};
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::light_client::StateSignature;
+use hotshot_types::{
+    data::ViewNumber,
+    light_client::{LightClientState, StateSignature, StateSignatureRequestBody},
+};
 
 pub mod data_source;
 pub mod endpoints;
@@ -40,6 +40,26 @@ impl<N: network::Type> SubmitDataSource<N> for SequencerContext<N> {
     }
 }
 
+impl<N: network::Type, D: Send + Sync> StateDataSource for AppState<N, D> {
+    async fn get_decided_state(&self) -> Arc<ValidatedState> {
+        self.as_ref().consensus().get_decided_state().await
+    }
+
+    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
+        self.as_ref().consensus().get_state(view).await
+    }
+}
+
+impl<N: network::Type> StateDataSource for SequencerContext<N> {
+    async fn get_decided_state(&self) -> Arc<ValidatedState> {
+        self.consensus().get_decided_state().await
+    }
+
+    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
+        self.consensus().get_state(view).await
+    }
+}
+
 #[async_trait]
 impl<N: network::Type, D: Sync> StateSignatureDataSource<N> for AppState<N, D> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
@@ -66,6 +86,8 @@ impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
 mod test_helpers {
     use super::*;
     use crate::{
+        api::endpoints::{AccountQueryData, BlocksFrontier},
+        state::BlockMerkleTree,
         testing::{
             init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
         },
@@ -74,7 +96,11 @@ mod test_helpers {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
-    use futures::FutureExt;
+    use ethers::prelude::Address;
+    use futures::{FutureExt, StreamExt};
+    use hotshot::types::{Event, EventType};
+    use hotshot_types::traits::node_implementation::ConsensusTime;
+    use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -215,7 +241,7 @@ mod test_helpers {
             handle.hotshot.start_consensus().await;
         }
 
-        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
+        let options = opt(Options::from(options::Http { port }).state(Default::default()));
         let SequencerNode { context, .. } = options
             .serve(|_| {
                 async move {
@@ -248,12 +274,162 @@ mod test_helpers {
             .await
             .is_ok());
     }
+
+    /// Test the state API with custom options.
+    ///
+    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
+    /// By default, the options are the minimal required to run this test (configuring a port and
+    /// enabling the state API). `opt` may add additional functionality (e.g. adding a query module
+    /// to test a different initialization path) but should not remove or modify the existing
+    /// functionality (e.g. removing the state module or changing the port).
+    pub async fn state_test_helper(opt: impl FnOnce(Options) -> Options) {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        // Get list of HotShot handles and take the first one.
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        let options = opt(Options::from(options::Http { port }).state(Default::default()));
+        let mut node = options
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
+            })
+            .await
+            .unwrap();
+        client.connect(None).await;
+
+        // Wait for a few blocks to be decided.
+        let mut events = node
+            .context
+            .consensus_mut()
+            .get_event_stream(Default::default())
+            .await
+            .0;
+        loop {
+            if let Event {
+                event: EventType::Decide { leaf_chain, .. },
+                ..
+            } = events.next().await.unwrap()
+            {
+                if leaf_chain.iter().any(|leaf| leaf.block_header.height > 2) {
+                    break;
+                }
+            }
+        }
+
+        // Stop consensus running on the node so we freeze the decided and undecided states.
+        node.context.consensus_mut().shut_down().await;
+
+        // Decided fee state: absent account.
+        let res = client
+            .get::<AccountQueryData>(&format!("state/account/{:x}", Address::default()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.balance, 0.into());
+        assert_eq!(
+            res.proof
+                .verify(
+                    &node
+                        .context
+                        .consensus()
+                        .get_decided_state()
+                        .await
+                        .fee_merkle_tree
+                        .commitment()
+                )
+                .unwrap(),
+            0.into()
+        );
+
+        // Undecided fee state: absent account.
+        let leaf = node.context.consensus().get_decided_leaf().await;
+        let view = leaf.view_number + 1;
+        let res = client
+            .get::<AccountQueryData>(&format!(
+                "state/catchup/{}/account/{:x}",
+                view.get_u64(),
+                Address::default()
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.balance, 0.into());
+        assert_eq!(
+            res.proof
+                .verify(
+                    &node
+                        .context
+                        .consensus()
+                        .get_state(view)
+                        .await
+                        .unwrap()
+                        .fee_merkle_tree
+                        .commitment()
+                )
+                .unwrap(),
+            0.into()
+        );
+
+        // Decided block state.
+        let res = client
+            .get::<BlocksFrontier>("state/blocks")
+            .send()
+            .await
+            .unwrap();
+        let root = &node
+            .context
+            .consensus()
+            .get_decided_state()
+            .await
+            .block_merkle_tree
+            .commitment();
+        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
+            .unwrap()
+            .unwrap();
+
+        // Undecided block state.
+        let res = client
+            .get::<BlocksFrontier>(&format!("state/catchup/{}/blocks", view.get_u64()))
+            .send()
+            .await
+            .unwrap();
+        let root = &node
+            .context
+            .consensus()
+            .get_state(view)
+            .await
+            .unwrap()
+            .block_merkle_tree
+            .commitment();
+        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
+            .unwrap()
+            .unwrap();
+    }
 }
 
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod generic_tests {
-    use super::{test_helpers::state_signature_test_helper, *};
+    use super::{
+        test_helpers::{state_signature_test_helper, state_test_helper},
+        *,
+    };
     use crate::{testing::init_hotshot_handles, Header};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -284,6 +460,12 @@ mod generic_tests {
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn state_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        state_test_helper(|opt| D::options(&storage, opt)).await
     }
 
     #[async_std::test]
@@ -481,7 +663,10 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use super::{test_helpers::state_signature_test_helper, *};
+    use super::{
+        test_helpers::{state_signature_test_helper, state_test_helper},
+        *,
+    };
     use crate::testing::init_hotshot_handles;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::FutureExt;
@@ -538,5 +723,10 @@ mod test {
     #[async_std::test]
     async fn state_signature_test_without_query_module() {
         state_signature_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn state_test_without_query_module() {
+        state_test_helper(|opt| opt).await
     }
 }
