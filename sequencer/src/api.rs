@@ -204,11 +204,7 @@ mod test_helpers {
             })
             .await
             .unwrap();
-        let mut events = context
-            .consensus_mut()
-            .get_event_stream(Default::default())
-            .await
-            .0;
+        let mut events = context.consensus_mut().get_event_stream();
 
         client.connect(None).await;
 

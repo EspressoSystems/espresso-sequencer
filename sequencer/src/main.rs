@@ -35,11 +35,8 @@ async fn main() -> anyhow::Result<()> {
     context.start_consensus().await;
 
     // Wait for events just to keep the process from exiting before consensus exits.
-    let mut events = context
-        .consensus_mut()
-        .get_event_stream(Default::default())
-        .await
-        .0;
+    let mut events = context.consensus_mut().get_event_stream();
+
     while let Some(event) = events.next().await {
         tracing::debug!(?event);
     }
