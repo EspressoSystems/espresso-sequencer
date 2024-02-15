@@ -1,11 +1,16 @@
-use crate::{Header, NodeState, Payload};
+use crate::{Header, L1BlockInfo, NodeState, Payload};
 use anyhow::{ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Add, From, Into, Sub};
-use ethers::{abi::Address, types::U256};
+use ethers::{
+    abi::Address,
+    core::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Signer, Wallet},
+    types::{self, RecoveryMessage, U256},
+};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
 use jf_primitives::merkle_tree::{
@@ -77,6 +82,20 @@ pub fn validate_proposal(
         )
     );
 
+    // fetch receipts from the l1
+    let receipts = fetch_fee_receipts(parent.l1_finalized, proposal.l1_finalized);
+    for FeeInfo { account, amount } in receipts {
+        // Get the balance in order to add amount, ignoring the proof.
+        match fee_merkle_tree.universal_lookup(account) {
+            LookupResult::Ok(balance, _) => fee_merkle_tree
+                .update(account, balance.add(amount))
+                .unwrap(),
+            // Handle `NotFound` and `NotInMemory` by initializing
+            // state.
+            _ => fee_merkle_tree.update(account, amount).unwrap(),
+        };
+    }
+
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.fee_merkle_tree_root == fee_merkle_tree_root,
@@ -90,12 +109,12 @@ pub fn validate_proposal(
 }
 
 /// Fetch receipts from the l1 and add them to local balance.
-fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header) {
-    let receipts = fetch_fee_receipts(parent);
-    for FeeReceipt { recipient, amount } in receipts {
+fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header, proposed: &Header) {
+    let receipts = fetch_fee_receipts(parent.l1_finalized, proposed.l1_finalized);
+    for FeeInfo { account, amount } in receipts {
         // Add `amount` to `balance`, if `balance` is `None` set it to `amount`
         #[allow(clippy::single_match)]
-        match fee_merkle_tree.update_with(recipient, |balance| {
+        match fee_merkle_tree.update_with(account, |balance| {
             Some(balance.cloned().unwrap_or_default().add(amount))
         }) {
             Ok(LookupResult::Ok(..)) => (),
@@ -120,7 +139,7 @@ fn validate_builder(
     anyhow::ensure!(
         builder_signature
             .verify(
-                AsRef::<[u8]>::as_ref(&proposed_header.commit()),
+                RecoveryMessage::Hash(types::H256(proposed_header.commit().into())),
                 fee_info.account.address()
             )
             .is_ok(),
@@ -177,10 +196,14 @@ impl HotShotState for ValidatedState {
         };
 
         // Update account balance from the l1
-        update_balance(&mut validated_state.fee_merkle_tree, parent_header);
+        update_balance(
+            &mut validated_state.fee_merkle_tree,
+            parent_header,
+            proposed_header,
+        );
 
         // Validate builder by verifying signature and charging account
-        if let Err(e) = validate_builder(&mut validated_state.fee_merkle_tree, parent_header) {
+        if let Err(e) = validate_builder(&mut validated_state.fee_merkle_tree, proposed_header) {
             tracing::warn!("Invalid Builder: {}", e);
             return Err(BlockError::InvalidBlockHeader);
         }
@@ -228,7 +251,6 @@ pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
 #[derive(
-    Default,
     Hash,
     Copy,
     Clone,
@@ -249,6 +271,21 @@ impl FeeInfo {
     pub fn new(account: FeeAccount) -> Self {
         let amount = FeeAmount::default(); // TODO grab from config (instance_state?)
         Self { account, amount }
+    }
+    pub fn account(&self) -> FeeAccount {
+        self.account
+    }
+    pub fn amount(&self) -> FeeAmount {
+        self.amount
+    }
+}
+
+impl Default for FeeInfo {
+    fn default() -> Self {
+        Self {
+            amount: FeeAmount::default(),
+            account: FeeAccount::test_wallet().address().into(),
+        }
     }
 }
 
@@ -315,6 +352,13 @@ impl FeeAccount {
     /// Return array containing underlying bytes of inner `Address` type
     pub fn to_fixed_bytes(self) -> [u8; 20] {
         self.0.to_fixed_bytes()
+    }
+    pub fn test_wallet() -> Wallet<SigningKey> {
+        let phrase = "test test test test test test test test test test test junk";
+        MnemonicBuilder::<English>::default()
+            .phrase::<&str>(phrase)
+            .build()
+            .unwrap()
     }
 }
 
@@ -392,15 +436,14 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
     }
 }
 
-#[derive(Default, Hash, Clone, CanonicalDeserialize)]
-pub struct FeeReceipt {
-    pub recipient: FeeAccount,
-    pub amount: FeeAmount,
-}
-/// Fetch fee receitps from l1. Currently a mock function to be
+/// Fetch all deposit receitps between `prev_l1_finalized` and
+/// `new_l1_finalized`. This is currently a mock function to be
 /// implemented in the future.
-pub fn fetch_fee_receipts(_parent: &Header) -> Vec<FeeReceipt> {
-    Vec::from([FeeReceipt::default()])
+pub fn fetch_fee_receipts(
+    _prev_l1_finalized: Option<L1BlockInfo>,
+    _new_l1_finalized: Option<L1BlockInfo>,
+) -> Vec<FeeInfo> {
+    Vec::from([FeeInfo::default()])
 }
 
 pub type FeeMerkleTree =

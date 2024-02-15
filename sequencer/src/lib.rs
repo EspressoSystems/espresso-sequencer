@@ -15,6 +15,7 @@ use ethers::{
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateKeyPair;
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -199,11 +200,7 @@ pub struct NodeState {
 
 impl Default for NodeState {
     fn default() -> Self {
-        let phrase = "test test test test test test test test test test test junk";
-        let wallet = MnemonicBuilder::<English>::default()
-            .phrase::<&str>(phrase)
-            .build()
-            .unwrap();
+        let wallet = FeeAccount::test_wallet();
 
         Self {
             genesis_state: ValidatedState::default(),
@@ -543,6 +540,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
+
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::StreamExt;
@@ -588,6 +586,7 @@ mod test {
         }
 
         let mut parent = Header::genesis(&NodeState::default()).0;
+
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {
@@ -597,9 +596,9 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for (i, leaf) in leaf_chain.iter().rev().enumerate() {
+            for leaf in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
-                if i == 0 {
+                if header.height == 0 {
                     parent = header;
                     continue;
                 }
