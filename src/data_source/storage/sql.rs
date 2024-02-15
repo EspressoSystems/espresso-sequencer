@@ -897,8 +897,9 @@ where
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         // A leaf can only be missing if there is no row for it in the database (all its columns are
         // non-nullable). A block can be missing if its corresponding leaf is missing or if the
-        // block's `data` field is `NULL`. Thus we need to get the number of fully missing leaf rows
-        // and the number of present but null-payload block rows.
+        // block's `data` field is `NULL`. We can find the number of missing leaves and blocks by
+        // getting the number of fully missing leaf rows and the number of present but null-payload
+        // block rows.
         //
         // Note that it should not be possible for a block's row to be missing (as opposed to
         // present but having a `NULL` payload) if the corresponding leaf is present. The schema
@@ -913,18 +914,18 @@ where
         // height of the highest leaf we do have). We can also get the number of null payloads
         // directly using an `IS NULL` filter.
         //
-        // We will thus select these three quantities, using a single SQL statement to minimize
-        // latency to the database. We accomplish this using a UNION of a sub-select from `leaf` and
-        // one from `payload`. From each of these tables, we are selecting disjoint sets of numeric
-        // quanitities. A trick to combine these into a single query is to select NULL
-        // for each column we are _not_ selecting from each table, and then combine the unioned
-        // table into a single row using `sum` (where the NULL placeholders are ignored).
+        // For VID, common data can only be missing if the entire row is missing. Shares can be
+        // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
+        // need to select the total number of VID rows and the number of present VID rows with a
+        // NULL share.
         let row = self
             .query_one_static(
-                "SELECT sum(h)::bigint AS max_height, sum(l)::bigint AS total_leaves, sum(p)::bigint AS null_payloads FROM (
-                    SELECT max(leaf.height) AS h, count(*) AS l, NULL     AS p FROM leaf UNION
-                    SELECT NULL             AS h, NULL     AS l, count(*) AS p FROM payload WHERE payload.data IS NULL
-                )"
+                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid FROM
+                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
+                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
+                    (SELECT count(*) AS total_vid FROM vid),
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL)
+                ",
             )
             .await?;
         let block_height = match row.get::<_, Option<i64>>("max_height") {
@@ -940,13 +941,19 @@ where
         };
         let total_leaves = row.get::<_, i64>("total_leaves") as usize;
         let null_payloads = row.get::<_, i64>("null_payloads") as usize;
+        let total_vid = row.get::<_, i64>("total_vid") as usize;
+        let null_vid = row.get::<_, i64>("null_vid") as usize;
 
         let missing_leaves = block_height.saturating_sub(total_leaves);
         let missing_blocks = missing_leaves + null_payloads;
+        let missing_vid_common = block_height.saturating_sub(total_vid);
+        let missing_vid_shares = missing_vid_common + null_vid;
 
         Ok(SyncStatus {
             missing_leaves,
             missing_blocks,
+            missing_vid_common,
+            missing_vid_shares,
         })
     }
 }

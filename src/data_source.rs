@@ -667,6 +667,9 @@ pub mod node_tests {
         let storage = D::create(0).await;
         let mut ds = D::connect(&storage).await;
 
+        // Set up a mock VID scheme to use for generating test data.
+        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
         let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
@@ -679,24 +682,32 @@ pub mod node_tests {
             block.header.block_number += 1;
             blocks.push(block);
         }
+        // Generate mock VID data. We reuse the same (empty) payload for each block, but with
+        // different metadata.
+        let disperse = vid.disperse([]).unwrap();
+        let vid = leaves
+            .iter()
+            .map(|leaf| {
+                (
+                    VidCommonQueryData::new(leaf.header().clone(), disperse.common.clone()),
+                    disperse.shares[0].clone(),
+                )
+            })
+            .collect::<Vec<_>>();
 
         // At first, the node is fully synced.
-        assert_eq!(
-            ds.sync_status().await.unwrap(),
-            SyncStatus {
-                missing_blocks: 0,
-                missing_leaves: 0,
-            }
-        );
+        assert!(ds.sync_status().await.unwrap().is_fully_synced());
 
-        // Insert a leaf without the corresponding block, make sure we detect that the block is
-        // missing.
+        // Insert a leaf without the corresponding block or VID info, make sure we detect that the
+        // block and VID info are missing.
         ds.insert_leaf(leaves[0].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 1,
+                missing_vid_common: 1,
+                missing_vid_shares: 1,
                 missing_leaves: 0,
             }
         );
@@ -709,36 +720,65 @@ pub mod node_tests {
             ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
+                missing_vid_common: 3,
+                missing_vid_shares: 3,
+                missing_leaves: 1,
+            }
+        );
+
+        // Insert VID common without a corresponding share.
+        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 3,
+                missing_vid_common: 2,
+                missing_vid_shares: 3,
                 missing_leaves: 1,
             }
         );
 
         // Rectify the missing data.
         ds.insert_block(blocks[0].clone()).await.unwrap();
+        ds.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
+            .await
+            .unwrap();
         ds.insert_leaf(leaves[1].clone()).await.unwrap();
         ds.insert_block(blocks[1].clone()).await.unwrap();
+        ds.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
+            .await
+            .unwrap();
         ds.insert_block(blocks[2].clone()).await.unwrap();
+        ds.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
+            .await
+            .unwrap();
         ds.commit().await.unwrap();
 
         // Some data sources (e.g. file system) don't support out-of-order insertion of missing
-        // data. These would have just ignored the insertion of `leaves[1]`. Detect if this is the
-        // case; then we allow 1 missing leaf remaining.
-        let expected_missing_leaves = if ds.get_leaf(1).await.try_resolve().is_err() {
+        // data. These would have just ignored the insertion of `vid[0]` (the share) and
+        // `leaves[1]`. Detect if this is the case; then we allow 1 missing leaf and 1 missing VID
+        // share.
+        let expected_missing = if ds.get_leaf(1).await.try_resolve().is_err() {
             tracing::warn!(
-                "data source does not support out-of-order filling, allowing one missing leaf"
+                "data source does not support out-of-order filling, allowing one missing leaf and VID share"
             );
             1
         } else {
             0
         };
+        let expected_sync_status = SyncStatus {
+            missing_blocks: 0,
+            missing_leaves: expected_missing,
+            missing_vid_common: 0,
+            missing_vid_shares: expected_missing,
+        };
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
 
-        assert_eq!(
-            ds.sync_status().await.unwrap(),
-            SyncStatus {
-                missing_blocks: 0,
-                missing_leaves: expected_missing_leaves
-            }
-        );
+        // If we re-insert one of the VID entries without a share, it should not overwrite the share
+        // that we already have; that is, `insert_vid` should be monotonic.
+        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
     }
 
     #[async_std::test]

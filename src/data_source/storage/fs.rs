@@ -551,9 +551,22 @@ where
 
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         let height = self.block_height().await?;
+
+        // The number of missing VID common is just the number of completely missing VID entries,
+        // since every entry we have is guaranteed to have the common data.
+        let missing_vid = self.vid_storage.missing(height);
+        // Missing shares includes the completely missing VID entries, plus any entry which is _not_
+        // messing but which has a null share.
+        let null_vid_shares: usize = self
+            .vid_storage
+            .iter()
+            .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
+            .sum();
         Ok(SyncStatus {
             missing_blocks: self.block_storage.missing(height),
             missing_leaves: self.leaf_storage.missing(height),
+            missing_vid_common: missing_vid,
+            missing_vid_shares: missing_vid + null_vid_shares,
         })
     }
 }
