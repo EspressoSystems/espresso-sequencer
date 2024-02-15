@@ -309,6 +309,9 @@ pub async fn init_node(
                 .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
 
+            config.config.my_own_validator_config.private_key = private_staking_key.clone();
+            config.config.my_own_validator_config.public_key = public_staking_key;
+
             tracing::info!("loaded config, we are node {}", config.node_index);
             persistence.save_config(&config).await?;
             (config, true)
