@@ -254,11 +254,13 @@ impl FeeInfo {
 
 impl Committable for FeeInfo {
     fn commit(&self) -> Commitment<Self> {
-        let mut comm_bytes = vec![];
-        self.serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
+        let mut amount_bytes = vec![];
+        self.account
+            .serialize_with_mode(&mut amount_bytes, ark_serialize::Compress::Yes)
             .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
-            .var_size_field("fee_info", &comm_bytes)
+            .var_size_field("account", self.account.as_bytes())
+            .var_size_field("amount", &amount_bytes)
             .finalize()
     }
     fn tag() -> String {
@@ -300,6 +302,9 @@ pub struct FeeAccount(Address);
 impl FeeAccount {
     pub fn address(&self) -> Address {
         self.0
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
     }
 }
 
