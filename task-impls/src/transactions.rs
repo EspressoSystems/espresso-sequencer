@@ -14,7 +14,6 @@ use commit::{Commitment, Committable};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
-    data::Leaf,
     event::{Event, EventType},
     traits::{
         block_contents::BlockHeader,
@@ -196,39 +195,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     debug!("Not next leader for view {:?}", self.cur_view);
                     return None;
                 }
-
-                // ED Copy of parent_leaf() function from sequencing leader
-
-                let consensus = self.consensus.read().await;
-                let parent_view_number = &consensus.high_qc.view_number;
-
-                let Some(parent_view) = consensus.validated_state_map.get(parent_view_number)
-                else {
-                    error!(
-                        "Couldn't find high QC parent in state map. Parent view {:?}",
-                        parent_view_number
-                    );
-                    return None;
-                };
-                let Some(leaf) = parent_view.get_leaf_commitment() else {
-                    error!(
-                        ?parent_view_number,
-                        ?parent_view,
-                        "Parent of high QC points to a view without a proposal"
-                    );
-                    return None;
-                };
-                let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
-                    error!("Failed to find high QC parent.");
-                    return None;
-                };
-                let parent_leaf = leaf.clone();
-
-                drop(consensus);
-
                 // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
-                let txns = self.wait_for_transactions(parent_leaf).await?;
+                let txns = self.wait_for_transactions().await?;
                 let (payload, metadata) =
                     match <TYPES::BlockPayload as BlockPayload>::from_transactions(txns) {
                         Ok((payload, metadata)) => (payload, metadata),
@@ -266,7 +235,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
-    async fn wait_for_transactions(&self, _: Leaf<TYPES>) -> Option<Vec<TYPES::Transaction>> {
+    async fn wait_for_transactions(&self) -> Option<Vec<TYPES::Transaction>> {
         let task_start_time = Instant::now();
 
         // TODO (Keyao) Investigate the use of transaction hash

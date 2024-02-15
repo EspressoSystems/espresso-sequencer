@@ -159,9 +159,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                 block_size: maybe_block_size,
             } => {
                 // Skip the genesis leaf.
-                if leaf_chain.len() == 1
-                    && leaf_chain[0].0.get_view_number() == TYPES::Time::genesis()
-                {
+                if leaf_chain.last().unwrap().0.get_view_number() == TYPES::Time::genesis() {
                     return None;
                 }
                 let paired_up = (leaf_chain.to_vec(), (*qc).clone());
@@ -233,6 +231,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                     return None;
                 }
                 ViewStatus::Err(e) => {
+                    task.send_event(GlobalTestEvent::ShutDown).await;
                     return Some(HotShotTaskCompleted::Error(Box::new(e)));
                 }
                 ViewStatus::InProgress => {
