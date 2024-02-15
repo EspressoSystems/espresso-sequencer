@@ -224,7 +224,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~1F_cwBMF2HLjz71KagS4CZTlUhOdLwu9FHnK1Ni4uwAB",
+            "BLOCK~WFEGaS0Y4bxWAj6K6TZtjrfoHKGUNpJtXVH9skBg6Js_",
             |header| header.commit(),
         );
     }
