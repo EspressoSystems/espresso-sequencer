@@ -47,11 +47,11 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
+//! let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
 //!     // Other fields omitted
-//! ).await.map_err(Error::internal)?;
+//! ).await.map_err(Error::internal)?.0;
 //!
 //! // Create API modules.
 //! let availability_api = availability::define_api(&Default::default())

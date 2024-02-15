@@ -41,11 +41,11 @@ use async_trait::async_trait;
 /// # use hotshot_types::consensus::ConsensusMetricsValue;
 /// # async fn doc() -> Result<(), hotshot_query_service::Error> {
 /// let data_source = MetricsDataSource::default();
-/// let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
+/// let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
 /// #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 ///     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
 ///     // Other fields omitted
-/// ).await.map_err(Error::internal)?;
+/// ).await.map_err(Error::internal)?.0;
 /// # Ok(())
 /// # }
 /// ```
