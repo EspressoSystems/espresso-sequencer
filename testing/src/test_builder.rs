@@ -171,7 +171,7 @@ impl TestMetadata {
 impl Default for TestMetadata {
     /// by default, just a single round
     fn default() -> Self {
-        let num_nodes = 5;
+        let num_nodes = 6;
         Self {
             timing_data: TimingData::default(),
             min_transactions: 0,

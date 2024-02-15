@@ -21,7 +21,7 @@ use tokio::{
     sync::RwLock,
     task::{spawn, JoinHandle},
 };
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{
     dependency::Dependency,
@@ -239,7 +239,7 @@ impl<
                         }
                     }
                     Err(e) => {
-                        error!("Failed to get event from task. Error: {:?}", e);
+                        warn!("Failed to get event from task. Error: {:?}", e);
                     }
                     Ok((Err(e), _, _)) => {
                         error!("A task channel returned an Error: {:?}", e);

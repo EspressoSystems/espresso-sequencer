@@ -237,7 +237,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::UpgradeProposalRecv(_, _)
                 | HotShotEvent::UpgradeVoteRecv(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewChange(_)
         )
     }

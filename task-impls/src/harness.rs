@@ -119,7 +119,7 @@ pub fn handle_event<TYPES: NodeType>(
     }
 
     if state.expected_output.is_empty() {
-        tracing::error!("test harness task completed");
+        tracing::info!("test harness task completed");
         return Some(HotShotTaskCompleted);
     }
 

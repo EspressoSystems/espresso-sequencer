@@ -193,6 +193,10 @@ async fn test_memory_network_partially_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata {
+        overall_safety_properties: OverallSafetyPropertiesDescription {
+            num_failed_views: 2,
+            ..Default::default()
+        },
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
@@ -237,7 +241,7 @@ async fn libp2p_network_partially_sync() {
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata {
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            check_leaf: true,
+            num_failed_views: 2,
             ..Default::default()
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(

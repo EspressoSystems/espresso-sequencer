@@ -37,7 +37,6 @@ cross_tests!(
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
         metadata.num_bootstrap_nodes = 19;
-        metadata.start_nodes = 19;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -66,7 +65,6 @@ cross_tests!(
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
         metadata.num_bootstrap_nodes = 17;
-        metadata.start_nodes = 17;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -111,7 +109,6 @@ cross_tests!(
         // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 22;
         metadata.num_bootstrap_nodes = 14;
-        metadata.start_nodes = 14;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -163,7 +160,7 @@ cross_tests!(
         metadata.num_bootstrap_nodes = 10;
         metadata.total_nodes = 12;
         metadata.da_committee_size = 12;
-        metadata.start_nodes = 10;
+        metadata.start_nodes = 12;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
