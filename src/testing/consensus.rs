@@ -10,9 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{
-    MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction, MockTypes,
-};
+use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
 use crate::{
     availability::AvailabilityDataSource,
     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
@@ -124,8 +122,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         ));
 
                         let networks = Networks {
-                            quorum_network: MockQuorumNetwork::new(network.clone()),
-                            da_network: MockDANetwork::new(network),
+                            quorum_network: network.clone(),
+                            da_network: network,
                             _pd: std::marker::PhantomData,
                         };
                         let membership = MockMembership::create_election(

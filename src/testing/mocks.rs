@@ -13,7 +13,7 @@
 use crate::availability::QueryablePayload;
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-    implementations::{MemoryCommChannel, MemoryStorage},
+    implementations::{MemoryNetwork, MemoryStorage},
     NodeImplementation,
 };
 use hotshot_example_types::{
@@ -22,6 +22,7 @@ use hotshot_example_types::{
 };
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
+    message::Message,
     signature_key::BLSPubKey,
     traits::node_implementation::NodeType,
 };
@@ -78,8 +79,7 @@ impl NodeType for MockTypes {
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
-pub type MockQuorumNetwork = MemoryCommChannel<MockTypes>;
-pub type MockDANetwork = MemoryCommChannel<MockTypes>;
+pub type MockNetwork = MemoryNetwork<Message<MockTypes>, BLSPubKey>;
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -88,6 +88,6 @@ pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes>;
-    type QuorumNetwork = MockQuorumNetwork;
-    type CommitteeNetwork = MockDANetwork;
+    type QuorumNetwork = MockNetwork;
+    type CommitteeNetwork = MockNetwork;
 }

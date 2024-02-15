@@ -21,9 +21,7 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::implementations::{
-        MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
-    },
+    traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -188,8 +186,8 @@ async fn init_consensus(
                     None,
                 ));
                 let networks = Networks {
-                    quorum_network: MemoryCommChannel::new(network.clone()),
-                    da_network: MemoryCommChannel::new(network),
+                    quorum_network: network.clone(),
+                    da_network: network,
                     _pd: Default::default(),
                 };
 
