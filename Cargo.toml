@@ -7,7 +7,15 @@ edition = "2021"
 
 resolver = "2"
 
-members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
+members = [
+    "contract-bindings",
+    "contracts/rust/adapter",
+    "contracts/rust/diff-test",
+    "contracts/rust/gen-vk-contract",
+    "hotshot-state-prover",
+    "sequencer",
+    "utils"
+]
 
 [workspace.dependencies]
 anyhow = "^1.0"
@@ -27,15 +35,16 @@ clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "3f4f488a" }
+futures = "0.3"
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "b7eb7e5" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
@@ -58,4 +67,5 @@ itertools = "0.12"
 rand_chacha = "0.3"
 rand_distr = "0.4"
 serde = { version = "1.0.195", features = ["derive"] }
+toml = "0.8"
 url = "2.3"

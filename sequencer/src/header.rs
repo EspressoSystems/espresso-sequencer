@@ -389,7 +389,7 @@ mod test_headers {
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
             let block_merkle_tree =
-                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
             let block_merkle_tree_root = block_merkle_tree.commitment();
 
             let FeeReceipt { recipient, amount } = FeeReceipt::default();
@@ -416,7 +416,7 @@ mod test_headers {
 
             assert_eq!(
                 block_merkle_tree,
-                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap()
+                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap()
             );
         }
     }
