@@ -419,7 +419,7 @@ pub mod persistence_tests {
         Leaf,
     };
     use commit::Committable;
-    use hotshot_testing::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::simple_certificate::QuorumCertificate;
 
     #[async_std::test]
@@ -527,7 +527,7 @@ pub mod node_tests {
         },
     };
     use futures::stream::StreamExt;
-    use hotshot_testing::{
+    use hotshot_example_types::{
         block_types::{TestBlockHeader, TestBlockPayload},
         state_types::TestInstanceState,
     };

@@ -268,7 +268,7 @@ impl Config {
 ///
 /// async fn init_server(
 ///     config: Config,
-///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
+///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
@@ -283,7 +283,7 @@ impl Config {
 ///     // Register API modules.
 ///
 ///     spawn(async move {
-///         let mut events = hotshot.get_event_stream(Default::default()).await.0;
+///         let mut events = hotshot.get_event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
 ///             UpdateDataSource::<AppTypes>::update(&mut state.hotshot_qs, &event)

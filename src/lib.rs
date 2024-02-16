@@ -47,11 +47,11 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
+//! let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
 //!     // Other fields omitted
-//! ).await.map_err(Error::internal)?;
+//! ).await.map_err(Error::internal)?.0;
 //!
 //! // Create API modules.
 //! let availability_api = availability::define_api(&Default::default())
@@ -76,7 +76,7 @@
 //! spawn(app.serve("0.0.0.0:8080"));
 //!
 //! // Update query data using HotShot events.
-//! let mut events = hotshot.get_event_stream(Default::default()).await.0;
+//! let mut events = hotshot.get_event_stream();
 //! while let Some(event) = events.next().await {
 //!     // Re-lock the mutex each time we get a new event.
 //!     let mut data_source = data_source.write().await;
@@ -465,7 +465,7 @@ pub struct Options {
 pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>, D>(
     options: Options,
     data_source: D,
-    mut hotshot: SystemContextHandle<Types, I>,
+    hotshot: SystemContextHandle<Types, I>,
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload,
@@ -499,7 +499,7 @@ where
     spawn(async move { app.serve(&url).await });
 
     // Subscribe to events before starting consensus, so we don't miss any events.
-    let mut events = hotshot.get_event_stream(Default::default()).await.0;
+    let mut events = hotshot.get_event_stream();
     hotshot.hotshot.start_consensus().await;
 
     // Update query data using HotShot events.
@@ -537,7 +537,7 @@ mod test {
 
     use futures::FutureExt;
     use hotshot::types::SignatureKey as _;
-    use hotshot_testing::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::signature_key::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;

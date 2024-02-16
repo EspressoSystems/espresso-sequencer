@@ -107,7 +107,7 @@ use std::path::Path;
 ///
 /// async fn init_server(
 ///     storage_path: &Path,
-///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
+///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;
@@ -126,7 +126,7 @@ use std::path::Path;
 ///     // Register API modules.
 ///
 ///     spawn(async move {
-///         let mut events = hotshot.get_event_stream(Default::default()).await.0;
+///         let mut events = hotshot.get_event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
 ///             state.hotshot_qs.update(&event).await.unwrap();

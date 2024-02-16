@@ -10,9 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{
-    MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction, MockTypes,
-};
+use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
 use crate::{
     availability::AvailabilityDataSource,
     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
@@ -32,7 +30,7 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_testing::state_types::TestInstanceState;
+use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -124,8 +122,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         ));
 
                         let networks = Networks {
-                            quorum_network: MockQuorumNetwork::new(network.clone()),
-                            da_network: MockDANetwork::new(network),
+                            quorum_network: network.clone(),
+                            da_network: network,
                             _pd: std::marker::PhantomData,
                         };
                         let membership = MockMembership::create_election(
@@ -140,7 +138,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             view_sync_membership: membership.clone(),
                         };
 
-                        let (hotshot, _) = SystemContext::init(
+                        let hotshot = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
@@ -152,7 +150,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                         )
                         .await
-                        .unwrap();
+                        .unwrap()
+                        .0;
                         MockNode {
                             hotshot,
                             data_source: Arc::new(RwLock::new(data_source)),
@@ -214,7 +213,7 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         // Spawn the update tasks.
         for node in &mut self.nodes {
             let ds = node.data_source.clone();
-            let mut events = node.hotshot.get_event_stream(Default::default()).await.0;
+            let mut events = node.hotshot.get_event_stream();
             spawn(async move {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);

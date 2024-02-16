@@ -67,13 +67,13 @@ where
             let qcs = once((**qc).clone())
                 // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
                 // `leaf.justify_qc`.
-                .chain(leaf_chain.iter().map(|leaf| leaf.get_justify_qc()))
+                .chain(leaf_chain.iter().map(|(leaf, _)| leaf.get_justify_qc()))
                 // Put the QCs in chronological order.
                 .rev()
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
-            for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
+            for (qc, (leaf, _)) in qcs.zip(leaf_chain.iter().rev()) {
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
