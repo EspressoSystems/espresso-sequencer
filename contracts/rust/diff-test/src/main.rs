@@ -90,6 +90,8 @@ enum Action {
     MockSkipBlocks,
     /// Get light client states when missing ending block of an epoch
     MockMissEndingBlock,
+    /// Get a malicious state update with a wrong stake table
+    MockWrongStakeTable,
 }
 
 #[allow(clippy::type_complexity)]
@@ -571,6 +573,23 @@ fn main() {
 
             let res = (new_states, proofs);
             println!("{}", res.encode_hex());
+        }
+        Action::MockWrongStakeTable => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numBlockPerEpoch");
+            }
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
+            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
+
+            ledger.elapse_with_block();
+            let (pi, proof) = ledger.gen_state_proof_with_fake_stakers();
+
+            let new_state: ParsedLightClientState = pi.into();
+            let proof: ParsedPlonkProof = proof.into();
+
+            println!("{}", (new_state, proof).encode_hex());
         }
         Action::GenBLSHashes => {
             if cli.args.len() != 1 {

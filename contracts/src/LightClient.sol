@@ -75,6 +75,8 @@ contract LightClient {
     error InvalidArgs();
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
+    /// @notice Wrong stake table used, should match `finalizedState`
+    error WrongStakeTableUsed();
 
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
@@ -110,6 +112,9 @@ contract LightClient {
     /// periodically, especially an update for the last block for every epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
+    ///
+    /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
+    /// the entire `newState` needs to be signed by stakers in `finalizedState`
     function newFinalizedState(
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
@@ -161,9 +166,9 @@ contract LightClient {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(finalizedState.stakeTableBlsKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(finalizedState.stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(finalizedState.stakeTableAmountComm);
         return publicInput;
     }
 

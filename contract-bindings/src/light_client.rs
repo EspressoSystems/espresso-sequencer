@@ -480,6 +480,13 @@ pub mod light_client {
                         inputs: ::std::vec![],
                     },],
                 ),
+                (
+                    ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed",),
+                        inputs: ::std::vec![],
+                    },],
+                ),
             ]),
             receive: false,
             fallback: false,
@@ -720,6 +727,21 @@ pub mod light_client {
     )]
     #[etherror(name = "OutdatedState", abi = "OutdatedState()")]
     pub struct OutdatedState;
+    ///Custom Error type `WrongStakeTableUsed` with signature `WrongStakeTableUsed()` and selector `0x51618089`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(name = "WrongStakeTableUsed", abi = "WrongStakeTableUsed()")]
+    pub struct WrongStakeTableUsed;
     ///Container type for all of the contract's custom errors
     #[derive(
         Clone,
@@ -736,6 +758,7 @@ pub mod light_client {
         InvalidProof(InvalidProof),
         MissingLastBlockForCurrentEpoch(MissingLastBlockForCurrentEpoch),
         OutdatedState(OutdatedState),
+        WrongStakeTableUsed(WrongStakeTableUsed),
         /// The standard solidity revert string, with selector
         /// Error(string) -- 0x08c379a0
         RevertString(::std::string::String),
@@ -764,6 +787,11 @@ pub mod light_client {
             if let Ok(decoded) = <OutdatedState as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::OutdatedState(decoded));
             }
+            if let Ok(decoded) =
+                <WrongStakeTableUsed as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::WrongStakeTableUsed(decoded));
+            }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
@@ -776,6 +804,9 @@ pub mod light_client {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::OutdatedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::WrongStakeTableUsed(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
@@ -796,6 +827,10 @@ pub mod light_client {
                     == <OutdatedState as ::ethers::contract::EthError>::selector() => {
                     true
                 }
+                _ if selector
+                    == <WrongStakeTableUsed as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
                 _ => false,
             }
         }
@@ -809,6 +844,7 @@ pub mod light_client {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::OutdatedState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::WrongStakeTableUsed(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
         }
@@ -836,6 +872,11 @@ pub mod light_client {
     impl ::core::convert::From<OutdatedState> for LightClientErrors {
         fn from(value: OutdatedState) -> Self {
             Self::OutdatedState(value)
+        }
+    }
+    impl ::core::convert::From<WrongStakeTableUsed> for LightClientErrors {
+        fn from(value: WrongStakeTableUsed) -> Self {
+            Self::WrongStakeTableUsed(value)
         }
     }
     #[derive(

@@ -275,6 +275,64 @@ impl MockLedger {
         (pi, proof)
     }
 
+    /// a malcious attack, generating a fake stake table full of adversarial stakers
+    /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
+    /// in an attempt to hijack the correct stake table.
+    pub fn gen_state_proof_with_fake_stakers(&mut self) -> (GenericPublicInput<F>, Proof) {
+        let mut new_state = self.state.clone();
+
+        let (adv_qc_keys, adv_state_keys) =
+            key_pairs_for_testing(STAKE_TABLE_CAPACITY, &mut self.rng);
+        let adv_st = stake_table_for_testing(&adv_qc_keys, &adv_state_keys);
+
+        // replace new state with adversarial stake table commitment
+        new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
+        let state_msg: [F; 7] = new_state.clone().into();
+
+        // every fake stakers sign on the adverarial new state
+        let bit_vec = vec![true; STAKE_TABLE_CAPACITY];
+        let sigs = adv_state_keys
+            .iter()
+            .map(|(sk, _)| {
+                SchnorrSignatureScheme::<EdwardsConfig>::sign(&(), sk, state_msg, &mut self.rng)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        let srs = {
+            // load SRS from Aztec's ceremony
+            let srs = crs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+                .expect("Aztec SRS fail to load");
+            // convert to Jellyfish type
+            // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
+            UnivariateUniversalParams {
+                powers_of_g: srs.powers_of_g,
+                h: srs.h,
+                beta_h: srs.beta_h,
+                powers_of_h: vec![srs.h, srs.beta_h],
+            }
+        };
+        let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+            .expect("Fail to preprocess state prover circuit");
+        let stake_table_entries = adv_st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .collect::<Vec<_>>();
+        let (proof, pi) =
+            hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+                &mut self.rng,
+                &pk,
+                &stake_table_entries,
+                &bit_vec,
+                &sigs,
+                &new_state,
+                &self.threshold, // it's fine to use the old threshold
+            )
+            .expect("Fail to generate state proof");
+
+        (pi, proof)
+    }
     /// Returns the `LightClientState` for solidity
     pub fn get_state(&self) -> ParsedLightClientState {
         // The ugly conversion due to slight difference of `LightClientState` in solidity containing `threshold`
