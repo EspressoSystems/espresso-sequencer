@@ -32,8 +32,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
 
-    /// @notice A simple way to track contract versions
-    uint32 public immutable VERSION = 1;
+    /// @notice This number represent the semantic version (semver) of the contract.
+    /// @dev They must be constants and cannot be set using a constructor.
+    uint256 public immutable MAJOR = 1;
+    uint256 public immutable MINOR = 0;
+    uint256 public immutable PATCH = 0;
 
     // === Storage ===
     //

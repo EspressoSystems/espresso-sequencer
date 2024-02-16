@@ -19,6 +19,54 @@ pub mod light_client {
             }),
             functions: ::core::convert::From::from([
                 (
+                    ::std::borrow::ToOwned::to_owned("MAJOR"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("MAJOR"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("MINOR"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("MINOR"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("PATCH"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("PATCH"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION",),
@@ -28,22 +76,6 @@ pub mod light_client {
                             kind: ::ethers::core::abi::ethabi::ParamType::String,
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("string"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("VERSION"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("VERSION"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint32"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -807,18 +839,36 @@ pub mod light_client {
                 client,
             ))
         }
+        ///Calls the contract's `MAJOR` (0x1c41cc5f) function
+        pub fn major(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([28, 65, 204, 95], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `MINOR` (0x4bc96225) function
+        pub fn minor(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([75, 201, 98, 37], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `PATCH` (0x057729e4) function
+        pub fn patch(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([5, 119, 41, 228], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `UPGRADE_INTERFACE_VERSION` (0xad3cb1cc) function
         pub fn upgrade_interface_version(
             &self,
         ) -> ::ethers::contract::builders::ContractCall<M, ::std::string::String> {
             self.0
                 .method_hash([173, 60, 177, 204], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `VERSION` (0xffa1ad74) function
-        pub fn version(&self) -> ::ethers::contract::builders::ContractCall<M, u32> {
-            self.0
-                .method_hash([255, 161, 173, 116], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `blocksPerEpoch` (0xf0682054) function
@@ -1752,6 +1802,51 @@ pub mod light_client {
             Self::UpgradedFilter(value)
         }
     }
+    ///Container type for all input parameters for the `MAJOR` function with signature `MAJOR()` and selector `0x1c41cc5f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "MAJOR", abi = "MAJOR()")]
+    pub struct MajorCall;
+    ///Container type for all input parameters for the `MINOR` function with signature `MINOR()` and selector `0x4bc96225`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "MINOR", abi = "MINOR()")]
+    pub struct MinorCall;
+    ///Container type for all input parameters for the `PATCH` function with signature `PATCH()` and selector `0x057729e4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "PATCH", abi = "PATCH()")]
+    pub struct PatchCall;
     ///Container type for all input parameters for the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -1770,21 +1865,6 @@ pub mod light_client {
         abi = "UPGRADE_INTERFACE_VERSION()"
     )]
     pub struct UpgradeInterfaceVersionCall;
-    ///Container type for all input parameters for the `VERSION` function with signature `VERSION()` and selector `0xffa1ad74`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "VERSION", abi = "VERSION()")]
-    pub struct VersionCall;
     ///Container type for all input parameters for the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,
@@ -2051,8 +2131,10 @@ pub mod light_client {
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientCalls {
+        Major(MajorCall),
+        Minor(MinorCall),
+        Patch(PatchCall),
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
-        Version(VersionCall),
         BlocksPerEpoch(BlocksPerEpochCall),
         ComputeStakeTableComm(ComputeStakeTableCommCall),
         CurrentEpoch(CurrentEpochCall),
@@ -2075,13 +2157,19 @@ pub mod light_client {
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
+            if let Ok(decoded) = <MajorCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::Major(decoded));
+            }
+            if let Ok(decoded) = <MinorCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::Minor(decoded));
+            }
+            if let Ok(decoded) = <PatchCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::Patch(decoded));
+            }
             if let Ok(decoded) =
                 <UpgradeInterfaceVersionCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeInterfaceVersion(decoded));
-            }
-            if let Ok(decoded) = <VersionCall as ::ethers::core::abi::AbiDecode>::decode(data) {
-                return Ok(Self::Version(decoded));
             }
             if let Ok(decoded) =
                 <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2162,10 +2250,12 @@ pub mod light_client {
     impl ::ethers::core::abi::AbiEncode for LightClientCalls {
         fn encode(self) -> Vec<u8> {
             match self {
+                Self::Major(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::Minor(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::Patch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeInterfaceVersion(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::Version(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::ComputeStakeTableComm(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -2194,8 +2284,10 @@ pub mod light_client {
     impl ::core::fmt::Display for LightClientCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
+                Self::Major(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Minor(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Patch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
-                Self::Version(element) => ::core::fmt::Display::fmt(element, f),
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
@@ -2215,14 +2307,24 @@ pub mod light_client {
             }
         }
     }
+    impl ::core::convert::From<MajorCall> for LightClientCalls {
+        fn from(value: MajorCall) -> Self {
+            Self::Major(value)
+        }
+    }
+    impl ::core::convert::From<MinorCall> for LightClientCalls {
+        fn from(value: MinorCall) -> Self {
+            Self::Minor(value)
+        }
+    }
+    impl ::core::convert::From<PatchCall> for LightClientCalls {
+        fn from(value: PatchCall) -> Self {
+            Self::Patch(value)
+        }
+    }
     impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
-        }
-    }
-    impl ::core::convert::From<VersionCall> for LightClientCalls {
-        fn from(value: VersionCall) -> Self {
-            Self::Version(value)
         }
     }
     impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
@@ -2305,6 +2407,48 @@ pub mod light_client {
             Self::VotingThreshold(value)
         }
     }
+    ///Container type for all return fields from the `MAJOR` function with signature `MAJOR()` and selector `0x1c41cc5f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct MajorReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `MINOR` function with signature `MINOR()` and selector `0x4bc96225`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct MinorReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `PATCH` function with signature `PATCH()` and selector `0x057729e4`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct PatchReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -2319,20 +2463,6 @@ pub mod light_client {
         Hash,
     )]
     pub struct UpgradeInterfaceVersionReturn(pub ::std::string::String);
-    ///Container type for all return fields from the `VERSION` function with signature `VERSION()` and selector `0xffa1ad74`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct VersionReturn(pub u32);
     ///Container type for all return fields from the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,
