@@ -86,7 +86,7 @@ use crate::{
         Callback, Provider,
     },
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, SyncStatus, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus},
     status::StatusDataSource,
     task::BackgroundTask,
     Header, Payload, QueryResult, SignatureKey,
@@ -214,11 +214,7 @@ impl<Types, S, P> Builder<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    S: NodeDataSource<Types>
-        + UpdateNodeData<Types>
-        + AvailabilityStorage<Types>
-        + VersionedDataSource
-        + 'static,
+    S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
     /// Build a [`FetchingDataSource`] with these options.
@@ -264,11 +260,7 @@ impl<Types, S, P> FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    S: NodeDataSource<Types>
-        + UpdateNodeData<Types>
-        + AvailabilityStorage<Types>
-        + VersionedDataSource
-        + 'static,
+    S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
     /// Build a [`FetchingDataSource`] with the given `storage` and `provider`.
@@ -496,28 +488,16 @@ where
         self.storage().await.count_proposals(proposer).await
     }
 
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        self.storage().await.count_transactions().await
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        self.storage().await.payload_size().await
+    }
+
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.storage().await.sync_status().await
-    }
-}
-
-#[async_trait]
-impl<Types, S, P> UpdateNodeData<Types> for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    S: UpdateNodeData<Types> + Send + Sync,
-    P: Send + Sync,
-{
-    type Error = S::Error;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        self.fetcher
-            .storage
-            .write()
-            .await
-            .storage
-            .insert_leaf(leaf)
-            .await
     }
 }
 

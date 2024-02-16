@@ -19,7 +19,7 @@ use crate::{
         QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus},
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
 };
 use async_std::{
@@ -774,6 +774,22 @@ where
         Ok(count as usize)
     }
 
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        let row = self
+            .query_one_static("SELECT count(*) FROM transaction")
+            .await?;
+        let count: i64 = row.get(0);
+        Ok(count as usize)
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        let row = self
+            .query_one_static("SELECT sum(size) FROM payload")
+            .await?;
+        let sum: Option<i64> = row.get(0);
+        Ok(sum.unwrap_or(0) as usize)
+    }
+
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         // A leaf can only be missing if there is no row for it in the database (all its columns are
         // non-nullable). A block can be missing if its corresponding leaf is missing or if the
@@ -828,20 +844,6 @@ where
             missing_leaves,
             missing_blocks,
         })
-    }
-}
-
-#[async_trait]
-impl<Types> UpdateNodeData<Types> for SqlStorage
-where
-    Types: NodeType,
-{
-    type Error = QueryError;
-
-    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        // The node data source borrows data that is populated by the availability source, so
-        // there's nothing more to do here.
-        Ok(())
     }
 }
 

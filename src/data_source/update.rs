@@ -14,7 +14,6 @@
 use crate::availability::{
     BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
 };
-use crate::node::UpdateNodeData;
 use crate::status::UpdateStatusData;
 use crate::Payload;
 use async_trait::async_trait;
@@ -34,9 +33,7 @@ use std::iter::once;
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>:
-    UpdateAvailabilityData<Types>
-    + UpdateNodeData<Types, Error = <Self as UpdateAvailabilityData<Types>>::Error>
-    + UpdateStatusData
+    UpdateAvailabilityData<Types> + UpdateStatusData
 {
     /// Update query state based on a new consensus event.
     ///
@@ -58,10 +55,7 @@ pub trait UpdateDataSource<Types: NodeType>:
 #[async_trait]
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
-    T: UpdateAvailabilityData<Types>
-        + UpdateNodeData<Types, Error = <Self as UpdateAvailabilityData<Types>>::Error>
-        + UpdateStatusData
-        + Send,
+    T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
     Payload<Types>: QueryablePayload,
 {
     async fn update(
@@ -85,8 +79,7 @@ where
                 // guaranteed to correspond, and this should never panic.
                 let leaf_data =
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
-                UpdateAvailabilityData::insert_leaf(self, leaf_data.clone()).await?;
-                UpdateNodeData::insert_leaf(self, leaf_data).await?;
+                self.insert_leaf(leaf_data.clone()).await?;
 
                 if let Some(block) = leaf.get_block_payload() {
                     self.insert_block(BlockQueryData::new(leaf.block_header.clone(), block))

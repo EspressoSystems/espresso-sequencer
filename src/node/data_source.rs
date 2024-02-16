@@ -10,12 +10,24 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Data for the [`node`](super) API.
+//!
+//! This module is just an alternative view of the same data provided by the
+//! [`availability`](crate::availability) API. It provides more insight into what data the node
+//! actually has at present, as opposed to trying to present a perfect view of an abstract chain,
+//! fetching data from other sources as needed. It is also more liberal with provided aggregate
+//! counts and statistics which may be inaccurate if data is missing.
+//!
+//! Due to this relationship with the availability module, this module has its own [data source
+//! trait](`NodeDataSource`) but not its own update trait. The node data source is expected to read
+//! its data from the same underlying database as the availability API, and as such the data is
+//! updated implicitly via the [availability API update
+//! trait](crate::availability::UpdateAvailabilityData).
+
 use super::query_data::{LeafQueryData, SyncStatus};
 use crate::{QueryResult, SignatureKey};
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::error::Error;
-use std::fmt::Debug;
 
 #[async_trait]
 pub trait NodeDataSource<Types: NodeType> {
@@ -26,11 +38,7 @@ pub trait NodeDataSource<Types: NodeType> {
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types>>>;
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
+    async fn count_transactions(&self) -> QueryResult<usize>;
+    async fn payload_size(&self) -> QueryResult<usize>;
     async fn sync_status(&self) -> QueryResult<SyncStatus>;
-}
-
-#[async_trait]
-pub trait UpdateNodeData<Types: NodeType> {
-    type Error: Error + Debug + Send + Sync + 'static;
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
 }

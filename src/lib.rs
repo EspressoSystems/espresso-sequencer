@@ -336,6 +336,14 @@
 //!         self.hotshot_qs.count_proposals(id).await
 //!     }
 //!
+//!     async fn count_transactions(&self) -> QueryResult<usize> {
+//!         self.hotshot_qs.count_transactions().await
+//!     }
+//!
+//!     async fn payload_size(&self) -> QueryResult<usize> {
+//!         self.hotshot_qs.payload_size().await
+//!     }
+//!
 //!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
 //!         self.hotshot_qs.sync_status().await
 //!     }
@@ -625,6 +633,12 @@ mod test {
         }
         async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
             self.hotshot_qs.count_proposals(proposer).await
+        }
+        async fn count_transactions(&self) -> QueryResult<usize> {
+            self.hotshot_qs.count_transactions().await
+        }
+        async fn payload_size(&self) -> QueryResult<usize> {
+            self.hotshot_qs.payload_size().await
         }
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             self.hotshot_qs.sync_status().await

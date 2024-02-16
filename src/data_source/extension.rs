@@ -18,7 +18,7 @@ use crate::{
         UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, SyncStatus, UpdateNodeData},
+    node::{NodeDataSource, SyncStatus},
     status::StatusDataSource,
     Payload, QueryResult, SignatureKey,
 };
@@ -224,22 +224,14 @@ where
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
         self.data_source.count_proposals(proposer).await
     }
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        self.data_source.count_transactions().await
+    }
+    async fn payload_size(&self) -> QueryResult<usize> {
+        self.data_source.payload_size().await
+    }
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.data_source.sync_status().await
-    }
-}
-
-#[async_trait]
-impl<D, U, Types> UpdateNodeData<Types> for ExtensibleDataSource<D, U>
-where
-    D: UpdateNodeData<Types> + Send + Sync,
-    U: Send + Sync,
-    Types: NodeType,
-{
-    type Error = D::Error;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        self.data_source.insert_leaf(leaf).await
     }
 }
 

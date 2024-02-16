@@ -27,9 +27,6 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout Repository
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Configure Git
@@ -69,7 +66,7 @@ jobs:
 
       - name: Generate Documentation
         run: |
-          cargo doc --no-deps --lib --release
+          cargo doc --no-deps --lib --release --all-features
           echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
 
       - name: Deploy Documentation

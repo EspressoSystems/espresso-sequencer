@@ -173,7 +173,6 @@
               nixpkgs-fmt
               git
               mdbook # make-doc, documentation generation
-              protobuf
               rustToolchain
             ] ++ myPython ++ rustDeps;
 
@@ -183,7 +182,7 @@
           perfShell = pkgs.mkShell {
             shellHook = shellHook;
             buildInputs = with pkgs;
-              [ nixWithFlakes cargo-llvm-cov rustToolchain protobuf ] ++ rustDeps;
+              [ nixWithFlakes cargo-llvm-cov rustToolchain ] ++ rustDeps;
 
             inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS;
           };
