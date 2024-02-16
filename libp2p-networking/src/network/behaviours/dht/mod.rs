@@ -6,13 +6,10 @@ use std::{
 };
 
 /// a local caching layer for the DHT key value pairs
-mod cache;
-
-use async_compatibility_layer::art::{async_block_on, async_spawn};
 use futures::channel::oneshot::Sender;
 use lazy_static::lazy_static;
-use libp2p::kad::Behaviour as KademliaBehaviour;
 use libp2p::kad::Event as KademliaEvent;
+use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour};
 use libp2p::{
     kad::{
         /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapError, BootstrapOk,
@@ -33,8 +30,6 @@ lazy_static! {
     /// the maximum number of nodes to query in the DHT at any one time
     static ref MAX_DHT_QUERY_SIZE: NonZeroUsize = NonZeroUsize::new(50).unwrap();
 }
-
-use self::cache::Cache;
 
 use super::exponential_backoff::ExponentialBackoff;
 
@@ -71,8 +66,6 @@ pub struct DHTBehaviour {
     pub peer_id: PeerId,
     /// replication factor
     pub replication_factor: NonZeroUsize,
-    /// kademlia cache
-    cache: Cache,
 }
 
 /// State of bootstrapping
@@ -123,11 +116,11 @@ impl DHTBehaviour {
 
     /// Create a new DHT behaviour
     #[must_use]
-    pub async fn new(
+    pub fn new(
         mut kadem: KademliaBehaviour<MemoryStore>,
         pid: PeerId,
         replication_factor: NonZeroUsize,
-        cache_location: Option<String>,
+        _: Option<String>,
     ) -> Self {
         // needed because otherwise we stay in client mode when testing locally
         // and don't publish keys stuff
@@ -156,13 +149,6 @@ impl DHTBehaviour {
             },
             in_progress_get_closest_peers: HashMap::default(),
             replication_factor,
-            cache: Cache::new(
-                cache::ConfigBuilder::default()
-                    .filename(cache_location)
-                    .build()
-                    .unwrap_or_default(),
-            )
-            .await,
         }
     }
 
@@ -249,9 +235,9 @@ impl DHTBehaviour {
         }
 
         // check cache before making the request
-        if let Some(entry) = async_block_on(self.cache.get(&key)) {
+        if let Some(entry) = self.kadem.store_mut().get(&key.clone().into()) {
             // exists in cache
-            if chan.send(entry.value().clone()).is_err() {
+            if chan.send(entry.value.clone()).is_err() {
                 error!("Get DHT: channel closed before get record request result could be sent");
             }
         } else {
@@ -338,13 +324,15 @@ impl DHTBehaviour {
                     .into_iter()
                     .find(|(_, v)| *v >= NUM_REPLICATED_TO_TRUST)
                 {
-                    // insert into cache
-                    // TODO we should find a better place to set the cache
-                    // https://github.com/EspressoSystems/HotShot/issues/2554
-                    let cache = self.cache.clone();
-                    let val = r.clone();
-                    async_spawn(async move { cache.insert(key, val).await });
-
+                    let record = Record {
+                        key: key.into(),
+                        value: r.clone(),
+                        publisher: None,
+                        expires: None,
+                    };
+                    if self.kadem.store_mut().put(record).is_err() {
+                        error!("Error putting DHT Get result into Record Store");
+                    }
                     // return value
                     if notify.send(r).is_err() {
                         error!("Get DHT: channel closed before get record request result could be sent");
