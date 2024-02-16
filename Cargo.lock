@@ -7410,6 +7410,7 @@ dependencies = [
  "anyhow",
  "ark-bls12-381",
  "ark-ed-on-bn254",
+ "ark-ff",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "async-compatibility-layer",
