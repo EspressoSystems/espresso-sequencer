@@ -473,7 +473,7 @@ mod generic_tests {
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
         let handle = handles[0].clone();
-        D::options(&storage, options::Http { port }.into())
+        let SequencerNode { mut context, .. } = D::options(&storage, options::Http { port }.into())
             .status(Default::default())
             .submit(Default::default())
             .serve(|_| {
@@ -484,30 +484,12 @@ mod generic_tests {
             })
             .await
             .unwrap();
+        let mut events = context.consensus_mut().get_event_stream();
 
         // Start consensus.
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
-
-        let options = Options::from(options::Http { port })
-            .submit(Default::default())
-            .status(Default::default());
-        let SequencerNode { mut context, .. } = options
-            .serve(|_| {
-                async move {
-                    SequencerContext::new(
-                        handles[0].clone(),
-                        0,
-                        Default::default(),
-                        Default::default(),
-                    )
-                }
-                .boxed()
-            })
-            .await
-            .unwrap();
-        let mut events = context.consensus_mut().get_event_stream();
 
         // Connect client.
         let client: Client<ServerError> =
