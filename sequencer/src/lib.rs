@@ -20,18 +20,16 @@ mod vm;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use derivative::Derivative;
+use hotshot::traits::implementations::MemoryNetwork;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{
-            MemoryCommChannel, MemoryStorage, NetworkingMetricsValue, WebCommChannel,
-            WebServerNetwork,
-        },
-        NodeImplementation,
+        implementations::{MemoryStorage, NetworkingMetricsValue, WebServerNetwork},
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
@@ -42,12 +40,14 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
-        metrics::Metrics, network::CommunicationChannel, node_implementation::NodeType,
+        metrics::Metrics,
+        node_implementation::{NodeImplementation, NodeType},
         states::InstanceState,
     },
     HotShotConfig,
 };
 
+use hotshot_types::traits::network::ConnectedNetwork;
 use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
@@ -127,27 +127,29 @@ impl NMTRoot {
 }
 
 pub mod network {
+    use hotshot_types::message::Message;
+
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel: CommunicationChannel<SeqTypes> + Debug;
-        type QuorumChannel: CommunicationChannel<SeqTypes> + Debug;
+        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
+        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Web;
 
     impl Type for Web {
-        type DAChannel = WebCommChannel<SeqTypes>;
-        type QuorumChannel = WebCommChannel<SeqTypes>;
+        type DAChannel = WebServerNetwork<SeqTypes>;
+        type QuorumChannel = WebServerNetwork<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Memory;
 
     impl Type for Memory {
-        type DAChannel = MemoryCommChannel<SeqTypes>;
-        type QuorumChannel = MemoryCommChannel<SeqTypes>;
+        type DAChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
+        type QuorumChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
     }
 }
 
@@ -337,18 +339,18 @@ pub async fn init_node(
 
     // Initialize networking.
     let networks = Networks {
-        da_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+        da_network: Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
             network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             true,
-        ))),
-        quorum_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+        )),
+        quorum_network: Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
             network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             false,
-        ))),
+        )),
         _pd: Default::default(),
     };
 
@@ -472,8 +474,8 @@ pub mod testing {
                 None,
             ));
             let networks = Networks {
-                da_network: MemoryCommChannel::new(network.clone()),
-                quorum_network: MemoryCommChannel::new(network),
+                da_network: network.clone(),
+                quorum_network: network,
                 _pd: Default::default(),
             };
             let instance_state = &NodeState {};
