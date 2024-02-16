@@ -57,9 +57,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
 
-    // TODO adding this field to the LightClientState struct does not seem to work. Why? See
-    // 8ba308fd9d613dd92b27baab2106e7401d4a0ec5
     /// @notice new field for testing purposes
+    /// @dev In order to add a field to LightClientState struct one can: add a new contract variable
+    /// that has the new struct type, or put the struct inside a map.
     uint256 public newField;
 
     // === Data Structure ===
