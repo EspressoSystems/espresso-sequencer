@@ -6,16 +6,15 @@ use anyhow::{self, bail, Context};
 use clap::Parser;
 use hotshot::types::SignatureKey;
 use hotshot_types::signature_key::BLSPubKey;
-
-const DEFAULT_SEED : &str = "[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]";
+use rand::{RngCore, SeedableRng};
 
 /// Utility program to generate keypairs
 #[derive(Clone, Debug, Parser)]
 struct Options {
     /// Seed for generating keypair.
-    /// Default is all zeros.
-    #[clap(long, short = 's',  default_value = DEFAULT_SEED, value_parser = parse_seed)]
-    seed: [u8; 32],
+    /// If not provided, a random seed will be generated.
+    #[clap(long, short = 's', value_parser = parse_seed)]
+    seed: Option<[u8; 32]>,
 
     /// Number of keypairs to generate.
     /// Default is 1.
@@ -40,6 +39,14 @@ fn parse_seed(s: &str) -> Result<[u8; 32], anyhow::Error> {
     Ok(seed)
 }
 
+fn gen_default_seed() -> [u8; 32] {
+    let mut seed = [0u8; 32];
+    let mut rng = rand_chacha::ChaChaRng::from_entropy();
+    rng.fill_bytes(&mut seed);
+
+    seed
+}
+
 fn main() {
     setup_logging();
 
@@ -47,8 +54,14 @@ fn main() {
 
     tracing::info!("Generating {} keypairs", opts.num);
 
+    let seed = opts.seed.unwrap_or_else(|| {
+        tracing::info!("No seed provided, generating a random seed");
+        gen_default_seed()
+    });
+
+    println!("Seed: {:?}\n", seed);
     for index in 0..opts.num {
-        let (pubkey, priv_key) = BLSPubKey::generated_from_seed_indexed(opts.seed, index as u64);
+        let (pubkey, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index as u64);
         println!("PrivateKey: {} PublicKey: {}\n", priv_key, pubkey);
     }
 }
