@@ -5,7 +5,7 @@ use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use sequencer::{options::parse_duration, PubKey, MAX_NMT_DEPTH};
+use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
@@ -105,8 +105,15 @@ struct Args {
     round_start_delay: Duration,
 
     /// Maximum number of transactions in a block.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_MAX_TRANSACTIONS")]
-    max_transactions: Option<NonZeroUsize>,
+    ///
+    /// TODO replace with maximum byte len:
+    /// https://github.com/EspressoSystems/espresso-sequencer/pull/1087#discussion_r1489585926
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_MAX_TRANSACTIONS",
+        default_value = "1000"
+    )]
+    max_transactions: NonZeroUsize,
 
     /// Seed to use for generating node keys.
     ///
@@ -193,9 +200,7 @@ async fn main() {
             .collect();
     config.config.total_nodes = args.num_nodes;
     config.config.known_nodes_with_stake = known_nodes_with_stake;
-    config.config.max_transactions = args
-        .max_transactions
-        .unwrap_or(NonZeroUsize::new(2_usize.pow(MAX_NMT_DEPTH as u32)).unwrap());
+    config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;

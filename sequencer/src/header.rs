@@ -1,7 +1,8 @@
 use crate::{
+    block::{entry::TxTableEntryWord, tables::NameSpaceTable},
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     state::{fetch_fee_receipts, BlockMerkleCommitment, FeeMerkleCommitment, FeeReceipt},
-    L1BlockInfo, NMTRoot, Payload, ValidatedState,
+    L1BlockInfo, Payload, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
@@ -68,7 +69,7 @@ pub struct Header {
     pub l1_finalized: Option<L1BlockInfo>,
 
     pub payload_commitment: VidCommitment,
-    pub transactions_root: NMTRoot,
+    pub ns_table: NameSpaceTable<TxTableEntryWord>,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Root Commitment of `FeeMerkleTree`
@@ -92,7 +93,7 @@ impl Committable for Header {
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
             .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
-            .field("transactions_root", self.transactions_root.commit())
+            .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
             .finalize()
@@ -103,19 +104,15 @@ impl Committable for Header {
     }
 }
 
-impl Committable for NMTRoot {
+impl Committable for NameSpaceTable<TxTableEntryWord> {
     fn commit(&self) -> Commitment<Self> {
-        let mut comm_bytes = vec![];
-        self.root
-            .serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
         RawCommitmentBuilder::new(&Self::tag())
-            .var_size_field("root", &comm_bytes)
+            .var_size_bytes(self.get_bytes())
             .finalize()
     }
 
     fn tag() -> String {
-        "NMTROOT".into()
+        "NSTABLE".into()
     }
 }
 
@@ -124,7 +121,7 @@ impl Header {
     // TODO pub or merely pub(super)?
     pub fn from_info(
         payload_commitment: VidCommitment,
-        transactions_root: NMTRoot,
+        ns_table: NameSpaceTable<TxTableEntryWord>,
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
@@ -180,7 +177,7 @@ impl Header {
             l1_head: l1.head,
             l1_finalized: l1.finalized,
             payload_commitment,
-            transactions_root,
+            ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
         }
@@ -188,7 +185,7 @@ impl Header {
 }
 
 impl BlockHeader for Header {
-    type Payload = Payload;
+    type Payload = Payload<TxTableEntryWord>;
     type State = ValidatedState;
 
     fn new(
@@ -251,6 +248,7 @@ impl BlockHeader for Header {
         )
     }
 
+    // TODO return metadata must be cloned from returned Payload; don't return metadata??
     fn genesis(
         _instance_state: &<Self::State as HotShotState>::Instance,
     ) -> (
@@ -258,7 +256,7 @@ impl BlockHeader for Header {
         Self::Payload,
         <Self::Payload as BlockPayload>::Metadata,
     ) {
-        let (payload, transactions_root) = Payload::genesis();
+        let (payload, ns_table) = Self::Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let ValidatedState {
             fee_merkle_tree,
@@ -275,11 +273,11 @@ impl BlockHeader for Header {
             l1_head: 0,
             l1_finalized: None,
             payload_commitment,
-            transactions_root,
+            ns_table: ns_table.clone(), // TODO forced clone
             block_merkle_tree_root,
             fee_merkle_tree_root,
         };
-        (header, payload, transactions_root)
+        (header, payload, ns_table)
     }
 
     fn block_number(&self) -> u64 {
@@ -290,8 +288,8 @@ impl BlockHeader for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &NMTRoot {
-        &self.transactions_root
+    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata {
+        &self.ns_table
     }
 }
 

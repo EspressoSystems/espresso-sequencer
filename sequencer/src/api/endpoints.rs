@@ -7,21 +7,23 @@ use super::{
     AppState,
 };
 use crate::{
+    block::payload::{parse_ns_payload, NamespaceProof},
     network,
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
-    Header, NamespaceProofType, SeqTypes, Transaction,
+    Header, SeqTypes, Transaction, VmId,
 };
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use ethers::prelude::U256;
 use futures::FutureExt;
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource, BlockHash, FetchBlockSnafu},
+    availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
     Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use jf_primitives::merkle_tree::{namespaced_merkle_tree::NamespaceProof, MerkleTreeScheme};
+use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
 use serde::{Deserialize, Serialize};
+use snafu::OptionExt;
 use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
@@ -29,7 +31,7 @@ use tide_disco::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProofType,
+    pub proof: NamespaceProof,
     pub header: Header,
     pub transactions: Vec<Transaction>,
 }
@@ -76,14 +78,56 @@ where
     api.get("getnamespaceproof", |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let namespace: u64 = req.integer_param("namespace")?;
+            let ns_id = VmId(req.integer_param("namespace")?);
             let block = state.get_block(height).await.context(FetchBlockSnafu {
                 resource: height.to_string(),
             })?;
 
-            let proof = block.payload().get_namespace_proof(namespace.into());
+            // TODO fake VidScheme construction
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
+            // TODO do not disperse here!
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/1093
+            let vid = crate::block::payload::test_vid_factory();
+            use hotshot::traits::BlockPayload;
+            let disperse_data = vid
+                .disperse(
+                    block
+                        .payload()
+                        .encode()
+                        .expect("should be infallible")
+                        .collect::<Vec<u8>>(),
+                )
+                .ok() // hack: VidError won't play with Snafu, so convert to Option
+                .context(CustomSnafu {
+                    message: format!("disperse failure for namespace {ns_id}"),
+                    status: StatusCode::InternalServerError,
+                })?;
+
+            let proof = block
+                .payload()
+                .namespace_with_proof(
+                    block.payload().get_ns_table(),
+                    ns_id,
+                    &vid,
+                    disperse_data.common,
+                )
+                .context(CustomSnafu {
+                    message: format!("failed to make proof for namespace {ns_id}"),
+                    status: StatusCode::NotFound,
+                })?;
+
+            let transactions = if let NamespaceProof::Existence {
+                ref ns_payload_flat,
+                ..
+            } = proof
+            {
+                parse_ns_payload(ns_payload_flat, ns_id)
+            } else {
+                Vec::new()
+            };
+
             Ok(NamespaceProofQueryData {
-                transactions: proof.get_namespace_leaves().into_iter().cloned().collect(),
+                transactions,
                 proof,
                 header: block.header().clone(),
             })

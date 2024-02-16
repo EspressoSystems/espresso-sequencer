@@ -1,5 +1,5 @@
-use crate::block2::entry::TxTableEntry;
-use crate::block2::payload::TableWordTraits;
+use crate::block::entry::TxTableEntry;
+use crate::block::payload::TableWordTraits;
 use crate::{BlockBuildingSnafu, Error, VmId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -27,33 +27,32 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
     fn get_table_len(&self, offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
-            self.raw_payload.len(),
+            self.bytes.len(),
         );
         let start = std::cmp::min(offset, end);
         let tx_table_len_range = start..end;
         let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-        entry_bytes[..tx_table_len_range.len()]
-            .copy_from_slice(&self.raw_payload[tx_table_len_range]);
+        entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.bytes[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
     }
 
     fn get_payload(&self) -> Vec<u8> {
-        self.raw_payload.clone()
+        self.bytes.clone()
     }
 }
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
-// TODO store only a reference to raw_payload.
-pub(super) struct NameSpaceTable<TableWord: TableWordTraits> {
-    pub(super) raw_payload: Vec<u8>,
+pub struct NameSpaceTable<TableWord: TableWordTraits> {
+    pub(super) bytes: Vec<u8>,
+    #[serde(skip)]
     pub(super) phantom: PhantomData<TableWord>,
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     pub fn from_vec(v: Vec<u8>) -> Self {
         Self {
-            raw_payload: v,
+            bytes: v,
             phantom: Default::default(),
         }
     }
@@ -72,20 +71,30 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         Ok(ns_table)
     }
 
-    // TODO see how we can  avoid cloning the whole payload
+    // TODO don't clone the entire payload
     pub fn from_bytes(b: &[u8]) -> Self {
         Self {
-            raw_payload: b.to_vec(),
+            bytes: b.to_vec(),
             phantom: Default::default(),
         }
     }
 
-    pub fn get_bytes(&self) -> Vec<u8> {
-        self.raw_payload.clone()
+    pub fn get_bytes(&self) -> &Vec<u8> {
+        &self.bytes
+    }
+
+    /// Find `ns_id` and return its index into this namespace table.
+    ///
+    /// TODO return Result or Option? Want to avoid catch-all Error type :(
+    pub fn lookup(&self, ns_id: VmId) -> Option<usize> {
+        // TODO don't use TxTable, need a new method
+        let ns_table_len = TxTable::get_tx_table_len(&self.bytes);
+
+        (0..ns_table_len).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
     }
 
     fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
-        self.raw_payload.extend(
+        self.bytes.extend(
             TxTableEntry::try_from(id)
                 .ok()
                 .context(BlockBuildingSnafu)?
@@ -95,7 +104,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     }
 
     fn add_new_entry_payload_len(&mut self, l: usize) -> Result<(), Error> {
-        self.raw_payload.extend(
+        self.bytes.extend(
             TxTableEntry::try_from(l)
                 .ok()
                 .context(BlockBuildingSnafu)?
@@ -108,8 +117,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     // Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
     pub fn len(&self) -> usize {
         let left = self.get_table_len(0).try_into().unwrap_or(0);
-        let right =
-            (self.raw_payload.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
+        let right = (self.bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
         std::cmp::min(left, right)
     }
 
@@ -123,18 +131,18 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
                 .saturating_mul(2)
                 .saturating_add(1)
                 .saturating_mul(TxTableEntry::byte_len()),
-            self.raw_payload.len(),
+            self.bytes.len(),
         );
         let end = std::cmp::min(
             start.saturating_add(TxTableEntry::byte_len()),
-            self.raw_payload.len(),
+            self.bytes.len(),
         );
         let ns_id_range = start..end;
 
         // parse ns_id bytes from ns table
         // any failure -> VmId(0)
         let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
-        ns_id_bytes[..ns_id_range.len()].copy_from_slice(&self.raw_payload[ns_id_range]);
+        ns_id_bytes[..ns_id_range.len()].copy_from_slice(&self.bytes[ns_id_range]);
         let ns_id =
             VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
                 .unwrap_or(VmId(0));
@@ -145,7 +153,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         let start = end;
         let end = std::cmp::min(
             start.saturating_add(TxTableEntry::byte_len()),
-            self.raw_payload.len(),
+            self.bytes.len(),
         );
         let ns_offset_range = start..end;
 
@@ -153,8 +161,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         // any failure -> 0 offset (?)
         // TODO refactor parsing code?
         let mut ns_offset_bytes = [0u8; TxTableEntry::byte_len()];
-        ns_offset_bytes[..ns_offset_range.len()]
-            .copy_from_slice(&self.raw_payload[ns_offset_range]);
+        ns_offset_bytes[..ns_offset_range.len()].copy_from_slice(&self.bytes[ns_offset_range]);
         let ns_offset = usize::try_from(
             TxTableEntry::from_bytes(&ns_offset_bytes).unwrap_or(TxTableEntry::zero()),
         )
@@ -236,9 +243,9 @@ impl TxTable {
 }
 #[cfg(test)]
 pub(super) mod test {
-    use crate::block2::entry::TxTableEntry;
-    use crate::block2::payload::TableWordTraits;
-    use crate::block2::tables::{Table, TxTable};
+    use crate::block::entry::TxTableEntry;
+    use crate::block::payload::TableWordTraits;
+    use crate::block::tables::{Table, TxTable};
     use std::marker::PhantomData;
 
     pub struct TxTableTest<TableWord: TableWordTraits> {

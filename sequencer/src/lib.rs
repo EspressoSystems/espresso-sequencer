@@ -1,12 +1,12 @@
 pub mod api;
 mod block;
-mod block2;
 mod chain_variables;
 pub mod context;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -18,7 +18,6 @@ mod state;
 pub mod transaction;
 mod vm;
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use derivative::Derivative;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot::{
@@ -29,6 +28,8 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_types::traits::network::ConnectedNetwork;
+use jf_primitives::signatures::bls_over_bn254::VerKey;
 
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -47,11 +48,6 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use hotshot_types::traits::network::ConnectedNetwork;
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -59,71 +55,21 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
-use typenum::U2;
 
-pub use block::Payload;
+pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
 pub use header::Header;
-use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NMT,
-    prelude::{Sha3Digest, Sha3Node},
-};
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
-// Supports 1K transactions
-pub const MAX_NMT_DEPTH: usize = 10;
-
-pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
-pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
-
 /// Initialize the static variables for the sequencer
 ///
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
     lazy_static::initialize(&header::L1_CLIENT);
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NMTRoot {
-    #[serde(with = "nmt_root_serializer")]
-    root: <TransactionNMT as MerkleTreeScheme>::NodeValue,
-}
-
-mod nmt_root_serializer {
-    use serde::{Deserializer, Serializer};
-
-    use super::*;
-
-    pub fn serialize<A, S>(a: &A, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        A: CanonicalSerialize,
-    {
-        let mut bytes = vec![];
-        a.serialize_with_mode(&mut bytes, ark_serialize::Compress::Yes)
-            .map_err(serde::ser::Error::custom)?;
-        s.serialize_bytes(&bytes)
-    }
-
-    pub fn deserialize<'de, D, A>(deserializer: D) -> Result<A, D::Error>
-    where
-        D: Deserializer<'de>,
-        A: CanonicalDeserialize,
-    {
-        let s: Vec<u8> = serde::de::Deserialize::deserialize(deserializer)?;
-        let a = A::deserialize_with_mode(s.as_slice(), Compress::Yes, Validate::Yes);
-        a.map_err(serde::de::Error::custom)
-    }
-}
-
-impl NMTRoot {
-    pub fn root(&self) -> <TransactionNMT as MerkleTreeScheme>::NodeValue {
-        self.root
-    }
 }
 
 pub mod network {
@@ -200,7 +146,7 @@ impl InstanceState for NodeState {}
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<TxTableEntryWord>;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;

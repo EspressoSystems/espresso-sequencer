@@ -424,12 +424,15 @@ mod generic_tests {
         test_helpers::{state_signature_test_helper, state_test_helper},
         *,
     };
-    use crate::{testing::init_hotshot_handles, Header};
+    use crate::{
+        testing::{init_hotshot_handles, wait_for_decide_on_handle},
+        Header, Transaction, VmId,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
-    use endpoints::TimeWindowQueryData;
+    use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
     use futures::FutureExt;
     use hotshot_query_service::availability::BlockQueryData;
     use portpicker::pick_unused_port;
@@ -454,6 +457,101 @@ mod generic_tests {
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
+        setup_logging();
+        setup_backtrace();
+
+        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+
+        // Create sequencer network.
+        let handles = init_hotshot_handles().await;
+
+        // Start query service.
+        let port = pick_unused_port().expect("No ports free");
+        let storage = D::create_storage().await;
+        let handle = handles[0].clone();
+        D::options(&storage, options::Http { port }.into())
+            .status(Default::default())
+            .submit(Default::default())
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(handle, 0, Default::default(), Default::default())
+                }
+                .boxed()
+            })
+            .await
+            .unwrap();
+
+        // Start consensus.
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        let options = Options::from(options::Http { port })
+            .submit(Default::default())
+            .status(Default::default());
+        let SequencerNode { mut context, .. } = options
+            .serve(|_| {
+                async move {
+                    SequencerContext::new(
+                        handles[0].clone(),
+                        0,
+                        Default::default(),
+                        Default::default(),
+                    )
+                }
+                .boxed()
+            })
+            .await
+            .unwrap();
+        let mut events = context.consensus_mut().get_event_stream();
+
+        // Connect client.
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+
+        let hash = client
+            .post("submit/submit")
+            .body_json(&txn)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(txn.commit(), hash);
+
+        // Wait for a Decide event containing transaction matching the one we sent
+        wait_for_decide_on_handle(&mut events, &txn).await.unwrap();
+        let mut found_txn = false;
+        let mut found_empty_block = false;
+
+        let block_height = client
+            .get::<usize>("status/block-height")
+            .send()
+            .await
+            .unwrap();
+
+        for block_num in 0..block_height {
+            let ns_query_res: NamespaceProofQueryData = client
+                .get(&format!("availability/block/{block_num}/namespace/0"))
+                .send()
+                .await
+                .unwrap();
+
+            found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
+
+            for txn in ns_query_res.transactions {
+                if txn.commit() == hash {
+                    // Ensure that we validate an inclusion proof
+                    found_txn = true;
+                }
+            }
+        }
+        assert!(found_txn);
+        assert!(found_empty_block);
     }
 
     #[async_std::test]
