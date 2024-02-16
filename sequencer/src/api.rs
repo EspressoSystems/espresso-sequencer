@@ -204,11 +204,7 @@ mod test_helpers {
             })
             .await
             .unwrap();
-        let mut events = context
-            .consensus_mut()
-            .get_event_stream(Default::default())
-            .await
-            .0;
+        let mut events = context.consensus_mut().get_event_stream();
 
         client.connect(None).await;
 
@@ -314,19 +310,17 @@ mod test_helpers {
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
-        let mut events = node
-            .context
-            .consensus_mut()
-            .get_event_stream(Default::default())
-            .await
-            .0;
+        let mut events = node.context.consensus_mut().get_event_stream();
         loop {
             if let Event {
                 event: EventType::Decide { leaf_chain, .. },
                 ..
             } = events.next().await.unwrap()
             {
-                if leaf_chain.iter().any(|leaf| leaf.block_header.height > 2) {
+                if leaf_chain
+                    .iter()
+                    .any(|(leaf, _)| leaf.block_header.height > 2)
+                {
                     break;
                 }
             }

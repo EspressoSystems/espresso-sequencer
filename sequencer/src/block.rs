@@ -31,7 +31,7 @@ mod nmt_serializer {
         use serde::de;
 
         let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
-        let nmt = TransactionNMT::from_elems(Some(MAX_NMT_DEPTH), leaves)
+        let nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, leaves)
             .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
         Ok(nmt)
     }
@@ -73,8 +73,7 @@ impl BlockPayload for Payload {
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let mut transactions = transactions.into_iter().collect::<Vec<_>>();
         transactions.sort_by_key(|tx| tx.vm());
-        let transaction_nmt =
-            TransactionNMT::from_elems(Some(MAX_NMT_DEPTH), transactions).unwrap();
+        let transaction_nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, transactions).unwrap();
         let root = NMTRoot {
             root: transaction_nmt.commitment().digest(),
         };
