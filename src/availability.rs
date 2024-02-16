@@ -383,7 +383,7 @@ mod test {
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
     use futures::FutureExt;
-    use hotshot_testing::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::data::Leaf;
     use portpicker::pick_unused_port;
     use std::time::Duration;

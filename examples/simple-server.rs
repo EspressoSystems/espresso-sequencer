@@ -21,12 +21,11 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::implementations::{
-        MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
-    },
+    traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_query_service::{
     data_source,
     fetching::provider::NoFetching,
@@ -38,7 +37,6 @@ use hotshot_query_service::{
     },
     Error,
 };
-use hotshot_testing::state_types::TestInstanceState;
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     ExecutionType, HotShotConfig, ValidatorConfig,
@@ -188,8 +186,8 @@ async fn init_consensus(
                     None,
                 ));
                 let networks = Networks {
-                    quorum_network: MemoryCommChannel::new(network.clone()),
-                    da_network: MemoryCommChannel::new(network),
+                    quorum_network: network.clone(),
+                    da_network: network,
                     _pd: Default::default(),
                 };
 
