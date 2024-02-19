@@ -1,0 +1,14 @@
+[package]
+name = "builder"
+description = "A standalone builder service"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+hs-builder-api = { workspace = true }
+hs-builder-core = { workspace = true }
+sequencer = { path = "../sequencer" }
+
+
+# [[bin]]
