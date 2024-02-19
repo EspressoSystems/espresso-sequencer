@@ -176,8 +176,6 @@ impl Options {
             }
         };
 
-        // Start consensus.
-        node.context.start_consensus().await;
         Ok(node)
     }
 
