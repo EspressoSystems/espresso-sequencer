@@ -1,94 +1,67 @@
-use crate::{NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
+use crate::{BlockBuildingSnafu, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::{traits::block_contents::BlockPayload, utils::BuilderCommitment};
-use jf_primitives::merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, prelude::*};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Debug, Display};
+use hotshot_types::traits::BlockPayload;
+use hotshot_types::utils::BuilderCommitment;
+use serde::{Deserialize, Serialize};
+use snafu::OptionExt;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-pub struct Payload {
-    #[serde(with = "nmt_serializer")]
-    pub(crate) transaction_nmt: TransactionNMT,
-}
+pub mod entry;
+pub mod payload;
+pub mod queryable;
+pub mod tables;
+pub mod tx_iterator;
 
-mod nmt_serializer {
-    use super::*;
+use entry::TxTableEntryWord;
+use payload::Payload;
+use tables::NameSpaceTable;
 
-    // Serialize the NMT as a compact Vec<Transaction>
-    pub fn serialize<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let leaves = nmt.leaves().cloned().collect::<Vec<Transaction>>();
-        leaves.serialize(s)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<TransactionNMT, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de;
-
-        let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
-        let nmt = TransactionNMT::from_elems(Some(MAX_NMT_DEPTH), leaves)
-            .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
-        Ok(nmt)
-    }
-}
-
-impl QueryablePayload for Payload {
-    type TransactionIndex = u64;
-    type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
-    type Iter<'a> = Box<dyn Iterator<Item = u64>>;
-
-    fn len(&self, _meta: &Self::Metadata) -> usize {
-        self.transaction_nmt.num_leaves() as usize
-    }
-
-    fn transaction_with_proof(
-        &self,
-        _meta: &Self::Metadata,
-        index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        match self.transaction_nmt.lookup(index) {
-            LookupResult::Ok(txn, proof) => Some((txn.clone(), proof)),
-            _ => None,
-        }
-    }
-
-    fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
-        Box::new(0..self.len(meta) as u64)
-    }
-}
-
-impl BlockPayload for Payload {
-    type Error = bincode::Error;
+impl BlockPayload for Payload<TxTableEntryWord> {
+    type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = NMTRoot;
-    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
+    type Metadata = NameSpaceTable<TxTableEntryWord>;
 
+    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
+    // https://github.com/EspressoSystems/HotShot/issues/2115
+    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+
+    /// Returns (Self, metadata).
+    ///
+    /// `metadata` is a bytes representation of the namespace table.
+    /// Why bytes? To make it easy to move metdata into payload in the future.
+    ///
+    /// Namespace table defined as follows for j>0:
+    /// word[0]:    [number of entries in namespace table]
+    /// word[2j-1]: [id for the jth namespace]
+    /// word[2j]:   [end byte index of the jth namespace in the payload]
+    ///
+    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
+    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
+    ///
+    /// Word type is `TxTableEntry`.
+    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
+    ///
+    /// TODO final entry should be implicit:
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
+    ///
+    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     fn from_transactions(
-        transactions: impl IntoIterator<Item = Self::Transaction>,
+        txs: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let mut transactions = transactions.into_iter().collect::<Vec<_>>();
-        transactions.sort_by_key(|tx| tx.vm());
-        let transaction_nmt =
-            TransactionNMT::from_elems(Some(MAX_NMT_DEPTH), transactions).unwrap();
-        let root = NMTRoot {
-            root: transaction_nmt.commitment().digest(),
-        };
-        Ok((Self { transaction_nmt }, root))
+        let payload = Payload::from_txs(txs)?;
+        let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
+        Some((payload, ns_table)).context(BlockBuildingSnafu)
     }
 
-    fn from_bytes<I>(encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
-        // TODO for now, we panic if the transactions are not properly encoded. This only works as
-        // long as all proposers are honest. We should soon replace this with the VID-specific
-        // payload implementation in block2.rs.
-        bincode::deserialize(encoded_transactions.collect::<Vec<u8>>().as_slice()).unwrap()
+        Self {
+            raw_payload: encoded_transactions.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
+            ns_table: metadata.clone(), // TODO don't clone ns_table
+        }
     }
 
     fn genesis() -> (Self, Self::Metadata) {
@@ -96,45 +69,16 @@ impl BlockPayload for Payload {
     }
 
     fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-        Ok(bincode::serialize(self)?.into_iter())
+        Ok(self.raw_payload.iter().cloned())
     }
 
-    fn transaction_commitments(
-        &self,
-        metadata: &Self::Metadata,
-    ) -> Vec<Commitment<Self::Transaction>> {
-        self.enumerate(metadata)
-            .map(|(_, tx)| tx.commit())
-            .collect()
+    fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
+
     /// Generate commitment that builders use to sign block options.
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         unimplemented!("TODO builder_commitment");
-    }
-}
-
-#[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::block_contents::TestableBlock for Payload {
-    fn genesis() -> Self {
-        BlockPayload::genesis().0
-    }
-
-    fn txn_count(&self) -> u64 {
-        self.transaction_nmt.num_leaves()
-    }
-}
-
-impl Display for Payload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:#?}")
-    }
-}
-
-impl Payload {
-    /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
-    /// and the root of the NMT
-    pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
-        self.transaction_nmt.get_namespace_proof(vm_id)
     }
 }
 
@@ -175,7 +119,7 @@ mod reference {
     }
 
     lazy_static! {
-        pub static ref NMT_ROOT: Value = load_reference!("nmt_root");
+        pub static ref NS_TABLE: Value = load_reference!("ns_table");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
     }
@@ -203,11 +147,11 @@ mod reference {
     }
 
     #[test]
-    fn test_reference_nmt_root() {
-        reference_test::<NMTRoot, _>(
-            NMT_ROOT.clone(),
-            "NMTROOT~-1Dow1sCihLw5x-sNsxaKtcqSLsPHIBDlXUacug5vgpx",
-            |root| root.commit(),
+    fn test_reference_ns_table() {
+        reference_test::<NameSpaceTable<TxTableEntryWord>, _>(
+            NS_TABLE.clone(),
+            "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn9vNzdIAL8W9ENOuh_",
+            |ns_table| ns_table.commit(),
         );
     }
 
@@ -224,7 +168,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~1F_cwBMF2HLjz71KagS4CZTlUhOdLwu9FHnK1Ni4uwAB",
+            "BLOCK~E_VbE93Sh6wUXhfPiGA3NzZ7wkv9G7Igxcrkm6EipCN8",
             |header| header.commit(),
         );
     }

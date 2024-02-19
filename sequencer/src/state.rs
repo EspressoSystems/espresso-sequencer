@@ -1,5 +1,6 @@
 use std::ops::Add;
 
+use crate::block::entry::TxTableEntryWord;
 use crate::{Header, NodeState, Payload};
 use anyhow::{ensure, Context};
 use ark_serialize::{
@@ -31,7 +32,7 @@ pub struct ValidatedState {
 impl Default for ValidatedState {
     fn default() -> Self {
         let block_merkle_tree =
-            BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
+            BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap();
 
         // Words of wisdom from @mrain: "capacity = arity^height"
         // "For index space 2^160, arity 256 (2^8),
@@ -107,7 +108,7 @@ impl HotShotState for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<TxTableEntryWord>;
 
     type Time = ViewNumber;
 

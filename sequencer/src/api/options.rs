@@ -10,7 +10,6 @@ use super::{
 };
 use crate::{
     api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
-    Event,
 };
 use anyhow::bail;
 use async_std::{
@@ -24,7 +23,6 @@ use hotshot_query_service::{
     status::{self, UpdateStatusData},
     Error,
 };
-use hotshot_task::task::FilterEvent;
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use tide_disco::{
     method::{ReadState, WriteState},
@@ -130,11 +128,7 @@ impl Options {
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let events = context
-                .consensus_mut()
-                .get_event_stream(Default::default())
-                .await
-                .0;
+            let events = context.consensus_mut().get_event_stream();
 
             // Initialize status API.
             let status_api = status::define_api(&Default::default())?;
@@ -165,11 +159,7 @@ impl Options {
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let events = context
-                .consensus_mut()
-                .get_event_stream(Default::default())
-                .await
-                .0;
+            let events = context.consensus_mut().get_event_stream();
 
             self.init_hotshot_modules(&mut app)?;
 
@@ -186,8 +176,6 @@ impl Options {
             }
         };
 
-        // Start consensus.
-        node.context.start_consensus().await;
         Ok(node)
     }
 
@@ -214,27 +202,9 @@ impl Options {
         //
         // We must do this _before_ starting consensus on the handle, otherwise we could miss
         // the first events emitted by consensus.
-        let events = context
-            .consensus_mut()
-            .get_event_stream(Default::default())
-            .await
-            .0;
+        let events = context.consensus_mut().get_event_stream();
 
-        let decided_event_filter = FilterEvent(Arc::new(|event| {
-            matches!(
-                event,
-                Event {
-                    event: hotshot_types::event::EventType::Decide { .. },
-                    ..
-                }
-            )
-        }));
-
-        let events_for_state_signature = context
-            .consensus_mut()
-            .get_event_stream(decided_event_filter)
-            .await
-            .0;
+        let events_for_state_signature = context.consensus_mut().get_event_stream();
 
         let state: State<N, D> =
             Arc::new(RwLock::new(ExtensibleDataSource::new(ds, context.clone())));

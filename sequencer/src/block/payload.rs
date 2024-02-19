@@ -1,17 +1,20 @@
-use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
-use crate::block2::payload;
+use crate::block::entry::{TxTableEntry, TxTableEntryWord};
+use crate::block::payload;
 use crate::{BlockBuildingSnafu, Error, Transaction, VmId};
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
-use jf_primitives::pcs::prelude::UnivariateKzgPCS;
-use jf_primitives::pcs::{checked_fft_size, PolynomialCommitmentScheme};
-use jf_primitives::vid::advz::payload_prover::{LargeRangeProof, SmallRangeProof};
-use jf_primitives::vid::advz::Advz;
-use jf_primitives::vid::payload_prover::Statement;
-use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+use hotshot_types::data::VidScheme;
+use jf_primitives::{
+    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::{
+        advz::payload_prover::{LargeRangeProof, SmallRangeProof},
+        payload_prover::{PayloadProver, Statement},
+        VidScheme as VidSchemeTrait,
+    },
+};
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -19,7 +22,7 @@ use std::default::Default;
 use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
-use crate::block2::tables::NameSpaceTable;
+use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
 
 use super::tables::TxTable;
@@ -66,7 +69,8 @@ pub(super) struct NamespaceInfo {
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
-pub(super) struct Payload<TableWord: TableWordTraits> {
+// TODO remove the generic type param, use local constants instead
+pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
     pub(super) raw_payload: Vec<u8>,
 
@@ -97,37 +101,34 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
-    /// Returns the `ns_index`th namespace bytes, along with a proof of correctness for those bytes.
+    /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
     ///
     /// RPC-friendly proof contains:
     /// - the namespace bytes
     /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
-    pub fn namespace_with_proof<V>(
+    pub fn namespace_with_proof(
         &self,
-        ns_table: &[u8], //&<Self as BlockPayload>::Metadata, TODO
-        ns_index: usize,
-        vid: &V,
-        vid_common: <V as VidScheme>::Common,
-    ) -> Option<NamespaceProof<V>>
-    where
-        V: PayloadProver<JellyfishNamespaceProof>,
-    {
-        // TODO using TxTable instead of NameSpaceTable for convenience
-        if ns_index >= TxTable::get_tx_table_len(ns_table) {
-            return None; // error: index out of bounds
-        }
-        if self.raw_payload.len() != V::get_payload_byte_len(&vid_common) {
+        ns_table: &NameSpaceTable<TxTableEntryWord>,
+        ns_id: VmId,
+        vid: &VidScheme,
+        vid_common: <VidScheme as VidSchemeTrait>::Common,
+    ) -> Option<NamespaceProof> {
+        if self.raw_payload.len() != VidScheme::get_payload_byte_len(&vid_common) {
             return None; // error: vid_common inconsistent with self
         }
 
-        // TODO rework NameSpaceTable struct
-        let ns_table_struct = NameSpaceTable::<TableWord>::from_bytes(ns_table);
-        let ns_payload_range = ns_table_struct.get_payload_range(ns_index, self.raw_payload.len());
+        let ns_index = if let Some(ns_index) = ns_table.lookup(ns_id) {
+            ns_index
+        } else {
+            return Some(NamespaceProof::NonExistence { ns_id });
+        };
+
+        let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
 
         // TODO log output for each `?`
         // fix this when we settle on an error handling pattern
-        Some(NamespaceProof {
-            ns_index: ns_index.try_into().ok()?,
+        Some(NamespaceProof::Existence {
+            ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
             ns_proof: vid
                 .payload_proof(&self.raw_payload, ns_payload_range)
@@ -163,8 +164,8 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             .as_ref()
     }
 
-    pub fn get_ns_table_bytes(&self) -> Vec<u8> {
-        self.ns_table.get_bytes()
+    pub fn get_ns_table(&self) -> &NameSpaceTable<TableWord> {
+        &self.ns_table
     }
 
     pub fn from_txs(
@@ -174,7 +175,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         let mut structured_payload = Self {
             raw_payload: vec![],
             ns_table: NameSpaceTable {
-                raw_payload: vec![],
+                bytes: vec![],
                 phantom: Default::default(),
             },
             tx_table_len_proof: Default::default(),
@@ -270,7 +271,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// https://stackoverflow.com/a/52886787
 ///
 /// TODO temporary VID constructor.
-pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+pub(crate) fn test_vid_factory() -> VidScheme {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
     let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
@@ -280,7 +281,7 @@ pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
         checked_fft_size(payload_chunk_size - 1).unwrap(),
     )
     .unwrap();
-    Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+    VidScheme::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
 }
 
 // TODO type alias needed only because nested impl Trait is not allowed
@@ -306,65 +307,74 @@ pub type JellyfishNamespaceProof =
     LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct NamespaceProof<V>
-where
-    V: PayloadProver<JellyfishNamespaceProof>,
-{
-    ns_payload_flat: Vec<u8>,
-    ns_index: u32,
-    ns_proof: JellyfishNamespaceProof,
-    vid_common: <V as VidScheme>::Common,
+#[serde(bound = "")] // for V
+pub enum NamespaceProof {
+    Existence {
+        ns_payload_flat: Vec<u8>,
+        ns_id: VmId,
+        ns_proof: JellyfishNamespaceProof,
+        vid_common: <VidScheme as VidSchemeTrait>::Common,
+    },
+    NonExistence {
+        ns_id: VmId,
+    },
 }
 
-impl<V> NamespaceProof<V>
-where
-    V: PayloadProver<JellyfishNamespaceProof>,
-{
+impl NamespaceProof {
     /// Verify a [`NamespaceProof`].
     ///
     /// All args must be available to the verifier in the block header.
     #[allow(dead_code)] // TODO temporary
     pub fn verify(
         &self,
-        vid: &V,
-        commit: &<V as VidScheme>::Commit,
-        ns_table: &[u8], //&<Payload as BlockPayload>::Metadata, TODO
+        vid: &VidScheme,
+        commit: &<VidScheme as VidSchemeTrait>::Commit,
+        ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
-        let ns_index = usize::try_from(self.ns_index).ok()?;
+        match self {
+            NamespaceProof::Existence {
+                ns_payload_flat,
+                ns_id,
+                ns_proof,
+                vid_common,
+            } => {
+                let ns_index = ns_table.lookup(*ns_id)?;
 
-        // TODO using TxTable instead of NameSpaceTable for convenience
-        if ns_index >= TxTable::get_tx_table_len(ns_table) {
-            return None; // error: index out of bounds
+                // TODO rework NameSpaceTable struct
+                // TODO merge get_ns_payload_range with get_ns_table_entry ?
+                let ns_payload_range = ns_table
+                    .get_payload_range(ns_index, VidScheme::get_payload_byte_len(vid_common));
+                let ns_id = ns_table.get_table_entry(ns_index).0;
+
+                // verify self against args
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: ns_payload_flat,
+                        range: ns_payload_range,
+                        commit,
+                        common: vid_common,
+                    },
+                    ns_proof,
+                )
+                .ok()?
+                .ok()?;
+
+                // verification succeeded, return some data
+                // we know ns_id is correct because the corresponding ns_payload_range passed verification
+                Some((parse_ns_payload(ns_payload_flat, ns_id), ns_id))
+            }
+            NamespaceProof::NonExistence { ns_id } => {
+                if ns_table.lookup(*ns_id).is_some() {
+                    return None; // error: expect not to find ns_id in ns_table
+                }
+                Some((Vec::new(), *ns_id))
+            }
         }
-
-        // TODO rework NameSpaceTable struct
-        // TODO merge get_ns_payload_range with get_ns_table_entry ?
-        let ns_table_struct = NameSpaceTable::<TxTableEntryWord>::from_bytes(ns_table);
-        let ns_payload_range =
-            ns_table_struct.get_payload_range(ns_index, V::get_payload_byte_len(&self.vid_common));
-        let ns_id = ns_table_struct.get_table_entry(ns_index).0;
-
-        // verify self against args
-        vid.payload_verify(
-            Statement {
-                payload_subslice: &self.ns_payload_flat,
-                range: ns_payload_range,
-                commit,
-                common: &self.vid_common,
-            },
-            &self.ns_proof,
-        )
-        .ok()?
-        .ok()?;
-
-        // verification succeeded, return some data
-        // we know ns_id is correct because the corresponding ns_payload_range passed verification
-        Some((parse_ns_payload(&self.ns_payload_flat, ns_id), ns_id))
     }
 }
 
 // TODO find a home for this function
-fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
+pub fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
     let num_txs = TxTable::get_tx_table_len(ns_payload_flat);
     let tx_bodies_offset = num_txs
         .saturating_add(1)
@@ -390,22 +400,36 @@ fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
     txs
 }
 
+#[cfg(any(test, feature = "testing"))]
+impl hotshot_types::traits::block_contents::TestableBlock
+    for Payload<crate::block::entry::TxTableEntryWord>
+{
+    fn genesis() -> Self {
+        BlockPayload::genesis().0
+    }
+
+    fn txn_count(&self) -> u64 {
+        use hotshot_query_service::availability::QueryablePayload;
+        self.len(&self.ns_table) as u64
+    }
+}
+
 #[cfg(test)]
 mod test {
 
-    use super::test_vid_factory;
-    use crate::block2::payload::{Payload, TableWordTraits};
-    use crate::block2::tables::Table;
+    use super::{test_vid_factory, NamespaceProof};
+    use crate::block::payload::{Payload, TableWordTraits};
+    use crate::block::tables::{NameSpaceTable, Table};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
     use hotshot_types::traits::BlockPayload;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 
-    use crate::block2::entry::{TxTableEntry, TxTableEntryWord};
-    use crate::block2::queryable;
-    use crate::block2::tables::test::TxTableTest;
-    use crate::block2::tx_iterator::TxIndex;
+    use crate::block::entry::{TxTableEntry, TxTableEntryWord};
+    use crate::block::queryable;
+    use crate::block::tables::test::TxTableTest;
+    use crate::block::tx_iterator::TxIndex;
     use crate::Transaction;
     use rand::RngCore;
     use std::marker::PhantomData;
@@ -544,7 +568,8 @@ mod test {
 
             // test namespace table length
             let actual_ns_table_len =
-                TxTableEntry::from_bytes(&actual_ns_table[..TxTableEntry::byte_len()]).unwrap();
+                TxTableEntry::from_bytes(&actual_ns_table.get_bytes()[..TxTableEntry::byte_len()])
+                    .unwrap();
             assert_eq!(
                 actual_ns_table_len,
                 TxTableEntry::try_from(test_case.len()).unwrap(),
@@ -559,7 +584,8 @@ mod test {
             let mut block_iter = block.iter(&actual_ns_table); // test iterator correctness
             let mut prev_entry = TxTableEntry::zero();
             let mut derived_block_payload = Vec::new();
-            for (ns_idx, (ns_id, entry)) in ns_table_iter::<TableWord>(&actual_ns_table).enumerate()
+            for (ns_idx, (ns_id, entry)) in
+                ns_table_iter::<TableWord>(actual_ns_table.get_bytes()).enumerate()
             {
                 // warning! ns_id may not equal VmId(ns_idx) due to HashMap nondeterminism
 
@@ -588,16 +614,27 @@ mod test {
                 let ns_proof = block
                     .namespace_with_proof(
                         &actual_ns_table,
-                        ns_idx,
+                        ns_id,
                         &vid,
                         disperse_data.common.clone(),
                     )
                     .unwrap();
-                assert_eq!(
-                    ns_proof.ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes returned from namespace_with_proof",
-                    ns_id.0,
-                );
+
+                if let NamespaceProof::Existence {
+                    ref ns_payload_flat,
+                    ..
+                } = ns_proof
+                {
+                    assert_eq!(
+                        ns_payload_flat, &derived_ns.payload_flat,
+                        "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                        ns_id.0,
+                    );
+                } else {
+                    // TODO test for non-existence
+                    panic!("expect NamespaceProof::Existence variant");
+                };
+
                 let (ns_proof_txs, ns_proof_ns_id) = ns_proof
                     .verify(&vid, &disperse_data.commit, &actual_ns_table)
                     .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id.0));
@@ -754,7 +791,11 @@ mod test {
                 payload_byte_len
             );
 
-            let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
+            // TODO don't initialize Payload with empty namespace table
+            let block = Payload::from_bytes(
+                test_case.payload.iter().cloned(),
+                &NameSpaceTable::from_vec(Vec::new()),
+            );
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
 
@@ -795,7 +836,12 @@ mod test {
 
         let mut rng = jf_utils::test_rng();
         let test_case = TestCase::<TableWord>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
-        let block = Payload::from_bytes(test_case.payload.iter().cloned(), &Vec::new());
+
+        // TODO don't initialize Payload with empty namespace table
+        let block = Payload::from_bytes(
+            test_case.payload.iter().cloned(),
+            &NameSpaceTable::from_vec(Vec::new()),
+        );
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
@@ -963,9 +1009,9 @@ mod test {
     }
 
     mod helpers {
-        use crate::block2::entry::TxTableEntry;
-        use crate::block2::payload::TableWordTraits;
-        use crate::block2::tables::{test::TxTableTest, NameSpaceTable, Table};
+        use crate::block::entry::TxTableEntry;
+        use crate::block::payload::TableWordTraits;
+        use crate::block::tables::{test::TxTableTest, NameSpaceTable, Table};
         use crate::VmId;
         use rand::RngCore;
 
