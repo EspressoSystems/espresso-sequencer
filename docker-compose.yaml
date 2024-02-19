@@ -239,6 +239,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:

@@ -251,12 +251,14 @@ pub async fn init_node(
             tracing::info!("loading network config from orchestrator");
             let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
                 orchestrator_client.get_config(public_ip.to_string()).await;
+            let node_index = config.node_index;
 
             // Get updated config from orchestrator containing all peer's public keys
             config = orchestrator_client
                 .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
 
+            config.node_index = node_index;
             config.config.my_own_validator_config.private_key = private_staking_key.clone();
             config.config.my_own_validator_config.public_key = public_staking_key;
 

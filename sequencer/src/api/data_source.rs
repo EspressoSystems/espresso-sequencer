@@ -12,6 +12,7 @@ use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId},
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
+    node::NodeDataSource,
     status::StatusDataSource,
     QueryResult,
 };
@@ -50,6 +51,7 @@ impl DataSourceOptions for persistence::fs::Options {
 #[async_trait]
 pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
+    + NodeDataSource<SeqTypes>
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
     + VersionedDataSource

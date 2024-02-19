@@ -216,9 +216,10 @@ impl Options {
             app.register_module("status", status_api)?;
         }
 
-        // Initialize availability API
+        // Initialize availability and node APIs (these both use the same data source).
         let availability_api = endpoints::availability::<N, D>()?;
         app.register_module("availability", availability_api)?;
+        app.register_module("node", endpoints::node::<N, D>()?)?;
 
         self.init_hotshot_modules(&mut app)?;
 

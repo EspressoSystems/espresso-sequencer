@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -e
+
+SERVER=http://localhost:50000
+
+# Wait for the server to start.
+while ! curl --fail $SERVER; do
+	echo "Waiting for demo to start"
+	sleep 1
+done
+
+# Get the block height and number of transactions, wait some time, and check that these numbers have
+# both increased.
+block_height=`curl -s $SERVER/node/block-height`
+num_tx=`curl -s $SERVER/node/transactions/count`
+
+echo "Initial state:"
+echo "  block_height: $block_height"
+echo "  transactions: $num_tx"
+
+sleep 10
+
+new_block_height=`curl -s $SERVER/node/block-height`
+new_num_tx=`curl -s $SERVER/node/transactions/count`
+
+echo "Final state:"
+echo "  block_height: $new_block_height"
+echo "  transactions: $new_num_tx"
+
+if ! [[ $new_block_height > $block_height ]]; then
+	echo "Block height is not increasing!"
+	exit 1
+fi
+if ! [[ $new_num_tx > $num_tx ]]; then
+	echo "Transaction count is not increasing!"
+	exit 1
+fi
