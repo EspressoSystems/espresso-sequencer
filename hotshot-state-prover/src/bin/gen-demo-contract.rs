@@ -110,7 +110,7 @@ fn main() {
         import {{ BN254 }} from \"bn254/BN254.sol\";
         import {{ LightClient as LC }} from \"../src/LightClient.sol\";
         
-        contract DeployLightClientScript is Script {{
+        contract DeployLightClientDemoScript is Script {{
             function run() external {{
                 string memory seedPhrase = vm.envString(\"MNEMONIC\");
                 uint256 privateKey = vm.deriveKey(seedPhrase, 0);
