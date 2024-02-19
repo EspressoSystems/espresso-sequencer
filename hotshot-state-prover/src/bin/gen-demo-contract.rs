@@ -83,7 +83,7 @@ fn main() {
         stake_table_commitment_for_demo(args.num_nodes, args.keygen_seed);
 
     // calculate the path to solidity file
-    let contract_name = "LightClient.s.sol";
+    let contract_name = "LightClientDemo.s.sol";
     let mut path = args.contracts_root_dir;
     path.push("script");
     path.push(contract_name);
