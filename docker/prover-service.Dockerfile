@@ -3,7 +3,7 @@ FROM ubuntu:jammy
 ARG TARGETARCH
 
 RUN apt-get update \
-    &&  apt-get install -y curl git cargo libcurl4 wait-for-it tini\
+    &&  apt-get install -y curl git cargo libcurl4 wait-for-it tini jq \
     &&  rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["tini", "--"]
 

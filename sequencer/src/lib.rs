@@ -8,8 +8,13 @@ pub mod options;
 pub mod state_signature;
 use block::entry::TxTableEntryWord;
 use context::SequencerContext;
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -140,7 +145,22 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 }
 
 #[derive(Clone, Debug)]
-pub struct NodeState {}
+pub struct NodeState {
+    genesis_state: ValidatedState,
+    builder_address: Wallet<SigningKey>,
+}
+
+impl Default for NodeState {
+    fn default() -> Self {
+        let wallet = FeeAccount::test_wallet();
+
+        Self {
+            genesis_state: ValidatedState::default(),
+            builder_address: wallet,
+        }
+    }
+}
+
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
@@ -228,6 +248,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
+    builder_mnemonic: String,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -251,11 +272,18 @@ pub async fn init_node(
             tracing::info!("loading network config from orchestrator");
             let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
                 orchestrator_client.get_config(public_ip.to_string()).await;
+            let node_index = config.node_index;
 
             // Get updated config from orchestrator containing all peer's public keys
             config = orchestrator_client
                 .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
+
+            // `post_and_wait_all_public_keys` does not set `config.node_index` properly, so we fix
+            // it by using the `node_index` from `get_config`. This will be fixed by
+            // https://github.com/EspressoSystems/HotShot/issues/2618, after which we can remove
+            // this line.
+            config.node_index = node_index;
 
             config.config.my_own_validator_config.private_key = private_staking_key.clone();
             config.config.my_own_validator_config.public_key = public_staking_key;
@@ -306,7 +334,15 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let instance_state = &NodeState {};
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase::<&str>(&builder_mnemonic)
+        .build()
+        .unwrap();
+
+    let instance_state = NodeState {
+        builder_address: wallet,
+        genesis_state: ValidatedState::default(),
+    };
     let hotshot = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
@@ -315,7 +351,7 @@ pub async fn init_node(
         networks,
         config.config,
         metrics,
-        instance_state,
+        &instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(
@@ -341,16 +377,12 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::{Stream, StreamExt};
-    use hotshot::traits::{
-        implementations::{MasterMap, MemoryNetwork},
-        BlockPayload,
-    };
+    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
+    use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
 
     use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
-        ExecutionType, ValidatorConfig,
+        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -424,7 +456,7 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
-            let instance_state = &NodeState {};
+            let instance_state = &NodeState::default();
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
@@ -442,33 +474,33 @@ pub mod testing {
         handles
     }
 
-    // Wait for decide event, make sure it matches submitted transaction
+    // Wait for decide event, make sure it matches submitted transaction. Return the block number
+    // containing the transaction.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = Event> + Unpin),
         submitted_txn: &Transaction,
-    ) -> Result<(), ()> {
+    ) -> u64 {
         let commitment = submitted_txn.commit();
 
         // Keep getting events until we see a Decide event
         loop {
-            let event = events.next().await;
+            let event = events.next().await.unwrap();
             tracing::info!("Received event from handle: {event:?}");
 
-            if let Some(Event {
-                event: Decide { leaf_chain, .. },
-                ..
-            }) = event
-            {
-                if leaf_chain
-                    .iter()
-                    .any(|(leaf, _)| match &leaf.block_payload {
-                        Some(ref block) => block
-                            .transaction_commitments(leaf.get_block_header().metadata())
-                            .contains(&commitment),
-                        None => false,
-                    })
-                {
-                    return Ok(());
+            if let Decide { leaf_chain, .. } = event.event {
+                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                    if leaf
+                        .block_payload
+                        .as_ref()?
+                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .contains(&commitment)
+                    {
+                        Some(leaf.get_block_header().block_number())
+                    } else {
+                        None
+                    }
+                }) {
+                    return height;
                 }
             } else {
                 // Keep waiting
@@ -479,6 +511,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
+
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::StreamExt;
@@ -488,7 +521,7 @@ mod test {
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     #[async_std::test]
-    async fn test_skeleton_instantiation() -> Result<(), ()> {
+    async fn test_skeleton_instantiation() {
         setup_logging();
         setup_backtrace();
 
@@ -507,7 +540,7 @@ mod test {
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await
+        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
     }
 
     #[async_std::test]
@@ -523,7 +556,8 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
-        let mut parent = Header::genesis(&NodeState {}).0;
+        let mut parent = Header::genesis(&NodeState::default()).0;
+
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {
@@ -533,9 +567,9 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for (i, (leaf, _)) in leaf_chain.iter().rev().enumerate() {
+            for (leaf, _) in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
-                if i == 0 {
+                if header.height == 0 {
                     parent = header;
                     continue;
                 }

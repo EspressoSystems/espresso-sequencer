@@ -307,7 +307,7 @@ pub enum ProverError {
     InvalidState(String),
     /// Error when communicating with the smart contract: {0}
     ContractError(anyhow::Error),
-    /// Error when communicating with the state relay server
+    /// Error when communicating with the state relay server: {0}
     RelayServerError(ServerError),
     /// Internal error with the stake table
     StakeTableError(StakeTableError),

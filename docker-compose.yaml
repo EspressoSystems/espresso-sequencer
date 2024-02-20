@@ -60,7 +60,7 @@ services:
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_PORT
       - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
-      - RUST_LOG=warn
+      - RUST_LOG
       - RUST_LOG_FORMAT
 
   prover-service:
@@ -237,8 +237,12 @@ services:
 
   submit-transactions:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    ports:
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PORT:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT"
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
