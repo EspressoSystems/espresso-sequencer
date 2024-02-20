@@ -6,9 +6,14 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+anyhow = { workspace = true }
+jf-primitives = { workspace = true }
+hotshot-types = { workspace = true }
+hotshot = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-stake-table = { workspace = true }
 hs-builder-api = { workspace = true }
 hs-builder-core = { workspace = true }
 sequencer = { path = "../sequencer" }
-
-
+tracing = { workspace = true }
 # [[bin]]

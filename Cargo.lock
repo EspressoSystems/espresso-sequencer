@@ -1265,9 +1265,16 @@ dependencies = [
 name = "builder"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "hotshot",
+ "hotshot-orchestrator",
+ "hotshot-stake-table",
+ "hotshot-types",
  "hs-builder-api",
  "hs-builder-core",
+ "jf-primitives",
  "sequencer",
+ "tracing",
 ]
 
 [[package]]
