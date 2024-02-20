@@ -272,11 +272,18 @@ pub async fn init_node(
             tracing::info!("loading network config from orchestrator");
             let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
                 orchestrator_client.get_config(public_ip.to_string()).await;
+            let node_index = config.node_index;
 
             // Get updated config from orchestrator containing all peer's public keys
             config = orchestrator_client
                 .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
+
+            // `post_and_wait_all_public_keys` does not set `config.node_index` properly, so we fix
+            // it by using the `node_index` from `get_config`. This will be fixed by
+            // https://github.com/EspressoSystems/HotShot/issues/2618, after which we can remove
+            // this line.
+            config.node_index = node_index;
 
             config.config.my_own_validator_config.private_key = private_staking_key.clone();
             config.config.my_own_validator_config.public_key = public_staking_key;
@@ -370,16 +377,12 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::{Stream, StreamExt};
-    use hotshot::traits::{
-        implementations::{MasterMap, MemoryNetwork},
-        BlockPayload,
-    };
+    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
+    use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
 
     use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
-        ExecutionType, ValidatorConfig,
+        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -471,33 +474,33 @@ pub mod testing {
         handles
     }
 
-    // Wait for decide event, make sure it matches submitted transaction
+    // Wait for decide event, make sure it matches submitted transaction. Return the block number
+    // containing the transaction.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = Event> + Unpin),
         submitted_txn: &Transaction,
-    ) -> Result<(), ()> {
+    ) -> u64 {
         let commitment = submitted_txn.commit();
 
         // Keep getting events until we see a Decide event
         loop {
-            let event = events.next().await;
+            let event = events.next().await.unwrap();
             tracing::info!("Received event from handle: {event:?}");
 
-            if let Some(Event {
-                event: Decide { leaf_chain, .. },
-                ..
-            }) = event
-            {
-                if leaf_chain
-                    .iter()
-                    .any(|(leaf, _)| match &leaf.block_payload {
-                        Some(ref block) => block
-                            .transaction_commitments(leaf.get_block_header().metadata())
-                            .contains(&commitment),
-                        None => false,
-                    })
-                {
-                    return Ok(());
+            if let Decide { leaf_chain, .. } = event.event {
+                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                    if leaf
+                        .block_payload
+                        .as_ref()?
+                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .contains(&commitment)
+                    {
+                        Some(leaf.get_block_header().block_number())
+                    } else {
+                        None
+                    }
+                }) {
+                    return height;
                 }
             } else {
                 // Keep waiting
@@ -518,7 +521,7 @@ mod test {
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     #[async_std::test]
-    async fn test_skeleton_instantiation() -> Result<(), ()> {
+    async fn test_skeleton_instantiation() {
         setup_logging();
         setup_backtrace();
 
@@ -537,7 +540,7 @@ mod test {
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await
+        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
     }
 
     #[async_std::test]
