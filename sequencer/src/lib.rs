@@ -258,7 +258,12 @@ pub async fn init_node(
                 .post_and_wait_all_public_keys(config.node_index, public_staking_key)
                 .await;
 
+            // `post_and_wait_all_public_keys` does not set `config.node_index` properly, so we fix
+            // it by using the `node_index` from `get_config`. This will be fixed by
+            // https://github.com/EspressoSystems/HotShot/issues/2618, after which we can remove
+            // this line.
             config.node_index = node_index;
+
             config.config.my_own_validator_config.private_key = private_staking_key.clone();
             config.config.my_own_validator_config.public_key = public_staking_key;
 
