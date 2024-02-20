@@ -416,6 +416,20 @@ mod test_headers {
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
 
+            let block_merkle_tree =
+                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
+
+            let fee_info = FeeInfo::default();
+            let fee_merkle_tree = FeeMerkleTree::from_kv_set(
+                20,
+                Vec::from([(fee_info.account(), fee_info.amount())]),
+            )
+            .unwrap();
+            let validated_state = ValidatedState {
+                block_merkle_tree: block_merkle_tree.clone(),
+                fee_merkle_tree,
+            };
+
             let header = Header::from_info(
                 genesis.payload_commitment,
                 metadata,
@@ -435,7 +449,7 @@ mod test_headers {
 
             assert_eq!(
                 block_merkle_tree,
-                BlockMerkleTree::from_elems(32, Vec::<Commitment<Header>>::new()).unwrap()
+                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap()
             );
         }
     }
