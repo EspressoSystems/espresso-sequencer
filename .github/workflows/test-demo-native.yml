@@ -48,10 +48,6 @@ jobs:
 
       - name: Test Demo
         run: |
-          pwd
-          echo "$PATH"
-          cat "$GITHUB_ENV"
-          which process-compose
-          scripts/demo-native &
+          scripts/demo-native --tui false &
           scripts/smoke-test-demo
-          bin/process-compose down
+          process-compose down
