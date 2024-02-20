@@ -28,7 +28,7 @@ use jf_primitives::{
 use sequencer::{
     context::SequencerContext, network, persistence::SequencerPersistence,
     state_signature::static_stake_table_commitment, NetworkParams, Node, NodeState, PrivKey,
-    PubKey, SeqTypes as BuilderType, Storage, STAKE_TABLE_CAPACITY,
+    PubKey, SeqTypes as BuilderType, Storage,
 };
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
