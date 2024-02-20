@@ -28,7 +28,7 @@ echo "Final state:"
 echo "  block_height: $new_block_height"
 echo "  transactions: $new_num_tx"
 
-if ! [[ $new_block_height > $block_height ]]; then
+if ! [[ $new_block_height -gt $block_height ]]; then
 	echo "Block height is not increasing!"
 	exit 1
 fi
