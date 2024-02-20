@@ -446,20 +446,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 };
                 handle.add_known_peers(bs_addrs).await.unwrap();
 
-                // 10 minute timeout
-                let timeout_duration = Duration::from_secs(600);
-                // perform connection
-                info!("WAITING TO CONNECT ON NODE {:?}", id);
-                handle
-                    .wait_to_connect(4, id, timeout_duration)
-                    .await
-                    .unwrap();
-
-                let connected_num = handle.num_connected().await?;
-                metrics_connected_peers
-                    .metrics
-                    .connected_peers
-                    .set(connected_num);
+                handle.begin_bootstrap().await?;
 
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
@@ -471,7 +458,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 if is_da {
                     handle.subscribe("DA".to_string()).await.unwrap();
                 }
-
                 // TODO figure out some way of passing in ALL keypairs. That way we can add the
                 // global topic to the topic map
                 // NOTE this wont' work without this change
@@ -487,7 +473,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 while handle.put_record(&pk, &handle.peer_id()).await.is_err() {
                     async_sleep(Duration::from_secs(1)).await;
                 }
-
                 info!(
                     "Node {:?} is ready, type: {:?}",
                     handle.peer_id(),
@@ -497,12 +482,25 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 while handle.put_record(&handle.peer_id(), &pk).await.is_err() {
                     async_sleep(Duration::from_secs(1)).await;
                 }
-
+                // 10 minute timeout
+                let timeout_duration = Duration::from_secs(600);
+                // perform connection
+                info!("WAITING TO CONNECT ON NODE {:?}", id);
+                handle
+                    .wait_to_connect(4, id, timeout_duration)
+                    .await
+                    .unwrap();
                 info!(
                     "node {:?} is barring bootstrap, type: {:?}",
                     handle.peer_id(),
                     node_type
                 );
+
+                let connected_num = handle.num_connected().await?;
+                metrics_connected_peers
+                    .metrics
+                    .connected_peers
+                    .set(connected_num);
 
                 is_ready.store(true, Ordering::Relaxed);
                 info!("STARTING CONSENSUS ON {:?}", handle.peer_id());
@@ -531,7 +529,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         broadcast_send: &UnboundedSender<M>,
     ) -> Result<(), NetworkError> {
         match msg {
-            GossipMsg(msg, _topic) => {
+            GossipMsg(msg, _) => {
                 let result: Result<M, _> = bincode_opts().deserialize(&msg);
                 if let Ok(result) = result {
                     broadcast_send

@@ -241,7 +241,6 @@ pub async fn spin_up_swarm<S: Debug + Default>(
 ) -> Result<(), NetworkNodeHandleError> {
     info!("known_nodes{:?}", known_nodes);
     handle.add_known_peers(known_nodes).await?;
-    handle.wait_to_connect(4, idx, timeout_len).await?;
     handle.subscribe("global".to_string()).await?;
 
     Ok(())

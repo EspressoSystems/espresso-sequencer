@@ -145,7 +145,11 @@ pub async fn spin_up_swarms<S: Debug + Default>(
         bootstrap_addrs.push((node.peer_id(), addr));
         connecting_futs.push({
             let node = node.clone();
-            async move { node.wait_to_connect(4, i, timeout_len).await }.boxed_local()
+            async move {
+                node.begin_bootstrap().await?;
+                node.lookup_pid(PeerId::random()).await
+            }
+            .boxed_local()
         });
         handles.push(node);
     }
@@ -175,8 +179,8 @@ pub async fn spin_up_swarms<S: Debug + Default>(
         connecting_futs.push({
             let node = node.clone();
             async move {
-                node.wait_to_connect(4, num_bootstrap + j, timeout_len)
-                    .await
+                node.begin_bootstrap().await?;
+                node.lookup_pid(PeerId::random()).await
             }
             .boxed_local()
         });

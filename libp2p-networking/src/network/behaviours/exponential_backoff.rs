@@ -61,6 +61,10 @@ impl ExponentialBackoff {
             true
         }
     }
+    /// Marked as expired regardless of time left.
+    pub fn expire(&mut self) {
+        self.started = None;
+    }
 }
 
 impl Default for ExponentialBackoff {
