@@ -171,6 +171,25 @@ where
             }
             .boxed()
         })?
+        .get("get_leaf_range", move |req, state| {
+            async move {
+                let from = req.integer_param::<_, usize>("from")?;
+                let until = req.integer_param("until")?;
+
+                state
+                    .get_leaf_range(from..until)
+                    .await
+                    .enumerate()
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .try_collect::<Vec<_>>()
+                    .await
+            }
+            .boxed()
+        })?
         .stream("stream_leaves", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
@@ -202,6 +221,26 @@ where
                     })?
                     .header()
                     .clone())
+            }
+            .boxed()
+        })?
+        .get("get_header_range", move |req, state| {
+            async move {
+                let from = req.integer_param::<_, usize>("from")?;
+                let until = req.integer_param::<_, usize>("until")?;
+
+                state
+                    .get_block_range(from..until)
+                    .await
+                    .enumerate()
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .map(|r| r.map(|block| block.header().clone()))
+                    .try_collect::<Vec<_>>()
+                    .await
             }
             .boxed()
         })?
@@ -243,6 +282,25 @@ where
             }
             .boxed()
         })?
+        .get("get_block_range", move |req, state| {
+            async move {
+                let from = req.integer_param::<_, usize>("from")?;
+                let until = req.integer_param("until")?;
+
+                state
+                    .get_block_range(from..until)
+                    .await
+                    .enumerate()
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .try_collect::<Vec<_>>()
+                    .await
+            }
+            .boxed()
+        })?
         .stream("stream_blocks", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
@@ -272,6 +330,25 @@ where
                     .context(FetchBlockSnafu {
                         resource: id.to_string(),
                     })
+            }
+            .boxed()
+        })?
+        .get("get_payload_range", move |req, state| {
+            async move {
+                let from = req.integer_param::<_, usize>("from")?;
+                let until = req.integer_param("until")?;
+
+                state
+                    .get_payload_range(from..until)
+                    .await
+                    .enumerate()
+                    .then(|(index, fetch)| async move {
+                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                            resource: (index + from).to_string(),
+                        })
+                    })
+                    .try_collect::<Vec<_>>()
+                    .await
             }
             .boxed()
         })?
@@ -579,6 +656,38 @@ mod test {
                         .hash()
                 );
             }
+
+            let block_range: Vec<BlockQueryData<MockTypes>> = client
+                .get(&format!("block/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(block_range.len() as u64, i);
+
+            let leaf_range: Vec<LeafQueryData<MockTypes>> = client
+                .get(&format!("leaf/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(leaf_range.len() as u64, i);
+
+            let payload_range: Vec<PayloadQueryData<MockTypes>> = client
+                .get(&format!("payload/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(payload_range.len() as u64, i);
+
+            let header_range: Vec<Header<MockTypes>> = client
+                .get(&format!("header/{}/{}", 0, i))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(header_range.len() as u64, i);
         }
     }
 

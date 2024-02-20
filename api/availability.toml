@@ -65,6 +65,15 @@ the quorum certificate signing this leaf. Both QCs have the schema
 ```
 """
 
+[route.get_leaf_range]
+PATH = ["leaf/:from/:until"]
+":from" = "Integer"
+":until" = "Integer"
+DOC = """
+Get the leaves based on their position in the ledger,
+the leaves are taken starting from the given :from up until the given :until.
+"""
+
 [route.stream_leaves]
 PATH = ["stream/leaves/:height"]
 METHOD = "SOCKET"
@@ -85,6 +94,16 @@ Get a header by its position in the ledger (0 is the genesis block) or its hash.
 
 Returns an application-specific header type.
 """
+
+[route.get_header_range]
+PATH = ["header/:from/:until"]
+":from" = "Integer"
+":until" = "Integer"
+DOC = """
+Get the headers based on their position in the ledger,
+the headers are taken starting from the given :from up until the given :until.
+"""
+
 
 [route.stream_headers]
 PATH = ["stream/headers/:height"]
@@ -122,6 +141,15 @@ Returns
 ```
 """
 
+[route.get_block_range]
+PATH = ["block/:from/:until"]
+":from" = "Integer"
+":until" = "Integer"
+DOC = """
+Get the blocks based on their position in the ledger,
+the blocks are taken starting from the given :from up until the given :until.
+"""
+
 [route.stream_blocks]
 PATH = ["stream/blocks/:height"]
 METHOD = "SOCKET"
@@ -139,6 +167,15 @@ PATH = ["payload/:height", "payload/hash/:hash", "payload/block-hash/:block-hash
 ":block-hash" = "TaggedBase64"
 DOC = """
 Get the payload of a block by its position in the ledger (0 is the genesis block) or its hash.
+"""
+
+[route.get_payload_range]
+PATH = ["payload/:from/:until"]
+":from" = "Integer"
+":until" = "Integer"
+DOC = """
+Get the payloads of blocks based on their position in the ledger,
+the payloads are taken starting from the given :from up until the given :until.
 """
 
 [route.stream_payloads]
