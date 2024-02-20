@@ -32,7 +32,7 @@ if ! [[ $new_block_height -gt $block_height ]]; then
 	echo "Block height is not increasing!"
 	exit 1
 fi
-if ! [[ $new_num_tx > $num_tx ]]; then
+if ! [[ $new_num_tx -gt $num_tx ]]; then
 	echo "Transaction count is not increasing!"
 	exit 1
 fi
