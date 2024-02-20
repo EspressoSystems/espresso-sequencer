@@ -14,7 +14,7 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// This state is submitted by any state-prover with evidence which is
 /// a SNARK proof that proves consensus.
 /// This contract also keeps track of the current epoch.
-/// For Decaf, the epoch is not used. <br>
+/// For this version, the epoch is not used. <br>
 /// The light client state primarily consists of:<br>
 /// - the merkle root of finalized block committments,<br>
 /// - the fee ledger committment and <br>
@@ -30,7 +30,7 @@ contract LightClient {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    /// - not used in Decaf to set to type(uint32).max when deployed
+    /// - not used in this version: set to type(uint32).max when deployed
     uint32 public immutable BLOCKS_PER_EPOCH;
 
     // === Storage ===
@@ -90,7 +90,7 @@ contract LightClient {
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
 
-    ///@dev For the Decaf launch, we are not using epochs so numBlockPerEpoch
+    ///@dev For this version, we are not using epochs so numBlockPerEpoch
     /// is set to type(uint32).max during deployment
     ///@param genesis this is the initial state of Hotshot (Espresso's consensus state)
     ///@param numBlockPerEpoch this specifies the number of L1 blocks in an epoch
@@ -129,7 +129,7 @@ contract LightClient {
     /// epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
-    /// @dev in Decaf, only a permissioned prover doing the computations
+    /// @dev in this version, only a permissioned prover doing the computations
     /// will call this function
     ///
     /// @param newState new light client state
