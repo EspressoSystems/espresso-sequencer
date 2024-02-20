@@ -148,73 +148,6 @@ pub mod light_client {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("finalizedState"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("finalizedState"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("viewNum"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockHeight"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("feeLedgerComm"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("threshold"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
-                                ),
-                            },
-                        ],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("frozenStakeTableCommitment"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("frozenStakeTableCommitment",),
@@ -247,68 +180,55 @@ pub mod light_client {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("genesisState"),
+                    ::std::borrow::ToOwned::to_owned("getFinalizedState"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("genesisState"),
+                        name: ::std::borrow::ToOwned::to_owned("getFinalizedState"),
                         inputs: ::std::vec![],
-                        outputs: ::std::vec![
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("viewNum"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct LightClient.LightClientState",
                                 ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockHeight"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("getGenesisState"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getGenesisState"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct LightClient.LightClientState",
                                 ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("feeLedgerComm"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("threshold"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint256"),
-                                ),
-                            },
-                        ],
+                            ),
+                        },],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
@@ -490,6 +410,79 @@ pub mod light_client {
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("states"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("states"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("index"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint32"),
+                            ),
+                        },],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("viewNum"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blockHeight"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("feeLedgerComm"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("threshold"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
                 ),
                 (
@@ -892,26 +885,6 @@ pub mod light_client {
                 .method_hash([118, 103, 24, 8], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `finalizedState` (0x9fdb54a7) function
-        pub fn finalized_state(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            (
-                u64,
-                u64,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-            ),
-        > {
-            self.0
-                .method_hash([159, 219, 84, 167], ())
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `frozenStakeTableCommitment` (0x382b215a) function
         pub fn frozen_stake_table_commitment(
             &self,
@@ -928,24 +901,20 @@ pub mod light_client {
                 .method_hash([202, 111, 232, 85], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `genesisState` (0xd24d933d) function
-        pub fn genesis_state(
+        ///Calls the contract's `getFinalizedState` (0x82d07ff3) function
+        pub fn get_finalized_state(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            (
-                u64,
-                u64,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-                ::ethers::core::types::U256,
-            ),
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, LightClientState> {
             self.0
-                .method_hash([210, 77, 147, 61], ())
+                .method_hash([130, 208, 127, 243], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `getGenesisState` (0x4847ae5d) function
+        pub fn get_genesis_state(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, LightClientState> {
+            self.0
+                .method_hash([72, 71, 174, 93], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `initialize` (0x5420d15d) function
@@ -986,6 +955,27 @@ pub mod light_client {
         pub fn renounce_ownership(&self) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([113, 80, 24, 166], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `states` (0x7f17baad) function
+        pub fn states(
+            &self,
+            index: u32,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (
+                u64,
+                u64,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+            ),
+        > {
+            self.0
+                .method_hash([127, 23, 186, 173], index)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `transferOwnership` (0xf2fde38b) function
@@ -1915,21 +1905,6 @@ pub mod light_client {
     )]
     #[ethcall(name = "currentEpoch", abi = "currentEpoch()")]
     pub struct CurrentEpochCall;
-    ///Container type for all input parameters for the `finalizedState` function with signature `finalizedState()` and selector `0x9fdb54a7`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "finalizedState", abi = "finalizedState()")]
-    pub struct FinalizedStateCall;
     ///Container type for all input parameters for the `frozenStakeTableCommitment` function with signature `frozenStakeTableCommitment()` and selector `0x382b215a`
     #[derive(
         Clone,
@@ -1963,7 +1938,7 @@ pub mod light_client {
     )]
     #[ethcall(name = "frozenThreshold", abi = "frozenThreshold()")]
     pub struct FrozenThresholdCall;
-    ///Container type for all input parameters for the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
+    ///Container type for all input parameters for the `getFinalizedState` function with signature `getFinalizedState()` and selector `0x82d07ff3`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -1976,8 +1951,23 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "genesisState", abi = "genesisState()")]
-    pub struct GenesisStateCall;
+    #[ethcall(name = "getFinalizedState", abi = "getFinalizedState()")]
+    pub struct GetFinalizedStateCall;
+    ///Container type for all input parameters for the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "getGenesisState", abi = "getGenesisState()")]
+    pub struct GetGenesisStateCall;
     ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)` and selector `0x5420d15d`
     #[derive(
         Clone,
@@ -2060,6 +2050,23 @@ pub mod light_client {
     )]
     #[ethcall(name = "renounceOwnership", abi = "renounceOwnership()")]
     pub struct RenounceOwnershipCall;
+    ///Container type for all input parameters for the `states` function with signature `states(uint32)` and selector `0x7f17baad`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "states", abi = "states(uint32)")]
+    pub struct StatesCall {
+        pub index: u32,
+    }
     ///Container type for all input parameters for the `transferOwnership` function with signature `transferOwnership(address)` and selector `0xf2fde38b`
     #[derive(
         Clone,
@@ -2138,15 +2145,16 @@ pub mod light_client {
         BlocksPerEpoch(BlocksPerEpochCall),
         ComputeStakeTableComm(ComputeStakeTableCommCall),
         CurrentEpoch(CurrentEpochCall),
-        FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
         FrozenThreshold(FrozenThresholdCall),
-        GenesisState(GenesisStateCall),
+        GetFinalizedState(GetFinalizedStateCall),
+        GetGenesisState(GetGenesisStateCall),
         Initialize(InitializeCall),
         NewFinalizedState(NewFinalizedStateCall),
         Owner(OwnerCall),
         ProxiableUUID(ProxiableUUIDCall),
         RenounceOwnership(RenounceOwnershipCall),
+        States(StatesCall),
         TransferOwnership(TransferOwnershipCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
@@ -2186,11 +2194,6 @@ pub mod light_client {
                 return Ok(Self::CurrentEpoch(decoded));
             }
             if let Ok(decoded) =
-                <FinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::FinalizedState(decoded));
-            }
-            if let Ok(decoded) =
                 <FrozenStakeTableCommitmentCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::FrozenStakeTableCommitment(decoded));
@@ -2200,9 +2203,15 @@ pub mod light_client {
             {
                 return Ok(Self::FrozenThreshold(decoded));
             }
-            if let Ok(decoded) = <GenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            if let Ok(decoded) =
+                <GetFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(Self::GenesisState(decoded));
+                return Ok(Self::GetFinalizedState(decoded));
+            }
+            if let Ok(decoded) =
+                <GetGenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::GetGenesisState(decoded));
             }
             if let Ok(decoded) = <InitializeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Initialize(decoded));
@@ -2223,6 +2232,9 @@ pub mod light_client {
                 <RenounceOwnershipCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::RenounceOwnership(decoded));
+            }
+            if let Ok(decoded) = <StatesCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::States(decoded));
             }
             if let Ok(decoded) =
                 <TransferOwnershipCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2261,17 +2273,18 @@ pub mod light_client {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::FinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FrozenStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::FrozenThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetGenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Initialize(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Owner(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::ProxiableUUID(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::RenounceOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::States(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TransferOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeToAndCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VotingStakeTableCommitment(element) => {
@@ -2291,15 +2304,16 @@ pub mod light_client {
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
-                Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenThreshold(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GetGenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Owner(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ProxiableUUID(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RenounceOwnership(element) => ::core::fmt::Display::fmt(element, f),
+                Self::States(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
@@ -2342,11 +2356,6 @@ pub mod light_client {
             Self::CurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<FinalizedStateCall> for LightClientCalls {
-        fn from(value: FinalizedStateCall) -> Self {
-            Self::FinalizedState(value)
-        }
-    }
     impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientCalls {
         fn from(value: FrozenStakeTableCommitmentCall) -> Self {
             Self::FrozenStakeTableCommitment(value)
@@ -2357,9 +2366,14 @@ pub mod light_client {
             Self::FrozenThreshold(value)
         }
     }
-    impl ::core::convert::From<GenesisStateCall> for LightClientCalls {
-        fn from(value: GenesisStateCall) -> Self {
-            Self::GenesisState(value)
+    impl ::core::convert::From<GetFinalizedStateCall> for LightClientCalls {
+        fn from(value: GetFinalizedStateCall) -> Self {
+            Self::GetFinalizedState(value)
+        }
+    }
+    impl ::core::convert::From<GetGenesisStateCall> for LightClientCalls {
+        fn from(value: GetGenesisStateCall) -> Self {
+            Self::GetGenesisState(value)
         }
     }
     impl ::core::convert::From<InitializeCall> for LightClientCalls {
@@ -2385,6 +2399,11 @@ pub mod light_client {
     impl ::core::convert::From<RenounceOwnershipCall> for LightClientCalls {
         fn from(value: RenounceOwnershipCall) -> Self {
             Self::RenounceOwnership(value)
+        }
+    }
+    impl ::core::convert::From<StatesCall> for LightClientCalls {
+        fn from(value: StatesCall) -> Self {
+            Self::States(value)
         }
     }
     impl ::core::convert::From<TransferOwnershipCall> for LightClientCalls {
@@ -2505,29 +2524,6 @@ pub mod light_client {
         Hash,
     )]
     pub struct CurrentEpochReturn(pub u64);
-    ///Container type for all return fields from the `finalizedState` function with signature `finalizedState()` and selector `0x9fdb54a7`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct FinalizedStateReturn {
-        pub view_num: u64,
-        pub block_height: u64,
-        pub block_comm_root: ::ethers::core::types::U256,
-        pub fee_ledger_comm: ::ethers::core::types::U256,
-        pub stake_table_bls_key_comm: ::ethers::core::types::U256,
-        pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
-        pub stake_table_amount_comm: ::ethers::core::types::U256,
-        pub threshold: ::ethers::core::types::U256,
-    }
     ///Container type for all return fields from the `frozenStakeTableCommitment` function with signature `frozenStakeTableCommitment()` and selector `0x382b215a`
     #[derive(
         Clone,
@@ -2556,7 +2552,7 @@ pub mod light_client {
         Hash,
     )]
     pub struct FrozenThresholdReturn(pub ::ethers::core::types::U256);
-    ///Container type for all return fields from the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
+    ///Container type for all return fields from the `getFinalizedState` function with signature `getFinalizedState()` and selector `0x82d07ff3`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -2569,16 +2565,21 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub struct GenesisStateReturn {
-        pub view_num: u64,
-        pub block_height: u64,
-        pub block_comm_root: ::ethers::core::types::U256,
-        pub fee_ledger_comm: ::ethers::core::types::U256,
-        pub stake_table_bls_key_comm: ::ethers::core::types::U256,
-        pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
-        pub stake_table_amount_comm: ::ethers::core::types::U256,
-        pub threshold: ::ethers::core::types::U256,
-    }
+    pub struct GetFinalizedStateReturn(pub LightClientState);
+    ///Container type for all return fields from the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct GetGenesisStateReturn(pub LightClientState);
     ///Container type for all return fields from the `owner` function with signature `owner()` and selector `0x8da5cb5b`
     #[derive(
         Clone,
@@ -2607,6 +2608,29 @@ pub mod light_client {
         Hash,
     )]
     pub struct ProxiableUUIDReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `states` function with signature `states(uint32)` and selector `0x7f17baad`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct StatesReturn {
+        pub view_num: u64,
+        pub block_height: u64,
+        pub block_comm_root: ::ethers::core::types::U256,
+        pub fee_ledger_comm: ::ethers::core::types::U256,
+        pub stake_table_bls_key_comm: ::ethers::core::types::U256,
+        pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
+        pub stake_table_amount_comm: ::ethers::core::types::U256,
+        pub threshold: ::ethers::core::types::U256,
+    }
     ///Container type for all return fields from the `votingStakeTableCommitment` function with signature `votingStakeTableCommitment()` and selector `0x76b6b7cb`
     #[derive(
         Clone,

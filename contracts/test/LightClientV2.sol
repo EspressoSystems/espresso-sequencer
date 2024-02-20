@@ -38,12 +38,14 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public immutable MINOR = 0;
     uint256 public immutable PATCH = 0;
 
+    /// @notice genesis block commitment index
+    uint32 internal immutable GENESIS_STATE = 0;
+
+    /// @notice Finalized HotShot's light client state index
+    uint32 internal immutable FINALIZED_STATE = 1;
+
     // === Storage ===
     //
-    /// @notice genesis block commitment
-    LightClientState public genesisState;
-    /// @notice global storage of the finalized HotShot's light client state
-    LightClientState public finalizedState;
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -56,6 +58,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public frozenStakeTableCommitment;
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
+
+    /// @notice mapping to store light client states in order to simplify upgrades
+    mapping(uint32 index => LightClientState value) public states;
 
     /// @notice new field for testing purposes
     /// @dev In order to add a field to LightClientState struct one can: add a new contract variable
@@ -82,6 +87,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
+        uint32 extraField; // New field for testing purposes
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -138,8 +144,8 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidArgs();
         }
 
-        genesisState = genesis;
-        finalizedState = genesis;
+        states[GENESIS_STATE] = genesis;
+        states[FINALIZED_STATE] = genesis;
         currentEpoch = 0;
 
         blocksPerEpoch = numBlockPerEpoch;
@@ -162,15 +168,15 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.PlonkProof memory proof
     ) external {
         if (
-            newState.viewNum <= finalizedState.viewNum
-                || newState.blockHeight <= finalizedState.blockHeight
+            newState.viewNum <= getFinalizedState().viewNum
+                || newState.blockHeight <= getFinalizedState().blockHeight
         ) {
             revert OutdatedState();
         }
         uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
+        bool isNewEpoch = getFinalizedState().blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
@@ -193,8 +199,18 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(newField == 0, "newField can only be set to 0");
 
         // upon successful verification, update the latest finalized state
-        finalizedState = newState;
+        states[FINALIZED_STATE] = newState;
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+    }
+
+    /// @dev Simple getter function for the genesis state
+    function getGenesisState() public view returns (LightClientState memory) {
+        return states[GENESIS_STATE];
+    }
+
+    /// @dev Simple getter function for the finalized state
+    function getFinalizedState() public view returns (LightClientState memory) {
+        return states[FINALIZED_STATE];
     }
 
     // === Pure or View-only APIs ===
@@ -234,12 +250,12 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() private {
-        bytes32 newStakeTableComm = computeStakeTableComm(finalizedState);
+        bytes32 newStakeTableComm = computeStakeTableComm(getFinalizedState());
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
 
         votingThreshold = frozenThreshold;
-        frozenThreshold = finalizedState.threshold;
+        frozenThreshold = getFinalizedState().threshold;
 
         currentEpoch += 1;
         emit EpochChanged(currentEpoch);

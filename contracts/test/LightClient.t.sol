@@ -47,56 +47,6 @@ contract LightClientCommonTest is Test {
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public {
         assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
     }
-
-    /// @dev helper getter since solidity doesn't return struct but tuples only
-    function getGenesisState() public view returns (LC.LightClientState memory) {
-        (
-            uint64 viewNum,
-            uint64 blockHeight,
-            BN254.ScalarField blockCommRoot,
-            BN254.ScalarField feeLedgerComm,
-            BN254.ScalarField stakeTableBlsKeyComm,
-            BN254.ScalarField stakeTableSchnorrKeyComm,
-            BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold
-        ) = lc.genesisState();
-
-        return LC.LightClientState(
-            viewNum,
-            blockHeight,
-            blockCommRoot,
-            feeLedgerComm,
-            stakeTableBlsKeyComm,
-            stakeTableSchnorrKeyComm,
-            stakeTableAmountComm,
-            threshold
-        );
-    }
-
-    /// @dev helper getter since solidity doesn't return struct but tuples only
-    function getFinalizedState() public view returns (LC.LightClientState memory) {
-        (
-            uint64 viewNum,
-            uint64 blockHeight,
-            BN254.ScalarField blockCommRoot,
-            BN254.ScalarField feeLedgerComm,
-            BN254.ScalarField stakeTableBlsKeyComm,
-            BN254.ScalarField stakeTableSchnorrKeyComm,
-            BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold
-        ) = lc.finalizedState();
-
-        return LC.LightClientState(
-            viewNum,
-            blockHeight,
-            blockCommRoot,
-            feeLedgerComm,
-            stakeTableBlsKeyComm,
-            stakeTableSchnorrKeyComm,
-            stakeTableAmountComm,
-            threshold
-        );
-    }
 }
 
 contract LightClient_constructor_Test is LightClientCommonTest {
@@ -108,8 +58,8 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     /// block.
     function test_CorrectInitialization() external {
         assert(lc.blocksPerEpoch() == BLOCKS_PER_EPOCH_TEST);
-        assertEq(abi.encode(getGenesisState()), abi.encode(genesis));
-        assertEq(abi.encode(getFinalizedState()), abi.encode(genesis));
+        assertEq(abi.encode(lc.getGenesisState()), abi.encode(genesis));
+        assertEq(abi.encode(lc.getFinalizedState()), abi.encode(genesis));
         assert(lc.currentEpoch() == 0);
 
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
@@ -216,7 +166,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
 
             // check if LightClient.sol states are updated correctly
-            assertEq(abi.encode(getFinalizedState()), abi.encode(states[i]));
+            assertEq(abi.encode(lc.getFinalizedState()), abi.encode(states[i]));
             // check against hardcoded epoch advancement expectation
             if (i == BLOCKS_PER_EPOCH_TEST) {
                 // first block of a new epoch (from epoch 2) should update the following

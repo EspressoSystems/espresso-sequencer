@@ -31,54 +31,9 @@ contract LightClientUpgradeTest is Test {
         assert(lcV1Proxy.blocksPerEpoch() == 10);
         assert(lcV1Proxy.currentEpoch() == 0);
 
-        {
-            (
-                uint64 viewNum,
-                uint64 blockHeight,
-                BN254.ScalarField blockCommRoot,
-                BN254.ScalarField feeLedgerComm,
-                BN254.ScalarField stakeTableBlsKeyComm,
-                BN254.ScalarField stakeTableSchnorrKeyComm,
-                BN254.ScalarField stakeTableAmountComm,
-                uint256 threshold
-            ) = lcV1Proxy.genesisState();
-            LCV1.LightClientState memory expectedState = LCV1.LightClientState(
-                viewNum,
-                blockHeight,
-                blockCommRoot,
-                feeLedgerComm,
-                stakeTableBlsKeyComm,
-                stakeTableSchnorrKeyComm,
-                stakeTableAmountComm,
-                threshold
-            );
+        assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
 
-            assertEq(abi.encode(expectedState), abi.encode(stateV1));
-        }
-        {
-            (
-                uint64 viewNum,
-                uint64 blockHeight,
-                BN254.ScalarField blockCommRoot,
-                BN254.ScalarField feeLedgerComm,
-                BN254.ScalarField stakeTableBlsKeyComm,
-                BN254.ScalarField stakeTableSchnorrKeyComm,
-                BN254.ScalarField stakeTableAmountComm,
-                uint256 threshold
-            ) = lcV1Proxy.finalizedState();
-            LCV1.LightClientState memory expectedState = LCV1.LightClientState(
-                viewNum,
-                blockHeight,
-                blockCommRoot,
-                feeLedgerComm,
-                stakeTableBlsKeyComm,
-                stakeTableSchnorrKeyComm,
-                stakeTableAmountComm,
-                threshold
-            );
-
-            assertEq(abi.encode(expectedState), abi.encode(stateV1));
-        }
+        assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
 
         bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stateV1);
         assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
@@ -98,28 +53,19 @@ contract LightClientUpgradeTest is Test {
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
         assertEq(lcV2Proxy.currentEpoch(), 0);
 
-        (
-            uint64 viewNum,
-            uint64 blockHeight,
-            BN254.ScalarField blockCommRoot,
-            BN254.ScalarField feeLedgerComm,
-            BN254.ScalarField stakeTableBlsKeyComm,
-            BN254.ScalarField stakeTableSchnorrKeyComm,
-            BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold
-        ) = lcV2Proxy.finalizedState();
-
-        LCV1.LightClientState memory expectedState = LCV1.LightClientState(
-            viewNum,
-            blockHeight,
-            blockCommRoot,
-            feeLedgerComm,
-            stakeTableBlsKeyComm,
-            stakeTableSchnorrKeyComm,
-            stakeTableAmountComm,
-            threshold
+        LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
+            stateV1.viewNum,
+            stateV1.blockHeight,
+            stateV1.blockCommRoot,
+            stateV1.feeLedgerComm,
+            stateV1.stakeTableBlsKeyComm,
+            stateV1.stakeTableSchnorrKeyComm,
+            stateV1.stakeTableAmountComm,
+            stateV1.threshold,
+            0 // New field for testing purposes
         );
-        assertEq(abi.encode(expectedState), abi.encode(stateV1));
+
+        assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
     }
 
     // check that the proxy address remains the same
