@@ -8,8 +8,13 @@ pub mod options;
 pub mod state_signature;
 use block::entry::TxTableEntryWord;
 use context::SequencerContext;
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -140,7 +145,22 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 }
 
 #[derive(Clone, Debug)]
-pub struct NodeState {}
+pub struct NodeState {
+    genesis_state: ValidatedState,
+    builder_address: Wallet<SigningKey>,
+}
+
+impl Default for NodeState {
+    fn default() -> Self {
+        let wallet = FeeAccount::test_wallet();
+
+        Self {
+            genesis_state: ValidatedState::default(),
+            builder_address: wallet,
+        }
+    }
+}
+
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
@@ -228,6 +248,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
+    builder_mnemonic: String,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -306,7 +327,15 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let instance_state = &NodeState {};
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase::<&str>(&builder_mnemonic)
+        .build()
+        .unwrap();
+
+    let instance_state = NodeState {
+        builder_address: wallet,
+        genesis_state: ValidatedState::default(),
+    };
     let hotshot = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
@@ -315,7 +344,7 @@ pub async fn init_node(
         networks,
         config.config,
         metrics,
-        instance_state,
+        &instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(
@@ -424,7 +453,7 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
-            let instance_state = &NodeState {};
+            let instance_state = &NodeState::default();
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
@@ -479,6 +508,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
+
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::StreamExt;
@@ -523,7 +553,8 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
-        let mut parent = Header::genesis(&NodeState {}).0;
+        let mut parent = Header::genesis(&NodeState::default()).0;
+
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {
@@ -533,9 +564,9 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for (i, (leaf, _)) in leaf_chain.iter().rev().enumerate() {
+            for (leaf, _) in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
-                if i == 0 {
+                if header.height == 0 {
                     parent = header;
                     continue;
                 }
