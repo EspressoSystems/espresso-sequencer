@@ -48,6 +48,6 @@ jobs:
 
       - name: Test Demo
         run: |
-          scripts/demo-native --tui false &
+          scripts/demo-native --tui=false &
           scripts/smoke-test-demo
           process-compose down
