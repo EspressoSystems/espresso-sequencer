@@ -14,66 +14,67 @@ hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
 portpicker = "0.1.1"
 rand = "0.8.5"
-serde_json = "1.0"
 tempfile = "3.9.0"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 ark-bls12-381 = "0.4"
-ark-ed-on-bn254 = "0.4"
-ark-serialize = { version = "0.4", features = ["derive"] }
-ark-std = "0.4"
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
-    "logging-utils",
-] }
-async-std = "1.12.0"
-async-trait = "0.1.77"
+ark-ed-on-bn254 = { workspace = true }
+ark-ff = "0.4"
+ark-serialize = { workspace = true, features = ["derive"] }
+ark-std = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+async-trait = { workspace = true }
 bincode = "1.3.3"
 bytesize = { workspace = true }
-clap = { version = "4.4", features = ["derive", "env"] }
-cld = "0.5"
+clap = { workspace = true }
+cld = { workspace = true }
 commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
-derive_more = "0.99.17"
-ethers = { version = "2.0", features = ["ws"] }
+derive_more = { workspace = true }
+ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
-futures = "0.3"
+futures = { workspace = true }
+
+hotshot = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-query-service = { workspace = true }
+hotshot-stake-table = { workspace = true }
+hotshot-state-prover = { path = "../hotshot-state-prover" }
+hotshot-task = { workspace = true }
+
+# Dependencies for feature `testing`
+hotshot-testing = { workspace = true, optional = true }
+hotshot-types = { workspace = true }
+hotshot-web-server = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
+
+jf-primitives = { workspace = true }
+jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 lazy_static = "1.4"
+num-traits = "0.2.17"
+rand = "0.8.5"
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
-serde_json = "1.0"
+sequencer-utils = { path = "../utils" }
+serde = { workspace = true }
+serde_json = "^1.0.113"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
+snafu = { workspace = true }
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
 time = "0.3"
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
     "with-serde_json-1",
 ] }
-
-hotshot = { workspace = true }
-hotshot-orchestrator = { workspace = true }
-hotshot-stake-table = { workspace = true }
-hotshot-task = { workspace = true }
-hotshot-types = { workspace = true }
-hotshot-web-server = { workspace = true }
-
-hotshot-query-service = { workspace = true }
-
-jf-primitives = { workspace = true }
-jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
-rand = "0.8.5"
-sequencer-utils = { path = "../utils" }
-serde = { version = "1.0.195", features = ["derive"] }
-snafu = "0.7.4"
-surf-disco = { workspace = true }
-tide-disco = { workspace = true }
-toml = "0.8"
-tracing = "0.1"
+toml = { workspace = true }
+tracing = { workspace = true }
+trait-set = "0.3.0"
+trait-variant = { workspace = true }
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
-url = "2.3"
-
-# Dependencies for feature `testing`
-hotshot-testing = { workspace = true, optional = true }
+url = { workspace = true }

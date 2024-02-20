@@ -2,6 +2,7 @@ use crate::{api, persistence, Leaf};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use commit::Commitment;
+use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
@@ -93,6 +94,10 @@ pub struct Options {
     /// Optional external query service to fetch `saved-leaf` from.
     #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
     pub query_service_url: Option<Url>,
+
+    // Sequencer Private Staking key
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")]
+    pub private_staking_key: BLSPrivKey,
 
     /// Add optional modules to the service.
     ///

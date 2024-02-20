@@ -7,6 +7,7 @@ nix develop .#armCrossShell --command cargo build --release
 # The rest of the script doesn't run in a nix shell but we need to know where
 # the binaries are.
 CARGO_TARGET_DIR="./target/nix"
+CONTRACTS_DIR="./contracts"
 
 # Copy binaries to a temporary directory.
 WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
@@ -31,15 +32,22 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server"; do
+  for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "gen-demo-contract"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
+
+  # Copy the contracts
+  cp -r "${CONTRACTS_DIR}" ${WORKDIR}
+  cp -v "./foundry.toml" ${WORKDIR}
+  mkdir -p ${WORKDIR}/scripts
+  cp -v "./scripts/launch-prover-service" ${WORKDIR}/scripts
 done
 
 export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main -f docker/state-relay-server.Dockerfile ${WORKDIR}
+docker build -t ghcr.io/espressosystems/espresso-sequencer/prover-service:main -f docker/prover-service.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}

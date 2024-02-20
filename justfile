@@ -24,7 +24,7 @@ docker-stop-rm:
     docker stop $(docker ps -aq); docker rm $(docker ps -aq)
 
 anvil *args:
-    docker run -p 127.0.0.1:8545/8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
+    docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
     cargo test --release --all-features
@@ -61,7 +61,7 @@ build-docker-images:
 
 # generate rust bindings for contracts
 gen-bindings:
-    forge bind --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
+    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
     cargo fmt --all
     cargo sort -g -w
 
@@ -75,3 +75,9 @@ sol-lint:
 sol-test:
     cargo build --bin diff-test --release
     forge test
+
+# Develop contracts to local blockchain for development and testing
+dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk":
+    forge build
+    MNEMONICS="{{mnemonics}}" forge script contracts/script/LightClientTest.s.sol \
+    --fork-url {{url}} --broadcast

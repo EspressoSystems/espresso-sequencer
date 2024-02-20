@@ -1,31 +1,38 @@
-//! Helpers and test mocks for Light Client logic
-
-use std::collections::HashMap;
-
+use anyhow::Result;
+use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
-use ark_std::rand::rngs::StdRng;
-use ark_std::rand::{CryptoRng, Rng, RngCore};
-use ark_std::str::FromStr;
-use ark_std::UniformRand;
+use ark_ff::PrimeField;
+use ark_std::{
+    rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
+    UniformRand,
+};
 use diff_test_bn254::{field_to_u256, u256_to_field};
 use ethers::{abi, utils};
 use ethers::{
-    abi::{AbiDecode, Token},
-    prelude::{AbiError, EthAbiCodec, EthAbiType},
+    abi::Token,
     types::{H256, U256},
 };
+use hotshot_contract_adapter::jellyfish::open_key;
+use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_state_prover::circuit::PublicInput;
-use hotshot_state_prover::Proof;
+use hotshot_state_prover::{Proof, VerifyingKey};
 use hotshot_types::traits::stake_table::StakeTableScheme;
-use hotshot_types::{light_client::LightClientState, traits::stake_table::SnapshotVersion};
+use hotshot_types::{
+    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
+    traits::stake_table::SnapshotVersion,
+};
+use itertools::izip;
+use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
+use jf_plonk::transcript::SolidityTranscript;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_primitives::signatures::schnorr::Signature;
 use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
     SchnorrSignatureScheme, SignatureScheme,
 };
+use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use jf_utils::test_rng;
+use std::collections::HashMap;
 
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
@@ -58,7 +65,7 @@ pub struct MockLedger {
     pp: MockSystemParam,
     pub rng: StdRng,
     epoch: u64,
-    state: LightClientState<F>,
+    state: GenericLightClientState<F>,
     st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     qc_keys: Vec<BLSVerKey>,
@@ -191,7 +198,7 @@ impl MockLedger {
     }
 
     /// Return the light client state and proof of consensus on this finalized state
-    pub fn gen_state_proof(&mut self) -> (PublicInput<F>, Proof) {
+    pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof) {
         let state_msg: [F; 7] = self.state.clone().into();
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
@@ -248,11 +255,17 @@ impl MockLedger {
         };
         let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
             .expect("Fail to preprocess state prover circuit");
+        let stake_table_entries = self
+            .st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .collect::<Vec<_>>();
         let (proof, pi) =
             hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
                 &mut self.rng,
                 &pk,
-                &self.st,
+                &stake_table_entries,
                 &bit_vec,
                 &sigs,
                 &self.state,
@@ -275,7 +288,7 @@ impl MockLedger {
             self.state.stake_table_comm.1,
             self.state.stake_table_comm.2,
         ];
-        let pi: PublicInput<F> = pi.into();
+        let pi: GenericPublicInput<F> = pi.into();
         pi.into()
     }
 
@@ -313,7 +326,7 @@ impl MockLedger {
 }
 
 /// Helper function for test
-pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
+fn key_pairs_for_testing<R: CryptoRng + RngCore>(
     num_validators: usize,
     prng: &mut R,
 ) -> (Vec<BLSVerKey>, Vec<(SchnorrSignKey, SchnorrVerKey)>) {
@@ -331,7 +344,7 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 }
 
 /// Helper function for test
-pub(crate) fn stake_table_for_testing(
+fn stake_table_for_testing(
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
@@ -351,54 +364,115 @@ pub(crate) fn stake_table_for_testing(
     st
 }
 
-/// Intermediate representations for `LightClientState` in Solidity
-#[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
-pub struct ParsedLightClientState {
-    pub view_num: u64,
-    pub block_height: u64,
-    pub block_comm_root: U256,
-    pub fee_ledger_comm: U256,
-    pub bls_key_comm: U256,
-    pub schnorr_key_comm: U256,
-    pub amount_comm: U256,
-    pub threshold: U256,
-}
+// modify from <https://github.com/EspressoSystems/cape/blob/main/contracts/rust/src/plonk_verifier/helpers.rs>
+/// return list of (proof, ver_key, public_input, extra_msg, domain_size)
+#[allow(clippy::type_complexity)]
+pub fn gen_plonk_proof_for_test(
+    num_proof: usize,
+) -> Vec<(Proof, VerifyingKey, Vec<F>, Option<Vec<u8>>, usize)> {
+    // 1. Simulate universal setup
+    let rng = &mut jf_utils::test_rng();
+    let srs = {
+        let aztec_srs = crs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
 
-impl FromStr for ParsedLightClientState {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
-    }
-}
-
-impl From<PublicInput<F>> for ParsedLightClientState {
-    fn from(pi: PublicInput<F>) -> Self {
-        Self {
-            view_num: field_to_u256(pi.view_number()).as_u64(),
-            block_height: field_to_u256(pi.block_height()).as_u64(),
-            block_comm_root: field_to_u256(pi.block_comm_root()),
-            fee_ledger_comm: field_to_u256(pi.fee_ledger_comm()),
-            bls_key_comm: field_to_u256(pi.qc_key_comm()),
-            schnorr_key_comm: field_to_u256(pi.state_key_comm()),
-            amount_comm: field_to_u256(pi.stake_amount_comm()),
-            threshold: field_to_u256(pi.threshold()),
+        UnivariateUniversalParams {
+            powers_of_g: aztec_srs.powers_of_g,
+            h: aztec_srs.h,
+            beta_h: aztec_srs.beta_h,
+            powers_of_h: vec![aztec_srs.h, aztec_srs.beta_h],
         }
+    };
+    let open_key = open_key();
+    assert_eq!(srs.h, open_key.h);
+    assert_eq!(srs.beta_h, open_key.beta_h);
+    assert_eq!(srs.powers_of_g[0], open_key.g);
+
+    // 2. Create circuits
+    let circuits = (0..num_proof)
+        .map(|i| {
+            let m = 2 + i / 3;
+            let a0 = 1 + i % 3;
+            gen_circuit_for_test::<F>(m, a0)
+        })
+        .collect::<Result<Vec<_>>>()
+        .expect("Test circuits fail to create");
+    let domain_sizes: Vec<usize> = circuits
+        .iter()
+        .map(|c| c.eval_domain_size().unwrap())
+        .collect();
+
+    // 3. Preprocessing
+    let mut prove_keys = vec![];
+    let mut ver_keys = vec![];
+    for c in circuits.iter() {
+        let (pk, vk) =
+            PlonkKzgSnark::<Bn254>::preprocess(&srs, c).expect("Circuit preprocessing failed");
+        prove_keys.push(pk);
+        ver_keys.push(vk);
     }
+
+    // 4. Proving
+    let mut proofs = vec![];
+    let mut extra_msgs = vec![];
+
+    circuits
+        .iter()
+        .zip(prove_keys.iter())
+        .enumerate()
+        .for_each(|(i, (cs, pk))| {
+            let extra_msg = Some(format!("extra message: {}", i).into_bytes());
+            proofs.push(
+                PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
+                    rng,
+                    cs,
+                    pk,
+                    extra_msg.clone(),
+                )
+                .unwrap(),
+            );
+            extra_msgs.push(extra_msg);
+        });
+
+    let public_inputs: Vec<Vec<F>> = circuits
+        .iter()
+        .map(|cs| cs.public_input().unwrap())
+        .collect();
+
+    izip!(proofs, ver_keys, public_inputs, extra_msgs, domain_sizes).collect()
 }
 
-impl From<ParsedLightClientState> for PublicInput<F> {
-    fn from(s: ParsedLightClientState) -> Self {
-        let fields = vec![
-            u256_to_field(s.threshold),
-            F::from(s.view_num),
-            F::from(s.block_height),
-            u256_to_field(s.block_comm_root),
-            u256_to_field(s.fee_ledger_comm),
-            u256_to_field(s.bls_key_comm),
-            u256_to_field(s.schnorr_key_comm),
-            u256_to_field(s.amount_comm),
-        ];
-        Self::from(fields)
+// Different `m`s lead to different circuits.
+// Different `a0`s lead to different witness values.
+pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkCircuit<F>> {
+    let mut cs: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
+    // Create variables
+    let mut a = vec![];
+    for i in a0..(a0 + 4 * m) {
+        a.push(cs.create_variable(F::from(i as u64))?);
     }
+    let b = [
+        cs.create_public_variable(F::from(m as u64 * 2))?,
+        cs.create_public_variable(F::from(a0 as u64 * 2 + m as u64 * 4 - 1))?,
+    ];
+    let c = cs.create_public_variable(
+        (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
+    )?;
+
+    // Create gates:
+    // 1. a0 + ... + a_{4*m-1} = b0 * b1
+    // 2. (b1 + a0) * (b1 - a0) = c
+    // 3. b0 = 2 * m
+    let mut acc = cs.zero();
+    a.iter().for_each(|&elem| acc = cs.add(acc, elem).unwrap());
+    let b_mul = cs.mul(b[0], b[1])?;
+    cs.enforce_equal(acc, b_mul)?;
+    let b1_plus_a0 = cs.add(b[1], a[0])?;
+    let b1_minus_a0 = cs.sub(b[1], a[0])?;
+    cs.mul_gate(b1_plus_a0, b1_minus_a0, c)?;
+    cs.enforce_constant(b[0], F::from(m as u64 * 2))?;
+
+    // Finalize the circuit.
+    cs.finalize_for_arithmetization()?;
+
+    Ok(cs)
 }

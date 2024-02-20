@@ -1,13 +1,18 @@
 //! Sequencer-specific API options and initialization.
 
 use super::{
-    data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState,
-    SequencerNode,
+    data_source::{
+        provider, SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+    },
+    endpoints, fs, sql,
+    update::update_loop,
+    AppState, SequencerNode,
 };
 use crate::{
     api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
-    Event, Leaf, SavedLeaf,
+    Leaf, SavedLeaf,
 };
+use anyhow::bail;
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -19,9 +24,11 @@ use hotshot_query_service::{
     status::{self, UpdateStatusData},
     Error,
 };
-use hotshot_task::task::FilterEvent;
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
-use tide_disco::App;
+use tide_disco::{
+    method::{ReadState, WriteState},
+    App, Url,
+};
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -29,6 +36,7 @@ pub struct Options {
     pub query: Option<Query>,
     pub submit: Option<Submit>,
     pub status: Option<Status>,
+    pub state: Option<State>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
     pub saved_leaf: SavedLeaf,
@@ -41,6 +49,7 @@ impl From<Http> for Options {
             query: None,
             submit: None,
             status: None,
+            state: None,
             storage_fs: None,
             storage_sql: None,
             saved_leaf: SavedLeaf::None,
@@ -75,6 +84,12 @@ impl Options {
         self
     }
 
+    /// Add a state API module.
+    pub fn state(mut self, opt: State) -> Self {
+        self.state = Some(opt);
+        self
+    }
+
     /// Add a saved leaf or leaf commitment to load consensus state from.
     pub fn with_saved_leaf(mut self, leaf: SavedLeaf) -> Self {
         self.saved_leaf = leaf;
@@ -98,10 +113,16 @@ impl Options {
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
-        let node = if let Some(opt) = self.storage_sql.take() {
-            init_with_query_module::<N, sql::DataSource>(self, opt, init_context).await?
-        } else if let Some(opt) = self.storage_fs.take() {
-            init_with_query_module::<N, fs::DataSource>(self, opt, init_context).await?
+        let node = if let Some(query_opt) = self.query.take() {
+            if let Some(opt) = self.storage_sql.take() {
+                self.init_with_query_module::<N, sql::DataSource>(query_opt, opt, init_context)
+                    .await?
+            } else if let Some(opt) = self.storage_fs.take() {
+                self.init_with_query_module::<N, fs::DataSource>(query_opt, opt, init_context)
+                    .await?
+            } else {
+                bail!("query module requested but not storage provided");
+            }
         } else if self.status.is_some() {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
             // which allows us to run the status API with no persistent storage.
@@ -109,7 +130,7 @@ impl Options {
 
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
-            let saved_leaf = self.saved_leaf.assert_resolved()?;
+            let saved_leaf = self.saved_leaf.take().assert_resolved()?;
 
             let mut context = init_context(saved_leaf, ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
@@ -121,24 +142,13 @@ impl Options {
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let events = context
-                .consensus_mut()
-                .get_event_stream(Default::default())
-                .await
-                .0;
+            let events = context.consensus_mut().get_event_stream();
 
             // Initialize status API.
             let status_api = status::define_api(&Default::default())?;
             app.register_module("status", status_api)?;
 
-            // Initialize submit API
-            if self.submit.is_some() {
-                let submit_api = endpoints::submit()?;
-                app.register_module("submit", submit_api)?;
-            }
-
-            let state_signature_api = endpoints::state_signature()?;
-            app.register_module("state-signature", state_signature_api)?;
+            self.init_hotshot_modules(&mut app)?;
 
             SequencerNode {
                 context: context.clone(),
@@ -158,7 +168,7 @@ impl Options {
             //
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
-            let saved_leaf = self.saved_leaf.assert_resolved()?;
+            let saved_leaf = self.saved_leaf.take().assert_resolved()?;
             let mut context = init_context(saved_leaf, Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(context.clone()));
 
@@ -167,21 +177,9 @@ impl Options {
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let events = context
-                .consensus_mut()
-                .get_event_stream(Default::default())
-                .await
-                .0;
+            let events = context.consensus_mut().get_event_stream();
 
-            // Initialize submit API
-            if self.submit.is_some() {
-                let submit_api = endpoints::submit::<N, RwLock<SequencerContext<N>>>()?;
-                app.register_module("submit", submit_api)?;
-            }
-
-            let state_signature_api =
-                endpoints::state_signature::<N, RwLock<SequencerContext<N>>>()?;
-            app.register_module("state-signature", state_signature_api)?;
+            self.init_hotshot_modules(&mut app)?;
 
             SequencerNode {
                 context: context.clone(),
@@ -196,9 +194,107 @@ impl Options {
             }
         };
 
-        // Start consensus.
-        node.context.start_consensus().await;
         Ok(node)
+    }
+
+    async fn init_with_query_module<N, D>(
+        mut self,
+        query_opt: Query,
+        mod_opt: D::Options,
+        init_context: impl FnOnce(
+            Option<Leaf>,
+            Box<dyn Metrics>,
+        ) -> BoxFuture<'static, SequencerContext<N>>,
+    ) -> anyhow::Result<SequencerNode<N>>
+    where
+        N: network::Type,
+        D: SequencerDataSource + Send + Sync + 'static,
+    {
+        type State<N, D> = Arc<RwLock<AppState<N, D>>>;
+
+        let ds = D::create(mod_opt, provider(query_opt.peers), false).await?;
+        let metrics = ds.populate_metrics();
+
+        // Load the saved leaf from storage, if required.
+        let saved_leaf = self
+            .saved_leaf
+            .take()
+            .resolve(|h| {
+                let ds = &ds;
+                async move { ds.get_leaf(h).await.await.leaf().clone() }
+            })
+            .await;
+
+        // Start up handle
+        let mut context = init_context(saved_leaf, metrics).await;
+
+        // Get an event stream from the handle to use for populating the query data with
+        // consensus events.
+        //
+        // We must do this _before_ starting consensus on the handle, otherwise we could miss
+        // the first events emitted by consensus.
+        let events = context.consensus_mut().get_event_stream();
+
+        let events_for_state_signature = context.consensus_mut().get_event_stream();
+
+        let state: State<N, D> =
+            Arc::new(RwLock::new(ExtensibleDataSource::new(ds, context.clone())));
+        let mut app = App::<_, Error>::with_state(state.clone());
+
+        // Initialize status API
+        if self.status.is_some() {
+            let status_api = status::define_api::<State<N, D>>(&Default::default())?;
+            app.register_module("status", status_api)?;
+        }
+
+        // Initialize availability API
+        let availability_api = endpoints::availability::<N, D>()?;
+        app.register_module("availability", availability_api)?;
+
+        self.init_hotshot_modules(&mut app)?;
+
+        Ok(SequencerNode {
+            context: context.clone(),
+            update_task: Some(spawn(async move {
+                futures::join!(
+                    app.serve(format!("0.0.0.0:{}", self.http.port))
+                        .map_err(anyhow::Error::from),
+                    update_loop(state, events),
+                    state_signature_loop(context, events_for_state_signature),
+                )
+                .0
+            })),
+        })
+    }
+
+    /// Initialize the modules for interacting with HotShot.
+    ///
+    /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
+    /// app. These modules only require a HotShot handle as state, and thus they work with any data
+    /// source, so initialization is the same no matter what mode the service is running in.
+    fn init_hotshot_modules<N, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
+    where
+        S: 'static + Send + Sync + ReadState + WriteState,
+        S::State: Send + Sync + SubmitDataSource<N> + StateSignatureDataSource<N> + StateDataSource,
+        N: network::Type,
+    {
+        // Initialize submit API
+        if self.submit.is_some() {
+            let submit_api = endpoints::submit()?;
+            app.register_module("submit", submit_api)?;
+        }
+
+        // Initialize state API.
+        if self.state.is_some() {
+            tracing::info!("initializing state API");
+            let state_api = endpoints::state()?;
+            app.register_module("state", state_api)?;
+        }
+
+        let state_signature_api = endpoints::state_signature()?;
+        app.register_module("state-signature", state_signature_api)?;
+
+        Ok(())
     }
 }
 
@@ -221,95 +317,14 @@ pub struct Submit;
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Status;
 
-/// Options for the query API module.
+/// Options for the state API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct Query;
+pub struct State;
 
-async fn init_with_query_module<N, D>(
-    opt: Options,
-    mod_opt: D::Options,
-    init_context: impl FnOnce(Option<Leaf>, Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
-) -> anyhow::Result<SequencerNode<N>>
-where
-    N: network::Type,
-    D: SequencerDataSource + Send + Sync + 'static,
-{
-    type State<N, D> = Arc<RwLock<AppState<N, D>>>;
-
-    let ds = D::create(mod_opt, false).await?;
-    let metrics = ds.populate_metrics();
-
-    // Load the saved leaf from storage, if required.
-    let saved_leaf = opt
-        .saved_leaf
-        .resolve(|h| {
-            let ds = &ds;
-            async move { ds.get_leaf(h).await.await.leaf().clone() }
-        })
-        .await;
-
-    // Start up handle
-    let mut context = init_context(saved_leaf, metrics).await;
-
-    // Get an event stream from the handle to use for populating the query data with
-    // consensus events.
-    //
-    // We must do this _before_ starting consensus on the handle, otherwise we could miss
-    // the first events emitted by consensus.
-    let events = context
-        .consensus_mut()
-        .get_event_stream(Default::default())
-        .await
-        .0;
-
-    let decided_event_filter = FilterEvent(Arc::new(|event| {
-        matches!(
-            event,
-            Event {
-                event: hotshot_types::event::EventType::Decide { .. },
-                ..
-            }
-        )
-    }));
-
-    let events_for_state_signature = context
-        .consensus_mut()
-        .get_event_stream(decided_event_filter)
-        .await
-        .0;
-
-    let state: State<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(ds, context.clone())));
-    let mut app = App::<_, Error>::with_state(state.clone());
-
-    // Initialize submit API
-    if opt.submit.is_some() {
-        let submit_api = endpoints::submit::<N, State<N, D>>()?;
-        app.register_module("submit", submit_api)?;
-    }
-
-    // Initialize status API
-    if opt.status.is_some() {
-        let status_api = status::define_api::<State<N, D>>(&Default::default())?;
-        app.register_module("status", status_api)?;
-    }
-
-    // Initialize availability API
-    let availability_api = endpoints::availability::<N, D>()?;
-    app.register_module("availability", availability_api)?;
-
-    let state_signature_api = endpoints::state_signature()?;
-    app.register_module("state-signature", state_signature_api)?;
-
-    Ok(SequencerNode {
-        context: context.clone(),
-        update_task: Some(spawn(async move {
-            futures::join!(
-                app.serve(format!("0.0.0.0:{}", opt.http.port))
-                    .map_err(anyhow::Error::from),
-                update_loop(state, events),
-                state_signature_loop(context, events_for_state_signature),
-            )
-            .0
-        })),
-    })
+/// Options for the query API module.
+#[derive(Parser, Clone, Debug, Default)]
+pub struct Query {
+    /// Peers for fetching missing data for the query service.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
+    pub peers: Vec<Url>,
 }
