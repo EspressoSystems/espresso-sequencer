@@ -1,3 +1,4 @@
+use crate::block::entry::TxTableEntryWord;
 use crate::{Header, L1BlockInfo, NodeState, Payload};
 use anyhow::{ensure, Context};
 use ark_serialize::{
@@ -169,7 +170,7 @@ impl HotShotState for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<TxTableEntryWord>;
 
     type Time = ViewNumber;
 
