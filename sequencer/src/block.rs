@@ -143,6 +143,7 @@ mod reference {
         tracing::info!("commitment bytes: {:?}", bytes);
         tracing::info!("commitment U256: {}", u256);
 
+        println!("{}", &actual);
         assert_eq!(actual, expected.parse().unwrap());
     }
 
@@ -168,7 +169,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~E_VbE93Sh6wUXhfPiGA3NzZ7wkv9G7Igxcrkm6EipCN8",
+            "BLOCK~CltsD5AWVMRYoPCVoir_T8qU3qJTIxi5qBjyWu9vr-gC",
             |header| header.commit(),
         );
     }

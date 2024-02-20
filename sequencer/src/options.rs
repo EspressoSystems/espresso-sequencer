@@ -99,6 +99,13 @@ pub struct Options {
     /// Multiple modules can be specified, provided they are separated by --
     #[clap(raw = true)]
     modules: Vec<String>,
+
+    /// Mnemonic phrase for builder account.
+    ///
+    /// This is the address fees will be charged to.
+    /// It must be funded with ETH in the Espresso fee ledger
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
+    pub eth_mnemonic: String,
 }
 
 impl Options {

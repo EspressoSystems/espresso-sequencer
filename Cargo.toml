@@ -44,7 +44,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
