@@ -28,16 +28,12 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+
       - name: Install process-compose
         run: |
-          sh -c "$(curl --location https://raw.githubusercontent.com/F1bonacc1/process-compose/main/scripts/get-pc.sh)" -- -d
-          export PATH=`pwd`/bin:$PATH
-          echo "PATH=$PATH" >> "$GITHUB_ENV"
-          pwd
-          ls `pwd`/bin
-          echo "$PATH"
-          cat "$GITHUB_ENV"
-          which process-compose
+          nix profile install nixpkgs#process-compose
 
       - name: Checkout Repository
         uses: actions/checkout@v4
