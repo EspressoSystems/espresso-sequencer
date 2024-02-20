@@ -3,9 +3,11 @@
 set -e
 
 SERVER=http://localhost:50000
+LOAD_GENERATOR=http://localhost:50010
 
-# Wait for the server to start.
-while ! curl --fail $SERVER; do
+
+# Wait for the load generator to start.
+while ! curl --fail $LOAD_GENERATOR/healthcheck; do
 	echo "Waiting for demo to start"
 	sleep 1
 done

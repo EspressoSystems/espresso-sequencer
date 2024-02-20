@@ -237,9 +237,12 @@ services:
 
   submit-transactions:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    ports:
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PORT:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT"
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
       - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:

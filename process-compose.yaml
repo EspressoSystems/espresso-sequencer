@@ -206,6 +206,14 @@ processes:
     command: submit-transactions
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
     depends_on:
       sequencer0:
         condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+        path: /healthcheck
+      failure_threshold: 100
