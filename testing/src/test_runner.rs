@@ -58,7 +58,7 @@ pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> 
     /// The underlying networks belonging to the node
     pub networks: Networks<TYPES, I>,
     /// The context to which we will use to launch HotShot when it's time
-    pub context: SystemContext<TYPES, I>,
+    pub context: Arc<SystemContext<TYPES, I>>,
 }
 
 /// The runner of a test network
@@ -355,7 +355,7 @@ where
         initializer: HotShotInitializer<TYPES>,
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
-    ) -> SystemContext<TYPES, I> {
+    ) -> Arc<SystemContext<TYPES, I>> {
         let node_id = self.next_node_id;
         self.next_node_id += 1;
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();

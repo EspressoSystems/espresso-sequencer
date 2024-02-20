@@ -1,5 +1,5 @@
-use hotshot::{types::SignatureKey, HotShotConsensusApi};
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot::types::SignatureKey;
+use hotshot_example_types::node_types::TestTypes;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::task_helpers::{build_quorum_proposal, vid_init};
 use hotshot_types::{
@@ -26,19 +26,16 @@ async fn test_network_task() {
 
     // Build the API for node 2.
     let (handle, _tx, _rx) = build_system_handle(2).await;
-    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let pub_key = *api.public_key();
-    let priv_key = api.private_key();
+    let pub_key = *handle.public_key();
+    let priv_key = handle.private_key();
     // quorum membership for VID share distribution
-    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 
     let encoded_transactions = Vec::new();
     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
     let da_signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
-            api.private_key(),
+            handle.private_key(),
             &encoded_transactions_hash,
         )
         .expect("Failed to sign block payload");
@@ -47,7 +44,7 @@ async fn test_network_task() {
     let payload_commitment = vid_disperse.commit;
     let vid_signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
-            api.private_key(),
+            handle.private_key(),
             payload_commitment.as_ref(),
         )
         .expect("Failed to sign block commitment");

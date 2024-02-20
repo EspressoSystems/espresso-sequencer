@@ -1,13 +1,18 @@
 //! Provides a number of tasks that run continuously
 
-use crate::{types::SystemContextHandle, HotShotConsensusApi};
+/// Provides trait to create task states from a `SystemContextHandle`
+pub mod task_state;
+
+use crate::tasks::task_state::CreateTaskState;
+use crate::ConsensusApi;
+
+use crate::types::SystemContextHandle;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 
-use hotshot_constants::VERSION_0_1;
 use hotshot_task::task::{Task, TaskRegistry};
 use hotshot_task_impls::{
-    consensus::{CommitmentAndMetadata, ConsensusTaskState},
+    consensus::ConsensusTaskState,
     da::DATaskState,
     events::HotShotEvent,
     network::{NetworkEventTaskState, NetworkMessageTaskState},
@@ -17,26 +22,17 @@ use hotshot_task_impls::{
     view_sync::ViewSyncTaskState,
 };
 use hotshot_types::{
-    event::Event,
-    message::Messages,
-    traits::{
-        block_contents::vid_commitment,
-        consensus_api::ConsensusApi,
-        network::{ConsensusIntentEvent, TransmitType},
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
-        BlockPayload,
-    },
-};
-use hotshot_types::{
     message::Message,
     traits::{election::Membership, network::ConnectedNetwork},
 };
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-    time::Duration,
+use hotshot_types::{
+    message::Messages,
+    traits::{
+        network::{ConsensusIntentEvent, TransmitType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+    },
 };
+use std::{sync::Arc, time::Duration};
 use tracing::error;
 
 /// event for global event stream
@@ -110,7 +106,6 @@ pub async fn add_network_message_task<
     task_reg.register(direct_handle).await;
     task_reg.register(broadcast_handle).await;
 }
-
 /// Add the network task to handle events and send messages.
 pub async fn add_network_event_task<
     TYPES: NodeType,
@@ -133,60 +128,14 @@ pub async fn add_network_event_task<
     task_reg.run_task(task).await;
 }
 
-/// Create the consensus task state
-/// # Panics
-/// If genesis payload can't be encoded.  This should not be possible
-pub async fn create_consensus_state<TYPES: NodeType, I: NodeImplementation<TYPES>>(
-    output_stream: Sender<Event<TYPES>>,
-    handle: &SystemContextHandle<TYPES, I>,
-) -> ConsensusTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>> {
-    let consensus = handle.hotshot.get_consensus();
-    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-
-    let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
-    // Impossible for `unwrap` to fail on the genesis payload.
-    let payload_commitment = vid_commitment(
-        &payload.encode().unwrap().collect(),
-        handle
-            .hotshot
-            .inner
-            .memberships
-            .quorum_membership
-            .total_nodes(),
-    );
-    // build the consensus task
-    let consensus_state = ConsensusTaskState {
-        consensus,
-        timeout: handle.hotshot.inner.config.next_view_timeout,
-        cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some(CommitmentAndMetadata {
-            commitment: payload_commitment,
-            metadata,
-            is_genesis: true,
-        }),
-        api: c_api.clone(),
-        _pd: PhantomData,
-        vote_collector: None.into(),
-        timeout_vote_collector: None.into(),
-        timeout_task: None,
-        timeout_cert: None,
-        upgrade_cert: None,
-        decided_upgrade_cert: None,
-        current_network_version: VERSION_0_1,
-        output_event_stream: output_stream,
-        vid_shares: BTreeMap::new(),
-        current_proposal: None,
-        id: handle.hotshot.inner.id,
-        public_key: c_api.public_key().clone(),
-        private_key: c_api.private_key().clone(),
-        quorum_network: c_api.inner.networks.quorum_network.clone(),
-        committee_network: c_api.inner.networks.da_network.clone(),
-        timeout_membership: c_api.inner.memberships.quorum_membership.clone().into(),
-        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
-        committee_membership: c_api.inner.memberships.da_membership.clone().into(),
-    };
+/// Setup polls for the given `consensus_state`
+pub async fn inject_consensus_polls<
+    TYPES: NodeType,
+    I: NodeImplementation<TYPES>,
+    API: ConsensusApi<TYPES, I>,
+>(
+    consensus_state: &ConsensusTaskState<TYPES, I, API>,
+) {
     // Poll (forever) for the latest quorum proposal
     consensus_state
         .quorum_network
@@ -214,7 +163,6 @@ pub async fn create_consensus_state<TYPES: NodeType, I: NodeImplementation<TYPES
         .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForLatestViewSyncCertificate)
         .await;
-    consensus_state
 }
 
 /// add the consensus task
@@ -224,9 +172,11 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let state =
-        create_consensus_state(handle.hotshot.inner.output_event_stream.0.clone(), handle).await;
-    let task = Task::new(tx, rx, task_reg.clone(), state);
+    let consensus_state = ConsensusTaskState::create_from(handle);
+
+    inject_consensus_polls(&consensus_state).await;
+
+    let task = Task::new(tx, rx, task_reg.clone(), consensus_state);
     task_reg.run_task(task).await;
 }
 
@@ -237,55 +187,23 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    // build the vid task
-    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let vid_state = VIDTaskState {
-        api: c_api.clone(),
-        consensus: handle.hotshot.get_consensus(),
-        cur_view: TYPES::Time::new(0),
-        vote_collector: None,
-        network: c_api.inner.networks.quorum_network.clone(),
-        membership: c_api.inner.memberships.vid_membership.clone().into(),
-        public_key: c_api.public_key().clone(),
-        private_key: c_api.private_key().clone(),
-        id: handle.hotshot.inner.id,
-    };
-
+    let vid_state = VIDTaskState::create_from(handle);
     let task = Task::new(tx, rx, task_reg.clone(), vid_state);
     task_reg.run_task(task).await;
 }
 
 /// add the Upgrade task.
-///
-/// # Panics
-///
-/// Uses .`unwrap()`, though this should never panic.
 pub async fn add_upgrade_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_reg: Arc<TaskRegistry>,
     tx: Sender<HotShotEvent<TYPES>>,
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let upgrade_state = UpgradeTaskState {
-        api: c_api.clone(),
-        cur_view: TYPES::Time::new(0),
-        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
-        quorum_network: c_api.inner.networks.quorum_network.clone(),
-        should_vote: |_upgrade_proposal| false,
-        vote_collector: None.into(),
-        public_key: c_api.public_key().clone(),
-        private_key: c_api.private_key().clone(),
-        id: handle.hotshot.inner.id,
-    };
+    let upgrade_state = UpgradeTaskState::create_from(handle);
+
     let task = Task::new(tx, rx, task_reg.clone(), upgrade_state);
     task_reg.run_task(task).await;
 }
-
 /// add the Data Availability task
 pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_reg: Arc<TaskRegistry>,
@@ -294,21 +212,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &SystemContextHandle<TYPES, I>,
 ) {
     // build the da task
-    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let da_state = DATaskState {
-        api: c_api.clone(),
-        consensus: handle.hotshot.get_consensus(),
-        da_membership: c_api.inner.memberships.da_membership.clone().into(),
-        da_network: c_api.inner.networks.da_network.clone(),
-        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
-        cur_view: TYPES::Time::new(0),
-        vote_collector: None.into(),
-        public_key: c_api.public_key().clone(),
-        private_key: c_api.private_key().clone(),
-        id: handle.hotshot.inner.id,
-    };
+    let da_state = DATaskState::create_from(handle);
 
     let task = Task::new(tx, rx, task_reg.clone(), da_state);
     task_reg.run_task(task).await;
@@ -321,26 +225,12 @@ pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    // build the transactions task
-    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let transactions_state = TransactionTaskState {
-        api: c_api.clone(),
-        consensus: handle.hotshot.get_consensus(),
-        transactions: Arc::default(),
-        seen_transactions: HashSet::new(),
-        cur_view: TYPES::Time::new(0),
-        network: c_api.inner.networks.quorum_network.clone(),
-        membership: c_api.inner.memberships.quorum_membership.clone().into(),
-        public_key: c_api.public_key().clone(),
-        private_key: c_api.private_key().clone(),
-        id: handle.hotshot.inner.id,
-    };
+    let transactions_state = TransactionTaskState::create_from(handle);
 
     let task = Task::new(tx, rx, task_reg.clone(), transactions_state);
     task_reg.run_task(task).await;
 }
+
 /// add the view sync task
 pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_reg: Arc<TaskRegistry>,
@@ -348,27 +238,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let api = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    // build the view sync task
-    let view_sync_state = ViewSyncTaskState {
-        current_view: TYPES::Time::new(0),
-        next_view: TYPES::Time::new(0),
-        network: api.inner.networks.quorum_network.clone(),
-        membership: api.inner.memberships.view_sync_membership.clone().into(),
-        public_key: api.public_key().clone(),
-        private_key: api.private_key().clone(),
-        api,
-        num_timeouts_tracked: 0,
-        replica_task_map: HashMap::default().into(),
-        pre_commit_relay_map: HashMap::default().into(),
-        commit_relay_map: HashMap::default().into(),
-        finalize_relay_map: HashMap::default().into(),
-        view_sync_timeout: Duration::new(10, 0),
-        id: handle.hotshot.inner.id,
-        last_garbage_collected_view: TYPES::Time::new(0),
-    };
+    let view_sync_state = ViewSyncTaskState::create_from(handle);
 
     let task = Task::new(tx, rx, task_reg.clone(), view_sync_state);
     task_reg.run_task(task).await;

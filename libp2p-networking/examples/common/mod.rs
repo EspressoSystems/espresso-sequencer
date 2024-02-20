@@ -20,8 +20,7 @@ use clap::{Args, Parser};
 use libp2p::{multiaddr, request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_networking::network::{
-    deserialize_msg,
-    network_node_handle_error::NodeConfigSnafu, spin_up_swarm, NetworkEvent,
+    deserialize_msg, network_node_handle_error::NodeConfigSnafu, spin_up_swarm, NetworkEvent,
     NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeType,
 };
 use rand::{

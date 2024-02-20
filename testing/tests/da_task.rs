@@ -1,8 +1,8 @@
-use hotshot::{types::SignatureKey, HotShotConsensusApi};
-use hotshot_example_types::{
-    block_types::TestTransaction,
-    node_types::{MemoryImpl, TestTypes},
-};
+use hotshot::tasks::task_state::CreateTaskState;
+use hotshot::types::SignatureKey;
+use hotshot::types::SystemContextHandle;
+use hotshot_example_types::node_types::MemoryImpl;
+use hotshot_example_types::{block_types::TestTransaction, node_types::TestTypes};
 use hotshot_task_impls::{da::DATaskState, events::HotShotEvent};
 use hotshot_types::{
     data::{DAProposal, ViewNumber},
@@ -32,26 +32,20 @@ async fn test_da_task() {
 
     // Build the API for node 2.
     let handle = build_system_handle(2).await.0;
-    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let pub_key = *api.public_key();
+    let pub_key = *handle.public_key();
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let payload_commitment = vid_commitment(
         &encoded_transactions,
-        handle
-            .hotshot
-            .inner
-            .memberships
-            .quorum_membership
-            .total_nodes(),
+        handle.hotshot.memberships.quorum_membership.total_nodes(),
     );
     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
-    let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), &encoded_transactions_hash)
-            .expect("Failed to sign block payload");
+    let signature = <TestTypes as NodeType>::SignatureKey::sign(
+        handle.private_key(),
+        &encoded_transactions_hash,
+    )
+    .expect("Failed to sign block payload");
     let proposal = DAProposal {
         encoded_transactions: encoded_transactions.clone(),
         metadata: (),
@@ -88,23 +82,12 @@ async fn test_da_task() {
             payload_commit: payload_commitment,
         },
         ViewNumber::new(2),
-        api.public_key(),
-        api.private_key(),
+        handle.public_key(),
+        handle.private_key(),
     )
     .expect("Failed to sign DAData");
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
-    let da_state = DATaskState {
-        api: api.clone(),
-        consensus: handle.hotshot.get_consensus(),
-        da_membership: api.inner.memberships.da_membership.clone().into(),
-        da_network: api.inner.networks.da_network.clone(),
-        quorum_membership: api.inner.memberships.quorum_membership.clone().into(),
-        cur_view: ViewNumber::new(0),
-        vote_collector: None.into(),
-        public_key: *api.public_key(),
-        private_key: api.private_key().clone(),
-        id: handle.hotshot.inner.id,
-    };
+    let da_state = DATaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle);
     run_harness(input, output, da_state, false).await;
 }

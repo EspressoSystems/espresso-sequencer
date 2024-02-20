@@ -1,6 +1,6 @@
 #![allow(clippy::panic)]
 use commit::Committable;
-use hotshot::{types::SystemContextHandle, HotShotConsensusApi};
+use hotshot::types::SystemContextHandle;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::task_helpers::{build_quorum_proposal, key_pair_for_id};
@@ -24,10 +24,7 @@ async fn build_vote(
 ) -> GeneralConsensusMessage<TestTypes> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
-    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let membership = api.inner.memberships.quorum_membership.clone();
+    let membership = handle.hotshot.memberships.quorum_membership.clone();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
@@ -65,8 +62,8 @@ async fn build_vote(
             leaf_commit: leaf.commit(),
         },
         view,
-        api.public_key(),
-        api.private_key(),
+        handle.public_key(),
+        handle.private_key(),
     )
     .expect("Failed to create quorum vote");
     GeneralConsensusMessage::<TestTypes>::Vote(vote)
@@ -79,8 +76,8 @@ async fn build_vote(
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
-    use hotshot::tasks::create_consensus_state;
-    use hotshot_task_impls::harness::run_harness;
+    use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
+    use hotshot_task_impls::{consensus::ConsensusTaskState, harness::run_harness};
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::simple_certificate::QuorumCertificate;
 
@@ -118,8 +115,13 @@ async fn test_consensus_task() {
         input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
     }
 
-    let consensus_state =
-        create_consensus_state(handle.hotshot.inner.output_event_stream.0.clone(), &handle).await;
+    let consensus_state = ConsensusTaskState::<
+        TestTypes,
+        MemoryImpl,
+        SystemContextHandle<TestTypes, MemoryImpl>,
+    >::create_from(&handle);
+
+    inject_consensus_polls(&consensus_state).await;
 
     run_harness(input, output, consensus_state, false).await;
 }
@@ -131,8 +133,8 @@ async fn test_consensus_task() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_vote() {
-    use hotshot::tasks::create_consensus_state;
-    use hotshot_task_impls::harness::run_harness;
+    use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
+    use hotshot_task_impls::{consensus::ConsensusTaskState, harness::run_harness};
     use hotshot_testing::task_helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
@@ -163,8 +165,13 @@ async fn test_consensus_vote() {
 
     input.push(HotShotEvent::Shutdown);
 
-    let consensus_state =
-        create_consensus_state(handle.hotshot.inner.output_event_stream.0.clone(), &handle).await;
+    let consensus_state = ConsensusTaskState::<
+        TestTypes,
+        MemoryImpl,
+        SystemContextHandle<TestTypes, MemoryImpl>,
+    >::create_from(&handle);
+
+    inject_consensus_polls(&consensus_state).await;
 
     run_harness(input, output, consensus_state, false).await;
 }
@@ -179,11 +186,12 @@ async fn test_consensus_vote() {
 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
 #[ignore]
 async fn test_consensus_with_vid() {
+    use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
     use hotshot::traits::BlockPayload;
     use hotshot::types::SignatureKey;
     use hotshot_example_types::block_types::TestBlockPayload;
     use hotshot_example_types::block_types::TestTransaction;
-    use hotshot_task_impls::harness::run_harness;
+    use hotshot_task_impls::{consensus::ConsensusTaskState, harness::run_harness};
     use hotshot_testing::task_helpers::build_cert;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;
@@ -206,20 +214,19 @@ async fn test_consensus_with_vid() {
     let (private_key_view2, public_key_view2) = key_pair_for_id(2);
 
     // For the test of vote logic with vid
-    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let pub_key = *api.public_key();
-    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
+    let pub_key = *handle.public_key();
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
-    let vid_signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
-            .expect("Failed to sign payload commitment");
+    let vid_signature = <TestTypes as NodeType>::SignatureKey::sign(
+        handle.private_key(),
+        payload_commitment.as_ref(),
+    )
+    .expect("Failed to sign payload commitment");
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let vid_disperse_inner = VidDisperse::from_membership(
         ViewNumber::new(2),
@@ -278,11 +285,13 @@ async fn test_consensus_with_vid() {
     input.push(HotShotEvent::Shutdown);
     output.insert(HotShotEvent::Shutdown, 1);
 
-    let consensus_state = hotshot::tasks::create_consensus_state(
-        handle.hotshot.inner.output_event_stream.0.clone(),
-        &handle,
-    )
-    .await;
+    let consensus_state = ConsensusTaskState::<
+        TestTypes,
+        MemoryImpl,
+        SystemContextHandle<TestTypes, MemoryImpl>,
+    >::create_from(&handle);
+
+    inject_consensus_polls(&consensus_state).await;
 
     run_harness(input, output, consensus_state, false).await;
 }
