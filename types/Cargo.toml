@@ -47,7 +47,7 @@ tracing = { workspace = true }
 typenum = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0.113"
+serde_json = "1.0.114"
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
