@@ -1,6 +1,6 @@
-use crate::block2::entry::TxTableEntryWord;
-use crate::block2::payload::{test_vid_factory, Payload, RangeProof};
-use crate::block2::tables::{NameSpaceTable, TxTable};
+use crate::block::entry::TxTableEntryWord;
+use crate::block::payload::{test_vid_factory, Payload, RangeProof};
+use crate::block::tables::TxTable;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
@@ -13,12 +13,13 @@ use super::{
     tx_iterator::{TxIndex, TxIterator},
 };
 
+// TODO don't hard-code TxTableEntryWord generic param
 impl QueryablePayload for Payload<TxTableEntryWord> {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a, TxTableEntryWord>;
     type InclusionProof = TxInclusionProof;
 
-    fn len(&self, meta: &Self::Metadata) -> usize {
+    fn len(&self, ns_table: &Self::Metadata) -> usize {
         let entry_len = TxTableEntry::byte_len();
 
         // The number of nss in a block is defined as the minimum of:
@@ -26,14 +27,14 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // (2) the number of ns table entries that could fit inside the ns table byte len
         // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
         // The quantity (2) must exclude the prefix of the ns table because this prefix indicates only the length of the ns table, not an actual ns.
-        let ns_table = NameSpaceTable::<TxTableEntryWord>::from_bytes(meta);
         let ns_table_len = ns_table.len();
 
         // First, collect the offsets of all the nss
         // (Range starts at 1 to conveniently skip the ns table prefix.)
         let mut ns_end_offsets = vec![0usize];
         for i in 1..=ns_table_len {
-            let ns_offset_bytes = meta
+            let ns_offset_bytes = ns_table
+                .get_bytes()
                 .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
                 .unwrap();
 
@@ -58,9 +59,8 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         result
     }
 
-    fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
-        let ns_table = NameSpaceTable::from_bytes(meta);
-        TxIterator::new(ns_table.clone(), self)
+    fn iter<'a>(&'a self, ns_table: &'a Self::Metadata) -> Self::Iter<'a> {
+        TxIterator::new(ns_table, self)
     }
 
     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010

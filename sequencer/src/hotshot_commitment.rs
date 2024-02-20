@@ -9,7 +9,7 @@ use hotshot_query_service::availability::LeafQueryData;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
+use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
@@ -20,6 +20,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
+// TODO: (alex) remove clap related info on tihs struct, as the CLI is in ./bin/hotshot-commitment.rs
 #[derive(Parser, Clone, Debug)]
 pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
@@ -65,38 +66,40 @@ pub struct CommitmentTaskOptions {
     pub delay: Option<Duration>,
 }
 
+/// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
 pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
-    let query_service_url = opt
-        .query_service_url
-        .clone()
-        .expect("query service URL must be specified");
-
-    let hotshot = HotShotClient::new(query_service_url);
+    // init a client connecting to HotShot query service
+    let hotshot = HotShotClient::new(
+        opt.query_service_url
+            .clone()
+            .expect("query service URL must be specified"),
+    );
     hotshot.connect(None).await;
 
-    // Connect to the layer one HotShot contract.
-    let Some(l1) = connect_l1(opt).await else {
-        panic!("unable to connect to L1, hotshot commitment task exiting");
-    };
-    let contract = HotShot::new(opt.hotshot_address, l1.clone());
+    // init a signer connecting to the HotShot contract
+    let signer = init_signer(
+        &opt.l1_provider,
+        &opt.sequencer_mnemonic,
+        opt.sequencer_account_index,
+    )
+    .await
+    .map(Arc::new)
+    .unwrap();
+    let contract = HotShot::new(opt.hotshot_address, signer.clone());
 
+    sequence(hotshot, contract, opt.delay).await;
+}
+
+async fn sequence(hotshot: HotShotClient, contract: HotShot<Signer>, delay: Option<Duration>) {
     // Get the maximum number of blocks the contract will allow at a time.
-    let max = match contract.max_blocks().call().await {
+    let hard_block_limit = match contract.max_blocks().call().await {
         Ok(max) => max.as_usize(),
         Err(err) => {
             tracing::error!("unable to read max_blocks from contract: {}", err);
             panic!("hotshot commitment task will exit");
         }
     };
-    sequence(max, hotshot, contract, opt.delay).await;
-}
 
-async fn sequence(
-    hard_block_limit: usize,
-    hotshot: HotShotClient,
-    contract: HotShot<Signer>,
-    delay: Option<Duration>,
-) {
     // This is the number of blocks we attempt to sequence
     // If we fail to submit soft_block_limit leaves, we assume we have hit
     // A gas limit exception and decrease the limit
@@ -132,6 +135,7 @@ async fn sequence(
     }
 }
 
+/// Trait for generalized query service for parts of the HotShot data involved in syncing with L1 contract
 #[async_trait]
 trait HotShotDataSource {
     type Error: Error + Send + Sync + 'static;
@@ -165,6 +169,7 @@ impl HotShotDataSource for HotShotClient {
     }
 }
 
+/// Error type during synchronization between data sources (e.g. L1, query services)
 #[derive(Debug)]
 enum SyncError {
     TransactionFailed {
@@ -174,6 +179,7 @@ enum SyncError {
     Other(anyhow::Error),
 }
 
+/// main logic for catching up with HotShot contract on L1
 async fn sync_with_l1(
     max_blocks: usize,
     hotshot: &impl HotShotDataSource,
@@ -252,6 +258,7 @@ async fn sync_with_l1(
     Ok(())
 }
 
+/// prepare the transaction from new leaves (with QC) from HotShot
 fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
     contract: &HotShot<M>,
     leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes>>,
@@ -267,21 +274,10 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
     contract.new_blocks(qcs)
 }
 
-pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Signer>> {
-    connect_rpc(
-        &opt.l1_provider,
-        &opt.sequencer_mnemonic,
-        opt.sequencer_account_index,
-        opt.l1_chain_id,
-    )
-    .await
-    .map(Arc::new)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Leaf;
+    use crate::{Leaf, NodeState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
@@ -334,7 +330,7 @@ mod test {
     }
 
     fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes> {
-        let mut leaf = Leaf::genesis();
+        let mut leaf = Leaf::genesis(&NodeState::default());
         let mut qc = QuorumCertificate::genesis();
         leaf.block_header.height = height;
         qc.data.leaf_commit = leaf.commit();
@@ -372,14 +368,9 @@ mod test {
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
 
         let adaptor_l1_signer = Arc::new(
-            connect_rpc(
-                l1.provider.url(),
-                TEST_MNEMONIC,
-                l1.clients.funded[0].index,
-                None,
-            )
-            .await
-            .unwrap(),
+            init_signer(l1.provider.url(), TEST_MNEMONIC, l1.clients.funded[0].index)
+                .await
+                .unwrap(),
         );
 
         // Create a few test batches.
@@ -444,14 +435,9 @@ mod test {
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let mut from_block = l1.provider.get_block_number().await.unwrap();
         let adaptor_l1_signer = Arc::new(
-            connect_rpc(
-                l1.provider.url(),
-                TEST_MNEMONIC,
-                l1.clients.funded[0].index,
-                None,
-            )
-            .await
-            .unwrap(),
+            init_signer(l1.provider.url(), TEST_MNEMONIC, l1.clients.funded[0].index)
+                .await
+                .unwrap(),
         );
 
         // Create a test batch.
@@ -511,14 +497,9 @@ mod test {
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let adaptor_l1_signer = Arc::new(
-            connect_rpc(
-                l1.provider.url(),
-                TEST_MNEMONIC,
-                l1.clients.funded[0].index,
-                None,
-            )
-            .await
-            .unwrap(),
+            init_signer(l1.provider.url(), TEST_MNEMONIC, l1.clients.funded[0].index)
+                .await
+                .unwrap(),
         );
 
         // Create a sequence of leaves, some of which are missing.

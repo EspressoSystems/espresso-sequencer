@@ -22,6 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 use surf_disco::{Client, Url};
+use tide_disco::{error::ServerError, App};
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -97,6 +98,10 @@ struct Options {
     #[clap(long, value_parser = parse_duration, default_value = "30s", env = "ESPRESSO_SUBMIT_TRANSACTIONS_SLOW_TRANSACTION_WARNING_THRESHOLD")]
     slow_transaction_warning_threshold: Duration,
 
+    /// Enable an HTTP server with a healthcheck endpoint on this port.
+    #[clap(short, long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_PORT")]
+    port: Option<u16>,
+
     /// URL of the query service.
     #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
     url: Url,
@@ -142,6 +147,11 @@ async fn main() {
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
         ));
+    }
+
+    // Start healthcheck endpoint once tasks are running.
+    if let Some(port) = opt.port {
+        spawn(server(port));
     }
 
     // Keep track of the results.
@@ -248,6 +258,15 @@ async fn submit_transactions(
         let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
         tracing::info!("sleeping for {delay:?}");
         sleep(delay).await;
+    }
+}
+
+async fn server(port: u16) {
+    if let Err(err) = App::<(), ServerError>::with_state(())
+        .serve(format!("0.0.0.0:{port}"))
+        .await
+    {
+        tracing::error!("web server exited: {err}");
     }
 }
 

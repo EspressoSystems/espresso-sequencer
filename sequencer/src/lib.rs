@@ -1,14 +1,20 @@
 pub mod api;
 mod block;
-mod block2;
 mod chain_variables;
 pub mod context;
+mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+use block::entry::TxTableEntryWord;
 use context::SequencerContext;
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -17,37 +23,36 @@ mod state;
 pub mod transaction;
 mod vm;
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use derivative::Derivative;
+use hotshot::traits::implementations::MemoryNetwork;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{
-            MemoryCommChannel, MemoryStorage, NetworkingMetricsValue, WebCommChannel,
-            WebServerNetwork,
-        },
-        NodeImplementation,
+        implementations::{MemoryStorage, NetworkingMetricsValue, WebServerNetwork},
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+use hotshot_types::traits::network::ConnectedNetwork;
+use jf_primitives::signatures::bls_over_bn254::VerKey;
+
+use hotshot_orchestrator::{
+    client::{OrchestratorClient, ValidatorArgs},
+    config::NetworkConfig,
+};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
     light_client::StateKeyPair,
-    signature_key::BLSPubKey,
+    signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::CommunicationChannel,
-        node_implementation::{ChannelMaps, NodeType},
+        node_implementation::{NodeImplementation, NodeType},
+        states::InstanceState,
     },
-    HotShotConfig, ValidatorConfig,
+    HotShotConfig,
 };
 
-use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme,
-};
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -55,94 +60,47 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
-use typenum::U2;
 
-pub use block::{Header, Payload};
+pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
-use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NMT,
-    prelude::{Sha3Digest, Sha3Node},
-};
+pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
-pub use state::State;
+pub use state::ValidatedState;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
-
-// Supports 1K transactions
-pub const MAX_NMT_DEPTH: usize = 10;
-
-pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
-pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
 /// Initialize the static variables for the sequencer
 ///
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
-    lazy_static::initialize(&block::L1_CLIENT);
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NMTRoot {
-    #[serde(with = "nmt_root_serializer")]
-    root: <TransactionNMT as MerkleTreeScheme>::NodeValue,
-}
-
-mod nmt_root_serializer {
-    use serde::{Deserializer, Serializer};
-
-    use super::*;
-
-    pub fn serialize<A, S>(a: &A, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        A: CanonicalSerialize,
-    {
-        let mut bytes = vec![];
-        a.serialize_with_mode(&mut bytes, ark_serialize::Compress::Yes)
-            .map_err(serde::ser::Error::custom)?;
-        s.serialize_bytes(&bytes)
-    }
-
-    pub fn deserialize<'de, D, A>(deserializer: D) -> Result<A, D::Error>
-    where
-        D: Deserializer<'de>,
-        A: CanonicalDeserialize,
-    {
-        let s: Vec<u8> = serde::de::Deserialize::deserialize(deserializer)?;
-        let a = A::deserialize_with_mode(s.as_slice(), Compress::Yes, Validate::Yes);
-        a.map_err(serde::de::Error::custom)
-    }
-}
-
-impl NMTRoot {
-    pub fn root(&self) -> <TransactionNMT as MerkleTreeScheme>::NodeValue {
-        self.root
-    }
+    lazy_static::initialize(&header::L1_CLIENT);
 }
 
 pub mod network {
+    use hotshot_types::message::Message;
+
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel: CommunicationChannel<SeqTypes> + Debug;
-        type QuorumChannel: CommunicationChannel<SeqTypes> + Debug;
+        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
+        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Web;
 
     impl Type for Web {
-        type DAChannel = WebCommChannel<SeqTypes>;
-        type QuorumChannel = WebCommChannel<SeqTypes>;
+        type DAChannel = WebServerNetwork<SeqTypes>;
+        type QuorumChannel = WebServerNetwork<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Memory;
 
     impl Type for Memory {
-        type DAChannel = MemoryCommChannel<SeqTypes>;
-        type QuorumChannel = MemoryCommChannel<SeqTypes>;
+        type DAChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
+        type QuorumChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
     }
 }
 
@@ -184,22 +142,36 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type Storage = Storage;
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
+}
 
-    fn new_channel_maps(
-        start_view: ViewNumber,
-    ) -> (ChannelMaps<SeqTypes>, Option<ChannelMaps<SeqTypes>>) {
-        (ChannelMaps::new(start_view), None)
+#[derive(Clone, Debug)]
+pub struct NodeState {
+    genesis_state: ValidatedState,
+    builder_address: Wallet<SigningKey>,
+}
+
+impl Default for NodeState {
+    fn default() -> Self {
+        let wallet = FeeAccount::test_wallet();
+
+        Self {
+            genesis_state: ValidatedState::default(),
+            builder_address: wallet,
+        }
     }
 }
+
+impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload;
+    type BlockPayload = Payload<TxTableEntryWord>;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;
-    type StateType = State;
+    type InstanceState = NodeState;
+    type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
 }
 
@@ -228,6 +200,7 @@ pub enum Error {
     BlockBuilding,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
@@ -236,6 +209,7 @@ async fn init_hotshot<N: network::Type>(
     networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
     metrics: &dyn Metrics,
+    instance_state: &NodeState,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
     let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
     let memberships = Memberships {
@@ -253,7 +227,7 @@ async fn init_hotshot<N: network::Type>(
         Storage::empty(),
         memberships,
         networks,
-        HotShotInitializer::from_genesis().unwrap(),
+        HotShotInitializer::from_genesis(instance_state).unwrap(),
         ConsensusMetricsValue::new(metrics),
     )
     .await
@@ -267,12 +241,14 @@ pub struct NetworkParams {
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
+    pub private_staking_key: BLSPrivKey,
 }
 
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
+    builder_mnemonic: String,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -284,53 +260,71 @@ pub async fn init_node(
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
-    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let private_staking_key = network_params.private_staking_key;
+    let public_staking_key = BLSPubKey::from_private(&private_staking_key);
+
+    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
         }
         None => {
             tracing::info!("loading network config from orchestrator");
-            let config = orchestrator_client.get_config(public_ip.to_string()).await;
+            let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
+                orchestrator_client.get_config(public_ip.to_string()).await;
+            let node_index = config.node_index;
+
+            // Get updated config from orchestrator containing all peer's public keys
+            config = orchestrator_client
+                .post_and_wait_all_public_keys(config.node_index, public_staking_key)
+                .await;
+
+            // `post_and_wait_all_public_keys` does not set `config.node_index` properly, so we fix
+            // it by using the `node_index` from `get_config`. This will be fixed by
+            // https://github.com/EspressoSystems/HotShot/issues/2618, after which we can remove
+            // this line.
+            config.node_index = node_index;
+
+            config.config.my_own_validator_config.private_key = private_staking_key.clone();
+            config.config.my_own_validator_config.public_key = public_staking_key;
+
             tracing::info!("loaded config, we are node {}", config.node_index);
             persistence.save_config(&config).await?;
             (config, true)
         }
     };
     let node_index = config.node_index;
-
-    // Generate public keys and this node's private keys.
-    //
-    // These are deterministic keys suitable *only* for testing and demo purposes.
-    config.config.my_own_validator_config =
-        ValidatorConfig::<PubKey>::generated_from_seed_indexed(config.seed, node_index, 1);
-    let priv_key = config.config.my_own_validator_config.private_key.clone();
     let num_nodes = config.config.total_nodes.get();
-    let pub_keys = (0..num_nodes)
-        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64).0)
+
+    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
+        config.config.known_nodes_with_stake.clone();
+
+    let pub_keys = known_nodes_with_stake
+        .iter()
+        .map(|entry| entry.stake_key)
         .collect::<Vec<_>>();
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
-        .map(|id| pub_keys[id].get_stake_table_entry(1u64))
-        .collect();
+
+    // TODO: fetch from orchestrator?
     let state_ver_keys = (0..num_nodes)
         .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
         .collect::<Vec<_>>();
+
     let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
-        da_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+        da_network: Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
             network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             true,
-        ))),
-        quorum_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+        )),
+        quorum_network: Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
             network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             false,
-        ))),
+        )),
         _pd: Default::default(),
     };
 
@@ -340,14 +334,24 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase::<&str>(&builder_mnemonic)
+        .build()
+        .unwrap();
+
+    let instance_state = NodeState {
+        builder_address: wallet,
+        genesis_state: ValidatedState::default(),
+    };
     let hotshot = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
         node_index as usize,
-        priv_key,
+        private_staking_key,
         networks,
         config.config,
         metrics,
+        &instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(
@@ -373,15 +377,12 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::{Stream, StreamExt};
-    use hotshot::traits::{
-        implementations::{MasterMap, MemoryNetwork},
-        BlockPayload,
-    };
+    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
+    use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
+
     use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
-        ExecutionType, ValidatorConfig,
+        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -451,11 +452,11 @@ pub mod testing {
                 None,
             ));
             let networks = Networks {
-                da_network: MemoryCommChannel::new(network.clone()),
-                quorum_network: MemoryCommChannel::new(network),
+                da_network: network.clone(),
+                quorum_network: network,
                 _pd: Default::default(),
             };
-
+            let instance_state = &NodeState::default();
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
@@ -464,6 +465,7 @@ pub mod testing {
                 networks,
                 config,
                 metrics,
+                instance_state,
             )
             .await;
 
@@ -472,30 +474,33 @@ pub mod testing {
         handles
     }
 
-    // Wait for decide event, make sure it matches submitted transaction
+    // Wait for decide event, make sure it matches submitted transaction. Return the block number
+    // containing the transaction.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = Event> + Unpin),
         submitted_txn: &Transaction,
-    ) -> Result<(), ()> {
+    ) -> u64 {
         let commitment = submitted_txn.commit();
 
         // Keep getting events until we see a Decide event
         loop {
-            let event = events.next().await;
+            let event = events.next().await.unwrap();
             tracing::info!("Received event from handle: {event:?}");
 
-            if let Some(Event {
-                event: Decide { leaf_chain, .. },
-                ..
-            }) = event
-            {
-                if leaf_chain.iter().any(|leaf| match &leaf.block_payload {
-                    Some(ref block) => block
+            if let Decide { leaf_chain, .. } = event.event {
+                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                    if leaf
+                        .block_payload
+                        .as_ref()?
                         .transaction_commitments(leaf.get_block_header().metadata())
-                        .contains(&commitment),
-                    None => false,
+                        .contains(&commitment)
+                    {
+                        Some(leaf.get_block_header().block_number())
+                    } else {
+                        None
+                    }
                 }) {
-                    return Ok(());
+                    return height;
                 }
             } else {
                 // Keep waiting
@@ -506,42 +511,22 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
+
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
-    use hotshot_testing::{
-        overall_safety_task::OverallSafetyPropertiesDescription, test_builder::TestMetadata,
-    };
+
     use hotshot_types::traits::block_contents::BlockHeader;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
-    // Run a hotshot test with our types
     #[async_std::test]
-    async fn hotshot_test() {
+    async fn test_skeleton_instantiation() {
         setup_logging();
         setup_backtrace();
 
-        TestMetadata {
-            overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 10,
-                ..Default::default()
-            },
-            ..Default::default()
-        }
-        .gen_launcher::<SeqTypes, Node<network::Memory>>(0)
-        .launch()
-        .run_test()
-        .await;
-    }
-
-    #[async_std::test]
-    async fn test_skeleton_instantiation() -> Result<(), ()> {
-        setup_logging();
-        setup_backtrace();
-
-        let mut handles = init_hotshot_handles().await;
-        let mut events = handles[0].get_event_stream(Default::default()).await.0;
+        let handles = init_hotshot_handles().await;
+        let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
@@ -555,7 +540,7 @@ mod test {
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await
+        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
     }
 
     #[async_std::test]
@@ -565,13 +550,14 @@ mod test {
 
         let success_height = 30;
 
-        let mut handles = init_hotshot_handles().await;
-        let mut events = handles[0].get_event_stream(Default::default()).await.0;
+        let handles = init_hotshot_handles().await;
+        let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
 
-        let mut parent = Header::genesis().0;
+        let mut parent = Header::genesis(&NodeState::default()).0;
+
         loop {
             let event = events.next().await.unwrap();
             let Decide { leaf_chain, .. } = event.event else {
@@ -581,8 +567,13 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for leaf in leaf_chain.iter().rev() {
+            for (leaf, _) in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
+                if header.height == 0 {
+                    parent = header;
+                    continue;
+                }
+                dbg!(header.height, parent.height);
                 assert_eq!(header.height, parent.height + 1);
                 assert!(header.timestamp >= parent.timestamp);
                 assert!(header.l1_head >= parent.l1_head);

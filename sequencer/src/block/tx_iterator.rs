@@ -1,7 +1,7 @@
 use std::ops::Range;
 
-use crate::block2::payload::{Payload, TableWordTraits};
-use crate::block2::tables::{NameSpaceTable, TxTable};
+use crate::block::payload::{Payload, TableWordTraits};
+use crate::block::tables::{NameSpaceTable, TxTable};
 use serde::{Deserialize, Serialize};
 
 /// TODO do we really need `PartialOrd`, `Ord` here?
@@ -12,17 +12,20 @@ pub struct TxIndex {
     pub tx_idx: usize,
 }
 
+/// TODO Decompose this iterator into
+/// - a tx iterator `T` over only 1 namespace
+/// - a namespace-tx iterator that reuses `T` over all namespaces
 pub struct TxIterator<'a, TableWord: TableWordTraits> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
     block_payload: &'a Payload<TableWord>,
-    ns_table: NameSpaceTable<TableWord>,
+    ns_table: &'a NameSpaceTable<TableWord>,
 }
 
 impl<'a, TableWord: TableWordTraits> TxIterator<'a, TableWord> {
     pub(super) fn new(
-        ns_table: NameSpaceTable<TableWord>,
+        ns_table: &'a NameSpaceTable<TableWord>,
         block_payload: &'a Payload<TableWord>,
     ) -> Self {
         Self {
