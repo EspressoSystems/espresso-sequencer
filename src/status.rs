@@ -98,6 +98,15 @@ where
         .get("success_rate", |_, state| {
             async { state.success_rate().await.map_err(internal) }.boxed()
         })?
+        .get("time_since_last_decide", |_, state| {
+            async {
+                state
+                    .elapsed_time_since_last_decide()
+                    .await
+                    .map_err(internal)
+            }
+            .boxed()
+        })?
         .metrics("metrics", |_, state| {
             async { Ok(Cow::Borrowed(state.metrics())) }.boxed()
         })?;

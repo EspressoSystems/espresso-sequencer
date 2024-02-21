@@ -57,6 +57,14 @@ Get the view success rate.
 Returns the fraction of views which resulted in a committed block, as a floating point number.
 """
 
+[route.time_since_last_decide]
+PATH = ["/time-since-last-decide"]
+DOC = """
+Get the time elapsed since the last decided time.
+
+Returns the time elapsed in seconds since the Unix epoch.
+"""
+
 [route.metrics]
 PATH = ["/metrics"]
 METHOD = "METRICS"
