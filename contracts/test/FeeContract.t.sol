@@ -29,7 +29,7 @@ contract FeeContractTest is Test {
         vm.assume(user != address(0));
         amount = bound(amount, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
 
-        uint256 balanceBeforeUser = feeContract.getBalance(user);
+        uint256 balanceBeforeUser = feeContract.balances(user);
 
         //check that the depositEvent is emitted
         vm.expectEmit(true, false, false, true);
@@ -40,7 +40,7 @@ contract FeeContractTest is Test {
         feeContract.deposit{ value: amount }(user);
 
         //get the balance for that user after the deposit
-        uint256 balanceAfterUser = feeContract.getBalance(user);
+        uint256 balanceAfterUser = feeContract.balances(user);
 
         //test that the users' balances have been incremented accurately
         assertEq(balanceAfterUser, balanceBeforeUser + amount);
@@ -58,7 +58,7 @@ contract FeeContractTest is Test {
             vm.deal(user, amount);
 
             //check the balance before
-            uint256 balanceBefore = feeContract.getBalance(user);
+            uint256 balanceBefore = feeContract.balances(user);
 
             //prank as if the deposit is made by the user
             vm.prank(user);
@@ -67,7 +67,7 @@ contract FeeContractTest is Test {
             feeContract.deposit{ value: amount }(user);
 
             //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContract.getBalance(user);
+            uint256 balanceAfter = feeContract.balances(user);
             assertEq(balanceAfter, balanceBefore + amount);
         }
     }
@@ -85,7 +85,7 @@ contract FeeContractTest is Test {
             uint256 amount = i + feeContract.MIN_DEPOSIT_AMOUNT();
 
             //check the balance before
-            uint256 balanceBefore = feeContract.getBalance(user);
+            uint256 balanceBefore = feeContract.balances(user);
 
             //prank as if the deposit is made by the user
             vm.prank(user);
@@ -94,13 +94,13 @@ contract FeeContractTest is Test {
             feeContract.deposit{ value: amount }(user);
 
             //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContract.getBalance(user);
+            uint256 balanceAfter = feeContract.balances(user);
             assertEq(balanceAfter, balanceBefore + amount);
             totalAmountDeposited += amount;
         }
 
         //affirm that the totalAmountDeposited is the user's current balance
-        assertEq(feeContract.getBalance(user), totalAmountDeposited);
+        assertEq(feeContract.balances(user), totalAmountDeposited);
     }
 
     // test calling no function with a payable amount is not successful
@@ -165,7 +165,7 @@ contract FeeContractTest is Test {
     function testFuzz_newUserHasZeroBalance(address user) public {
         vm.assume(user != address(0));
 
-        uint256 balance = feeContract.getBalance(user);
+        uint256 balance = feeContract.balances(user);
 
         assertEq(balance, 0);
     }
@@ -189,7 +189,7 @@ contract FeeContractUpgradabilityTest is Test {
             amount, feeContractProxy.MIN_DEPOSIT_AMOUNT(), feeContractProxy.MAX_DEPOSIT_AMOUNT()
         );
 
-        uint256 balanceBefore = feeContractProxy.getBalance(user);
+        uint256 balanceBefore = feeContractProxy.balances(user);
 
         //check that the depositEvent is emitted
         vm.expectEmit(true, false, false, true);
@@ -200,7 +200,7 @@ contract FeeContractUpgradabilityTest is Test {
         feeContractProxy.deposit{ value: amount }(user);
 
         //get the balance for that user after the deposit
-        uint256 balanceAfter = feeContractProxy.getBalance(user);
+        uint256 balanceAfter = feeContractProxy.balances(user);
         assertEq(balanceAfter, balanceBefore + amount);
     }
 
@@ -214,7 +214,7 @@ contract FeeContractUpgradabilityTest is Test {
             vm.deal(user, amount);
 
             //check the balance before
-            uint256 balanceBefore = feeContractProxy.getBalance(user);
+            uint256 balanceBefore = feeContractProxy.balances(user);
 
             //prank as if the deposit is made by the user
             vm.prank(user);
@@ -223,7 +223,7 @@ contract FeeContractUpgradabilityTest is Test {
             feeContractProxy.deposit{ value: amount }(user);
 
             //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContractProxy.getBalance(user);
+            uint256 balanceAfter = feeContractProxy.balances(user);
             assertEq(balanceAfter, balanceBefore + amount);
         }
     }
@@ -241,7 +241,7 @@ contract FeeContractUpgradabilityTest is Test {
             uint256 amount = i + feeContractProxy.MIN_DEPOSIT_AMOUNT();
 
             //check the balance before
-            uint256 balanceBefore = feeContractProxy.getBalance(user);
+            uint256 balanceBefore = feeContractProxy.balances(user);
 
             //prank as if the deposit is made by the user
             vm.prank(user);
@@ -250,13 +250,13 @@ contract FeeContractUpgradabilityTest is Test {
             feeContractProxy.deposit{ value: amount }(user);
 
             //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContractProxy.getBalance(user);
+            uint256 balanceAfter = feeContractProxy.balances(user);
             assertEq(balanceAfter, balanceBefore + amount);
             totalAmountDeposited += amount;
         }
 
         //affirm that the totalAmountDeposited is the user's current balance
-        assertEq(feeContractProxy.getBalance(user), totalAmountDeposited);
+        assertEq(feeContractProxy.balances(user), totalAmountDeposited);
     }
 
     // test calling no function with a payable amount is not successful

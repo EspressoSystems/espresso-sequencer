@@ -14,7 +14,19 @@ import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
 import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
 
-/// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
+/// @title Light Client Contract
+/// @notice This contract serves as an always-on client
+/// that verifies HotShot's state (Espresso's consensus state) which can be used by
+/// Rollup contracts on L1 (Ethereum).
+/// This state is submitted by any state-prover with evidence which is
+/// a SNARK proof that proves consensus.
+/// This contract also keeps track of the current epoch.
+/// For this version, the epoch is not used. <br>
+/// The light client state primarily consists of:<br>
+/// - the merkle root of finalized block committments,<br>
+/// - the fee ledger committment and <br>
+/// - the active stake table committment<br>
+/// @dev You can use this contract to keep track of its finalized states in safe,
 /// authenticated ways.
 contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
@@ -28,6 +40,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
+
     /// @dev This variable cannot be made immutable due to how UUPS contracts work. See
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
@@ -45,6 +58,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 internal immutable FINALIZED_STATE = 1;
 
     // === Storage ===
+
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -151,10 +165,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === State Modifying APIs ===
     //
-    /// @notice Update the latest finalized light client state. It is expected to be updated
-    /// periodically, especially an update for the last block for every epoch has to be submitted
+    /// @notice Update the latest finalized light client state. It must be updated
+    /// periodically (at least once per epoch), especially an update for the last block for every
+    /// epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
+    /// @dev in this version, only a permissioned prover doing the computations
+    /// will call this function
+    ///
+    /// @param newState new light client state
+    /// @param proof PlonkProof
     function newFinalizedState(
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
@@ -203,7 +223,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // === Pure or View-only APIs ===
-    /// @dev Transform a state into an array of field elements, prepared as public inputs of the
+    /// @notice Transform a state into an array of field elements, prepared as public inputs of the
     /// plonk proof verification
     function preparePublicInput(LightClientState memory state)
         internal
@@ -222,7 +242,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return publicInput;
     }
 
-    /// @dev Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK used
+    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
+    /// used
     /// in inherited contracts.
     function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
         internal
