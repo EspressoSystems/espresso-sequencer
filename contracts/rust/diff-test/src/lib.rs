@@ -275,7 +275,7 @@ impl MockLedger {
         (pi, proof)
     }
 
-    /// a malcious attack, generating a fake stake table full of adversarial stakers
+    /// a malicious attack, generating a fake stake table full of adversarial stakers
     /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
     /// in an attempt to hijack the correct stake table.
     pub fn gen_state_proof_with_fake_stakers(&mut self) -> (GenericPublicInput<F>, Proof) {
