@@ -10,25 +10,13 @@ import { UUPSUpgradeable } from
     "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import { BN254 } from "bn254/BN254.sol";
-import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
-import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
+import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
+import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
+import { LightClientStateUpdateVK as VkLib } from "../src/libraries/LightClientStateUpdateVK.sol";
 
-/// @title Light Client Contract
-/// @notice This contract serves as an always-on client
-/// that verifies HotShot's state (Espresso's consensus state) which can be used by
-/// Rollup contracts on L1 (Ethereum).
-/// This state is submitted by any state-prover with evidence which is
-/// a SNARK proof that proves consensus.
-/// This contract also keeps track of the current epoch.
-/// For this version, the epoch is not used. <br>
-/// The light client state primarily consists of:<br>
-/// - the merkle root of finalized block committments,<br>
-/// - the fee ledger committment and <br>
-/// - the active stake table committment<br>
-/// @dev You can use this contract to keep track of its finalized states in safe,
+/// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
-contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
     // @notice Notify a new epoch is starting
@@ -40,14 +28,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-
     /// @dev This variable cannot be made immutable due to how UUPS contracts work. See
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
 
     /// @notice This number represent the semantic version (semver) of the contract.
     /// @dev They must be constants and cannot be set using a constructor.
-    uint256 public immutable MAJOR = 1;
+    uint256 public immutable MAJOR = 2;
     uint256 public immutable MINOR = 0;
     uint256 public immutable PATCH = 0;
 
@@ -58,7 +45,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 internal immutable FINALIZED_STATE = 1;
 
     // === Storage ===
-
+    //
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -74,6 +61,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
+
+    /// @notice new field for testing purposes
+    /// @dev In order to add a field to LightClientState struct one can: add a new contract variable
+    /// that has the new struct type, or put the struct inside a map.
+    uint256 public newField;
 
     // === Data Structure ===
     //
@@ -95,6 +87,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
+        uint32 extraField; // New field for testing purposes
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -133,9 +126,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Upgrade(newImplementation);
     }
 
-    // @dev Initialization of contract variables happens in this method because the LightClient
-    // contract is upgradable and thus has its constructor method disabled.
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal {
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch)
+        internal
+        onlyOwner
+    {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -165,16 +159,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === State Modifying APIs ===
     //
-    /// @notice Update the latest finalized light client state. It must be updated
-    /// periodically (at least once per epoch), especially an update for the last block for every
-    /// epoch has to be submitted
+    /// @notice Update the latest finalized light client state. It is expected to be updated
+    /// periodically, especially an update for the last block for every epoch has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
-    /// @dev in this version, only a permissioned prover doing the computations
-    /// will call this function
-    ///
-    /// @param newState new light client state
-    /// @param proof PlonkProof
     function newFinalizedState(
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
@@ -188,7 +176,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[FINALIZED_STATE].blockHeight == epochEndingBlockHeight;
+        bool isNewEpoch = getFinalizedState().blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
@@ -207,6 +195,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // check plonk proof
         verifyProof(newState, proof);
 
+        // New condition to check w.r.t. LightClient contract V1
+        require(newField == 0, "newField can only be set to 0");
+
         // upon successful verification, update the latest finalized state
         states[FINALIZED_STATE] = newState;
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
@@ -223,7 +214,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // === Pure or View-only APIs ===
-    /// @notice Transform a state into an array of field elements, prepared as public inputs of the
+    /// @dev Transform a state into an array of field elements, prepared as public inputs of the
     /// plonk proof verification
     function preparePublicInput(LightClientState memory state)
         internal
@@ -242,8 +233,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return publicInput;
     }
 
-    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
-    /// used
+    /// @dev Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK used
     /// in inherited contracts.
     function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
         internal
@@ -260,12 +250,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() private {
-        bytes32 newStakeTableComm = computeStakeTableComm(states[FINALIZED_STATE]);
+        bytes32 newStakeTableComm = computeStakeTableComm(getFinalizedState());
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
 
         votingThreshold = frozenThreshold;
-        frozenThreshold = states[FINALIZED_STATE].threshold;
+        frozenThreshold = getFinalizedState().threshold;
 
         currentEpoch += 1;
         emit EpochChanged(currentEpoch);

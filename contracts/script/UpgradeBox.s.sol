@@ -10,7 +10,7 @@ contract UpgradeBoxScript is Script {
     /// @notice runs the upgrade
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy
-    /// TODO get th most recent deployment from the devops tooling
+    /// TODO get the most recent deployment from the devops tooling
 
     function run(address admin, address mostRecentlyDeployedProxy) external returns (address) {
         DemoBoxV2 newAddy = new DemoBoxV2(); //gets the address of the new implementation
@@ -18,7 +18,7 @@ contract UpgradeBoxScript is Script {
         return proxy;
     }
 
-    /// @notice upgrades the box but calling the upgrade function the implementation contract via
+    /// @notice upgrades the box by calling the upgrade function the implementation contract via
     /// the proxy
     /// @param proxyAddress address of proxy
     /// @param newBox address of new implementation

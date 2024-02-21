@@ -10,6 +10,8 @@ contract DeployHotShotScript is Script {
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
         vm.startBroadcast(privateKey);
 
+        //// Legacy HotShot contract deployment
+
         new HotShot();
 
         vm.stopBroadcast();

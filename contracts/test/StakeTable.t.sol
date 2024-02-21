@@ -59,8 +59,8 @@ contract StakeTable_Test is StakeTableCommonTest {
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
 
-    uint256 constant INITIAL_BALANCE = 1_000_000_000;
-    address exampleTokenCreator;
+    uint256 public constant INITIAL_BALANCE = 1_000_000_000;
+    address public exampleTokenCreator;
 
     function registerWithSeed(address sender, uint8 seed, uint64 depositAmount, bool expectRevert)
         private

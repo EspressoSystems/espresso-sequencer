@@ -40,7 +40,8 @@ contract DeployLightClientScript is Script {
             stakeTableAmountComm,
             threshold
         );
-        new LC(genesis, blocksPerEpoch);
+        LC lc = new LC();
+        lc.initialize(genesis, blocksPerEpoch);
 
         vm.stopBroadcast();
     }

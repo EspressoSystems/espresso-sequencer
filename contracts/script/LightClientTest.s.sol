@@ -46,7 +46,6 @@ contract DeployLightClientTestScript is Script {
             threshold
         );
         new LCTest(genesis, blocksPerEpoch);
-
         vm.stopBroadcast();
     }
 }
