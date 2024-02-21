@@ -330,7 +330,7 @@ mod test {
     }
 
     fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes> {
-        let mut leaf = Leaf::genesis(&NodeState {});
+        let mut leaf = Leaf::genesis(&NodeState::default());
         let mut qc = QuorumCertificate::genesis();
         leaf.block_header.height = height;
         qc.data.leaf_commit = leaf.commit();

@@ -35,11 +35,7 @@ async fn main() -> anyhow::Result<()> {
     context.start_consensus().await;
 
     // Wait for events just to keep the process from exiting before consensus exits.
-    let mut events = context
-        .consensus_mut()
-        .get_event_stream(Default::default())
-        .await
-        .0;
+    let mut events = context.consensus_mut().get_event_stream();
     while let Some(event) = events.next().await {
         tracing::debug!(?event);
     }
@@ -55,12 +51,14 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
+    let builder_mnemonic = opt.eth_mnemonic;
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
+        private_staking_key: opt.private_staking_key,
     };
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
@@ -83,7 +81,7 @@ where
             let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
                     async move {
-                        init_node(network_params, &*metrics, &mut storage)
+                        init_node(network_params, &*metrics, &mut storage, builder_mnemonic)
                             .await
                             .unwrap()
                     }
@@ -92,6 +90,14 @@ where
                 .await?;
             context
         }
-        None => init_node(network_params, &NoMetrics, &mut storage_opt.create().await?).await?,
+        None => {
+            init_node(
+                network_params,
+                &NoMetrics,
+                &mut storage_opt.create().await?,
+                builder_mnemonic,
+            )
+            .await?
+        }
     })
 }

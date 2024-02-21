@@ -41,7 +41,7 @@ pub(super) async fn state_signature_loop<N>(
             ..
         } = event
         {
-            if let Some(leaf) = leaf_chain.first() {
+            if let Some((leaf, _)) = leaf_chain.first() {
                 match form_light_client_state(leaf, stake_table_comm) {
                     Ok(state) => {
                         let signature = context.sign_new_state(&state).await;
@@ -136,7 +136,7 @@ impl StateSignatureMemStorage {
 pub type StakeTableCommitmentType = (CircuitField, CircuitField, CircuitField);
 
 /// Helper function for stake table commitment
-pub(crate) fn static_stake_table_commitment(
+pub fn static_stake_table_commitment(
     known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
     state_ver_keys: &[StateVerKey],
     capacity: usize,

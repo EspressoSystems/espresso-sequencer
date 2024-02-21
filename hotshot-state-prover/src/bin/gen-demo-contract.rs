@@ -83,7 +83,7 @@ fn main() {
         stake_table_commitment_for_demo(args.num_nodes, args.keygen_seed);
 
     // calculate the path to solidity file
-    let contract_name = "LightClient.s.sol";
+    let contract_name = "LightClientDemo.s.sol";
     let mut path = args.contracts_root_dir;
     path.push("script");
     path.push(contract_name);
@@ -110,13 +110,13 @@ fn main() {
         import {{ BN254 }} from \"bn254/BN254.sol\";
         import {{ LightClient as LC }} from \"../src/LightClient.sol\";
         
-        contract DeployLightClientScript is Script {{
+        contract DeployLightClientDemoScript is Script {{
             function run() external {{
                 string memory seedPhrase = vm.envString(\"MNEMONIC\");
                 uint256 privateKey = vm.deriveKey(seedPhrase, 0);
                 vm.startBroadcast(privateKey);
         
-                // For Decaf there will be only one epoch
+                // For this version there will be only one epoch
                 uint32 blocksPerEpoch = type(uint32).max;
         
                 uint64 viewNum = 0;

@@ -1,4 +1,4 @@
-pub use light_client::*;
+pub use light_client_v2::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,7 +9,7 @@ pub use light_client::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod light_client {
+pub mod light_client_v2 {
     pub use super::super::shared_types::*;
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
@@ -113,10 +113,11 @@ pub mod light_client {
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.LightClientState",
+                                    "struct LightClientV2.LightClientState",
                                 ),
                             ),
                         },],
@@ -195,10 +196,11 @@ pub mod light_client {
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.LightClientState",
+                                    "struct LightClientV2.LightClientState",
                                 ),
                             ),
                         },],
@@ -222,10 +224,11 @@ pub mod light_client {
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.LightClientState",
+                                    "struct LightClientV2.LightClientState",
                                 ),
                             ),
                         },],
@@ -249,10 +252,11 @@ pub mod light_client {
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                                 ],),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(
-                                        "struct LightClient.LightClientState",
+                                        "struct LightClientV2.LightClientState",
                                     ),
                                 ),
                             },
@@ -267,6 +271,22 @@ pub mod light_client {
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("newField"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("newField"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
                 ),
                 (
@@ -285,10 +305,11 @@ pub mod light_client {
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                                 ],),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(
-                                        "struct LightClient.LightClientState",
+                                        "struct LightClientV2.LightClientState",
                                     ),
                                 ),
                             },
@@ -478,6 +499,13 @@ pub mod light_client {
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("extraField"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint32"),
                                 ),
                             },
                         ],
@@ -787,46 +815,39 @@ pub mod light_client {
                         },],
                     },],
                 ),
-                (
-                    ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed"),
-                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
-                        name: ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed",),
-                        inputs: ::std::vec![],
-                    },],
-                ),
             ]),
             receive: false,
             fallback: false,
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static LIGHTCLIENT_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static LIGHTCLIENTV2_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
-    pub struct LightClient<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for LightClient<M> {
+    pub struct LightClientV2<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for LightClientV2<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for LightClient<M> {
+    impl<M> ::core::ops::Deref for LightClientV2<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for LightClient<M> {
+    impl<M> ::core::ops::DerefMut for LightClientV2<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for LightClient<M> {
+    impl<M> ::core::fmt::Debug for LightClientV2<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(LightClient))
+            f.debug_tuple(::core::stringify!(LightClientV2))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> LightClientV2<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -835,7 +856,7 @@ pub mod light_client {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                LIGHTCLIENT_ABI.clone(),
+                LIGHTCLIENTV2_ABI.clone(),
                 client,
             ))
         }
@@ -877,13 +898,13 @@ pub mod light_client {
                 .method_hash([240, 104, 32, 84], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `computeStakeTableComm` (0xaa922732) function
+        ///Calls the contract's `computeStakeTableComm` (0x2a49491a) function
         pub fn compute_stake_table_comm(
             &self,
             state: LightClientState,
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
-                .method_hash([170, 146, 39, 50], (state,))
+                .method_hash([42, 73, 73, 26], (state,))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `currentEpoch` (0x76671808) function
@@ -924,24 +945,32 @@ pub mod light_client {
                 .method_hash([72, 71, 174, 93], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `initialize` (0x5420d15d) function
+        ///Calls the contract's `initialize` (0xc8d9d168) function
         pub fn initialize(
             &self,
             genesis: LightClientState,
             num_blocks_per_epoch: u32,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([84, 32, 209, 93], (genesis, num_blocks_per_epoch))
+                .method_hash([200, 217, 209, 104], (genesis, num_blocks_per_epoch))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `newFinalizedState` (0x409939b7) function
+        ///Calls the contract's `newField` (0xa7605f45) function
+        pub fn new_field(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([167, 96, 95, 69], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `newFinalizedState` (0x73c3adc0) function
         pub fn new_finalized_state(
             &self,
             new_state: LightClientState,
             proof: PlonkProof,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([64, 153, 57, 183], (new_state, proof))
+                .method_hash([115, 195, 173, 192], (new_state, proof))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `owner` (0x8da5cb5b) function
@@ -979,6 +1008,7 @@ pub mod light_client {
                 ::ethers::core::types::U256,
                 ::ethers::core::types::U256,
                 ::ethers::core::types::U256,
+                u32,
             ),
         > {
             self.0
@@ -1062,13 +1092,15 @@ pub mod light_client {
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LightClientEvents>
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LightClientV2Events>
         {
             self.0
                 .event_with_filter(::core::default::Default::default())
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+        for LightClientV2<M>
+    {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -1310,21 +1342,6 @@ pub mod light_client {
     pub struct UUPSUnsupportedProxiableUUID {
         pub slot: [u8; 32],
     }
-    ///Custom Error type `WrongStakeTableUsed` with signature `WrongStakeTableUsed()` and selector `0x51618089`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[etherror(name = "WrongStakeTableUsed", abi = "WrongStakeTableUsed()")]
-    pub struct WrongStakeTableUsed;
     ///Container type for all of the contract's custom errors
     #[derive(
         Clone,
@@ -1336,7 +1353,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub enum LightClientErrors {
+    pub enum LightClientV2Errors {
         AddressEmptyCode(AddressEmptyCode),
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
         ERC1967NonPayable(ERC1967NonPayable),
@@ -1351,12 +1368,11 @@ pub mod light_client {
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
         UUPSUnauthorizedCallContext(UUPSUnauthorizedCallContext),
         UUPSUnsupportedProxiableUUID(UUPSUnsupportedProxiableUUID),
-        WrongStakeTableUsed(WrongStakeTableUsed),
         /// The standard solidity revert string, with selector
         /// Error(string) -- 0x08c379a0
         RevertString(::std::string::String),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientErrors {
+    impl ::ethers::core::abi::AbiDecode for LightClientV2Errors {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -1424,15 +1440,10 @@ pub mod light_client {
             {
                 return Ok(Self::UUPSUnsupportedProxiableUUID(decoded));
             }
-            if let Ok(decoded) =
-                <WrongStakeTableUsed as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::WrongStakeTableUsed(decoded));
-            }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientErrors {
+    impl ::ethers::core::abi::AbiEncode for LightClientV2Errors {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
                 Self::AddressEmptyCode(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -1463,14 +1474,11 @@ pub mod light_client {
                 Self::UUPSUnsupportedProxiableUUID(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::WrongStakeTableUsed(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
     }
-    impl ::ethers::contract::ContractRevert for LightClientErrors {
+    impl ::ethers::contract::ContractRevert for LightClientV2Errors {
         fn valid_selector(selector: [u8; 4]) -> bool {
             match selector {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
@@ -1526,15 +1534,11 @@ pub mod light_client {
                     == <UUPSUnsupportedProxiableUUID as ::ethers::contract::EthError>::selector() => {
                     true
                 }
-                _ if selector
-                    == <WrongStakeTableUsed as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
                 _ => false,
             }
         }
     }
-    impl ::core::fmt::Display for LightClientErrors {
+    impl ::core::fmt::Display for LightClientV2Errors {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::AddressEmptyCode(element) => ::core::fmt::Display::fmt(element, f),
@@ -1557,89 +1561,83 @@ pub mod light_client {
                 Self::UUPSUnsupportedProxiableUUID(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::WrongStakeTableUsed(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
         }
     }
-    impl ::core::convert::From<::std::string::String> for LightClientErrors {
+    impl ::core::convert::From<::std::string::String> for LightClientV2Errors {
         fn from(value: String) -> Self {
             Self::RevertString(value)
         }
     }
-    impl ::core::convert::From<AddressEmptyCode> for LightClientErrors {
+    impl ::core::convert::From<AddressEmptyCode> for LightClientV2Errors {
         fn from(value: AddressEmptyCode) -> Self {
             Self::AddressEmptyCode(value)
         }
     }
-    impl ::core::convert::From<ERC1967InvalidImplementation> for LightClientErrors {
+    impl ::core::convert::From<ERC1967InvalidImplementation> for LightClientV2Errors {
         fn from(value: ERC1967InvalidImplementation) -> Self {
             Self::ERC1967InvalidImplementation(value)
         }
     }
-    impl ::core::convert::From<ERC1967NonPayable> for LightClientErrors {
+    impl ::core::convert::From<ERC1967NonPayable> for LightClientV2Errors {
         fn from(value: ERC1967NonPayable) -> Self {
             Self::ERC1967NonPayable(value)
         }
     }
-    impl ::core::convert::From<FailedInnerCall> for LightClientErrors {
+    impl ::core::convert::From<FailedInnerCall> for LightClientV2Errors {
         fn from(value: FailedInnerCall) -> Self {
             Self::FailedInnerCall(value)
         }
     }
-    impl ::core::convert::From<InvalidArgs> for LightClientErrors {
+    impl ::core::convert::From<InvalidArgs> for LightClientV2Errors {
         fn from(value: InvalidArgs) -> Self {
             Self::InvalidArgs(value)
         }
     }
-    impl ::core::convert::From<InvalidInitialization> for LightClientErrors {
+    impl ::core::convert::From<InvalidInitialization> for LightClientV2Errors {
         fn from(value: InvalidInitialization) -> Self {
             Self::InvalidInitialization(value)
         }
     }
-    impl ::core::convert::From<InvalidProof> for LightClientErrors {
+    impl ::core::convert::From<InvalidProof> for LightClientV2Errors {
         fn from(value: InvalidProof) -> Self {
             Self::InvalidProof(value)
         }
     }
-    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientErrors {
+    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientV2Errors {
         fn from(value: MissingLastBlockForCurrentEpoch) -> Self {
             Self::MissingLastBlockForCurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<NotInitializing> for LightClientErrors {
+    impl ::core::convert::From<NotInitializing> for LightClientV2Errors {
         fn from(value: NotInitializing) -> Self {
             Self::NotInitializing(value)
         }
     }
-    impl ::core::convert::From<OutdatedState> for LightClientErrors {
+    impl ::core::convert::From<OutdatedState> for LightClientV2Errors {
         fn from(value: OutdatedState) -> Self {
             Self::OutdatedState(value)
         }
     }
-    impl ::core::convert::From<OwnableInvalidOwner> for LightClientErrors {
+    impl ::core::convert::From<OwnableInvalidOwner> for LightClientV2Errors {
         fn from(value: OwnableInvalidOwner) -> Self {
             Self::OwnableInvalidOwner(value)
         }
     }
-    impl ::core::convert::From<OwnableUnauthorizedAccount> for LightClientErrors {
+    impl ::core::convert::From<OwnableUnauthorizedAccount> for LightClientV2Errors {
         fn from(value: OwnableUnauthorizedAccount) -> Self {
             Self::OwnableUnauthorizedAccount(value)
         }
     }
-    impl ::core::convert::From<UUPSUnauthorizedCallContext> for LightClientErrors {
+    impl ::core::convert::From<UUPSUnauthorizedCallContext> for LightClientV2Errors {
         fn from(value: UUPSUnauthorizedCallContext) -> Self {
             Self::UUPSUnauthorizedCallContext(value)
         }
     }
-    impl ::core::convert::From<UUPSUnsupportedProxiableUUID> for LightClientErrors {
+    impl ::core::convert::From<UUPSUnsupportedProxiableUUID> for LightClientV2Errors {
         fn from(value: UUPSUnsupportedProxiableUUID) -> Self {
             Self::UUPSUnsupportedProxiableUUID(value)
-        }
-    }
-    impl ::core::convert::From<WrongStakeTableUsed> for LightClientErrors {
-        fn from(value: WrongStakeTableUsed) -> Self {
-            Self::WrongStakeTableUsed(value)
         }
     }
     #[derive(
@@ -1758,7 +1756,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub enum LightClientEvents {
+    pub enum LightClientV2Events {
         EpochChangedFilter(EpochChangedFilter),
         InitializedFilter(InitializedFilter),
         NewStateFilter(NewStateFilter),
@@ -1766,32 +1764,32 @@ pub mod light_client {
         UpgradeFilter(UpgradeFilter),
         UpgradedFilter(UpgradedFilter),
     }
-    impl ::ethers::contract::EthLogDecode for LightClientEvents {
+    impl ::ethers::contract::EthLogDecode for LightClientV2Events {
         fn decode_log(
             log: &::ethers::core::abi::RawLog,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
             if let Ok(decoded) = EpochChangedFilter::decode_log(log) {
-                return Ok(LightClientEvents::EpochChangedFilter(decoded));
+                return Ok(LightClientV2Events::EpochChangedFilter(decoded));
             }
             if let Ok(decoded) = InitializedFilter::decode_log(log) {
-                return Ok(LightClientEvents::InitializedFilter(decoded));
+                return Ok(LightClientV2Events::InitializedFilter(decoded));
             }
             if let Ok(decoded) = NewStateFilter::decode_log(log) {
-                return Ok(LightClientEvents::NewStateFilter(decoded));
+                return Ok(LightClientV2Events::NewStateFilter(decoded));
             }
             if let Ok(decoded) = OwnershipTransferredFilter::decode_log(log) {
-                return Ok(LightClientEvents::OwnershipTransferredFilter(decoded));
+                return Ok(LightClientV2Events::OwnershipTransferredFilter(decoded));
             }
             if let Ok(decoded) = UpgradeFilter::decode_log(log) {
-                return Ok(LightClientEvents::UpgradeFilter(decoded));
+                return Ok(LightClientV2Events::UpgradeFilter(decoded));
             }
             if let Ok(decoded) = UpgradedFilter::decode_log(log) {
-                return Ok(LightClientEvents::UpgradedFilter(decoded));
+                return Ok(LightClientV2Events::UpgradedFilter(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData)
         }
     }
-    impl ::core::fmt::Display for LightClientEvents {
+    impl ::core::fmt::Display for LightClientV2Events {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::EpochChangedFilter(element) => ::core::fmt::Display::fmt(element, f),
@@ -1803,32 +1801,32 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<EpochChangedFilter> for LightClientEvents {
+    impl ::core::convert::From<EpochChangedFilter> for LightClientV2Events {
         fn from(value: EpochChangedFilter) -> Self {
             Self::EpochChangedFilter(value)
         }
     }
-    impl ::core::convert::From<InitializedFilter> for LightClientEvents {
+    impl ::core::convert::From<InitializedFilter> for LightClientV2Events {
         fn from(value: InitializedFilter) -> Self {
             Self::InitializedFilter(value)
         }
     }
-    impl ::core::convert::From<NewStateFilter> for LightClientEvents {
+    impl ::core::convert::From<NewStateFilter> for LightClientV2Events {
         fn from(value: NewStateFilter) -> Self {
             Self::NewStateFilter(value)
         }
     }
-    impl ::core::convert::From<OwnershipTransferredFilter> for LightClientEvents {
+    impl ::core::convert::From<OwnershipTransferredFilter> for LightClientV2Events {
         fn from(value: OwnershipTransferredFilter) -> Self {
             Self::OwnershipTransferredFilter(value)
         }
     }
-    impl ::core::convert::From<UpgradeFilter> for LightClientEvents {
+    impl ::core::convert::From<UpgradeFilter> for LightClientV2Events {
         fn from(value: UpgradeFilter) -> Self {
             Self::UpgradeFilter(value)
         }
     }
-    impl ::core::convert::From<UpgradedFilter> for LightClientEvents {
+    impl ::core::convert::From<UpgradedFilter> for LightClientV2Events {
         fn from(value: UpgradedFilter) -> Self {
             Self::UpgradedFilter(value)
         }
@@ -1911,7 +1909,7 @@ pub mod light_client {
     )]
     #[ethcall(name = "blocksPerEpoch", abi = "blocksPerEpoch()")]
     pub struct BlocksPerEpochCall;
-    ///Container type for all input parameters for the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    ///Container type for all input parameters for the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32))` and selector `0x2a49491a`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -1926,7 +1924,7 @@ pub mod light_client {
     )]
     #[ethcall(
         name = "computeStakeTableComm",
-        abi = "computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))"
+        abi = "computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32))"
     )]
     pub struct ComputeStakeTableCommCall {
         pub state: LightClientState,
@@ -2009,7 +2007,7 @@ pub mod light_client {
     )]
     #[ethcall(name = "getGenesisState", abi = "getGenesisState()")]
     pub struct GetGenesisStateCall;
-    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)` and selector `0x5420d15d`
+    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32),uint32)` and selector `0xc8d9d168`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2024,13 +2022,28 @@ pub mod light_client {
     )]
     #[ethcall(
         name = "initialize",
-        abi = "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)"
+        abi = "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32),uint32)"
     )]
     pub struct InitializeCall {
         pub genesis: LightClientState,
         pub num_blocks_per_epoch: u32,
     }
-    ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x409939b7`
+    ///Container type for all input parameters for the `newField` function with signature `newField()` and selector `0xa7605f45`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "newField", abi = "newField()")]
+    pub struct NewFieldCall;
+    ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x73c3adc0`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2040,7 +2053,7 @@ pub mod light_client {
     )]
     #[ethcall(
         name = "newFinalizedState",
-        abi = "newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
+        abi = "newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
     )]
     pub struct NewFinalizedStateCall {
         pub new_state: LightClientState,
@@ -2178,7 +2191,7 @@ pub mod light_client {
     pub struct VotingThresholdCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
-    pub enum LightClientCalls {
+    pub enum LightClientV2Calls {
         Major(MajorCall),
         Minor(MinorCall),
         Patch(PatchCall),
@@ -2191,6 +2204,7 @@ pub mod light_client {
         GetFinalizedState(GetFinalizedStateCall),
         GetGenesisState(GetGenesisStateCall),
         Initialize(InitializeCall),
+        NewField(NewFieldCall),
         NewFinalizedState(NewFinalizedStateCall),
         Owner(OwnerCall),
         ProxiableUUID(ProxiableUUIDCall),
@@ -2201,7 +2215,7 @@ pub mod light_client {
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
         VotingThreshold(VotingThresholdCall),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientCalls {
+    impl ::ethers::core::abi::AbiDecode for LightClientV2Calls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -2257,6 +2271,9 @@ pub mod light_client {
             if let Ok(decoded) = <InitializeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Initialize(decoded));
             }
+            if let Ok(decoded) = <NewFieldCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::NewField(decoded));
+            }
             if let Ok(decoded) =
                 <NewFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -2300,7 +2317,7 @@ pub mod light_client {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientCalls {
+    impl ::ethers::core::abi::AbiEncode for LightClientV2Calls {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::Major(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -2321,6 +2338,7 @@ pub mod light_client {
                 Self::GetFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetGenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Initialize(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NewField(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Owner(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::ProxiableUUID(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -2335,7 +2353,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::fmt::Display for LightClientCalls {
+    impl ::core::fmt::Display for LightClientV2Calls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::Major(element) => ::core::fmt::Display::fmt(element, f),
@@ -2350,6 +2368,7 @@ pub mod light_client {
                 Self::GetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetGenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NewField(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Owner(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ProxiableUUID(element) => ::core::fmt::Display::fmt(element, f),
@@ -2362,107 +2381,112 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<MajorCall> for LightClientCalls {
+    impl ::core::convert::From<MajorCall> for LightClientV2Calls {
         fn from(value: MajorCall) -> Self {
             Self::Major(value)
         }
     }
-    impl ::core::convert::From<MinorCall> for LightClientCalls {
+    impl ::core::convert::From<MinorCall> for LightClientV2Calls {
         fn from(value: MinorCall) -> Self {
             Self::Minor(value)
         }
     }
-    impl ::core::convert::From<PatchCall> for LightClientCalls {
+    impl ::core::convert::From<PatchCall> for LightClientV2Calls {
         fn from(value: PatchCall) -> Self {
             Self::Patch(value)
         }
     }
-    impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientCalls {
+    impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientV2Calls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
         }
     }
-    impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
+    impl ::core::convert::From<BlocksPerEpochCall> for LightClientV2Calls {
         fn from(value: BlocksPerEpochCall) -> Self {
             Self::BlocksPerEpoch(value)
         }
     }
-    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientCalls {
+    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientV2Calls {
         fn from(value: ComputeStakeTableCommCall) -> Self {
             Self::ComputeStakeTableComm(value)
         }
     }
-    impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
+    impl ::core::convert::From<CurrentEpochCall> for LightClientV2Calls {
         fn from(value: CurrentEpochCall) -> Self {
             Self::CurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientV2Calls {
         fn from(value: FrozenStakeTableCommitmentCall) -> Self {
             Self::FrozenStakeTableCommitment(value)
         }
     }
-    impl ::core::convert::From<FrozenThresholdCall> for LightClientCalls {
+    impl ::core::convert::From<FrozenThresholdCall> for LightClientV2Calls {
         fn from(value: FrozenThresholdCall) -> Self {
             Self::FrozenThreshold(value)
         }
     }
-    impl ::core::convert::From<GetFinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<GetFinalizedStateCall> for LightClientV2Calls {
         fn from(value: GetFinalizedStateCall) -> Self {
             Self::GetFinalizedState(value)
         }
     }
-    impl ::core::convert::From<GetGenesisStateCall> for LightClientCalls {
+    impl ::core::convert::From<GetGenesisStateCall> for LightClientV2Calls {
         fn from(value: GetGenesisStateCall) -> Self {
             Self::GetGenesisState(value)
         }
     }
-    impl ::core::convert::From<InitializeCall> for LightClientCalls {
+    impl ::core::convert::From<InitializeCall> for LightClientV2Calls {
         fn from(value: InitializeCall) -> Self {
             Self::Initialize(value)
         }
     }
-    impl ::core::convert::From<NewFinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<NewFieldCall> for LightClientV2Calls {
+        fn from(value: NewFieldCall) -> Self {
+            Self::NewField(value)
+        }
+    }
+    impl ::core::convert::From<NewFinalizedStateCall> for LightClientV2Calls {
         fn from(value: NewFinalizedStateCall) -> Self {
             Self::NewFinalizedState(value)
         }
     }
-    impl ::core::convert::From<OwnerCall> for LightClientCalls {
+    impl ::core::convert::From<OwnerCall> for LightClientV2Calls {
         fn from(value: OwnerCall) -> Self {
             Self::Owner(value)
         }
     }
-    impl ::core::convert::From<ProxiableUUIDCall> for LightClientCalls {
+    impl ::core::convert::From<ProxiableUUIDCall> for LightClientV2Calls {
         fn from(value: ProxiableUUIDCall) -> Self {
             Self::ProxiableUUID(value)
         }
     }
-    impl ::core::convert::From<RenounceOwnershipCall> for LightClientCalls {
+    impl ::core::convert::From<RenounceOwnershipCall> for LightClientV2Calls {
         fn from(value: RenounceOwnershipCall) -> Self {
             Self::RenounceOwnership(value)
         }
     }
-    impl ::core::convert::From<StatesCall> for LightClientCalls {
+    impl ::core::convert::From<StatesCall> for LightClientV2Calls {
         fn from(value: StatesCall) -> Self {
             Self::States(value)
         }
     }
-    impl ::core::convert::From<TransferOwnershipCall> for LightClientCalls {
+    impl ::core::convert::From<TransferOwnershipCall> for LightClientV2Calls {
         fn from(value: TransferOwnershipCall) -> Self {
             Self::TransferOwnership(value)
         }
     }
-    impl ::core::convert::From<UpgradeToAndCallCall> for LightClientCalls {
+    impl ::core::convert::From<UpgradeToAndCallCall> for LightClientV2Calls {
         fn from(value: UpgradeToAndCallCall) -> Self {
             Self::UpgradeToAndCall(value)
         }
     }
-    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientV2Calls {
         fn from(value: VotingStakeTableCommitmentCall) -> Self {
             Self::VotingStakeTableCommitment(value)
         }
     }
-    impl ::core::convert::From<VotingThresholdCall> for LightClientCalls {
+    impl ::core::convert::From<VotingThresholdCall> for LightClientV2Calls {
         fn from(value: VotingThresholdCall) -> Self {
             Self::VotingThreshold(value)
         }
@@ -2537,7 +2561,7 @@ pub mod light_client {
         Hash,
     )]
     pub struct BlocksPerEpochReturn(pub u32);
-    ///Container type for all return fields from the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    ///Container type for all return fields from the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32))` and selector `0x2a49491a`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -2621,6 +2645,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct GetGenesisStateReturn(pub LightClientState);
+    ///Container type for all return fields from the `newField` function with signature `newField()` and selector `0xa7605f45`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct NewFieldReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `owner` function with signature `owner()` and selector `0x8da5cb5b`
     #[derive(
         Clone,
@@ -2671,6 +2709,7 @@ pub mod light_client {
         pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
         pub stake_table_amount_comm: ::ethers::core::types::U256,
         pub threshold: ::ethers::core::types::U256,
+        pub extra_field: u32,
     }
     ///Container type for all return fields from the `votingStakeTableCommitment` function with signature `votingStakeTableCommitment()` and selector `0x76b6b7cb`
     #[derive(
@@ -2700,7 +2739,7 @@ pub mod light_client {
         Hash,
     )]
     pub struct VotingThresholdReturn(pub ::ethers::core::types::U256);
-    ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
+    ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256,uint32)`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -2722,5 +2761,6 @@ pub mod light_client {
         pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
         pub stake_table_amount_comm: ::ethers::core::types::U256,
         pub threshold: ::ethers::core::types::U256,
+        pub extra_field: u32,
     }
 }

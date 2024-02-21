@@ -151,7 +151,7 @@ pub async fn read_contract_state(
     config: &StateProverConfig,
 ) -> Result<LightClientState, ProverError> {
     let contract = prepare_contract(config).await?;
-    let state: ParsedLightClientState = match contract.finalized_state().call().await {
+    let state: ParsedLightClientState = match contract.get_finalized_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
             tracing::error!("unable to read finalized_state from contract: {}", e);
@@ -307,7 +307,7 @@ pub enum ProverError {
     InvalidState(String),
     /// Error when communicating with the smart contract: {0}
     ContractError(anyhow::Error),
-    /// Error when communicating with the state relay server
+    /// Error when communicating with the state relay server: {0}
     RelayServerError(ServerError),
     /// Internal error with the stake table
     StakeTableError(StakeTableError),
@@ -534,7 +534,7 @@ mod test {
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, u32::MAX);
-        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
+        let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
         // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
         assert_eq!(genesis.view_num, 0);
         assert_eq!(genesis.block_height, 0);
@@ -563,7 +563,7 @@ mod test {
         // sanity check on `config`
 
         // sanity check to ensure the same genesis state for LightClientTest and for our tests
-        let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
+        let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 
         let mut new_state = genesis.clone();
@@ -578,7 +578,7 @@ mod test {
         super::submit_state_and_proof(proof, pi, &config).await?;
         tracing::info!("Successfully submited new finalized state to L1.");
         // test if new state is updated in l1
-        let finalized_l1: ParsedLightClientState = contract.finalized_state().await?.into();
+        let finalized_l1: ParsedLightClientState = contract.get_finalized_state().await?.into();
         assert_eq!(finalized_l1, new_state);
         Ok(())
     }

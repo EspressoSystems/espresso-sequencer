@@ -17,7 +17,7 @@ contract DeployLightClientTestScript is Script {
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
         vm.startBroadcast(privateKey);
 
-        // For Decaf there will be only one epoch
+        // For this version there will be only one epoch
         uint32 blocksPerEpoch = type(uint32).max;
 
         uint64 viewNum = 0;
@@ -46,7 +46,6 @@ contract DeployLightClientTestScript is Script {
             threshold
         );
         new LCTest(genesis, blocksPerEpoch);
-
         vm.stopBroadcast();
     }
 }
