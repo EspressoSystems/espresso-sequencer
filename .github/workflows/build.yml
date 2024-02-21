@@ -285,22 +285,22 @@ jobs:
 
       - name: Pull docker images
         run: |
-          docker pull ghcr.io/espressosystems/espresso-sequencer/sequencer:${{ needs.build-dockers.outputs.sequencer-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/web-server:${{ needs.build-dockers.outputs.web-server-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/state-relay-server:${{ needs.build-dockers.outputs.state-relay-server-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/prover-service:${{ needs.build-dockers.outputs.prover-service-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/orchestrator:${{ needs.build-dockers.outputs.orchestrator-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/commitment-task:${{ needs.build-dockers.outputs.commitment-task-tag }}
-          docker pull ghcr.io/espressosystems/espresso-sequencer/submit-transactions:${{ needs.build-dockers.outputs.submit-transactions-tag }}
+          docker pull ${{ needs.build-dockers.outputs.sequencer-tag }}
+          docker pull ${{ needs.build-dockers.outputs.web-server-tag }}
+          docker pull ${{ needs.build-dockers.outputs.state-relay-server-tag }}
+          docker pull ${{ needs.build-dockers.outputs.prover-service-tag }}
+          docker pull ${{ needs.build-dockers.outputs.orchestrator-tag }}
+          docker pull ${{ needs.build-dockers.outputs.commitment-task-tag }}
+          docker pull ${{ needs.build-dockers.outputs.submit-transactions-tag }}
       - name: Tag new docker images
         run: |
-          docker tag ghcr.io/espressosystems/espresso-sequencer/sequencer:${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/web-server:${{ needs.build-dockers.outputs.web-server-tag }} ghcr.io/espressosystems/espresso-sequencer/web-server:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/state-relay-server:${{ needs.build-dockers.outputs.state-relay-server-tag }} ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/prover-service:${{ needs.build-dockers.outputs.prover-service-tag }} ghcr.io/espressosystems/espresso-sequencer/prover-service:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/orchestrator:${{ needs.build-dockers.outputs.orchestrator-tag }} ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/commitment-task:${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
-          docker tag ghcr.io/espressosystems/espresso-sequencer/submit-transactions:${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+          docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+          docker tag ${{ needs.build-dockers.outputs.web-server-tag }} ghcr.io/espressosystems/espresso-sequencer/web-server:main
+          docker tag ${{ needs.build-dockers.outputs.state-relay-server-tag }} ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
+          docker tag ${{ needs.build-dockers.outputs.prover-service-tag }} ghcr.io/espressosystems/espresso-sequencer/prover-service:main
+          docker tag ${{ needs.build-dockers.outputs.orchestrator-tag }} ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
+          docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
+          docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
 
       - name: Start Demo
         run: just demo --wait
