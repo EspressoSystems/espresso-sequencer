@@ -391,4 +391,19 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.expectRevert(LC.InvalidProof.selector);
         lc.newFinalizedState(newState, dummyProof);
     }
+
+    /// @dev Test that update on finalized state will fail if a different stake table is used
+    function test_revertWhenWrongStakeTableUsed() external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-wrong-stake-table";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(newState, proof);
+    }
 }

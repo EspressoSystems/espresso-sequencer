@@ -111,6 +111,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidArgs();
     /// @notice Wrong plonk proof or public inputs.
     error InvalidProof();
+    /// @notice Wrong stake table used, should match `finalizedState`
+    error WrongStakeTableUsed();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -173,6 +175,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev in this version, only a permissioned prover doing the computations
     /// will call this function
     ///
+    /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
+    /// the entire `newState` needs to be signed by stakers in `finalizedState`
     /// @param newState new light client state
     /// @param proof PlonkProof
     function newFinalizedState(
@@ -236,9 +240,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableBlsKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableAmountComm);
         return publicInput;
     }
 
