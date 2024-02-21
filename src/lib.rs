@@ -258,10 +258,10 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use hotshot_query_service::{QueryResult, SignatureKey};
+//! # use hotshot_query_service::{QueryResult, SignatureKey, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-//! #   PayloadQueryData, TransactionHash, TransactionIndex,
+//! #   PayloadQueryData, TransactionHash, TransactionIndex, VidCommonQueryData,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
 //! # use hotshot_query_service::node::{NodeDataSource, SyncStatus};
@@ -290,6 +290,9 @@
 //!     type PayloadRange<R> = D::PayloadRange<R>
 //!     where
 //!         R: RangeBounds<usize> + Send;
+//!     type VidCommonRange<R> = D::VidCommonRange<R>
+//!     where
+//!         R: RangeBounds<usize> + Send;
 //!
 //!     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<AppTypes>>
 //!     where
@@ -305,6 +308,9 @@
 //! #   async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<AppTypes>>
 //! #   where
 //! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
+//! #   async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<AppTypes>>
+//! #   where
+//! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
 //! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
 //! #   async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
 //! #   where
@@ -313,6 +319,9 @@
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! #   async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+//! #   where
+//! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
 //! }
@@ -342,6 +351,13 @@
 //!
 //!     async fn payload_size(&self) -> QueryResult<usize> {
 //!         self.hotshot_qs.payload_size().await
+//!     }
+//!
+//!     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+//!     where
+//!         ID: Into<BlockId<AppTypes>> + Send + Sync,
+//!     {
+//!         self.hotshot_qs.vid_share(id).await
 //!     }
 //!
 //!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
@@ -407,9 +423,12 @@ use async_std::{
 };
 use futures::StreamExt;
 use hotshot::types::SystemContextHandle;
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    BlockPayload,
+use hotshot_types::{
+    data::{VidScheme, VidSchemeTrait},
+    traits::{
+        node_implementation::{NodeImplementation, NodeType},
+        BlockPayload,
+    },
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -423,6 +442,8 @@ pub type Metadata<Types> = <Payload<Types> as BlockPayload>::Metadata;
 /// Item within a [`Payload`].
 pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
 pub type SignatureKey<Types> = <Types as NodeType>::SignatureKey;
+pub type VidCommon = <VidScheme as VidSchemeTrait>::Common;
+pub type VidShare = <VidScheme as VidSchemeTrait>::Share;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -522,6 +543,7 @@ mod test {
         availability::{
             AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
             PayloadQueryData, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+            VidCommonQueryData,
         },
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus},
@@ -573,6 +595,12 @@ mod test {
             >>::PayloadRange<R>
         where
             R: RangeBounds<usize> + Send;
+        type VidCommonRange<R> =
+            <MockDataSource as AvailabilityDataSource<
+                MockTypes,
+            >>::VidCommonRange<R>
+        where
+            R: RangeBounds<usize> + Send;
 
         async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
@@ -592,6 +620,12 @@ mod test {
         {
             self.hotshot_qs.get_payload(id).await
         }
+        async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_vid_common(id).await
+        }
         async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -609,6 +643,12 @@ mod test {
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_payload_range(range).await
+        }
+        async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            self.hotshot_qs.get_vid_common_range(range).await
         }
         async fn get_block_with_transaction(
             &self,
@@ -639,6 +679,12 @@ mod test {
         }
         async fn payload_size(&self) -> QueryResult<usize> {
             self.hotshot_qs.payload_size().await
+        }
+        async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.vid_share(id).await
         }
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             self.hotshot_qs.sync_status().await

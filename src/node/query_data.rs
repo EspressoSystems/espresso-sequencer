@@ -12,10 +12,27 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::availability::LeafQueryData;
+pub use crate::availability::{BlockId, LeafQueryData};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct SyncStatus {
     pub missing_blocks: usize,
     pub missing_leaves: usize,
+    pub missing_vid_common: usize,
+    pub missing_vid_shares: usize,
+}
+
+impl SyncStatus {
+    pub fn fully_synced() -> Self {
+        Self {
+            missing_blocks: 0,
+            missing_leaves: 0,
+            missing_vid_common: 0,
+            missing_vid_shares: 0,
+        }
+    }
+
+    pub fn is_fully_synced(&self) -> bool {
+        *self == Self::fully_synced()
+    }
 }

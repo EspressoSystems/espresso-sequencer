@@ -12,7 +12,7 @@
 
 //! Requests for fetching resources.
 
-use crate::{availability::LeafQueryData, Payload};
+use crate::{availability::LeafQueryData, Payload, VidCommon};
 use derive_more::{From, Into};
 use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
 
@@ -31,6 +31,14 @@ pub struct PayloadRequest(pub VidCommitment);
 
 impl<Types: NodeType> Request<Types> for PayloadRequest {
     type Response = Payload<Types>;
+}
+
+/// A request for VID common data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct VidCommonRequest(pub VidCommitment);
+
+impl<Types: NodeType> Request<Types> for VidCommonRequest {
+    type Response = VidCommon;
 }
 
 /// A request for a leaf with a given height.

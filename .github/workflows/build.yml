@@ -57,9 +57,7 @@ jobs:
           cargo build --workspace --release
 
       - name: Test
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
         timeout-minutes: 60

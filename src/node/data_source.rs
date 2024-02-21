@@ -24,8 +24,8 @@
 //! updated implicitly via the [availability API update
 //! trait](crate::availability::UpdateAvailabilityData).
 
-use super::query_data::{LeafQueryData, SyncStatus};
-use crate::{QueryResult, SignatureKey};
+use super::query_data::{BlockId, LeafQueryData, SyncStatus};
+use crate::{QueryResult, SignatureKey, VidShare};
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 
@@ -40,5 +40,8 @@ pub trait NodeDataSource<Types: NodeType> {
     async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
     async fn count_transactions(&self) -> QueryResult<usize>;
     async fn payload_size(&self) -> QueryResult<usize>;
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
     async fn sync_status(&self) -> QueryResult<SyncStatus>;
 }

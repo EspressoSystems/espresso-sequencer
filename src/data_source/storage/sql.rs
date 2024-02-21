@@ -17,10 +17,12 @@ use crate::{
     availability::{
         get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
         QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus},
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
+    VidShare,
 };
 use async_std::{
     net::ToSocketAddrs,
@@ -511,6 +513,22 @@ where
         parse_payload(row)
     }
 
+    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {VID_COMMON_COLUMNS}
+               FROM header AS h
+               JOIN vid AS v ON h.height = v.height
+               WHERE {where_clause}
+               ORDER BY h.height ASC
+               LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_vid_common(row)
+    }
+
     async fn get_leaf_range<R>(
         &self,
         range: R,
@@ -563,6 +581,26 @@ where
         let rows = self.query(&query, params).await?;
 
         Ok(rows.map(|res| parse_payload(res?)).collect().await)
+    }
+
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
+        let query = format!(
+            "SELECT {VID_COMMON_COLUMNS}
+              FROM header AS h
+              JOIN vid AS v ON h.height = v.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        let rows = self.query(&query, params).await?;
+
+        Ok(rows.map(|res| parse_vid_common(res?)).collect().await)
     }
 
     async fn get_block_with_transaction(
@@ -720,6 +758,47 @@ where
 
         Ok(())
     }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), Self::Error> {
+        let mut tx = self.transaction().await?;
+        let common_data = bincode::serialize(common.common()).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize VID common data: {err}"),
+        })?;
+        if let Some(share) = share {
+            let share_data = bincode::serialize(&share).map_err(|err| QueryError::Error {
+                message: format!("failed to serialize VID share: {err}"),
+            })?;
+            tx.upsert(
+                "vid",
+                ["height", "common", "share"],
+                ["height"],
+                [[
+                    sql_param(&(common.height() as i64)),
+                    sql_param(&common_data),
+                    sql_param(&share_data),
+                ]],
+            )
+            .await
+        } else {
+            // Don't touch the `share` column at all if we don't have a share to insert. It's
+            // possible that this column already exists, and we are just upserting the common data,
+            // in which case we don't want to overwrite the share with NULL.
+            tx.upsert(
+                "vid",
+                ["height", "common"],
+                ["height"],
+                [[
+                    sql_param(&(common.height() as i64)),
+                    sql_param(&common_data),
+                ]],
+            )
+            .await
+        }
+    }
 }
 
 #[async_trait]
@@ -790,11 +869,37 @@ where
         Ok(sum.unwrap_or(0) as usize)
     }
 
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        let (where_clause, param) = header_where_clause(id.into());
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT v.share AS share FROM vid AS v
+               JOIN header AS h ON v.height = h.height
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        let share_data: Option<Vec<u8>> =
+            row.try_get("share").map_err(|err| QueryError::Error {
+                message: format!("error extracting share data from query results: {err}"),
+            })?;
+        let share_data = share_data.context(MissingSnafu)?;
+        bincode::deserialize(&share_data).map_err(|err| QueryError::Error {
+            message: format!("malformed VID share: {err}"),
+        })
+    }
+
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         // A leaf can only be missing if there is no row for it in the database (all its columns are
         // non-nullable). A block can be missing if its corresponding leaf is missing or if the
-        // block's `data` field is `NULL`. Thus we need to get the number of fully missing leaf rows
-        // and the number of present but null-payload block rows.
+        // block's `data` field is `NULL`. We can find the number of missing leaves and blocks by
+        // getting the number of fully missing leaf rows and the number of present but null-payload
+        // block rows.
         //
         // Note that it should not be possible for a block's row to be missing (as opposed to
         // present but having a `NULL` payload) if the corresponding leaf is present. The schema
@@ -809,18 +914,18 @@ where
         // height of the highest leaf we do have). We can also get the number of null payloads
         // directly using an `IS NULL` filter.
         //
-        // We will thus select these three quantities, using a single SQL statement to minimize
-        // latency to the database. We accomplish this using a UNION of a sub-select from `leaf` and
-        // one from `payload`. From each of these tables, we are selecting disjoint sets of numeric
-        // quanitities. A trick to combine these into a single query is to select NULL
-        // for each column we are _not_ selecting from each table, and then combine the unioned
-        // table into a single row using `sum` (where the NULL placeholders are ignored).
+        // For VID, common data can only be missing if the entire row is missing. Shares can be
+        // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
+        // need to select the total number of VID rows and the number of present VID rows with a
+        // NULL share.
         let row = self
             .query_one_static(
-                "SELECT sum(h)::bigint AS max_height, sum(l)::bigint AS total_leaves, sum(p)::bigint AS null_payloads FROM (
-                    SELECT max(leaf.height) AS h, count(*) AS l, NULL     AS p FROM leaf UNION
-                    SELECT NULL             AS h, NULL     AS l, count(*) AS p FROM payload WHERE payload.data IS NULL
-                )"
+                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid FROM
+                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
+                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
+                    (SELECT count(*) AS total_vid FROM vid),
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL)
+                ",
             )
             .await?;
         let block_height = match row.get::<_, Option<i64>>("max_height") {
@@ -836,13 +941,19 @@ where
         };
         let total_leaves = row.get::<_, i64>("total_leaves") as usize;
         let null_payloads = row.get::<_, i64>("null_payloads") as usize;
+        let total_vid = row.get::<_, i64>("total_vid") as usize;
+        let null_vid = row.get::<_, i64>("null_vid") as usize;
 
         let missing_leaves = block_height.saturating_sub(total_leaves);
         let missing_blocks = missing_leaves + null_payloads;
+        let missing_vid_common = block_height.saturating_sub(total_vid);
+        let missing_vid_shares = missing_vid_common + null_vid;
 
         Ok(SyncStatus {
             missing_leaves,
             missing_blocks,
+            missing_vid_common,
+            missing_vid_shares,
         })
     }
 }
@@ -1256,6 +1367,49 @@ where
     Payload<Types>: QueryablePayload,
 {
     parse_block(row).map(PayloadQueryData::from)
+}
+
+const VID_COMMON_COLUMNS: &str =
+    "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
+
+fn parse_vid_common<Types>(row: Row) -> QueryResult<VidCommonQueryData<Types>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+    let height = row
+        .try_get::<_, i64>("height")
+        .map_err(|err| QueryError::Error {
+            message: format!("error extracting height from query results: {err}"),
+        })? as u64;
+    let block_hash: String = row.try_get("block_hash").map_err(|err| QueryError::Error {
+        message: format!("error extracting block_hash from query results: {err}"),
+    })?;
+    let block_hash = block_hash.parse().map_err(|err| QueryError::Error {
+        message: format!("malformed block hash: {err}"),
+    })?;
+    let payload_hash: String = row
+        .try_get("payload_hash")
+        .map_err(|err| QueryError::Error {
+            message: format!("error extracting payload_hash from query results: {err}"),
+        })?;
+    let payload_hash = payload_hash.parse().map_err(|err| QueryError::Error {
+        message: format!("malformed payload hash: {err}"),
+    })?;
+    let common_data: Vec<u8> = row
+        .try_get("common_data")
+        .map_err(|err| QueryError::Error {
+            message: format!("error extracting common_data from query results: {err}"),
+        })?;
+    let common = bincode::deserialize(&common_data).map_err(|err| QueryError::Error {
+        message: format!("malformed VID common data: {err}"),
+    })?;
+    Ok(VidCommonQueryData {
+        height,
+        block_hash,
+        payload_hash,
+        common,
+    })
 }
 
 const HEADER_COLUMNS: &str = "h.data AS data";

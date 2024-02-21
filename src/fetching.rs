@@ -29,6 +29,7 @@ use derivative::Derivative;
 use std::{
     cmp::min,
     collections::{hash_map::Entry, BTreeSet, HashMap},
+    fmt::Debug,
     time::Duration,
 };
 
@@ -71,7 +72,7 @@ const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
 /// instance of each distinct callback which was registered. Callbacks will run in the order
 /// determined by `Ord`.
 #[trait_variant::make(Callback: Send)]
-pub trait LocalCallback<T>: Ord {
+pub trait LocalCallback<T>: Debug + Ord {
     async fn run(self, response: T);
 }
 
@@ -143,7 +144,7 @@ impl<T, C> Fetcher<T, C> {
                         // If the object is already being fetched, add our callback for the fetching
                         // task to execute upon completion.
                         e.get_mut().extend(callbacks);
-                        tracing::info!("resource {req:?} is already being fetched");
+                        tracing::info!(?req, callbacks = ?e.get(), "resource is already being fetched");
                         return;
                     }
                     Entry::Vacant(e) => {

@@ -12,9 +12,9 @@
 
 use super::Provider;
 use crate::{
-    availability::{LeafQueryData, PayloadQueryData},
-    fetching::request::{LeafRequest, PayloadRequest},
-    Error, Payload,
+    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
+    Error, Payload, VidCommon,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -90,12 +90,40 @@ where
     }
 }
 
+#[async_trait]
+impl<Types> Provider<Types, VidCommonRequest> for QueryServiceProvider
+where
+    Types: NodeType,
+{
+    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+        match self
+            .client
+            .get::<VidCommonQueryData<Types>>(&format!(
+                "availability/vid/common/payload-hash/{}",
+                req.0
+            ))
+            .send()
+            .await
+        {
+            Ok(res) => {
+                // TODO Verify that the data we retrieved is consistent with the request we made.
+                // https://github.com/EspressoSystems/hotshot-query-service/issues/355
+                Some(res.common)
+            }
+            Err(err) => {
+                tracing::error!("failed to fetch VID common {req:?}: {err}");
+                None
+            }
+        }
+    }
+}
+
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use super::*;
     use crate::{
-        availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
+        availability::{define_api, AvailabilityDataSource, Fetch, UpdateAvailabilityData},
         data_source::{
             sql::{self, SqlDataSource},
             storage::sql::testing::TmpDb,
@@ -105,7 +133,7 @@ mod test {
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::{mock_transaction, MockTypes},
-            setup_test, sleep,
+            setup_test, sleep, FIRST_VID_VIEW,
         },
     };
     use async_std::task::spawn;
@@ -165,16 +193,18 @@ mod test {
         // Start consensus.
         network.start().await;
 
-        // Wait until the block height reaches 5. This gives us the genesis block, one additional
+        // Wait until the block height reaches 6. This gives us the genesis block, one additional
         // block at the end, and then one block to play around with fetching each type of resource:
         // * Leaf
         // * Block
         // * Payload
+        // * VID common
         let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
-        let leaves = leaves.take(4).collect::<Vec<_>>().await;
+        let leaves = leaves.take(5).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
         let test_block = &leaves[1];
         let test_payload = &leaves[2];
+        let test_common = &leaves[3];
 
         // Make requests for missing data that should _not_ trigger an active fetch:
         tracing::info!("requesting unfetchable resources");
@@ -201,6 +231,12 @@ mod test {
                 .await
                 .map(ignore),
         );
+        fetches.push(
+            data_source
+                .get_vid_common(test_common.block_hash())
+                .await
+                .map(ignore),
+        );
         // * An unknown block height.
         fetches.push(
             data_source
@@ -214,6 +250,14 @@ mod test {
                 .await
                 .map(ignore),
         );
+        fetches.push(
+            data_source
+                .get_vid_common(test_common.height() as usize)
+                .await
+                .map(ignore),
+        );
+        // * Genesis VID common (no VID for genesis)
+        fetches.push(data_source.get_vid_common(0).await.map(ignore));
         // * An unknown transaction.
         fetches.push(
             data_source
@@ -249,6 +293,9 @@ mod test {
         let req_payload = data_source
             .get_payload(test_payload.height() as usize)
             .await;
+        let req_common = data_source
+            .get_vid_common(test_common.height() as usize)
+            .await;
 
         // Give the requests some extra time to complete, and check that they still haven't
         // resolved, since the provider is blocked. This just ensures the integrity of the test by
@@ -259,6 +306,7 @@ mod test {
         req_leaf.try_resolve().unwrap_err();
         req_block.try_resolve().unwrap_err();
         req_payload.try_resolve().unwrap_err();
+        req_common.try_resolve().unwrap_err();
 
         // Unblock the request and see that we eventually receive the data.
         provider.unblock().await;
@@ -272,6 +320,10 @@ mod test {
             .await;
         let payload = data_source
             .get_payload(test_payload.height() as usize)
+            .await
+            .await;
+        let common = data_source
+            .get_vid_common(test_common.height() as usize)
             .await
             .await;
         {
@@ -290,6 +342,13 @@ mod test {
                 payload,
                 truth
                     .get_payload(test_payload.height() as usize)
+                    .await
+                    .await
+            );
+            assert_eq!(
+                common,
+                truth
+                    .get_vid_common(test_common.height() as usize)
                     .await
                     .await
             );
@@ -462,9 +521,10 @@ mod test {
         // Start consensus.
         network.start().await;
 
-        // Subscribe to blocks and leaves from the future.
+        // Subscribe to objects from the future.
         let blocks = data_source.subscribe_blocks(0).await;
         let leaves = data_source.subscribe_leaves(0).await;
+        let common = data_source.subscribe_vid_common(FIRST_VID_VIEW).await;
 
         // Wait for a few blocks to be finalized.
         let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
@@ -481,10 +541,71 @@ mod test {
         // Check the subscriptions.
         let blocks = blocks.take(5).collect::<Vec<_>>().await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
+        let common = common.take(5 - FIRST_VID_VIEW).collect::<Vec<_>>().await;
         for i in 0..5 {
             tracing::info!("checking block {i}");
             assert_eq!(leaves[i], finalized_leaves[i]);
             assert_eq!(blocks[i].header(), finalized_leaves[i].header());
+            if i >= FIRST_VID_VIEW {
+                assert_eq!(
+                    common[i - FIRST_VID_VIEW],
+                    data_source.get_vid_common(i).await.await
+                );
+            }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_fetch_range_start() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{port}")));
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+        ));
+        let mut data_source = data_source(&db, &provider).await;
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait for a few blocks to be finalized.
+        let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
+        let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
+
+        // Tell the node about a leaf after the range of interest (so it learns about the block
+        // height) and one in the middle of the range, to test what happens when data is missing
+        // from the beginning of the range but other data is available.
+        data_source
+            .insert_leaf(finalized_leaves[2].clone())
+            .await
+            .unwrap();
+        data_source
+            .insert_leaf(finalized_leaves[4].clone())
+            .await
+            .unwrap();
+        data_source.commit().await.unwrap();
+
+        // Get the whole range of leaves.
+        let leaves = data_source
+            .get_leaf_range(..5)
+            .await
+            .then(Fetch::resolve)
+            .collect::<Vec<_>>()
+            .await;
+        for i in 0..5 {
+            tracing::info!("checking leaf {i}");
+            assert_eq!(leaves[i], finalized_leaves[i]);
         }
     }
 

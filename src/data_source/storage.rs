@@ -27,7 +27,7 @@
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
     Header, Payload, QueryResult,
@@ -73,6 +73,7 @@ where
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
     async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>>;
+    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>>;
 
     async fn get_leaf_range<R>(
         &self,
@@ -90,6 +91,12 @@ where
         &self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
 

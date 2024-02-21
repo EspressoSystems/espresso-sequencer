@@ -13,8 +13,9 @@
 use super::{Provider, Request};
 use crate::{
     availability::LeafQueryData,
-    fetching::request::{LeafRequest, PayloadRequest},
-    Payload,
+    data_source::AvailabilityProvider,
+    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
+    Payload, VidCommon,
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -44,6 +45,7 @@ where
 
 type PayloadProvider<Types> = Arc<dyn DebugProvider<Types, PayloadRequest>>;
 type LeafProvider<Types> = Arc<dyn DebugProvider<Types, LeafRequest>>;
+type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 
 /// Adaptor combining multiple data availability providers.
 ///
@@ -87,6 +89,7 @@ where
 {
     payload_providers: Vec<PayloadProvider<Types>>,
     leaf_providers: Vec<LeafProvider<Types>>,
+    vid_common_providers: Vec<VidCommonProvider<Types>>,
 }
 
 #[async_trait]
@@ -109,6 +112,16 @@ where
     }
 }
 
+#[async_trait]
+impl<Types> Provider<Types, VidCommonRequest> for AnyProvider<Types>
+where
+    Types: NodeType,
+{
+    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+        any_fetch(&self.vid_common_providers, req).await
+    }
+}
+
 impl<Types> AnyProvider<Types>
 where
     Types: NodeType,
@@ -116,11 +129,12 @@ where
     /// Add a sub-provider which fetches both blocks and leaves.
     pub fn with_provider<P>(mut self, provider: P) -> Self
     where
-        P: Provider<Types, PayloadRequest> + Provider<Types, LeafRequest> + Debug + 'static,
+        P: AvailabilityProvider<Types> + Debug + 'static,
     {
         let provider = Arc::new(provider);
         self.payload_providers.push(provider.clone());
-        self.leaf_providers.push(provider);
+        self.leaf_providers.push(provider.clone());
+        self.vid_common_providers.push(provider);
         self
     }
 
@@ -139,6 +153,15 @@ where
         P: Provider<Types, LeafRequest> + Debug + 'static,
     {
         self.leaf_providers.push(Arc::new(provider));
+        self
+    }
+
+    /// Add a sub-provider which fetches VID common data.
+    pub fn with_vid_common_provider<P>(mut self, provider: P) -> Self
+    where
+        P: Provider<Types, VidCommonRequest> + Debug + 'static,
+    {
+        self.vid_common_providers.push(Arc::new(provider));
         self
     }
 }

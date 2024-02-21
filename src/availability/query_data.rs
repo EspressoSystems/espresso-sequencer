@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Header, Metadata, Payload, SignatureKey, Transaction};
+use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::{Leaf, VidCommitment},
@@ -404,6 +404,42 @@ impl<Types: NodeType> PayloadQueryData<Types> {
 
     pub fn data(&self) -> &Payload<Types> {
         &self.data
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct VidCommonQueryData<Types: NodeType> {
+    pub(crate) height: u64,
+    pub(crate) block_hash: BlockHash<Types>,
+    pub(crate) payload_hash: VidCommitment,
+    pub(crate) common: VidCommon,
+}
+
+impl<Types: NodeType> VidCommonQueryData<Types> {
+    pub fn new(header: Header<Types>, common: VidCommon) -> Self {
+        Self {
+            height: header.block_number(),
+            block_hash: header.commit(),
+            payload_hash: header.payload_commitment(),
+            common,
+        }
+    }
+
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.block_hash
+    }
+
+    pub fn payload_hash(&self) -> VidCommitment {
+        self.payload_hash
+    }
+
+    pub fn common(&self) -> &VidCommon {
+        &self.common
     }
 }
 

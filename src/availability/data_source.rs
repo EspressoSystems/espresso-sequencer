@@ -14,10 +14,10 @@ use super::{
     fetch::Fetch,
     query_data::{
         BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex,
+        TransactionHash, TransactionIndex, VidCommonQueryData,
     },
 };
-use crate::Payload;
+use crate::{Payload, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -127,6 +127,9 @@ where
     type PayloadRange<R>: Stream<Item = Fetch<PayloadQueryData<Types>>> + Unpin + Send + 'static
     where
         R: RangeBounds<usize> + Send;
+    type VidCommonRange<R>: Stream<Item = Fetch<VidCommonQueryData<Types>>> + Unpin + Send + 'static
+    where
+        R: RangeBounds<usize> + Send;
 
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
@@ -140,6 +143,10 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
+    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
+
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static;
@@ -149,6 +156,10 @@ where
         R: RangeBounds<usize> + Send + 'static;
 
     async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+
+    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -179,6 +190,16 @@ where
             .then(Fetch::resolve)
             .boxed()
     }
+
+    async fn subscribe_vid_common(
+        &self,
+        from: usize,
+    ) -> BoxStream<'static, VidCommonQueryData<Types>> {
+        self.get_vid_common_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
 }
 
 #[async_trait]
@@ -186,4 +207,9 @@ pub trait UpdateAvailabilityData<Types: NodeType> {
     type Error: Error + Debug + Send + Sync + 'static;
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), Self::Error>;
 }

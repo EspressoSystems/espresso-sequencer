@@ -69,6 +69,12 @@ pub enum Error {
         source: QueryError,
         proposer: String,
     },
+    #[snafu(display("error fetching VID share for block {block}: {source}"))]
+    #[from(ignore)]
+    QueryVid {
+        source: QueryError,
+        block: String,
+    },
     #[snafu(display("malformed signature key"))]
     #[from(ignore)]
     InvalidSignatureKey,
@@ -89,7 +95,9 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
-            Self::Query { source, .. } | Self::QueryProposals { source, .. } => source.status(),
+            Self::Query { source, .. }
+            | Self::QueryProposals { source, .. }
+            | Self::QueryVid { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
     }
@@ -140,6 +148,21 @@ where
         .get("payload_size", |_req, state| {
             async move { Ok(state.payload_size().await?) }.boxed()
         })?
+        .get("get_vid_share", |req, state| {
+            async move {
+                let id = if let Some(height) = req.opt_integer_param("height")? {
+                    BlockId::Number(height)
+                } else if let Some(hash) = req.opt_blob_param("hash")? {
+                    BlockId::Hash(hash)
+                } else {
+                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
+                };
+                state.vid_share(id).await.context(QueryVidSnafu {
+                    block: id.to_string(),
+                })
+            }
+            .boxed()
+        })?
         .get("sync_status", |_req, state| {
             async move { Ok(state.sync_status().await?) }.boxed()
         })?;
@@ -161,18 +184,20 @@ mod test {
         data_source::ExtensibleDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork},
+            has_vid,
             mocks::MockTypes,
-            setup_test,
+            setup_test, FIRST_VID_VIEW,
         },
-        Error,
+        Error, VidShare,
     };
     use async_std::{
         sync::RwLock,
         task::{sleep, spawn},
     };
-    use futures::FutureExt;
+    use commit::Committable;
+    use futures::{FutureExt, StreamExt};
     use hotshot::types::SignatureKey;
-    use hotshot_types::signature_key::BLSPubKey;
+    use hotshot_types::{event::EventType, signature_key::BLSPubKey};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -186,6 +211,7 @@ mod test {
 
         // Create the consensus network.
         let mut network = MockNetwork::<MockDataSource>::init().await;
+        let mut events = network.handle().get_event_stream();
         network.start().await;
 
         // Start the web server.
@@ -200,10 +226,16 @@ mod test {
             Client::<Error>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
-        // Wait for each node to propose a block.
-        while client.get::<usize>("block-height").send().await.unwrap() < network.num_nodes() + 1 {
+        // Wait until the block height is high enough that:
+        // * each node has proposed a block
+        // * there is more than one block for which VID is available
+        let block_height = loop {
+            let block_height = client.get::<usize>("block-height").send().await.unwrap();
+            if block_height > network.num_nodes() && block_height > FIRST_VID_VIEW + 1 {
+                break block_height;
+            }
             sleep(Duration::from_secs(1)).await;
-        }
+        };
 
         // Check proposals for node 0.
         let proposals: Vec<LeafQueryData<MockTypes>> = client
@@ -270,6 +302,55 @@ mod test {
                 .unwrap(),
             0
         );
+
+        // Get VID share for each block.
+        tracing::info!(block_height, "checking VID shares");
+        'outer: while let Some(event) = events.next().await {
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for (leaf, vid) in leaf_chain.iter().rev() {
+                if !has_vid(leaf.block_header.block_number as usize) {
+                    // Skip the genesis leaf, it has no VID.
+                    continue;
+                }
+                if leaf.block_header.block_number >= block_height as u64 {
+                    break 'outer;
+                }
+                tracing::info!(height = leaf.block_header.block_number, "checking share");
+
+                let share = client
+                    .get::<VidShare>(&format!("vid/share/{}", leaf.block_header.block_number))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    share,
+                    *vid.as_ref().unwrap().shares.first_key_value().unwrap().1
+                );
+
+                // Query various other ways.
+                assert_eq!(
+                    share,
+                    client
+                        .get(&format!("vid/share/hash/{}", leaf.block_header.commit()))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+                assert_eq!(
+                    share,
+                    client
+                        .get(&format!(
+                            "vid/share/payload-hash/{}",
+                            leaf.block_header.payload_commitment
+                        ))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+            }
+        }
 
         // In this simple test, the node should be fully synchronized.
         let sync_status = client

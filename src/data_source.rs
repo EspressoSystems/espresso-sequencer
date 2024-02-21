@@ -124,6 +124,7 @@ pub mod availability_tests {
         node::NodeDataSource,
         testing::{
             consensus::{MockNetwork, TestableDataSource},
+            has_vid,
             mocks::{mock_transaction, MockTypes},
             setup_test,
         },
@@ -192,6 +193,7 @@ pub mod availability_tests {
             }
 
             // Check payload lookup.
+            tracing::info!("looking up payload {i} various ways");
             let expected_payload = block.clone().into();
             assert_eq!(ds.get_payload(i).await.await, expected_payload);
             assert_eq!(ds.get_payload(block.hash()).await.await, expected_payload);
@@ -214,6 +216,35 @@ pub mod availability_tests {
                 ds.get_payload(BlockId::PayloadHash(block.payload_hash()))
                     .await
                     .await;
+            }
+
+            // Look up the common VID data. Skip the genesis block, as there is no VID for it.
+            if has_vid(i) {
+                tracing::info!("looking up VID common {i} various ways");
+                let common = ds.get_vid_common(block.height() as usize).await.await;
+                assert_eq!(common, ds.get_vid_common(block.hash()).await.await);
+                // Similar to the above, we can't guarantee which index we will get when passively
+                // fetching this data, so only check the index if the data is available locally.
+                if let Ok(res) = ds
+                    .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
+                    .await
+                    .try_resolve()
+                {
+                    if *ix == i as u64 {
+                        assert_eq!(res, common);
+                    }
+                } else {
+                    tracing::warn!(
+                        "skipping VID common index check for missing data {:?}",
+                        block.header()
+                    );
+                    // At least check that _some_ data can be fetched.
+                    let res = ds
+                        .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
+                        .await
+                        .await;
+                    assert_eq!(res.payload_hash(), common.payload_hash());
+                }
             }
 
             for (j, txn) in block.enumerate() {
@@ -363,12 +394,20 @@ pub mod availability_tests {
 
         let mut leaves = ds.get_leaf_range(range.clone()).await;
         let mut blocks = ds.get_block_range(range.clone()).await;
+        let mut vid_common = ds.get_vid_common_range(range.clone()).await;
 
         for i in expected_indices {
+            tracing::info!(i, "check entries");
             let leaf = leaves.next().await.unwrap().await;
             let block = blocks.next().await.unwrap().await;
+            let common = vid_common.next().await.unwrap();
             assert_eq!(leaf.height(), i);
             assert_eq!(block.height(), i);
+            if has_vid(i as usize) {
+                assert_eq!(common.await, ds.get_vid_common(i as usize).await.await);
+            } else {
+                common.try_resolve().unwrap_err();
+            }
         }
 
         if range.end_bound() == Bound::Unbounded {
@@ -376,12 +415,15 @@ pub mod availability_tests {
             // the objects which are not currently available.
             let fetch_leaf = leaves.next().await.unwrap();
             let fetch_block = blocks.next().await.unwrap();
+            let fetch_common = vid_common.next().await.unwrap();
             fetch_leaf.try_resolve().unwrap_err();
             fetch_block.try_resolve().unwrap_err();
+            fetch_common.try_resolve().unwrap_err();
         } else {
             // If the range is bounded, it should end where expected.
             assert!(leaves.next().await.is_none());
             assert!(blocks.next().await.is_none());
+            assert!(vid_common.next().await.is_none());
         }
     }
 
@@ -518,20 +560,24 @@ pub mod persistence_tests {
 pub mod node_tests {
     use super::test_helpers::*;
     use crate::{
-        availability::{BlockQueryData, LeafQueryData},
-        node::SyncStatus,
+        availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
+        node::{BlockId, SyncStatus},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
-            mocks::{mock_transaction, MockTypes},
-            setup_test,
+            mocks::{mock_transaction, MockPayload, MockTypes},
+            setup_test, FIRST_VID_VIEW,
         },
+        VidShare,
     };
-    use futures::stream::StreamExt;
+    use futures::{future::join_all, stream::StreamExt};
     use hotshot_example_types::{
         block_types::{TestBlockHeader, TestBlockPayload},
         state_types::TestInstanceState,
     };
-    use hotshot_types::traits::block_contents::{vid_commitment, BlockPayload};
+    use hotshot_types::{
+        data::{test_srs, VidScheme, VidSchemeTrait},
+        traits::block_contents::{vid_commitment, BlockPayload},
+    };
     use std::collections::HashSet;
 
     async fn validate(ds: &impl TestableDataSource) {
@@ -622,6 +668,9 @@ pub mod node_tests {
         let storage = D::create(0).await;
         let mut ds = D::connect(&storage).await;
 
+        // Set up a mock VID scheme to use for generating test data.
+        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
         let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
@@ -634,24 +683,32 @@ pub mod node_tests {
             block.header.block_number += 1;
             blocks.push(block);
         }
+        // Generate mock VID data. We reuse the same (empty) payload for each block, but with
+        // different metadata.
+        let disperse = vid.disperse([]).unwrap();
+        let vid = leaves
+            .iter()
+            .map(|leaf| {
+                (
+                    VidCommonQueryData::new(leaf.header().clone(), disperse.common.clone()),
+                    disperse.shares[0].clone(),
+                )
+            })
+            .collect::<Vec<_>>();
 
         // At first, the node is fully synced.
-        assert_eq!(
-            ds.sync_status().await.unwrap(),
-            SyncStatus {
-                missing_blocks: 0,
-                missing_leaves: 0,
-            }
-        );
+        assert!(ds.sync_status().await.unwrap().is_fully_synced());
 
-        // Insert a leaf without the corresponding block, make sure we detect that the block is
-        // missing.
+        // Insert a leaf without the corresponding block or VID info, make sure we detect that the
+        // block and VID info are missing.
         ds.insert_leaf(leaves[0].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 1,
+                missing_vid_common: 1,
+                missing_vid_shares: 1,
                 missing_leaves: 0,
             }
         );
@@ -664,36 +721,65 @@ pub mod node_tests {
             ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
+                missing_vid_common: 3,
+                missing_vid_shares: 3,
+                missing_leaves: 1,
+            }
+        );
+
+        // Insert VID common without a corresponding share.
+        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(
+            ds.sync_status().await.unwrap(),
+            SyncStatus {
+                missing_blocks: 3,
+                missing_vid_common: 2,
+                missing_vid_shares: 3,
                 missing_leaves: 1,
             }
         );
 
         // Rectify the missing data.
         ds.insert_block(blocks[0].clone()).await.unwrap();
+        ds.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
+            .await
+            .unwrap();
         ds.insert_leaf(leaves[1].clone()).await.unwrap();
         ds.insert_block(blocks[1].clone()).await.unwrap();
+        ds.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
+            .await
+            .unwrap();
         ds.insert_block(blocks[2].clone()).await.unwrap();
+        ds.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
+            .await
+            .unwrap();
         ds.commit().await.unwrap();
 
         // Some data sources (e.g. file system) don't support out-of-order insertion of missing
-        // data. These would have just ignored the insertion of `leaves[1]`. Detect if this is the
-        // case; then we allow 1 missing leaf remaining.
-        let expected_missing_leaves = if ds.get_leaf(1).await.try_resolve().is_err() {
+        // data. These would have just ignored the insertion of `vid[0]` (the share) and
+        // `leaves[1]`. Detect if this is the case; then we allow 1 missing leaf and 1 missing VID
+        // share.
+        let expected_missing = if ds.get_leaf(1).await.try_resolve().is_err() {
             tracing::warn!(
-                "data source does not support out-of-order filling, allowing one missing leaf"
+                "data source does not support out-of-order filling, allowing one missing leaf and VID share"
             );
             1
         } else {
             0
         };
+        let expected_sync_status = SyncStatus {
+            missing_blocks: 0,
+            missing_leaves: expected_missing,
+            missing_vid_common: 0,
+            missing_vid_shares: expected_missing,
+        };
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
 
-        assert_eq!(
-            ds.sync_status().await.unwrap(),
-            SyncStatus {
-                missing_blocks: 0,
-                missing_leaves: expected_missing_leaves
-            }
-        );
+        // If we re-insert one of the VID entries without a share, it should not overwrite the share
+        // that we already have; that is, `insert_vid` should be monotonic.
+        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
     }
 
     #[async_std::test]
@@ -739,6 +825,137 @@ pub mod node_tests {
             assert_eq!(ds.count_transactions().await.unwrap(), total_transactions);
             assert_eq!(ds.payload_size().await.unwrap(), total_size);
         }
+    }
+
+    #[async_std::test]
+    pub async fn test_vid_shares<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        network.start().await;
+
+        // Check VID shares for a few blocks. We skip the genesis leaf as there is no VID for the
+        // genesis block.
+        let mut leaves = {
+            ds.read()
+                .await
+                .subscribe_leaves(FIRST_VID_VIEW)
+                .await
+                .take(2)
+        };
+        while let Some(leaf) = leaves.next().await {
+            tracing::info!("got leaf {}", leaf.height());
+            let ds = ds.read().await;
+            let share = ds.vid_share(leaf.height() as usize).await.unwrap();
+            assert_eq!(share, ds.vid_share(leaf.block_hash()).await.unwrap());
+            assert_eq!(
+                share,
+                ds.vid_share(BlockId::PayloadHash(leaf.payload_hash()))
+                    .await
+                    .unwrap()
+            );
+        }
+    }
+
+    #[async_std::test]
+    pub async fn test_vid_monotonicity<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        // Generate some test VID data.
+        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+        let disperse = vid.disperse([]).unwrap();
+
+        // Insert test data with VID common and a share. We use height `FIRST_VID_VIEW` to avoid
+        // confusing the data source, which assumes VID cannot exist at lower heights.
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        leaf.leaf.block_header.block_number = FIRST_VID_VIEW as u64;
+        let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
+        ds.insert_leaf(leaf).await.unwrap();
+        ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
+            .await
+            .unwrap();
+        ds.commit().await.unwrap();
+
+        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
+        assert_eq!(
+            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
+            disperse.shares[0]
+        );
+
+        // Re-insert the common data, without a share. This should not overwrite the share we
+        // already have.
+        ds.insert_vid(common.clone(), None).await.unwrap();
+        ds.commit().await.unwrap();
+        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
+        assert_eq!(
+            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
+            disperse.shares[0]
+        );
+    }
+
+    // This test is currently ignored, as all nodes are temporarily storing the same share, so
+    // recovery is not possible. This will be fixed when HotShot is updated to send a unique share
+    // to each node. See https://github.com/EspressoSystems/HotShot/issues/1696.
+    #[ignore]
+    #[async_std::test]
+    pub async fn test_vid_recovery<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        network.start().await;
+
+        // Submit a transaction so we can try to recover a non-empty block.
+        let mut blocks = { ds.read().await.subscribe_blocks(0).await };
+        let txn = mock_transaction(vec![1, 2, 3]);
+        network.submit_transaction(txn.clone()).await;
+
+        // Wait for the transaction to be finalized.
+        let block = loop {
+            tracing::info!("waiting for transaction");
+            let block = blocks.next().await.unwrap();
+            if !block.is_empty() {
+                break block;
+            }
+            tracing::info!(height = block.height(), "empty block");
+        };
+        let height = block.height() as usize;
+        let commit = block.payload_hash();
+
+        // Set up a test VID scheme.
+        let num_nodes = network.num_nodes();
+        let vid = VidScheme::new(num_nodes, num_nodes, test_srs(num_nodes)).unwrap();
+
+        // Get VID common data and verify it.
+        tracing::info!("fetching common data");
+        let common = { ds.read().await.get_vid_common(height).await.await };
+        let common = common.common();
+        VidScheme::is_consistent(&commit, common).unwrap();
+
+        // Collect shares from each node.
+        tracing::info!("fetching shares");
+        let network = &network;
+        let vid = &vid;
+        let shares: Vec<VidShare> = join_all((0..network.num_nodes()).map(|i| async move {
+            let ds = network.data_source_index(i);
+            let share = ds.read().await.vid_share(height).await.unwrap();
+            vid.verify_share(&share, common, &commit).unwrap().unwrap();
+            share
+        }))
+        .await;
+
+        // Recover payload.
+        tracing::info!("recovering payload");
+        let bytes = vid.recover_payload(&shares, common).unwrap();
+        let recovered = MockPayload::from_bytes(bytes.into_iter(), &());
+        assert_eq!(recovered, *block.payload());
+        assert_eq!(recovered.transactions, vec![txn]);
     }
 }
 
@@ -786,10 +1003,7 @@ pub mod status_tests {
             if mempool == expected {
                 break;
             }
-            tracing::info!(
-                "waiting for mempool to reflect transaction (currently {:?})",
-                mempool
-            );
+            tracing::info!(?mempool, "waiting for mempool to reflect transaction");
             sleep(Duration::from_secs(1)).await;
         }
         {
@@ -819,17 +1033,30 @@ pub mod status_tests {
         network.start().await;
         // First wait for the transaction to be taken out of the mempool.
         let block_height = loop {
-            let ds = ds.read().await;
-            if ds.mempool_info().await.unwrap().transaction_count == 0 {
-                break ds.block_height().await.unwrap();
+            {
+                let ds = ds.read().await;
+                let mempool = ds.mempool_info().await.unwrap();
+                if mempool.transaction_count == 0 {
+                    break ds.block_height().await.unwrap();
+                }
+                tracing::info!(
+                    ?mempool,
+                    "waiting for transaction to be taken out of mempool"
+                );
             }
             sleep(Duration::from_secs(1)).await;
         };
         // Now wait for at least one block to be finalized.
         loop {
-            if ds.read().await.block_height().await.unwrap() > block_height {
+            let current_height = ds.read().await.block_height().await.unwrap();
+            if current_height > block_height {
                 break;
             }
+            tracing::info!(
+                current_height,
+                block_height,
+                "waiting for a block to be finalized"
+            );
             sleep(Duration::from_secs(1)).await;
         }
 

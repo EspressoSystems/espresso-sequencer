@@ -21,12 +21,12 @@ use crate::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
-            TransactionHash, TransactionIndex,
+            TransactionHash, TransactionIndex, VidCommonQueryData,
         },
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus},
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -42,6 +42,7 @@ use std::path::Path;
 
 const CACHED_LEAVES_COUNT: usize = 100;
 const CACHED_BLOCKS_COUNT: usize = 100;
+const CACHED_VID_COMMON_COUNT: usize = 100;
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
 #[derive(custom_debug::Debug)]
@@ -54,12 +55,18 @@ where
     index_by_payload_hash: HashMap<VidCommitment, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
+    // We have separate indexes for VID than for other data, because of the special case where VID
+    // information does not exist for the genesis block. This means that VID data for blocks that
+    // are duplicates of the genesis block may exist but not be findable through the block indexes.
+    index_vid_by_block_hash: HashMap<BlockHash<Types>, u64>,
+    index_vid_by_payload_hash: HashMap<VidCommitment, u64>,
     num_transactions: usize,
     payload_size: usize,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
     leaf_storage: LedgerLog<LeafQueryData<Types>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
+    vid_storage: LedgerLog<(VidCommonQueryData<Types>, Option<VidShare>)>,
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>
@@ -107,11 +114,14 @@ where
             index_by_payload_hash: Default::default(),
             index_by_txn_hash: Default::default(),
             index_by_proposer_id: Default::default(),
+            index_vid_by_block_hash: Default::default(),
+            index_vid_by_payload_hash: Default::default(),
             num_transactions: 0,
             payload_size: 0,
             top_storage: None,
             leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
+            vid_storage: LedgerLog::create(loader, "vid_common", CACHED_VID_COMMON_COUNT)?,
         })
     }
 
@@ -128,6 +138,11 @@ where
             LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
             LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
+        let vid_storage = LedgerLog::<(VidCommonQueryData<Types>, Option<VidShare>)>::open(
+            loader,
+            "vid_common",
+            CACHED_VID_COMMON_COUNT,
+        )?;
 
         let mut index_by_proposer_id = HashMap::new();
         let mut index_by_block_hash = HashMap::new();
@@ -163,16 +178,34 @@ where
             }
         }
 
+        let mut index_vid_by_block_hash = HashMap::new();
+        let mut index_vid_by_payload_hash = HashMap::new();
+        for (common, _) in vid_storage.iter().flatten() {
+            update_index_by_hash(
+                &mut index_vid_by_block_hash,
+                common.block_hash(),
+                common.height(),
+            );
+            update_index_by_hash(
+                &mut index_vid_by_payload_hash,
+                common.payload_hash(),
+                common.height(),
+            );
+        }
+
         Ok(Self {
             index_by_leaf_hash,
             index_by_block_hash,
             index_by_payload_hash,
             index_by_txn_hash,
             index_by_proposer_id,
+            index_vid_by_block_hash,
+            index_vid_by_payload_hash,
             num_transactions,
             payload_size,
             leaf_storage,
             block_storage,
+            vid_storage,
             top_storage: None,
         })
     }
@@ -181,10 +214,37 @@ where
     pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.skip_version()?;
         self.block_storage.skip_version()?;
+        self.vid_storage.skip_version()?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
         }
         Ok(())
+    }
+
+    fn get_block_index(&self, id: BlockId<Types>) -> QueryResult<usize> {
+        match id {
+            BlockId::Number(n) => Ok(n),
+            BlockId::Hash(h) => {
+                Ok(*self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize)
+            }
+            BlockId::PayloadHash(h) => {
+                Ok(*self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize)
+            }
+        }
+    }
+
+    fn get_vid_index(&self, id: BlockId<Types>) -> QueryResult<usize> {
+        match id {
+            BlockId::Number(n) => Ok(n),
+            BlockId::Hash(h) => Ok(*self
+                .index_vid_by_block_hash
+                .get(&h)
+                .context(NotFoundSnafu)? as usize),
+            BlockId::PayloadHash(h) => Ok(*self
+                .index_vid_by_payload_hash
+                .get(&h)
+                .context(NotFoundSnafu)? as usize),
+        }
     }
 }
 
@@ -198,6 +258,7 @@ where
     async fn commit(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.commit_version().await?;
         self.block_storage.commit_version().await?;
+        self.vid_storage.commit_version().await?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
         }
@@ -207,6 +268,7 @@ where
     async fn revert(&mut self) {
         self.leaf_storage.revert_version().unwrap();
         self.block_storage.revert_version().unwrap();
+        self.vid_storage.revert_version().unwrap();
     }
 }
 
@@ -269,16 +331,9 @@ where
     }
 
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        let n = match id {
-            BlockId::Number(n) => n,
-            BlockId::Hash(h) => *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize,
-            BlockId::PayloadHash(h) => {
-                *self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize
-            }
-        };
         self.block_storage
             .iter()
-            .nth(n)
+            .nth(self.get_block_index(id)?)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)
     }
@@ -289,6 +344,16 @@ where
 
     async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
         self.get_block(id).await.map(PayloadQueryData::from)
+    }
+
+    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+        Ok(self
+            .vid_storage
+            .iter()
+            .nth(self.get_vid_index(id)?)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)?
+            .0)
     }
 
     async fn get_leaf_range<R>(
@@ -320,6 +385,18 @@ where
     {
         Ok(range_iter(self.block_storage.iter(), range)
             .map(|res| res.map(PayloadQueryData::from))
+            .collect())
+    }
+
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.vid_storage.iter(), range)
+            .map(|res| res.map(|(common, _)| common))
             .collect())
     }
 
@@ -378,6 +455,20 @@ where
                 (block.height(), txn_ix),
             );
         }
+        Ok(())
+    }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> Result<(), Self::Error> {
+        let height = common.height();
+        let block_hash = common.block_hash();
+        let payload_hash = common.payload_hash();
+        self.vid_storage.insert(height as usize, (common, share))?;
+        update_index_by_hash(&mut self.index_vid_by_block_hash, block_hash, height);
+        update_index_by_hash(&mut self.index_vid_by_payload_hash, payload_hash, height);
         Ok(())
     }
 }
@@ -445,11 +536,37 @@ where
         Ok(self.payload_size)
     }
 
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.vid_storage
+            .iter()
+            .nth(self.get_vid_index(id.into())?)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)?
+            .1
+            .context(MissingSnafu)
+    }
+
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         let height = self.block_height().await?;
+
+        // The number of missing VID common is just the number of completely missing VID entries,
+        // since every entry we have is guaranteed to have the common data.
+        let missing_vid = self.vid_storage.missing(height);
+        // Missing shares includes the completely missing VID entries, plus any entry which is _not_
+        // messing but which has a null share.
+        let null_vid_shares: usize = self
+            .vid_storage
+            .iter()
+            .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
+            .sum();
         Ok(SyncStatus {
             missing_blocks: self.block_storage.missing(height),
             missing_leaves: self.leaf_storage.missing(height),
+            missing_vid_common: missing_vid,
+            missing_vid_shares: missing_vid + null_vid_shares,
         })
     }
 }
