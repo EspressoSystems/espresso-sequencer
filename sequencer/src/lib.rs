@@ -8,8 +8,6 @@ pub mod options;
 pub mod state_signature;
 use block::entry::TxTableEntryWord;
 use context::SequencerContext;
-// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -18,18 +16,14 @@ mod state;
 pub mod transaction;
 mod vm;
 
-use anyhow::bail;
-use commit::Commitment;
 use derivative::Derivative;
-use derive_more::From;
-use futures::future::Future;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
         implementations::{MemoryNetwork, MemoryStorage, NetworkingMetricsValue, WebServerNetwork},
     },
-    types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    types::SignatureKey,
+    Networks,
 };
 use hotshot_types::traits::network::ConnectedNetwork;
 use jf_primitives::signatures::bls_over_bn254::VerKey;
@@ -39,7 +33,6 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::ConsensusMetricsValue,
     data::ViewNumber,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
@@ -50,14 +43,14 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
-
-use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::net::Ipv4Addr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
+
+use persistence::SequencerPersistence;
 
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
@@ -73,64 +66,6 @@ pub use vm::{Vm, VmId, VmTransaction};
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
     lazy_static::initialize(&header::L1_CLIENT);
-}
-
-/// A saved leaf to start consensus from.
-///
-/// A saved leaf may be an entire leaf, a commitment to a leaf, to be fetched from an external
-/// source, or no leaf at all, in which case consensus starts from the genesis state.
-#[derive(Clone, Debug, Default, From)]
-pub enum SavedLeaf {
-    Leaf(Box<Leaf>),
-    Hash(Commitment<Leaf>),
-    #[default]
-    None,
-}
-
-impl From<Leaf> for SavedLeaf {
-    fn from(leaf: Leaf) -> Self {
-        Self::Leaf(Box::new(leaf))
-    }
-}
-
-impl SavedLeaf {
-    /// Move out of the saved leaf, leaving [`SavedLeaf::None`] in its place.
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
-    }
-
-    /// Resolve the [`SavedLeaf`] to an optional [`Leaf`] by fetching it if not already present.
-    pub async fn resolve<Fut>(self, f: impl FnOnce(Commitment<Leaf>) -> Fut) -> Option<Leaf>
-    where
-        Fut: Future<Output = Leaf>,
-    {
-        match self {
-            Self::Hash(h) => {
-                tracing::info!("fetching saved leaf {h}");
-                Some(f(h).await)
-            }
-            Self::Leaf(l) => Some(*l),
-            Self::None => None,
-        }
-    }
-
-    /// Enforce that a [`SavedLeaf`] has enough information to start consensus.
-    ///
-    /// At this point, we may have either [`SavedLeaf::Leaf`] or [`SavedLeaf::None`], but
-    /// [`SavedLeaf::Hash`] is not acceptable -- we should have already fetched the full leaf if
-    /// necessary.
-    ///
-    /// Returns `Some(leaf)` if consensus should start from `leaf` or `None` if consensus should
-    /// start from genesis.
-    pub fn assert_resolved(self) -> anyhow::Result<Option<Leaf>> {
-        match self {
-            Self::Leaf(leaf) => Ok(Some(*leaf)),
-            Self::Hash(_) => {
-                bail!("saved leaf requested, but not query service or storage provided")
-            }
-            Self::None => Ok(None),
-        }
-    }
 }
 
 pub mod network {
@@ -241,46 +176,6 @@ pub enum Error {
     BlockBuilding,
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn init_hotshot<N: network::Type>(
-    nodes_pub_keys: Vec<PubKey>,
-    node_id: usize,
-    priv_key: PrivKey,
-    networks: Networks<SeqTypes, Node<N>>,
-    config: HotShotConfig<PubKey, ElectionConfig>,
-    saved_leaf: Option<Leaf>,
-    metrics: &dyn Metrics,
-    instance_state: NodeState,
-) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let membership =
-        GeneralStaticCommittee::new(&nodes_pub_keys, config.known_nodes_with_stake.clone());
-    let memberships = Memberships {
-        quorum_membership: membership.clone(),
-        da_membership: membership.clone(),
-        vid_membership: membership.clone(),
-        view_sync_membership: membership,
-    };
-    let initializer = match saved_leaf {
-        Some(leaf) => HotShotInitializer::from_reload(leaf, instance_state),
-        None => HotShotInitializer::from_genesis(&instance_state).unwrap(),
-    };
-
-    SystemContext::init(
-        nodes_pub_keys[node_id],
-        priv_key,
-        node_id as u64,
-        config,
-        Storage::empty(),
-        memberships,
-        networks,
-        initializer,
-        ConsensusMetricsValue::new(metrics),
-    )
-    .await
-    .unwrap()
-    .0
-}
-
 pub struct NetworkParams {
     pub da_server_url: Url,
     pub consensus_server_url: Url,
@@ -292,9 +187,8 @@ pub struct NetworkParams {
 
 pub async fn init_node(
     network_params: NetworkParams,
-    saved_leaf: Option<Leaf>,
     metrics: &dyn Metrics,
-    persistence: &mut impl SequencerPersistence,
+    mut persistence: impl SequencerPersistence,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -335,32 +229,23 @@ pub async fn init_node(
     let node_index = config.node_index;
     let num_nodes = config.config.total_nodes.get();
 
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
-        config.config.known_nodes_with_stake.clone();
-
-    let pub_keys = known_nodes_with_stake
-        .iter()
-        .map(|entry| entry.stake_key)
-        .collect::<Vec<_>>();
     // TODO: fetch from orchestrator?
     let state_ver_keys = (0..num_nodes)
         .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
         .collect::<Vec<_>>();
-
-    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
         da_network: Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            public_staking_key,
             true,
         )),
         quorum_network: Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            public_staking_key,
             false,
         )),
         _pd: Default::default(),
@@ -372,25 +257,16 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let stake_table_commit = static_stake_table_commitment(
-        &config.config.known_nodes_with_stake,
-        &state_ver_keys,
-        STAKE_TABLE_CAPACITY,
-    );
-    let instance_state = NodeState {};
-    let hotshot = init_hotshot(
-        pub_keys.clone(),
-        node_index as usize,
-        private_staking_key,
-        networks,
+    let mut ctx = SequencerContext::init(
         config.config,
-        saved_leaf,
+        &state_ver_keys,
+        persistence,
+        networks,
+        Some(network_params.state_relay_server_url),
         metrics,
-        instance_state,
+        node_index,
     )
-    .await;
-    let mut ctx = SequencerContext::new(hotshot, node_index, state_key_pair, stake_table_commit)
-        .with_state_relay_server(network_params.state_relay_server_url);
+    .await?;
     if wait_for_orchestrator {
         ctx = ctx.wait_for_orchestrator(orchestrator_client);
     }
@@ -400,14 +276,17 @@ pub async fn init_node(
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use crate::persistence::no_storage::NoStorage;
     use commit::Committable;
-    use futures::{Stream, StreamExt};
+    use futures::{
+        future::join_all,
+        stream::{Stream, StreamExt},
+    };
     use hotshot::traits::{
         implementations::{MasterMap, MemoryNetwork},
         BlockPayload,
     };
-    use hotshot::types::EventType::Decide;
+    use hotshot::types::{EventType::Decide, Message};
 
     use hotshot_types::{
         light_client::StateKeyPair,
@@ -416,70 +295,90 @@ pub mod testing {
     };
     use std::time::Duration;
 
-    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
-    {
-        init_hotshot_handles_with_state(None, &NoMetrics).await
+    #[derive(Clone, Debug)]
+    pub struct TestConfig {
+        config: HotShotConfig<PubKey, ElectionConfig>,
+        priv_keys: Vec<BLSPrivKey>,
+        state_key_pairs: Vec<StateKeyPair>,
+        master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
     }
 
-    pub async fn init_hotshot_handles_with_state(
-        saved_leaf: Option<Leaf>,
-        metrics: &dyn Metrics,
-    ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
-        setup_logging();
-        setup_backtrace();
+    impl Default for TestConfig {
+        fn default() -> Self {
+            let num_nodes = 5;
 
-        let num_nodes = 5;
+            // Generate keys for the nodes.
+            let priv_keys = (0..num_nodes)
+                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
+                .collect::<Vec<_>>();
+            let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0
+                ..num_nodes)
+                .map(|id| PubKey::from_private(&priv_keys[id]).get_stake_table_entry(1u64))
+                .collect();
+            let state_key_pairs = (0..num_nodes)
+                .map(|_| StateKeyPair::generate())
+                .collect::<Vec<_>>();
 
-        // Generate keys for the nodes.
-        let priv_keys = (0..num_nodes)
-            .map(|_| PrivKey::generate(&mut rand::thread_rng()))
-            .collect::<Vec<_>>();
-        let pub_keys = priv_keys
-            .iter()
-            .map(PubKey::from_private)
-            .collect::<Vec<_>>();
-        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
-            .collect();
+            let master_map = MasterMap::new();
 
-        let mut handles = vec![];
+            let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+                execution_type: ExecutionType::Continuous,
+                total_nodes: num_nodes.try_into().unwrap(),
+                min_transactions: 1,
+                max_transactions: 10000.try_into().unwrap(),
+                known_nodes_with_stake,
+                next_view_timeout: Duration::from_secs(5).as_millis() as u64,
+                timeout_ratio: (10, 11),
+                round_start_delay: Duration::from_millis(1).as_millis() as u64,
+                start_delay: Duration::from_millis(1).as_millis() as u64,
+                num_bootstrap: 1usize,
+                propose_min_round_time: Duration::from_secs(0),
+                propose_max_round_time: Duration::from_secs(1),
+                election_config: None,
+                da_committee_size: num_nodes,
+                my_own_validator_config: Default::default(),
+            };
 
-        let master_map = MasterMap::new();
+            Self {
+                config,
+                priv_keys,
+                state_key_pairs,
+                master_map,
+            }
+        }
+    }
 
-        let config: HotShotConfig<_, _> = HotShotConfig {
-            execution_type: ExecutionType::Continuous,
-            total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 1,
-            max_transactions: 10000.try_into().unwrap(),
-            known_nodes_with_stake: known_nodes_with_stake.clone(),
-            next_view_timeout: Duration::from_secs(5).as_millis() as u64,
-            timeout_ratio: (10, 11),
-            round_start_delay: Duration::from_millis(1).as_millis() as u64,
-            start_delay: Duration::from_millis(1).as_millis() as u64,
-            num_bootstrap: 1usize,
-            propose_min_round_time: Duration::from_secs(0),
-            propose_max_round_time: Duration::from_secs(1),
-            election_config: None,
-            da_committee_size: num_nodes,
-            my_own_validator_config: Default::default(),
-        };
+    impl TestConfig {
+        pub fn num_nodes(&self) -> usize {
+            self.priv_keys.len()
+        }
 
-        // Create HotShot instances.
-        for node_id in 0..num_nodes {
-            let metrics = if node_id == 0 { metrics } else { &NoMetrics };
+        pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
+            join_all(
+                (0..self.num_nodes())
+                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
+            )
+            .await
+        }
 
-            let mut config = config.clone();
+        pub async fn init_node(
+            &self,
+            i: usize,
+            persistence: impl SequencerPersistence,
+            metrics: &dyn Metrics,
+        ) -> SequencerContext<network::Memory> {
+            let mut config = self.config.clone();
             config.my_own_validator_config = ValidatorConfig {
-                public_key: pub_keys[node_id],
-                private_key: priv_keys[node_id].clone(),
-                stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
-                state_key_pair: StateKeyPair::generate(),
+                public_key: config.known_nodes_with_stake[i].stake_key,
+                private_key: self.priv_keys[i].clone(),
+                stake_value: config.known_nodes_with_stake[i].stake_amount.as_u64(),
+                state_key_pair: self.state_key_pairs[i].clone(),
             };
 
             let network = Arc::new(MemoryNetwork::new(
-                pub_keys[node_id],
+                config.my_own_validator_config.public_key,
                 NetworkingMetricsValue::new(metrics),
-                master_map.clone(),
+                self.master_map.clone(),
                 None,
             ));
             let networks = Networks {
@@ -487,22 +386,23 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
-            let instance_state = NodeState {};
-            let handle = init_hotshot(
-                pub_keys.clone(),
-                node_id,
-                priv_keys[node_id].clone(),
-                networks,
+            let state_ver_keys = self
+                .state_key_pairs
+                .iter()
+                .map(|pair| pair.ver_key())
+                .collect::<Vec<_>>();
+            SequencerContext::init(
                 config,
-                saved_leaf.clone(),
+                &state_ver_keys,
+                persistence,
+                networks,
+                None,
                 metrics,
-                instance_state,
+                i as u64,
             )
-            .await;
-
-            handles.push(handle);
+            .await
+            .unwrap()
         }
-        handles
     }
 
     // Wait for decide event, make sure it matches submitted transaction
@@ -548,17 +448,17 @@ mod test {
     use hotshot::types::EventType::Decide;
 
     use hotshot_types::traits::block_contents::BlockHeader;
-    use testing::{init_hotshot_handles, wait_for_decide_on_handle};
+    use testing::{wait_for_decide_on_handle, TestConfig};
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         setup_logging();
         setup_backtrace();
 
-        let handles = init_hotshot_handles().await;
+        let handles = TestConfig::default().init_nodes().await;
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
+            handle.start_consensus().await;
         }
 
         // Submit target transaction to handle
@@ -580,10 +480,10 @@ mod test {
 
         let success_height = 30;
 
-        let handles = init_hotshot_handles().await;
+        let handles = TestConfig::default().init_nodes().await;
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
+            handle.start_consensus().await;
         }
 
         let mut parent = Header::genesis(&NodeState {}).0;

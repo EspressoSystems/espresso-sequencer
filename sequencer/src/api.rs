@@ -1,16 +1,14 @@
 use self::data_source::StateSignatureDataSource;
 use crate::{
-    context::SequencerContext, network, state::ValidatedState, state_signature, Node, SeqTypes,
+    context::SequencerContext, network, state::ValidatedState, state_signature::StateSigner, Node,
+    SeqTypes,
 };
-use async_std::{sync::Arc, task::JoinHandle};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use data_source::{StateDataSource, SubmitDataSource};
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::{
-    data::ViewNumber,
-    light_client::{LightClientState, StateSignature, StateSignatureRequestBody},
-};
+use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 
 pub mod data_source;
 pub mod endpoints;
@@ -21,106 +19,65 @@ mod update;
 
 pub use options::Options;
 
-pub struct SequencerNode<N: network::Type> {
-    context: SequencerContext<N>,
-    update_task: Option<JoinHandle<anyhow::Result<()>>>,
+struct State<N: network::Type> {
+    state_signer: Arc<StateSigner>,
+    handle: SystemContextHandle<SeqTypes, Node<N>>,
 }
 
-impl<N: network::Type> From<SequencerContext<N>> for SequencerNode<N> {
-    fn from(context: SequencerContext<N>) -> Self {
+impl<N: network::Type> From<&SequencerContext<N>> for State<N> {
+    fn from(ctx: &SequencerContext<N>) -> Self {
         Self {
-            context,
-            update_task: None,
+            state_signer: ctx.state_signer(),
+            handle: ctx.consensus().clone(),
         }
     }
 }
 
-impl<N: network::Type> SequencerNode<N> {
-    pub async fn start_consensus(&self) {
-        self.context.start_consensus().await;
-    }
+type StorageState<N, D> = ExtensibleDataSource<D, State<N>>;
 
-    pub async fn shut_down(&mut self) {
-        self.context.shut_down().await;
-        if let Some(task) = self.update_task.take() {
-            task.cancel().await;
-        }
-    }
-
-    pub fn detach(&mut self) {
-        self.context.detach();
-    }
-
-    pub fn context(&self) -> &SequencerContext<N> {
-        &self.context
-    }
-
-    pub fn context_mut(&mut self) -> &mut SequencerContext<N> {
-        &mut self.context
-    }
-}
-
-impl<N: network::Type> Drop for SequencerNode<N> {
-    fn drop(&mut self) {
-        if let Some(task) = self.update_task.take() {
-            async_std::task::block_on(task.cancel());
-        }
-    }
-}
-
-type AppState<N, D> = ExtensibleDataSource<D, SequencerContext<N>>;
-
-impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
+impl<N: network::Type, D> SubmitDataSource<N> for StorageState<N, D> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for SequencerContext<N> {
+impl<N: network::Type> SubmitDataSource<N> for State<N> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
-        self.consensus()
+        &self.handle
     }
 }
 
-impl<N: network::Type, D: Send + Sync> StateDataSource for AppState<N, D> {
+impl<N: network::Type, D: Send + Sync> StateDataSource for StorageState<N, D> {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
-        self.as_ref().consensus().get_decided_state().await
+        self.as_ref().get_decided_state().await
     }
 
     async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
-        self.as_ref().consensus().get_state(view).await
+        self.as_ref().get_undecided_state(view).await
     }
 }
 
-impl<N: network::Type> StateDataSource for SequencerContext<N> {
+impl<N: network::Type> StateDataSource for State<N> {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
-        self.consensus().get_decided_state().await
+        self.handle.get_decided_state().await
     }
 
     async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
-        self.consensus().get_state(view).await
+        self.handle.get_state(view).await
     }
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync> StateSignatureDataSource<N> for AppState<N, D> {
+impl<N: network::Type, D: Sync> StateSignatureDataSource<N> for StorageState<N, D> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
     }
-
-    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        self.as_ref().sign_new_state(state).await
-    }
 }
 
 #[async_trait]
-impl<N: network::Type> StateSignatureDataSource<N> for SequencerContext<N> {
+impl<N: network::Type> StateSignatureDataSource<N> for State<N> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
-        self.get_state_signature(height).await
-    }
-
-    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        self.sign_new_state(state).await
+        self.state_signer.get_state_signature(height).await
     }
 }
 
@@ -129,43 +86,64 @@ mod test_helpers {
     use super::*;
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
+        persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
-        testing::{init_hotshot_handles_with_state, wait_for_decide_on_handle},
-        Leaf, Transaction, VmId,
+        testing::{wait_for_decide_on_handle, TestConfig},
+        Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
     use ethers::prelude::Address;
     use futures::{
-        future::{BoxFuture, FutureExt},
+        future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-    use hotshot_types::traits::node_implementation::ConsensusTime;
+    use hotshot_types::traits::{metrics::NoMetrics, node_implementation::ConsensusTime};
     use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
-    pub fn init_handle(
-        leaf: Option<Leaf>,
-        metrics: Box<dyn crate::Metrics>,
-    ) -> BoxFuture<'static, SequencerContext<network::Memory>> {
-        async move {
-            let mut handles = init_hotshot_handles_with_state(leaf, &*metrics).await;
-            for handle in &mut handles {
-                handle.hotshot.start_consensus().await;
+    pub struct TestNetwork {
+        pub server: SequencerContext<network::Memory>,
+        pub peers: Vec<SequencerContext<network::Memory>>,
+    }
+
+    impl TestNetwork {
+        pub async fn with_state(opt: Options, persistence: impl SequencerPersistence) -> Self {
+            let cfg = TestConfig::default();
+            let server = opt
+                .serve(|metrics| {
+                    let cfg = cfg.clone();
+                    async move { cfg.init_node(0, persistence, &*metrics).await }.boxed()
+                })
+                .await
+                .unwrap();
+            let peers =
+                join_all((1..cfg.num_nodes()).map(|i| cfg.init_node(i, NoStorage, &NoMetrics)))
+                    .await;
+
+            server.start_consensus().await;
+            for ctx in &peers {
+                ctx.start_consensus().await;
             }
-            SequencerContext::new(
-                handles[0].clone(),
-                0,
-                Default::default(),
-                Default::default(),
-            )
+
+            Self { server, peers }
         }
-        .boxed()
+
+        pub async fn new(opt: Options) -> Self {
+            Self::with_state(opt, NoStorage).await
+        }
+
+        pub async fn stop_consensus(&mut self) {
+            self.server.consensus_mut().shut_down().await;
+            for ctx in &mut self.peers {
+                ctx.consensus_mut().shut_down().await;
+            }
+        }
     }
 
     /// Test the status API with custom options.
@@ -184,7 +162,7 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        let _server = options.serve(init_handle).await.unwrap();
+        let _network = TestNetwork::new(options).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -230,8 +208,8 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let mut node = options.serve(init_handle).await.unwrap();
-        let mut events = node.context.consensus_mut().get_event_stream();
+        let network = TestNetwork::new(options).await;
+        let mut events = network.server.get_event_stream();
 
         client.connect(None).await;
 
@@ -259,14 +237,14 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
-        let node = options.serve(init_handle).await.unwrap();
+        let network = TestNetwork::new(options).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = node
-                .context
+            height = network
+                .server
                 .consensus()
                 .get_decided_leaf()
                 .await
@@ -300,11 +278,11 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).state(Default::default()));
-        let mut node = options.serve(init_handle).await.unwrap();
+        let mut network = TestNetwork::new(options).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
-        let mut events = node.context.consensus_mut().get_event_stream();
+        let mut events = network.server.get_event_stream();
         loop {
             if let Event {
                 event: EventType::Decide { leaf_chain, .. },
@@ -321,7 +299,7 @@ mod test_helpers {
         }
 
         // Stop consensus running on the node so we freeze the decided and undecided states.
-        node.context.consensus_mut().shut_down().await;
+        network.server.consensus_mut().shut_down().await;
 
         // Decided fee state: absent account.
         let res = client
@@ -333,8 +311,8 @@ mod test_helpers {
         assert_eq!(
             res.proof
                 .verify(
-                    &node
-                        .context
+                    &network
+                        .server
                         .consensus()
                         .get_decided_state()
                         .await
@@ -346,7 +324,7 @@ mod test_helpers {
         );
 
         // Undecided fee state: absent account.
-        let leaf = node.context.consensus().get_decided_leaf().await;
+        let leaf = network.server.consensus().get_decided_leaf().await;
         let view = leaf.view_number + 1;
         let res = client
             .get::<AccountQueryData>(&format!(
@@ -361,8 +339,8 @@ mod test_helpers {
         assert_eq!(
             res.proof
                 .verify(
-                    &node
-                        .context
+                    &network
+                        .server
                         .consensus()
                         .get_state(view)
                         .await
@@ -380,8 +358,8 @@ mod test_helpers {
             .send()
             .await
             .unwrap();
-        let root = &node
-            .context
+        let root = &network
+            .server
             .consensus()
             .get_decided_state()
             .await
@@ -397,8 +375,8 @@ mod test_helpers {
             .send()
             .await
             .unwrap();
-        let root = &node
-            .context
+        let root = &network
+            .server
             .consensus()
             .get_state(view)
             .await
@@ -415,27 +393,20 @@ mod test_helpers {
 #[espresso_macros::generic_tests]
 mod generic_tests {
     use super::*;
-    use crate::{
-        testing::{init_hotshot_handles_with_state, wait_for_decide_on_handle},
-        Header, Transaction, VmId,
-    };
+    use crate::{testing::wait_for_decide_on_handle, Header, Transaction, VmId};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
-    use futures::{
-        future::{self, join_all, FutureExt},
-        stream::StreamExt,
-    };
+    use futures::stream::{StreamExt, TryStreamExt};
     use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
-    use hotshot_types::traits::metrics::NoMetrics;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
-        init_handle, state_signature_test_helper, state_test_helper, status_test_helper,
-        submit_test_helper,
+        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+        TestNetwork,
     };
     use tide_disco::error::ServerError;
 
@@ -467,13 +438,13 @@ mod generic_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
-        let mut node = D::options(&storage, options::Http { port }.into())
-            .status(Default::default())
-            .submit(Default::default())
-            .serve(init_handle)
-            .await
-            .unwrap();
-        let mut events = node.context.consensus_mut().get_event_stream();
+        let network = TestNetwork::new(
+            D::options(&storage, options::Http { port }.into())
+                .status(Default::default())
+                .submit(Default::default()),
+        )
+        .await;
+        let mut events = network.server.get_event_stream();
 
         // Connect client.
         let client: Client<ServerError> =
@@ -532,115 +503,70 @@ mod generic_tests {
         setup_backtrace();
 
         // Initialize nodes.
-        let mut nodes = init_hotshot_handles_with_state(None, &NoMetrics).await;
-        let storage = join_all(nodes.iter().map(|_| D::create_storage())).await;
-        let ports = nodes
-            .iter()
-            .map(|_| pick_unused_port().unwrap())
-            .collect::<Vec<_>>();
-        let servers = join_all(nodes.iter().enumerate().map(|(i, node)| {
-            let storage = &storage[i];
-            let port = ports[i];
-            async move {
-                D::options(storage, options::Http { port }.into())
-                    .status(Default::default())
-                    .serve(|_, _| {
-                        future::ready(SequencerContext::new(
-                            node.clone(),
-                            0,
-                            Default::default(),
-                            Default::default(),
-                        ))
-                        .boxed()
-                    })
-                    .await
-                    .unwrap()
-            }
-        }))
+        let storage = D::create_storage().await;
+        let port = pick_unused_port().unwrap();
+        let mut network = TestNetwork::with_state(
+            D::options(&storage, options::Http { port }.into()),
+            D::connect(&storage).await,
+        )
         .await;
 
-        for node in &nodes {
-            node.hotshot.start_consensus().await;
-        }
+        // Connect client.
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
 
-        // Connect clients.
-        let clients = join_all(ports.iter().map(|port| async move {
-            let client: Client<ServerError> =
-                Client::new(format!("http://localhost:{port}").parse().unwrap());
-            client.connect(None).await;
-            client
-        }))
-        .await;
-
-        // Wait until some blocks have been decided on all nodes.
-        join_all(clients.iter().map(|client| async move {
-            client
-                .socket("availability/stream/blocks/0")
-                .subscribe::<BlockQueryData<SeqTypes>>()
-                .await
-                .unwrap()
-                .take(3)
-                .collect::<Vec<_>>()
-                .await;
-        }))
-        .await;
+        // Wait until some blocks have been decided.
+        client
+            .socket("availability/stream/blocks/0")
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
 
         // Shut down the consensus nodes.
         tracing::info!("shutting down nodes");
-        for node in &mut nodes {
-            node.shut_down().await;
-        }
+        network.stop_consensus().await;
 
-        // Get the longest chain decided by any node.
-        let chains = join_all(clients.iter().map(|client| async move {
-            let height = client.get("status/block-height").send().await.unwrap();
-            join_all((0..height).map(|i| async move {
-                let leaf: LeafQueryData<SeqTypes> = client
-                    .get(&format!("availability/leaf/{i}"))
-                    .send()
-                    .await
-                    .unwrap();
-                let block: BlockQueryData<SeqTypes> = client
-                    .get(&format!("availability/block/{i}"))
-                    .send()
-                    .await
-                    .unwrap();
-                (leaf, block)
-            }))
+        // Get the block height we reached.
+        let height = client
+            .get::<usize>("status/block-height")
+            .send()
             .await
-        }))
-        .await;
+            .unwrap();
+        tracing::info!("decided {height} blocks before shutting down");
+
+        // Get the decided chain, so we can check consistency after the restart.
+        let chain: Vec<LeafQueryData<SeqTypes>> = client
+            .socket("availability/stream/leaves/0")
+            .subscribe()
+            .await
+            .unwrap()
+            .take(height)
+            .try_collect()
+            .await
+            .unwrap();
 
         // Fully shut down the API servers.
-        drop(servers);
-
-        let longest_chain = chains.into_iter().max_by_key(|chain| chain.len()).unwrap();
-        let saved_leaf = &longest_chain.last().unwrap().0;
-        tracing::info!(
-            "longest chain has {} blocks, ending in {:?}",
-            longest_chain.len(),
-            saved_leaf
-        );
+        drop(network);
 
         // Start up again, resuming from the last decided leaf.
         let port = pick_unused_port().expect("No ports free");
-        let _node = D::options(&storage[0], options::Http { port }.into())
-            .with_saved_leaf(saved_leaf.hash().into())
-            .status(Default::default())
-            .serve(init_handle)
-            .await
-            .unwrap();
+        let _network = TestNetwork::with_state(
+            D::options(&storage, options::Http { port }.into()),
+            D::connect(&storage).await,
+        )
+        .await;
         let client: Client<ServerError> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
         // Make sure we can decide new blocks after the restart.
-        tracing::info!("waiting for decide, height {}", saved_leaf.height() + 1);
+        tracing::info!("waiting for decide, height {}", height + 1);
         let new_leaf: LeafQueryData<SeqTypes> = client
-            .socket(&format!(
-                "availability/stream/leaves/{}",
-                saved_leaf.height() + 1
-            ))
+            .socket(&format!("availability/stream/leaves/{}", height + 1))
             .subscribe()
             .await
             .unwrap()
@@ -648,28 +574,20 @@ mod generic_tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(new_leaf.height(), saved_leaf.height() + 1);
-        assert_eq!(new_leaf.leaf().parent_commitment, saved_leaf.hash());
+        assert_eq!(new_leaf.height(), height as u64 + 1);
+        assert_eq!(new_leaf.leaf().parent_commitment, chain[height - 1].hash());
 
         // Ensure the new chain is consistent with the old chain.
-        let new_chain = join_all((0..=saved_leaf.height()).map(|i| {
-            let client = &client;
-            async move {
-                let leaf: LeafQueryData<SeqTypes> = client
-                    .get(&format!("availability/leaf/{i}"))
-                    .send()
-                    .await
-                    .unwrap();
-                let block: BlockQueryData<SeqTypes> = client
-                    .get(&format!("availability/block/{i}"))
-                    .send()
-                    .await
-                    .unwrap();
-                (leaf, block)
-            }
-        }))
-        .await;
-        assert_eq!(longest_chain, new_chain);
+        let new_chain: Vec<LeafQueryData<SeqTypes>> = client
+            .socket("availability/stream/leaves/0")
+            .subscribe()
+            .await
+            .unwrap()
+            .take(height)
+            .try_collect()
+            .await
+            .unwrap();
+        assert_eq!(chain, new_chain);
     }
 
     #[async_std::test]
@@ -680,11 +598,10 @@ mod generic_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
-        let _server = D::options(&storage, options::Http { port }.into())
-            .status(Default::default())
-            .serve(init_handle)
-            .await
-            .unwrap();
+        let _network = TestNetwork::new(
+            D::options(&storage, options::Http { port }.into()).status(Default::default()),
+        )
+        .await;
 
         // Connect client.
         let client: Client<ServerError> =
@@ -858,8 +775,8 @@ mod test {
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
-        init_handle, state_signature_test_helper, state_test_helper, status_test_helper,
-        submit_test_helper,
+        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+        TestNetwork,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
@@ -872,7 +789,7 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
         let options = Options::from(options::Http { port });
-        let _server = options.serve(init_handle).await.unwrap();
+        let _network = TestNetwork::new(options).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();

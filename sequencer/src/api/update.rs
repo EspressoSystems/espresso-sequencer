@@ -1,6 +1,6 @@
 //! Update loop for query API state.
 
-use super::{data_source::SequencerDataSource, AppState};
+use super::{data_source::SequencerDataSource, StorageState};
 use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
 use futures::stream::{Stream, StreamExt};
@@ -11,7 +11,7 @@ use hotshot_query_service::{
 };
 
 pub(super) async fn update_loop<N, D>(
-    state: Arc<RwLock<AppState<N, D>>>,
+    state: Arc<RwLock<StorageState<N, D>>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: network::Type,
@@ -35,7 +35,7 @@ pub(super) async fn update_loop<N, D>(
 }
 
 async fn update_state<N, D>(
-    state: &mut AppState<N, D>,
+    state: &mut StorageState<N, D>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where

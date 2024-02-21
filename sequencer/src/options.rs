@@ -1,7 +1,6 @@
-use crate::{api, persistence, Leaf};
+use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
-use commit::Commitment;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
 use std::collections::HashSet;
@@ -81,19 +80,6 @@ pub struct Options {
         value_parser = parse_duration
     )]
     pub webserver_poll_interval: Duration,
-
-    /// Start consensus from a saved state, instead of the genesis state.
-    ///
-    /// The value of this option is merely a commitment to a leaf. The leaf itself is expected to be
-    /// fetched at runtime, either from local storage, if this node was previously run with `query`
-    /// and the required leaf is available in the database, or from an external query service. In
-    /// the latter case, `query-service-url` must be provided.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_SAVED_LEAF")]
-    pub saved_leaf: Option<Commitment<Leaf>>,
-
-    /// Optional external query service to fetch `saved-leaf` from.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
-    pub query_service_url: Option<Url>,
 
     // Sequencer Private Staking key
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")]

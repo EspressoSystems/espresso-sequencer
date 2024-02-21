@@ -1,6 +1,8 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
+use crate::{Leaf, NodeState, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use clap::Parser;
+use hotshot::HotShotInitializer;
 use std::path::PathBuf;
 
 /// Options for file system backed persistence.
@@ -56,5 +58,20 @@ impl SequencerPersistence for Persistence {
         let path = self.config_path();
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
+    }
+
+    async fn save_highest_view(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn save_anchor_leaf(&mut self, _leaf: &Leaf) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn load_consensus_state(
+        &self,
+        _genesis: NodeState,
+    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+        todo!()
     }
 }

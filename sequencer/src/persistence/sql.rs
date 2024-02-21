@@ -1,6 +1,8 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
+use crate::{Leaf, NodeState, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use clap::Parser;
+use hotshot::HotShotInitializer;
 use hotshot_query_service::data_source::{
     storage::sql::{include_migrations, Config, Query, SqlStorage},
     VersionedDataSource,
@@ -120,5 +122,20 @@ impl SequencerPersistence for Persistence {
             .await?;
         self.commit().await?;
         Ok(())
+    }
+
+    async fn save_highest_view(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn save_anchor_leaf(&mut self, _leaf: &Leaf) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn load_consensus_state(
+        &self,
+        _genesis: NodeState,
+    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+        todo!()
     }
 }

@@ -1,22 +1,31 @@
 //! Utilities for generating and storing the most recent light client state signatures.
 
-use crate::context::SequencerContext;
-use crate::{network, Leaf, SeqTypes};
+use crate::{Leaf, SeqTypes, StateKeyPair};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
-use futures::stream::{Stream, StreamExt};
-use hotshot::types::{Event, SignatureKey};
+use async_std::sync::RwLock;
+use hotshot::types::{Event, EventType, SignatureKey};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
 };
-use hotshot_types::signature_key::BLSPubKey;
-use hotshot_types::traits::node_implementation::ConsensusTime;
-use hotshot_types::traits::signature_key::StakeTableEntryType;
-use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
-use jf_primitives::crhf::{VariableLengthRescueCRHF, CRHF};
-use jf_primitives::errors::PrimitivesError;
+use hotshot_types::{
+    light_client::{StateSignature, StateSignatureScheme},
+    signature_key::BLSPubKey,
+    traits::{
+        node_implementation::ConsensusTime,
+        signature_key::StakeTableEntryType,
+        stake_table::{SnapshotVersion, StakeTableScheme as _},
+    },
+};
+use jf_primitives::{
+    crhf::{VariableLengthRescueCRHF, CRHF},
+    errors::PrimitivesError,
+    signatures::SignatureScheme,
+};
 use std::collections::{HashMap, VecDeque};
+use surf_disco::{Client, Url};
+use tide_disco::error::ServerError;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -24,58 +33,106 @@ pub mod relay_server;
 /// Capacity for the in memory signature storage.
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
-pub(super) async fn state_signature_loop<N>(
-    context: SequencerContext<N>,
-    mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
-) where
-    N: network::Type,
-{
-    tracing::info!("State signature watcher is watching event stream for decided leaves.");
-    let stake_table_comm = context.get_stake_table_comm();
-    let key = context.get_state_ver_key();
-    let client = context.get_state_relay_server_client();
-    while let Some(event) = events.next().await {
-        // Trigger the light client signature hook when a new leaf is decided
-        if let Event {
-            event: hotshot_types::event::EventType::Decide { leaf_chain, .. },
-            ..
-        } = event
-        {
-            if let Some((leaf, _)) = leaf_chain.first() {
-                match form_light_client_state(leaf, stake_table_comm) {
-                    Ok(state) => {
-                        let signature = context.sign_new_state(&state).await;
-                        tracing::debug!(
-                            "New leaves decided. Latest block height: {}",
-                            leaf.get_height(),
-                        );
+#[derive(Debug)]
+pub struct StateSigner {
+    /// Key pair for signing a new light client state
+    key_pair: StateKeyPair,
 
-                        if let Some(client) = client {
-                            let request_body = StateSignatureRequestBody {
-                                key: key.clone(),
-                                state,
-                                signature,
-                            };
-                            if let Err(error) = client
-                                .post::<()>("api/state")
-                                .body_binary(&request_body)
-                                .unwrap()
-                                .send()
-                                .await
-                            {
-                                tracing::warn!(
-                                    "Error posting signature to the relay server: {:?}",
-                                    error
-                                );
-                            }
-                        }
+    /// The most recent light client state signatures
+    signatures: RwLock<StateSignatureMemStorage>,
+
+    /// Commitment for current fixed stake table
+    stake_table_comm: StakeTableCommitmentType,
+
+    /// The state relay server url
+    relay_server_client: Option<Client<ServerError>>,
+}
+
+impl StateSigner {
+    pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
+        Self {
+            key_pair,
+            stake_table_comm,
+            signatures: Default::default(),
+            relay_server_client: Default::default(),
+        }
+    }
+
+    /// Connect to the given state relay server to send signed HotShot states to.
+    pub fn with_relay_server(mut self, url: Url) -> Self {
+        self.relay_server_client = Some(Client::new(url));
+        self
+    }
+
+    pub(super) async fn handle_event(&self, event: Event<SeqTypes>) {
+        let EventType::Decide { leaf_chain, .. } = event.event else {
+            return;
+        };
+        let Some((leaf, _)) = leaf_chain.first() else {
+            return;
+        };
+        match form_light_client_state(leaf, &self.stake_table_comm) {
+            Ok(state) => {
+                let signature = self.sign_new_state(&state).await;
+                tracing::debug!(
+                    "New leaves decided. Latest block height: {}",
+                    leaf.get_height(),
+                );
+
+                if let Some(client) = &self.relay_server_client {
+                    let request_body = StateSignatureRequestBody {
+                        key: self.key_pair.ver_key(),
+                        state,
+                        signature,
+                    };
+                    if let Err(error) = client
+                        .post::<()>("api/state")
+                        .body_binary(&request_body)
+                        .unwrap()
+                        .send()
+                        .await
+                    {
+                        tracing::warn!("Error posting signature to the relay server: {:?}", error);
                     }
-                    Err(err) => tracing::error!("Error generating light client state: {:?}", err),
                 }
+            }
+            Err(err) => {
+                tracing::error!("Error generating light client state: {:?}", err)
             }
         }
     }
-    tracing::info!("And now his watch has ended.");
+
+    /// Return a signature of a light client state at given height.
+    pub async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
+        let pool_guard = self.signatures.read().await;
+        pool_guard.get_signature(height)
+    }
+
+    /// Sign the light client state at given height and store it.
+    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
+        let msg: [CircuitField; 7] = state.into();
+        let signature = StateSignatureScheme::sign(
+            &(),
+            self.key_pair.sign_key_ref(),
+            msg,
+            &mut rand::thread_rng(),
+        )
+        .unwrap();
+        let mut pool_guard = self.signatures.write().await;
+        pool_guard.push(
+            state.block_height as u64,
+            StateSignatureRequestBody {
+                key: self.key_pair.ver_key(),
+                state: state.clone(),
+                signature: signature.clone(),
+            },
+        );
+        tracing::debug!(
+            "New signature added for block height {}",
+            state.block_height
+        );
+        signature
+    }
 }
 
 fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, PrimitivesError> {

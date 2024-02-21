@@ -1,20 +1,31 @@
-use async_std::sync::{Arc, RwLock};
-use derivative::Derivative;
-use hotshot::types::SystemContextHandle;
-use hotshot_orchestrator::client::OrchestratorClient;
-use hotshot_types::light_client::{
-    CircuitField, LightClientState, StateKeyPair, StateSignature, StateSignatureRequestBody,
-    StateSignatureScheme, StateVerKey,
+use async_std::{
+    sync::Arc,
+    task::{spawn, JoinHandle},
 };
-use jf_primitives::signatures::SignatureScheme;
-use surf_disco::Client;
-use tide_disco::error::ServerError;
+use commit::Committable;
+use derivative::Derivative;
+use futures::{
+    future::{join_all, Future},
+    stream::{Stream, StreamExt},
+};
+use hotshot::{
+    traits::{election::static_committee::GeneralStaticCommittee, implementations::MemoryStorage},
+    types::{Event, EventType, SystemContextHandle},
+    Memberships, Networks, SystemContext,
+};
+use hotshot_orchestrator::client::OrchestratorClient;
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use hotshot_types::{
+    consensus::ConsensusMetricsValue, light_client::StateVerKey, traits::metrics::Metrics,
+    HotShotConfig,
+};
+use std::fmt::Display;
 use url::Url;
 
 use crate::{
-    network,
-    state_signature::{StakeTableCommitmentType, StateSignatureMemStorage},
-    Node, SeqTypes,
+    network, persistence::SequencerPersistence, state_signature::StateSigner,
+    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 
 /// The consensus handle
@@ -22,51 +33,106 @@ pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""))]
+#[derivative(Debug(bound = ""))]
 pub struct SequencerContext<N: network::Type> {
     /// The consensus handle
+    #[derivative(Debug = "ignore")]
     handle: Consensus<N>,
 
     /// Index of this sequencer node
     #[allow(dead_code)]
     node_index: u64,
 
-    /// Key pair for signing a new light client state
-    state_key_pair: Arc<StateKeyPair>,
-
-    /// The most recent light client state signatures
-    state_signatures: Arc<RwLock<StateSignatureMemStorage>>,
-
-    /// Commitment for current fixed stake table
-    stake_table_comm: Arc<StakeTableCommitmentType>,
-
-    /// The state relay server url
-    state_relay_server_client: Option<Client<ServerError>>,
+    /// Context for generating state signatures.
+    state_signer: Arc<StateSigner>,
 
     /// An orchestrator to wait for before starting consensus.
+    #[derivative(Debug = "ignore")]
     wait_for_orchestrator: Option<Arc<OrchestratorClient>>,
+
+    /// Background tasks to shut down when the node is dropped.
+    tasks: Vec<(String, JoinHandle<()>)>,
 
     detached: bool,
 }
 
 impl<N: network::Type> SequencerContext<N> {
+    pub async fn init(
+        config: HotShotConfig<PubKey, ElectionConfig>,
+        state_ver_keys: &[StateVerKey],
+        persistence: impl SequencerPersistence,
+        networks: Networks<SeqTypes, Node<N>>,
+        state_relay_server: Option<Url>,
+        metrics: &dyn Metrics,
+        node_id: u64,
+    ) -> anyhow::Result<Self> {
+        // Load saved consensus state from storage.
+        let initializer = persistence.load_consensus_state(NodeState {}).await?;
+
+        let pub_keys = config
+            .known_nodes_with_stake
+            .iter()
+            .map(|entry| entry.stake_key)
+            .collect::<Vec<_>>();
+        let membership =
+            GeneralStaticCommittee::new(&pub_keys, config.known_nodes_with_stake.clone());
+        let memberships = Memberships {
+            quorum_membership: membership.clone(),
+            da_membership: membership.clone(),
+            vid_membership: membership.clone(),
+            view_sync_membership: membership,
+        };
+
+        let stake_table_commit = static_stake_table_commitment(
+            &config.known_nodes_with_stake,
+            state_ver_keys,
+            STAKE_TABLE_CAPACITY,
+        );
+        let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
+
+        let handle = SystemContext::init(
+            config.my_own_validator_config.public_key,
+            config.my_own_validator_config.private_key.clone(),
+            node_id,
+            config,
+            MemoryStorage::empty(),
+            memberships,
+            networks,
+            initializer,
+            ConsensusMetricsValue::new(metrics),
+        )
+        .await?
+        .0;
+
+        let mut state_signer = StateSigner::new(state_key_pair, stake_table_commit);
+        if let Some(url) = state_relay_server {
+            state_signer = state_signer.with_relay_server(url);
+        }
+
+        Ok(Self::new(handle, persistence, node_id, state_signer))
+    }
+
     /// Constructor
-    pub fn new(
+    fn new(
         handle: Consensus<N>,
+        persistence: impl SequencerPersistence,
         node_index: u64,
-        state_key_pair: StateKeyPair,
-        stake_table_comm: StakeTableCommitmentType,
+        state_signer: StateSigner,
     ) -> Self {
-        Self {
+        let events = handle.get_event_stream();
+        let mut ctx = Self {
             handle,
             node_index,
-            state_key_pair: Arc::new(state_key_pair),
-            state_signatures: Default::default(),
-            stake_table_comm: Arc::new(stake_table_comm),
-            state_relay_server_client: None,
-            wait_for_orchestrator: None,
+            state_signer: Arc::new(state_signer),
+            tasks: vec![],
             detached: false,
-        }
+            wait_for_orchestrator: None,
+        };
+        ctx.spawn(
+            "main event handler",
+            handle_events(events, persistence, ctx.state_signer.clone()),
+        );
+        ctx
     }
 
     /// Wait for a signal from the orchestrator before starting consensus.
@@ -75,10 +141,19 @@ impl<N: network::Type> SequencerContext<N> {
         self
     }
 
-    /// Connect to the given state relay server to send signed HotShot states to.
-    pub fn with_state_relay_server(mut self, url: Url) -> Self {
-        self.state_relay_server_client = Some(Client::new(url));
-        self
+    /// Return a reference to the consensus state signer.
+    pub fn state_signer(&self) -> Arc<StateSigner> {
+        self.state_signer.clone()
+    }
+
+    /// Stream consensus events.
+    pub fn get_event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> {
+        self.handle.get_event_stream()
+    }
+
+    pub async fn submit_transaction(&self, tx: Transaction) -> anyhow::Result<()> {
+        self.handle.submit_transaction(tx).await?;
+        Ok(())
     }
 
     /// Return a reference to the underlying consensus handle.
@@ -89,53 +164,6 @@ impl<N: network::Type> SequencerContext<N> {
     /// Return a mutable reference to the underlying consensus handle.
     pub fn consensus_mut(&mut self) -> &mut Consensus<N> {
         &mut self.handle
-    }
-
-    /// Return a signature of a light client state at given height.
-    pub async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
-        let pool_guard = self.state_signatures.read().await;
-        pool_guard.get_signature(height)
-    }
-
-    /// Sign the light client state at given height and store it.
-    pub async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        let msg: [CircuitField; 7] = state.into();
-        let signature = StateSignatureScheme::sign(
-            &(),
-            self.state_key_pair.sign_key_ref(),
-            msg,
-            &mut rand::thread_rng(),
-        )
-        .unwrap();
-        let mut pool_guard = self.state_signatures.write().await;
-        pool_guard.push(
-            state.block_height as u64,
-            StateSignatureRequestBody {
-                key: self.get_state_ver_key(),
-                state: state.clone(),
-                signature: signature.clone(),
-            },
-        );
-        tracing::debug!(
-            "New signature added for block height {}",
-            state.block_height
-        );
-        signature
-    }
-
-    /// Get the public key for light client state
-    pub fn get_state_ver_key(&self) -> StateVerKey {
-        self.state_key_pair.ver_key()
-    }
-
-    /// Return a commitment of the current fixed stake table
-    pub fn get_stake_table_comm(&self) -> &StakeTableCommitmentType {
-        &self.stake_table_comm
-    }
-
-    /// Return a url to the state relay server
-    pub fn get_state_relay_server_client(&self) -> &Option<Client<ServerError>> {
-        &self.state_relay_server_client
     }
 
     /// Start participating in consensus.
@@ -149,9 +177,37 @@ impl<N: network::Type> SequencerContext<N> {
         self.handle.hotshot.start_consensus().await;
     }
 
+    /// Spawn a background task attached to this context.
+    ///
+    /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
+    /// cancelled in the reverse order that they were spawned.
+    pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        let name = name.to_string();
+        let task = {
+            let name = name.clone();
+            spawn(async move {
+                task.await;
+                tracing::info!(name, "background task exited");
+            })
+        };
+        self.tasks.push((name, task));
+    }
+
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         self.handle.shut_down().await;
+        for (name, task) in self.tasks.drain(..).rev() {
+            tracing::info!(name, "cancelling background task");
+            task.cancel().await;
+        }
+    }
+
+    /// Wait for consensus to complete.
+    ///
+    /// Under normal conditions, this function will block forever, which is a convenient way of
+    /// keeping the main thread from exiting as long as there are still active background tasks.
+    pub async fn join(mut self) {
+        join_all(self.tasks.drain(..).map(|(_, task)| task)).await;
     }
 
     /// Allow this node to continue participating in consensus even after it is dropped.
@@ -166,5 +222,35 @@ impl<N: network::Type> Drop for SequencerContext<N> {
         if !self.detached {
             async_std::task::block_on(self.shut_down());
         }
+    }
+}
+
+async fn handle_events(
+    mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
+    mut persistence: impl SequencerPersistence,
+    state_signer: Arc<StateSigner>,
+) {
+    while let Some(event) = events.next().await {
+        // Store latest consensus state.
+        match &event.event {
+            EventType::Decide { leaf_chain, .. } => {
+                if let Some((leaf, _)) = leaf_chain.first() {
+                    if let Err(err) = persistence.save_anchor_leaf(leaf).await {
+                        tracing::error!(?leaf, hash = %leaf.commit(), %err, "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf.");
+                    }
+                }
+            }
+            EventType::ViewFinished { view_number, .. } => {
+                if let Err(err) = persistence.save_highest_view(*view_number).await {
+                    tracing::error!(?view_number, %err, "Failed to save highest view. When restrating, make sure view number is at least as recent as this.");
+                }
+            }
+            event => {
+                tracing::debug!(?event)
+            }
+        }
+
+        // Generate state signature.
+        state_signer.handle_event(event).await;
     }
 }
