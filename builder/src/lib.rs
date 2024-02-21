@@ -26,21 +26,34 @@ use jf_primitives::{
     signatures::bls_over_bn254::VerKey,
 };
 use sequencer::{
-    context::SequencerContext, network, persistence::SequencerPersistence,
+    context::{Consensus, SequencerContext}, network, persistence::SequencerPersistence,
     state_signature::static_stake_table_commitment, NetworkParams, Node, NodeState, PrivKey,
     PubKey, SeqTypes as BuilderType, Storage,
 };
-use std::{fmt::Debug, sync::Arc};
+use std::{alloc::System, any, fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 
 type ElectionConfig = StaticElectionConfig;
 
+pub struct BuilderContext<N: network::Type>{
+    /// The consensus handle
+    pub hotshot_handle: Consensus<N>,
+
+    /// Index of this sequencer node
+    pub node_index: u64,
+
+    // An orchestrator to wait for before starting consensus.
+    pub wait_for_orchestrator: Option<Arc<OrchestratorClient>>,
+}
+#[allow(unused_variables)]
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    persistence: &mut impl SequencerPersistence,
-) -> anyhow::Result<SequencerContext<network::Web>> {
+    //persistence: &mut impl SequencerPersistence,
+) -> anyhow::Result<BuilderContext<network::Web>> {
+//anyhow::Result<SystemContextHandle<BuilderType, Node<network::Web>>>{
+//-> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -54,6 +67,8 @@ pub async fn init_node(
     let private_staking_key = network_params.private_staking_key;
     let public_staking_key = BLSPubKey::from_private(&private_staking_key);
 
+    // Since we don't have persistence, directly load the configs from orchestrator
+    /*
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
@@ -77,6 +92,24 @@ pub async fn init_node(
             (config, true)
         }
     };
+    */
+    let wait_for_orchestrator = true;
+
+    tracing::info!("loading network config from orchestrator");
+    let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
+        orchestrator_client.get_config(public_ip.to_string()).await;
+
+    // Get updated config from orchestrator containing all peer's public keys
+    config = orchestrator_client
+        .post_and_wait_all_public_keys(config.node_index, public_staking_key)
+        .await;
+
+    config.config.my_own_validator_config.private_key = private_staking_key.clone();
+    config.config.my_own_validator_config.public_key = public_staking_key;
+
+    tracing::info!("loaded config, we are node {}", config.node_index);
+
+
     let node_index = config.node_index;
     let num_nodes = config.config.total_nodes.get();
 
@@ -119,7 +152,7 @@ pub async fn init_node(
     let _ = NetworkingMetricsValue::new(metrics);
 
     let instance_state = &NodeState {};
-    let hotshot = init_hotshot(
+    let hotshot_handle = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),
         node_index as usize,
@@ -130,6 +163,8 @@ pub async fn init_node(
         instance_state,
     )
     .await;
+
+    /*
     let mut ctx = SequencerContext::new(
         hotshot,
         node_index,
@@ -141,10 +176,35 @@ pub async fn init_node(
         ),
     )
     .with_state_relay_server(network_params.state_relay_server_url);
-    if wait_for_orchestrator {
-        ctx = ctx.wait_for_orchestrator(orchestrator_client);
+    */
+    // Now we just need the system context handle, we can return it
+
+
+
+    // if wait_for_orchestrator {
+    //     ctx = ctx.wait_for_orchestrator(orchestrator_client);
+    // }
+    // Ok(ctx)
+    // Ok(hotshot_handle)
+    let builder_ctx = BuilderContext {
+        hotshot_handle,
+        node_index,
+        wait_for_orchestrator: Some(Arc::new(orchestrator_client)),
+    };
+    Ok(builder_ctx)
+}
+
+impl<N: network::Type> BuilderContext<N> {
+   /// Start participating in consensus.
+   pub async fn start_consensus(&self) {
+    if let Some(orchestrator_client) = &self.wait_for_orchestrator {
+        tracing::info!("waiting for orchestrated start");
+        orchestrator_client
+            .wait_for_all_nodes_ready(self.node_index)
+            .await;
     }
-    Ok(ctx)
+    self.hotshot_handle.hotshot.start_consensus().await;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
