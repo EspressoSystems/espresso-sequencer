@@ -145,7 +145,7 @@ fn main() {
                     threshold
                 );
                 new LC(genesis, blocksPerEpoch);
-        
+
                 vm.stopBroadcast();
             }}
         }}
