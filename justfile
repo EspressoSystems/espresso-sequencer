@@ -76,8 +76,8 @@ sol-test:
     cargo build --bin diff-test --release
     forge test
 
-# Develop contracts to local blockchain for development and testing
+# Deploy contracts to local blockchain for development and testing
 dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk":
     forge build
-    MNEMONICS="{{mnemonics}}" forge script contracts/script/LightClientTest.s.sol \
+    MNEMONICS="{{mnemonics}}" forge script contracts/script/LightClient.s.sol \
     --fork-url {{url}} --broadcast

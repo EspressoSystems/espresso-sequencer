@@ -345,9 +345,9 @@ impl std::error::Error for ProverError {}
 
 #[cfg(test)]
 mod test {
-    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
 
     use super::*;
+    use crate::mock_ledger::{MockLedger, MockSystemParam};
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -356,7 +356,6 @@ mod test {
         providers::Middleware,
         utils::{Anvil, AnvilInstance},
     };
-    use hotshot_contract_adapter::jellyfish::field_to_u256;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
@@ -368,7 +367,6 @@ mod test {
     /// Init a meaningful ledger state that prover can generate future valid proof.
     /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
     ///
-    /// NOTE: please update `contracts/script/LightClientTest.s.sol`'s genesis with the stderr print info
     #[allow(clippy::type_complexity)]
     fn init_ledger_for_test() -> (
         ParsedLightClientState,
@@ -376,22 +374,17 @@ mod test {
         Vec<(StateSignKey, StateVerKey)>,
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) {
-        let mut rng = test_rng();
-        let (qc_keys, state_keys) = key_pairs_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &mut rng);
-        let st = stake_table_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &qc_keys, &state_keys);
-        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
+        // TODO (Philippe) make a parameter when calling LightClient.s.sol
+        let block_per_epoch = 10;
+        let num_init_validators = 5;
 
-        let stake_table_comm = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let genesis = ParsedLightClientState {
-            view_num: 0,
-            block_height: 0,
-            block_comm_root: U256::from(42), // arbitrary value
-            fee_ledger_comm: U256::from(42), // arbitrary value
-            bls_key_comm: field_to_u256(stake_table_comm.0),
-            schnorr_key_comm: field_to_u256(stake_table_comm.1),
-            amount_comm: field_to_u256(stake_table_comm.2),
-            threshold,
-        };
+        let pp = MockSystemParam::init(block_per_epoch);
+        let ledger = MockLedger::init(pp, num_init_validators as usize);
+
+        let genesis = ledger.get_state();
+        let qc_keys = ledger.qc_keys;
+        let state_keys = ledger.state_keys;
+        let st = ledger.st;
 
         eprintln!(
             "Genesis: view_num: {}, block_height: {}, block_comm_root: {}, fee_ledger_comm: {}\
@@ -469,7 +462,7 @@ mod test {
         (pi, proof)
     }
 
-    /// deploy LightClient.sol on local blockchian (via `anvil`) for testing
+    /// deploy LightClient.sol on local blockchain (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
@@ -524,7 +517,6 @@ mod test {
 
     // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
-    #[ignore]
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
@@ -533,12 +525,12 @@ mod test {
         let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
 
         // now test if we can read from the contract
-        assert_eq!(contract.blocks_per_epoch().call().await?, u32::MAX);
+        assert_eq!(contract.blocks_per_epoch().call().await?, 10);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
         // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
         assert_eq!(genesis.view_num, 0);
         assert_eq!(genesis.block_height, 0);
-        assert_eq!(genesis.threshold, U256::from(36));
+        assert_eq!(genesis.threshold, U256::from(40));
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -549,7 +541,6 @@ mod test {
 
     // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
-    #[ignore]
     async fn test_submit_state_and_proof() -> Result<()> {
         setup_logging();
         setup_backtrace();
@@ -568,15 +559,13 @@ mod test {
 
         let mut new_state = genesis.clone();
         new_state.view_num = 5;
-        new_state.block_height = 4;
-        new_state.block_comm_root = U256::from(123);
-        new_state.fee_ledger_comm = U256::from(456);
+        new_state.block_height = 1;
 
         let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
         tracing::info!("Successfully generated proof for new state.");
 
         super::submit_state_and_proof(proof, pi, &config).await?;
-        tracing::info!("Successfully submited new finalized state to L1.");
+        tracing::info!("Successfully submitted new finalized state to L1.");
         // test if new state is updated in l1
         let finalized_l1: ParsedLightClientState = contract.get_finalized_state().await?.into();
         assert_eq!(finalized_l1, new_state);
