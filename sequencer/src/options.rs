@@ -112,7 +112,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
-        default_value = "2"
+        default_value = "8"
     )]
     pub eth_account_index: u32,
 

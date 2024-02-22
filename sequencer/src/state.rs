@@ -164,10 +164,16 @@ fn validate_builder(
             fee_merkle_tree.update(fee_info.account, updated).unwrap();
         }
         LookupResult::NotFound(_) => {
-            anyhow::bail!("Account Not Found");
+            anyhow::bail!(format!(
+                "Account Not Found {:?}",
+                fee_info.account.address()
+            ));
         }
         LookupResult::NotInMemory => {
-            anyhow::bail!("Invalid Builder Account");
+            anyhow::bail!(format!(
+                "Invalid Builder Account {:?}",
+                fee_info.account.address()
+            ));
         }
     };
     Ok(())
