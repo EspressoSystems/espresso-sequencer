@@ -10,7 +10,8 @@ use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
+    types::{Address, U256},
 };
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -235,6 +236,7 @@ async fn init_hotshot<N: network::Type>(
     .0
 }
 
+#[derive(Clone, Debug)]
 pub struct NetworkParams {
     pub da_server_url: Url,
     pub consensus_server_url: Url,
@@ -244,11 +246,18 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
 }
 
+#[derive(Clone, Debug)]
+pub struct BuilderParams {
+    pub mnemonic: String,
+    pub eth_account_index: u32,
+    pub prefunded_accounts: Vec<Address>,
+}
+
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence: &mut impl SequencerPersistence,
-    builder_mnemonic: String,
+    builder_params: BuilderParams,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -335,13 +344,20 @@ pub async fn init_node(
     let _ = NetworkingMetricsValue::new(metrics);
 
     let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_mnemonic)
-        .build()
-        .unwrap();
+        .phrase::<&str>(&builder_params.mnemonic)
+        .index(builder_params.eth_account_index)?
+        .build()?;
+    tracing::info!("Builder account address {:?}", wallet.address());
+
+    let mut genesis_state = ValidatedState::default();
+    for address in builder_params.prefunded_accounts {
+        tracing::warn!("Prefunding account {:?} for demo", address);
+        genesis_state.prefund_account(address.into(), U256::max_value().into());
+    }
 
     let instance_state = NodeState {
         builder_address: wallet,
-        genesis_state: ValidatedState::default(),
+        genesis_state,
     };
     let hotshot = init_hotshot(
         pub_keys.clone(),

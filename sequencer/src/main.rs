@@ -7,7 +7,7 @@ use sequencer::{
     context::SequencerContext,
     init_node, init_static, network,
     options::{Modules, Options},
-    persistence, NetworkParams,
+    persistence, BuilderParams, NetworkParams,
 };
 
 #[async_std::main]
@@ -51,7 +51,11 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
-    let builder_mnemonic = opt.eth_mnemonic;
+    let builder_params = BuilderParams {
+        mnemonic: opt.eth_mnemonic,
+        prefunded_accounts: opt.prefunded_builder_accounts,
+        eth_account_index: opt.eth_account_index,
+    };
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
@@ -81,7 +85,7 @@ where
             let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
                     async move {
-                        init_node(network_params, &*metrics, &mut storage, builder_mnemonic)
+                        init_node(network_params, &*metrics, &mut storage, builder_params)
                             .await
                             .unwrap()
                     }
@@ -95,7 +99,7 @@ where
                 network_params,
                 &NoMetrics,
                 &mut storage_opt.create().await?,
-                builder_mnemonic,
+                builder_params,
             )
             .await?
         }
