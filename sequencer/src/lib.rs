@@ -10,8 +10,8 @@ use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
-    types::U256,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+    types::{Address, U256},
 };
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -250,7 +250,7 @@ pub struct NetworkParams {
 pub struct BuilderParams {
     pub mnemonic: String,
     pub eth_account_index: u32,
-    pub prefund_account: bool,
+    pub prefunded_accounts: Vec<Address>,
 }
 
 pub async fn init_node(
@@ -349,9 +349,9 @@ pub async fn init_node(
         .build()?;
 
     let mut genesis_state = ValidatedState::default();
-    if builder_params.prefund_account {
-        tracing::warn!("Prefunding account {:?} for demo", wallet.address());
-        genesis_state.prefund_account(wallet.address().into(), U256::max_value().into());
+    for address in builder_params.prefunded_accounts {
+        tracing::warn!("Prefunding account {:?} for demo", address);
+        genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
     let instance_state = NodeState {

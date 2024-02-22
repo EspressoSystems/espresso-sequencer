@@ -53,7 +53,7 @@ where
 {
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
-        prefund_account: opt.prefund_builder_account,
+        prefunded_accounts: opt.prefunded_builder_accounts,
         eth_account_index: opt.eth_account_index,
     };
     let network_params = NetworkParams {

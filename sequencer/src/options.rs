@@ -1,8 +1,8 @@
 use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
+use ethers::types::Address;
 use hotshot_types::signature_key::BLSPrivKey;
-use sequencer_utils::parse_bool;
 use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
@@ -116,14 +116,15 @@ pub struct Options {
     )]
     pub eth_account_index: u32,
 
-    /// Prefund the builder account. Use for demo purposes only.
+    /// Prefunded the builder accounts. Use for demo purposes only.
+    ///
+    /// Comma-separated list of Ethereum addresses.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_PREFUND_BUILDER_ACCOUNT",
-        default_value = "no",
-        value_parser = parse_bool,
+        env = "ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS",
+        value_delimiter = ','
     )]
-    pub prefund_builder_account: bool,
+    pub prefunded_builder_accounts: Vec<Address>,
 }
 
 impl Options {
