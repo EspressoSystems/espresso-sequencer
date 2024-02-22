@@ -280,6 +280,14 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             .await
     }
 
+    async fn da_broadcast_message(
+        &self,
+        message: Message<TYPES>,
+        recipients: BTreeSet<TYPES::SignatureKey>,
+    ) -> Result<(), NetworkError> {
+        self.broadcast_message(message, recipients).await
+    }
+
     async fn direct_message(
         &self,
         message: Message<TYPES>,

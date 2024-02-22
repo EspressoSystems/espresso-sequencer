@@ -825,6 +825,16 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         }
     }
 
+    /// broadcast a message only to a DA committee
+    /// blocking
+    async fn da_broadcast_message(
+        &self,
+        message: Message<TYPES>,
+        recipients: BTreeSet<TYPES::SignatureKey>,
+    ) -> Result<(), NetworkError> {
+        self.broadcast_message(message, recipients).await
+    }
+
     /// Sends a direct message to a specific node
     /// blocking
     async fn direct_message(
@@ -881,6 +891,12 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         .iter()
                         .map(|x| x.get_message().unwrap())
                         .collect())
+                }
+                TransmitType::DACommitteeBroadcast => {
+                    error!("Received DACommitteeBroadcast, it should have not happened.");
+                    Err(NetworkError::WebServer {
+                        source: WebServerNetworkError::ClientDisconnected,
+                    })
                 }
             }
         };
