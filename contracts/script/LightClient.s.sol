@@ -10,6 +10,7 @@ contract DeployLightClientContractScript is Script {
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
+
     function run()
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
