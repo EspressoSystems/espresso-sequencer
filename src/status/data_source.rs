@@ -15,7 +15,9 @@ use crate::{
     metrics::{MetricsError, PrometheusMetrics},
     QueryError, QueryResult,
 };
+
 use async_trait::async_trait;
+use chrono::Utc;
 use hotshot_types::traits::metrics::Metrics;
 
 #[async_trait]
@@ -28,6 +30,22 @@ pub trait StatusDataSource {
         self.metrics()
             .get_subgroup(["consensus"])
             .map_err(metrics_err)
+    }
+
+    async fn elapsed_time_since_last_decide(&self) -> QueryResult<u64> {
+        let current_ts = Utc::now().timestamp() as u64;
+
+        let last_decided_time = self
+            .consensus_metrics()?
+            .get_gauge("last_decided_time")
+            .map_err(metrics_err)?
+            .get() as u64;
+
+        current_ts
+            .checked_sub(last_decided_time)
+            .ok_or_else(|| QueryError::Error {
+                message: "last_decided_time is in future".into(),
+            })
     }
 
     async fn mempool_info(&self) -> QueryResult<MempoolQueryData> {

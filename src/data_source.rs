@@ -989,6 +989,15 @@ pub mod status_tests {
             // With consensus paused, check that the success rate returns NAN (since the block
             // height, the numerator, is 0, and the view number, the denominator, is 0).
             assert!(ds.success_rate().await.unwrap().is_nan());
+            // Since there is no block produced, "last_decided_time" metric is 0.
+            // Therefore, the elapsed time since the last block should be close to the time elapsed since the Unix epoch.
+            assert!(
+                (ds.elapsed_time_since_last_decide().await.unwrap() as i64
+                    - chrono::Utc::now().timestamp())
+                .abs()
+                    <= 1,
+                "time elapsed since last_decided_time is not within 1s"
+            );
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.
@@ -1077,6 +1086,22 @@ pub mod status_tests {
                     transaction_count: 0,
                     memory_footprint: 0,
                 }
+            );
+        }
+
+        {
+            // Shutting down the consensus to halt block production
+            // Introducing a delay of 3 seconds to ensure that elapsed time since last block is atleast 3seconds
+            network.shut_down().await;
+            sleep(Duration::from_secs(3)).await;
+            // Asserting that the elapsed time since the last block is at least 3 seconds
+            assert!(
+                ds.read()
+                    .await
+                    .elapsed_time_since_last_decide()
+                    .await
+                    .unwrap()
+                    >= 3
             );
         }
     }
