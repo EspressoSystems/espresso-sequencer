@@ -156,21 +156,25 @@ async fn main() -> anyhow::Result<()> {
         let mut app: App<GlobalState<SeqTypes>, hs_builder_api::builder::Error> =
             App::with_state(global_state);
 
-        app.register_module("/", builder_api)
+        app.register_module("builder", builder_api)
             .expect("Failed to register the builder API");
 
-        async_spawn(app.serve(api_url));
-
-        run_standalone_builder_service(
-            builder_context.hotshot_handle,
-            tx_sender,
-            decide_sender,
-            da_sender,
-            qc_sender,
-        );
-
+        async_spawn(async move {
+            app.serve(api_url).await;
+        });
+        async_spawn(async move {
+            run_standalone_builder_service(
+                builder_context.hotshot_handle,
+                tx_sender,
+                decide_sender,
+                da_sender,
+                qc_sender,
+            )
+            .await;
+        });
         builder_state.event_loop();
-    });
+    })
+    .await;
 
     Ok(())
 }
