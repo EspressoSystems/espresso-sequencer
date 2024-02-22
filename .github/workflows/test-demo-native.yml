@@ -51,4 +51,3 @@ jobs:
           export PATH="$PWD/target/release:$PATH"
           scripts/demo-native --tui=false &
           scripts/smoke-test-demo
-          process-compose down
