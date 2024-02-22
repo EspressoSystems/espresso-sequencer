@@ -2,6 +2,7 @@ use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use hotshot_types::signature_key::BLSPrivKey;
+use sequencer_utils::parse_bool;
 use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
@@ -106,6 +107,23 @@ pub struct Options {
     /// It must be funded with ETH in the Espresso fee ledger
     #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
     pub eth_mnemonic: String,
+
+    /// Index of a funded account derived from eth-mnemonic.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
+        default_value = "2"
+    )]
+    pub eth_account_index: u32,
+
+    /// Prefund the builder account. Use for demo purposes only.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PREFUND_BUILDER_ACCOUNT",
+        default_value = "no",
+        value_parser = parse_bool,
+    )]
+    pub prefund_builder_account: bool,
 }
 
 impl Options {

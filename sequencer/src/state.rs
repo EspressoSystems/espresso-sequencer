@@ -51,6 +51,13 @@ impl Default for ValidatedState {
     }
 }
 
+impl ValidatedState {
+    /// Prefund an account with a given amount. Only for demo purposes.
+    pub fn prefund_account(&mut self, account: FeeAccount, amount: FeeAmount) {
+        self.fee_merkle_tree.update(account, amount).unwrap();
+    }
+}
+
 pub fn validate_proposal(
     state: &mut ValidatedState,
     parent: &Header,

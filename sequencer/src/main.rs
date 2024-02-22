@@ -3,11 +3,7 @@ use clap::Parser;
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{self, data_source::DataSourceOptions, SequencerNode},
-    context::SequencerContext,
-    init_node, init_static, network,
-    options::{Modules, Options},
-    persistence, NetworkParams,
+    api::{self, data_source::DataSourceOptions, SequencerNode}, context::SequencerContext, init_node, init_static, network, options::{Modules, Options}, persistence, BuilderParams, NetworkParams
 };
 
 #[async_std::main]
@@ -51,7 +47,11 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
-    let builder_mnemonic = opt.eth_mnemonic;
+    let builder_params = BuilderParams {
+        mnemonic: opt.eth_mnemonic,
+        prefund_account: opt.prefund_builder_account,
+        eth_account_index: opt.eth_account_index,
+    };
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
@@ -81,7 +81,7 @@ where
             let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
                     async move {
-                        init_node(network_params, &*metrics, &mut storage, builder_mnemonic)
+                        init_node(network_params, &*metrics, &mut storage, builder_params)
                             .await
                             .unwrap()
                     }
@@ -95,7 +95,7 @@ where
                 network_params,
                 &NoMetrics,
                 &mut storage_opt.create().await?,
-                builder_mnemonic,
+                builder_params,
             )
             .await?
         }

@@ -5,7 +5,7 @@ demo *args:
     docker compose up {{args}}
 
 demo-native:
-    cargo build --release
+    cargo build --release --features testing
     scripts/demo-native
 
 down *args:
