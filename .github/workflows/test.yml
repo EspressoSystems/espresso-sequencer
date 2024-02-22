@@ -17,6 +17,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUST_LOG: info,libp2p=off,node=error
+
 jobs:
   build:
     runs-on: ubuntu-latest
