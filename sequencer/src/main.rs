@@ -3,7 +3,11 @@ use clap::Parser;
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{self, data_source::DataSourceOptions, SequencerNode}, context::SequencerContext, init_node, init_static, network, options::{Modules, Options}, persistence, BuilderParams, NetworkParams
+    api::{self, data_source::DataSourceOptions, SequencerNode},
+    context::SequencerContext,
+    init_node, init_static, network,
+    options::{Modules, Options},
+    persistence, BuilderParams, NetworkParams,
 };
 
 #[async_std::main]

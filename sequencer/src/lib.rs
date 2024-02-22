@@ -10,7 +10,8 @@ use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet}, types::U256,
+    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
+    types::U256,
 };
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;

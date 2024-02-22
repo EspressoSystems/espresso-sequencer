@@ -432,7 +432,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 
 pub fn parse_bool(s: &str) -> Result<bool, String> {
     Ok(match s {
-        "y" | "yes" | "t"|  "true" | "on" | "1"  => true,
+        "y" | "yes" | "t" | "true" | "on" | "1" => true,
         "n" | "no" | "f" | "false" | "off" | "0" => false,
         _ => return Err(format!("invalid boolean: {s}")),
     })
