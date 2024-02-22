@@ -144,9 +144,8 @@ fn main() {
                     stakeTableAmountComm,
                     threshold
                 );
-                new LC();
-                new LC.initialize(genesis, blocksPerEpoch);
-        
+                new LC(genesis, blocksPerEpoch);
+
                 vm.stopBroadcast();
             }}
         }}
