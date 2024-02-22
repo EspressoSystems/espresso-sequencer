@@ -121,6 +121,10 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         std::cmp::min(left, right)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     // returns (ns_id, ns_offset)
     // ns_offset is not checked, could be anything
     pub fn get_table_entry(&self, ns_index: usize) -> (VmId, usize) {

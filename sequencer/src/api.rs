@@ -237,7 +237,7 @@ mod test_helpers {
         assert_eq!(txn.commit(), hash);
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, &txn).await.unwrap()
+        wait_for_decide_on_handle(&mut events, &txn).await;
     }
 
     /// Test the state signature API.
@@ -459,9 +459,7 @@ mod api_tests {
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
         let network = TestNetwork::new(
-            D::options(&storage, options::Http { port }.into())
-                .status(Default::default())
-                .submit(Default::default()),
+            D::options(&storage, options::Http { port }.into()).submit(Default::default()),
         )
         .await;
         let mut events = network.server.get_event_stream();
@@ -481,17 +479,11 @@ mod api_tests {
         assert_eq!(txn.commit(), hash);
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, &txn).await.unwrap();
+        let block_height = wait_for_decide_on_handle(&mut events, &txn).await;
+        tracing::info!(block_height, "transaction sequenced");
         let mut found_txn = false;
         let mut found_empty_block = false;
-
-        let block_height = client
-            .get::<usize>("status/block-height")
-            .send()
-            .await
-            .unwrap();
-
-        for block_num in 0..block_height {
+        for block_num in 0..=block_height {
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()

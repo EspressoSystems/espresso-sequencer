@@ -5,6 +5,7 @@ environment:
   - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL=http://localhost:$ESPRESSO_CONSENSUS_SERVER_PORT
   - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL=http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
   - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+  - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
   - ESPRESSO_SEQUENCER_L1_WS_PROVIDER=ws://localhost:$ESPRESSO_SEQUENCER_L1_WS_PORT
   - ESPRESSO_DEMO_L1_HTTP_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -79,6 +80,23 @@ processes:
         port: $ESPRESSO_STATE_RELAY_SERVER_PORT
         path: /healthcheck
 
+  prover-service:
+    command: ./scripts/launch-prover-service
+    environment:
+      - ESPRESSO_STATE_RELAY_SERVER_URL
+      - ESPRESSO_ORCHESTRATOR_NUM_NODES
+      - ESPRESSO_ORCHESTRATOR_KEYGEN_SEED
+      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
+      - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
+    depends_on:
+      state-relay-server:
+        condition: process_healthy
+      demo-l1-network:
+        condition: process_healthy
+
   sequencer0:
     command: sequencer -- http -- query -- status -- submit
     environment:
@@ -86,6 +104,9 @@ processes:
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -108,6 +129,9 @@ processes:
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -129,6 +153,9 @@ processes:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -150,6 +177,9 @@ processes:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -171,6 +201,9 @@ processes:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -198,5 +231,21 @@ processes:
         scheme: http
         host: localhost
         port: $ESPRESSO_COMMITMENT_TASK_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  submit-transactions:
+    command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
         path: /healthcheck
       failure_threshold: 100

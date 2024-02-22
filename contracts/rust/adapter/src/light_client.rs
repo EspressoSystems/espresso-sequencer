@@ -45,6 +45,21 @@ impl From<PublicInput> for ParsedLightClientState {
     }
 }
 
+impl From<contract_bindings::light_client::LightClientState> for ParsedLightClientState {
+    fn from(state: contract_bindings::light_client::LightClientState) -> Self {
+        Self {
+            view_num: state.view_num,
+            block_height: state.block_height,
+            block_comm_root: state.block_comm_root,
+            fee_ledger_comm: state.fee_ledger_comm,
+            bls_key_comm: state.stake_table_bls_key_comm,
+            schnorr_key_comm: state.stake_table_schnorr_key_comm,
+            amount_comm: state.stake_table_amount_comm,
+            threshold: state.threshold,
+        }
+    }
+}
+
 impl From<ParsedLightClientState> for PublicInput {
     fn from(s: ParsedLightClientState) -> Self {
         let fields = vec![

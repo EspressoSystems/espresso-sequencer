@@ -18,7 +18,7 @@ use ethers::prelude::U256;
 use futures::FutureExt;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
-    Error,
+    node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
@@ -156,6 +156,15 @@ where
         .boxed()
     })?;
 
+    Ok(api)
+}
+
+pub(super) fn node<N, D>() -> anyhow::Result<Api<AvailState<N, D>, node::Error>>
+where
+    N: network::Type,
+    D: SequencerDataSource + Send + Sync + 'static,
+{
+    let api = node::define_api::<AvailState<N, D>, SeqTypes>(&Default::default())?;
     Ok(api)
 }
 

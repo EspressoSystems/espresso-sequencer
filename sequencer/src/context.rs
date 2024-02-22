@@ -56,8 +56,10 @@ pub struct SequencerContext<N: network::Type> {
 }
 
 impl<N: network::Type> SequencerContext<N> {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
+        instance_state: NodeState,
         state_ver_keys: &[StateVerKey],
         persistence: impl SequencerPersistence,
         networks: Networks<SeqTypes, Node<N>>,
@@ -66,7 +68,7 @@ impl<N: network::Type> SequencerContext<N> {
         node_id: u64,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
-        let initializer = persistence.load_consensus_state(NodeState {}).await?;
+        let initializer = persistence.load_consensus_state(instance_state).await?;
 
         let pub_keys = config
             .known_nodes_with_stake

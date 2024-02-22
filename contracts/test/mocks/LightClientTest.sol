@@ -9,9 +9,9 @@ import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientTest is LC {
-    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch)
-        LC(genesis, numBlockPerEpoch)
-    { }
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
+        _initializeState(genesis, numBlockPerEpoch);
+    }
 
     /// @dev Directly mutate `currentEpoch` variable for test
     function setCurrentEpoch(uint64 newEpoch) public {
@@ -20,7 +20,7 @@ contract LightClientTest is LC {
 
     /// @dev Directly mutate `finalizedState` variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
-        finalizedState = state;
+        states[FINALIZED_STATE] = state;
     }
 
     /// @dev override the production-implementation with test VK.

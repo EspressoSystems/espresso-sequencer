@@ -77,14 +77,6 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Deposit(user, msg.value);
     }
 
-    /// @notice Allows anyone to get the balance an ETH balance for any user
-    function getBalance(address user) public view returns (uint256 amount) {
-        if (user == address(0)) {
-            revert InvalidUserAddress();
-        }
-        return balances[user];
-    }
-
     /// @notice only the owner can authorize an upgrade
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
         emit Upgrade(newImplementation);

@@ -1,6 +1,7 @@
 use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
+use ethers::types::Address;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
 use std::collections::HashSet;
@@ -100,6 +101,31 @@ pub struct Options {
     /// Multiple modules can be specified, provided they are separated by --
     #[clap(raw = true)]
     modules: Vec<String>,
+
+    /// Mnemonic phrase for builder account.
+    ///
+    /// This is the address fees will be charged to.
+    /// It must be funded with ETH in the Espresso fee ledger
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
+    pub eth_mnemonic: String,
+
+    /// Index of a funded account derived from eth-mnemonic.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
+        default_value = "8"
+    )]
+    pub eth_account_index: u32,
+
+    /// Prefunded the builder accounts. Use for demo purposes only.
+    ///
+    /// Comma-separated list of Ethereum addresses.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS",
+        value_delimiter = ','
+    )]
+    pub prefunded_builder_accounts: Vec<Address>,
 }
 
 impl Options {

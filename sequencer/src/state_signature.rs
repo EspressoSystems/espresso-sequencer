@@ -193,7 +193,7 @@ impl StateSignatureMemStorage {
 pub type StakeTableCommitmentType = (CircuitField, CircuitField, CircuitField);
 
 /// Helper function for stake table commitment
-pub(crate) fn static_stake_table_commitment(
+pub fn static_stake_table_commitment(
     known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
     state_ver_keys: &[StateVerKey],
     capacity: usize,

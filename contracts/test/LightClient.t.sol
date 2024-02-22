@@ -15,11 +15,15 @@ import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
-    LCTest lc;
+    LCTest public lc;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
+
+    function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
+        lc = new LCTest(_genesis, _blocksPerEpoch);
+    }
 
     /// @dev initialized ledger like genesis and system params
     function init() public {
@@ -34,7 +38,7 @@ contract LightClientCommonTest is Test {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         genesis = state;
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
         assertEq(frozenSTComm, expectedStakeTableComm);
@@ -43,56 +47,6 @@ contract LightClientCommonTest is Test {
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public {
         assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
     }
-
-    /// @dev helper getter since solidity doesn't return struct but tuples only
-    function getGenesisState() public view returns (LC.LightClientState memory) {
-        (
-            uint64 viewNum,
-            uint64 blockHeight,
-            BN254.ScalarField blockCommRoot,
-            BN254.ScalarField feeLedgerComm,
-            BN254.ScalarField stakeTableBlsKeyComm,
-            BN254.ScalarField stakeTableSchnorrKeyComm,
-            BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold
-        ) = lc.genesisState();
-
-        return LC.LightClientState(
-            viewNum,
-            blockHeight,
-            blockCommRoot,
-            feeLedgerComm,
-            stakeTableBlsKeyComm,
-            stakeTableSchnorrKeyComm,
-            stakeTableAmountComm,
-            threshold
-        );
-    }
-
-    /// @dev helper getter since solidity doesn't return struct but tuples only
-    function getFinalizedState() public view returns (LC.LightClientState memory) {
-        (
-            uint64 viewNum,
-            uint64 blockHeight,
-            BN254.ScalarField blockCommRoot,
-            BN254.ScalarField feeLedgerComm,
-            BN254.ScalarField stakeTableBlsKeyComm,
-            BN254.ScalarField stakeTableSchnorrKeyComm,
-            BN254.ScalarField stakeTableAmountComm,
-            uint256 threshold
-        ) = lc.finalizedState();
-
-        return LC.LightClientState(
-            viewNum,
-            blockHeight,
-            blockCommRoot,
-            feeLedgerComm,
-            stakeTableBlsKeyComm,
-            stakeTableSchnorrKeyComm,
-            stakeTableAmountComm,
-            threshold
-        );
-    }
 }
 
 contract LightClient_constructor_Test is LightClientCommonTest {
@@ -100,12 +54,12 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         init();
     }
 
-    /// @dev Test the constructor has initialized the contract state properly, espeically genesis
+    /// @dev Test the constructor has initialized the contract state properly, especially genesis
     /// block.
     function test_CorrectInitialization() external {
-        assert(lc.BLOCKS_PER_EPOCH() == BLOCKS_PER_EPOCH_TEST);
-        assertEq(abi.encode(getGenesisState()), abi.encode(genesis));
-        assertEq(abi.encode(getFinalizedState()), abi.encode(genesis));
+        assert(lc.blocksPerEpoch() == BLOCKS_PER_EPOCH_TEST);
+        assertEq(abi.encode(lc.getGenesisState()), abi.encode(genesis));
+        assertEq(abi.encode(lc.getFinalizedState()), abi.encode(genesis));
         assert(lc.currentEpoch() == 0);
 
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
@@ -115,44 +69,46 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         assertEq(lc.frozenThreshold(), genesis.threshold);
     }
 
+    // @dev helper function to be able to initialize the contract and capture the revert error
+    function initWithExpectRevert(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch)
+        private
+    {
+        vm.expectRevert(LC.InvalidArgs.selector);
+        lc = new LCTest(_genesis, _blocksPerEpoch);
+    }
+
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
         badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
         badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
 
         // zero-valued threshold would revert
         badGenesis.threshold = 0;
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
         badGenesis.threshold = genesis.threshold; // revert to correct
 
         // zero-valued BLOCK_PER_EPOCH would revert
-        vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(genesis, 0);
+        initWithExpectRevert(genesis, 0);
     }
 }
 
@@ -186,7 +142,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
 
         // Generating a few consecutive states and proofs
         cmds = new string[](6);
@@ -210,7 +166,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
 
             // check if LightClient.sol states are updated correctly
-            assertEq(abi.encode(getFinalizedState()), abi.encode(states[i]));
+            assertEq(abi.encode(lc.getFinalizedState()), abi.encode(states[i]));
             // check against hardcoded epoch advancement expectation
             if (i == BLOCKS_PER_EPOCH_TEST) {
                 // first block of a new epoch (from epoch 2) should update the following
@@ -243,7 +199,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
-        lc = new LCTest(genesis, numBlockPerEpoch);
+        initLC(genesis, numBlockPerEpoch);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -434,5 +390,20 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (V.PlonkProof memory dummyProof) = abi.decode(result, (V.PlonkProof));
         vm.expectRevert(LC.InvalidProof.selector);
         lc.newFinalizedState(newState, dummyProof);
+    }
+
+    /// @dev Test that update on finalized state will fail if a different stake table is used
+    function test_revertWhenWrongStakeTableUsed() external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-wrong-stake-table";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
+            abi.decode(result, (LC.LightClientState, V.PlonkProof));
+
+        vm.expectRevert(LC.InvalidProof.selector);
+        lc.newFinalizedState(newState, proof);
     }
 }
