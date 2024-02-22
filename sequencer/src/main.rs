@@ -5,17 +5,15 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
-    init_node, init_static, network,
+    init_node, network,
     options::{Modules, Options},
-    persistence, BuilderParams, NetworkParams,
+    persistence, BuilderParams, L1Params, NetworkParams,
 };
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
-
-    init_static();
 
     tracing::info!("sequencer starting up");
     let opt = Options::parse();
@@ -45,6 +43,10 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
+    let l1_params = L1Params {
+        url: opt.l1_provider_url,
+    };
+
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
@@ -93,6 +95,7 @@ where
                 &NoMetrics,
                 storage_opt.create().await?,
                 builder_params,
+                l1_params,
             )
             .await
         }

@@ -143,7 +143,6 @@ mod reference {
         tracing::info!("commitment bytes: {:?}", bytes);
         tracing::info!("commitment U256: {}", u256);
 
-        println!("{}", &actual);
         assert_eq!(actual, expected.parse().unwrap());
     }
 
