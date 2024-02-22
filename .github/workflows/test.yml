@@ -1,4 +1,4 @@
-name: Test Demo Native
+name: Test
 
 on:
   push:
@@ -22,18 +22,20 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  demo-native:
+  test:
     runs-on: ubuntu-latest
     steps:
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v25
-
-      - name: Install process-compose
+      - name: Install just command runner
         run: |
-          nix profile install nixpkgs#process-compose
+          sudo snap install --edge --classic just
+          just --version
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -43,11 +45,10 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
-      - name: Build
-        run: cargo build --release
-
-      - name: Test Demo
+      - name: Test
+        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export PATH="$PWD/target/release:$PATH"
-          scripts/demo-native --tui=false &
-          scripts/smoke-test-demo
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          cargo test --release --workspace --all-features --no-run
+          cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
+        timeout-minutes: 30
