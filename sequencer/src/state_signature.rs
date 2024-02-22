@@ -64,8 +64,8 @@ impl StateSigner {
         self
     }
 
-    pub(super) async fn handle_event(&self, event: Event<SeqTypes>) {
-        let EventType::Decide { leaf_chain, .. } = event.event else {
+    pub(super) async fn handle_event(&self, event: &Event<SeqTypes>) {
+        let EventType::Decide { leaf_chain, .. } = &event.event else {
             return;
         };
         let Some((leaf, _)) = leaf_chain.first() else {

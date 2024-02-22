@@ -2,9 +2,8 @@
 #![cfg(any(test, feature = "testing"))]
 
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, NodeState, SeqTypes, ViewNumber};
+use crate::{Leaf, ViewNumber};
 use async_trait::async_trait;
-use hotshot::HotShotInitializer;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;
@@ -34,7 +33,7 @@ impl SequencerPersistence for NoStorage {
     async fn save_config(&mut self, _: &NetworkConfig) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn save_highest_view(&mut self, _: ViewNumber) -> anyhow::Result<()> {
+    async fn save_voted_view(&mut self, _: ViewNumber) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -42,10 +41,11 @@ impl SequencerPersistence for NoStorage {
         Ok(())
     }
 
-    async fn load_consensus_state(
-        &self,
-        genesis: NodeState,
-    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
-        Ok(HotShotInitializer::from_genesis(&genesis)?)
+    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+        Ok(None)
+    }
+
+    async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
+        Ok(None)
     }
 }

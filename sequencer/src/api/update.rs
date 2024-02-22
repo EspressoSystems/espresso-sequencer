@@ -19,16 +19,18 @@ pub(super) async fn update_loop<N, D>(
 {
     tracing::debug!("waiting for event");
     while let Some(event) = events.next().await {
-        tracing::debug!("got event {:?}", event);
+        let mut state = state.write().await;
 
-        // If update results in an error, program state is unrecoverable
-        if let Err(err) = update_state(&mut *state.write().await, &event).await {
+        // If update results in an error, revert to undo partial state changes. We will continue
+        // streaming events, as we can update our state based on future events and then filling in
+        // the missing part of the state later, by fetching from a peer.
+        if let Err(err) = update_state(&mut *state, &event).await {
             tracing::error!(
-                "failed to update event {:?}: {}; updater task will exit",
-                event,
-                err
+                ?event,
+                %err,
+                "failed to update API state",
             );
-            panic!();
+            state.revert().await;
         }
     }
     tracing::warn!("end of HotShot event stream, updater task will exit");

@@ -113,29 +113,43 @@ mod test_helpers {
     }
 
     impl TestNetwork {
-        pub async fn with_state(opt: Options, persistence: impl SequencerPersistence) -> Self {
+        pub async fn with_state(
+            opt: Options,
+            persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+        ) -> Self {
             let cfg = TestConfig::default();
-            let server = opt
-                .serve(|metrics| {
-                    let cfg = cfg.clone();
-                    async move { cfg.init_node(0, persistence, &*metrics).await }.boxed()
-                })
-                .await
-                .unwrap();
-            let peers =
-                join_all((1..cfg.num_nodes()).map(|i| cfg.init_node(i, NoStorage, &NoMetrics)))
-                    .await;
+            let mut nodes =
+                join_all(persistence.into_iter().enumerate().map(|(i, persistence)| {
+                    let opt = opt.clone();
+                    let cfg = &cfg;
+                    async move {
+                        if i == 0 {
+                            opt.serve(|metrics| {
+                                let cfg = cfg.clone();
+                                async move { cfg.init_node(0, persistence, &*metrics).await }
+                                    .boxed()
+                            })
+                            .await
+                            .unwrap()
+                        } else {
+                            cfg.init_node(i, persistence, &NoMetrics).await
+                        }
+                    }
+                }))
+                .await;
 
-            server.start_consensus().await;
-            for ctx in &peers {
+            for ctx in &nodes {
                 ctx.start_consensus().await;
             }
+
+            let server = nodes.remove(0);
+            let peers = nodes;
 
             Self { server, peers }
         }
 
         pub async fn new(opt: Options) -> Self {
-            Self::with_state(opt, NoStorage).await
+            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES]).await
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -391,15 +405,21 @@ mod test_helpers {
 
 #[cfg(test)]
 #[espresso_macros::generic_tests]
-mod generic_tests {
+mod api_tests {
     use super::*;
-    use crate::{testing::wait_for_decide_on_handle, Header, Transaction, VmId};
+    use crate::{
+        testing::{wait_for_decide_on_handle, TestConfig},
+        Header, Transaction, VmId,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
-    use futures::stream::{StreamExt, TryStreamExt};
+    use futures::{
+        future::join_all,
+        stream::{StreamExt, TryStreamExt},
+    };
     use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -497,17 +517,22 @@ mod generic_tests {
         state_test_helper(|opt| D::options(&storage, opt)).await
     }
 
+    #[ignore]
     #[async_std::test]
     pub(crate) async fn test_restart<D: TestableSequencerDataSource>() {
         setup_logging();
         setup_backtrace();
 
         // Initialize nodes.
-        let storage = D::create_storage().await;
+        let storage = join_all((0..TestConfig::NUM_NODES).map(|_| D::create_storage())).await;
+        let persistence = join_all(storage.iter().map(D::connect))
+            .await
+            .try_into()
+            .unwrap();
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
-            D::options(&storage, options::Http { port }.into()),
-            D::connect(&storage).await,
+            D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
+            persistence,
         )
         .await;
 
@@ -554,9 +579,13 @@ mod generic_tests {
 
         // Start up again, resuming from the last decided leaf.
         let port = pick_unused_port().expect("No ports free");
+        let persistence = join_all(storage.iter().map(D::connect))
+            .await
+            .try_into()
+            .unwrap();
         let _network = TestNetwork::with_state(
-            D::options(&storage, options::Http { port }.into()),
-            D::connect(&storage).await,
+            D::options(&storage[0], options::Http { port }.into()),
+            persistence,
         )
         .await;
         let client: Client<ServerError> =

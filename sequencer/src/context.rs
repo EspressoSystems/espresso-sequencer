@@ -2,7 +2,6 @@ use async_std::{
     sync::Arc,
     task::{spawn, JoinHandle},
 };
-use commit::Committable;
 use derivative::Derivative;
 use futures::{
     future::{join_all, Future},
@@ -10,7 +9,7 @@ use futures::{
 };
 use hotshot::{
     traits::{election::static_committee::GeneralStaticCommittee, implementations::MemoryStorage},
-    types::{Event, EventType, SystemContextHandle},
+    types::{Event, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::client::OrchestratorClient;
@@ -231,26 +230,12 @@ async fn handle_events(
     state_signer: Arc<StateSigner>,
 ) {
     while let Some(event) = events.next().await {
+        tracing::debug!(?event, "consensus event");
+
         // Store latest consensus state.
-        match &event.event {
-            EventType::Decide { leaf_chain, .. } => {
-                if let Some((leaf, _)) = leaf_chain.first() {
-                    if let Err(err) = persistence.save_anchor_leaf(leaf).await {
-                        tracing::error!(?leaf, hash = %leaf.commit(), %err, "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf.");
-                    }
-                }
-            }
-            EventType::ViewFinished { view_number, .. } => {
-                if let Err(err) = persistence.save_highest_view(*view_number).await {
-                    tracing::error!(?view_number, %err, "Failed to save highest view. When restrating, make sure view number is at least as recent as this.");
-                }
-            }
-            event => {
-                tracing::debug!(?event)
-            }
-        }
+        persistence.handle_event(&event).await;
 
         // Generate state signature.
-        state_signer.handle_event(event).await;
+        state_signer.handle_event(&event).await;
     }
 }

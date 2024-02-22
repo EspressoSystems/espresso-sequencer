@@ -305,7 +305,7 @@ pub mod testing {
 
     impl Default for TestConfig {
         fn default() -> Self {
-            let num_nodes = 5;
+            let num_nodes = Self::NUM_NODES;
 
             // Generate keys for the nodes.
             let priv_keys = (0..num_nodes)
@@ -349,6 +349,8 @@ pub mod testing {
     }
 
     impl TestConfig {
+        pub const NUM_NODES: usize = 4;
+
         pub fn num_nodes(&self) -> usize {
             self.priv_keys.len()
         }

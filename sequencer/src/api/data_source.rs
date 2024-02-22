@@ -106,11 +106,12 @@ pub(crate) mod testing {
     use super::super::Options;
     use super::*;
     use crate::persistence::SequencerPersistence;
+    use std::fmt::Debug;
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
         type Storage;
-        type Persistence: SequencerPersistence;
+        type Persistence: Debug + SequencerPersistence;
 
         async fn create_storage() -> Self::Storage;
         async fn connect(storage: &Self::Storage) -> Self::Persistence;
