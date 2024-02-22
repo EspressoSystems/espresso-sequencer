@@ -21,16 +21,11 @@ use hotshot_types::{
 };
 
 use crate::vote::HandleVoteEvent;
-use snafu::Snafu;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
 
 /// Alias for Optional type for Vote Collectors
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
-
-#[derive(Snafu, Debug)]
-/// Error type for consensus tasks
-pub struct ConsensusTaskError {}
 
 /// Tracks state of a DA task
 pub struct UpgradeTaskState<

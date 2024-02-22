@@ -25,7 +25,6 @@ use hotshot_types::{
     },
 };
 use hotshot_utils::bincode::bincode_opts;
-use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -35,10 +34,6 @@ use tracing::{debug, error, instrument, warn};
 
 /// A type alias for `HashMap<Commitment<T>, T>`
 type CommitmentMap<T> = HashMap<Commitment<T>, T>;
-
-#[derive(Snafu, Debug)]
-/// Error type for consensus tasks
-pub struct ConsensusTaskError {}
 
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<

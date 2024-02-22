@@ -25,14 +25,9 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 
-use snafu::Snafu;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
-
-#[derive(Snafu, Debug)]
-/// Error type for consensus tasks
-pub struct ConsensusTaskError {}
 
 /// Tracks state of a VID task
 pub struct VIDTaskState<

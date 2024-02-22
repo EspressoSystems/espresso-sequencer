@@ -35,7 +35,6 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
-use snafu::Snafu;
 use std::{collections::BTreeMap, collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
@@ -52,10 +51,6 @@ pub enum ViewSyncPhase {
     /// Finalize phase
     Finalize,
 }
-
-#[derive(Snafu, Debug)]
-/// Stub of a view sync error
-pub struct ViewSyncTaskError {}
 
 /// Type alias for a map from View Number to Relay to Vote Task
 type RelayMap<TYPES, VOTE, CERT> =

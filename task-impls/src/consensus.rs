@@ -39,7 +39,6 @@ use tracing::warn;
 
 use crate::vote::HandleVoteEvent;
 use chrono::Utc;
-use snafu::Snafu;
 use std::{
     collections::{BTreeMap, HashSet},
     marker::PhantomData,
@@ -48,10 +47,6 @@ use std::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument};
-
-/// Error returned by the consensus task
-#[derive(Snafu, Debug)]
-pub struct ConsensusTaskError {}
 
 /// Alias for the block payload commitment and the associated metadata.
 pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {

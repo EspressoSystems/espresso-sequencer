@@ -21,12 +21,7 @@ use hotshot_types::{
     traits::{election::Membership, node_implementation::NodeType},
     vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
-use snafu::Snafu;
 use tracing::{debug, error};
-
-#[derive(Snafu, Debug)]
-/// Stub of a vote error
-pub struct VoteTaskError {}
 
 /// Task state for collecting votes of one type and emiting a certificate
 pub struct VoteCollectionTaskState<
