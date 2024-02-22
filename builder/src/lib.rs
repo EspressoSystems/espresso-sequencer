@@ -124,7 +124,9 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
+    // creating the instance state without any builder mnemonic
     let instance_state = &NodeState::default();
+
     let hotshot_handle = init_hotshot(
         pub_keys.clone(),
         known_nodes_with_stake.clone(),

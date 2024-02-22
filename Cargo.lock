@@ -1266,6 +1266,13 @@ name = "builder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "futures",
  "hotshot 0.3.3 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.14)",
  "hotshot-orchestrator 0.1.1 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.14)",
  "hotshot-stake-table",
@@ -1274,6 +1281,7 @@ dependencies = [
  "hs-builder-core",
  "jf-primitives 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?tag=0.4.0)",
  "sequencer",
+ "tide-disco",
  "tracing",
 ]
 

@@ -7,6 +7,12 @@ edition = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+async-broadcast = "0.7.0"
+async-lock = "2.8"
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
 jf-primitives = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot = { workspace = true }
@@ -16,4 +22,6 @@ hs-builder-api = { workspace = true }
 hs-builder-core = { workspace = true }
 sequencer = { path = "../sequencer" }
 tracing = { workspace = true }
+tide-disco = { workspace = true }
+async-trait = { workspace = true }
 # [[bin]]
