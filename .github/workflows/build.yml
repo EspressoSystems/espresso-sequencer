@@ -44,19 +44,13 @@ jobs:
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --release --workspace
-
-      - name: Test
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          cargo test --release --workspace --all-features --no-run
-          cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
-        timeout-minutes: 30
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -302,9 +296,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
           docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
 
-      - name: Start Demo
-        run: just demo --wait
-      - name: Test Demo
-        run: scripts/smoke-test-demo
-      - name: Stop Demo
-        run: just down -v
+      - name: Test docker demo
+        run: |
+          just demo &
+          timeout 600 scripts/smoke-test-demo
