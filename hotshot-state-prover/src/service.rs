@@ -375,10 +375,10 @@ mod test {
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) {
         // TODO (Philippe) make a parameter when calling LightClient.s.sol
-        let block_per_epoch = 10;
+        let blocks_per_epoch = 10;
         let num_init_validators = 5;
 
-        let pp = MockSystemParam::init(block_per_epoch);
+        let pp = MockSystemParam::init(blocks_per_epoch);
         let ledger = MockLedger::init(pp, num_init_validators as usize);
 
         let genesis = ledger.get_state();

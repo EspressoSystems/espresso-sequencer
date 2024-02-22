@@ -20,12 +20,15 @@ contract DeployLightClientContractScript is Script {
 
         // TODO for a production deployment provide the right genesis state and value
 
+        // TODO Philippe parametrize run with these variables
         uint32 numBlocksPerEpoch = 10;
+        uint32 numInitValidators = 5;
+
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
         cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(5));
+        cmds[3] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
