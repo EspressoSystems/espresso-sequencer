@@ -9,19 +9,23 @@ edition = { workspace = true }
 anyhow = { workspace = true }
 async-broadcast = "0.7.0"
 async-lock = "2.8"
+async-trait = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
 clap = { workspace = true }
+commit = { git = "https://github.com/EspressoSystems/commit.git" }
 futures = { workspace = true }
 jf-primitives = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.14" }
 hs-builder-api = { workspace = true }
 hs-builder-core = { workspace = true }
+portpicker = "0.1.1"
 sequencer = { path = "../sequencer" }
 tracing = { workspace = true }
 tide-disco = { workspace = true }
-async-trait = { workspace = true }
+tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 # [[bin]]

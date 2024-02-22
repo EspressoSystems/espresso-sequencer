@@ -30,7 +30,7 @@ use sequencer::{
     network,
     persistence::SequencerPersistence,
     state_signature::static_stake_table_commitment,
-    NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes as BuilderType, Storage,
+    NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes, Storage,
 };
 use std::{alloc::System, any, fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -165,11 +165,11 @@ async fn init_hotshot<N: network::Type>(
     known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
     node_id: usize,
     priv_key: PrivKey,
-    networks: Networks<BuilderType, Node<N>>,
+    networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
     metrics: &dyn Metrics,
     instance_state: &NodeState,
-) -> SystemContextHandle<BuilderType, Node<N>> {
+) -> SystemContextHandle<SeqTypes, Node<N>> {
     let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
     let memberships = Memberships {
         quorum_membership: membership.clone(),
