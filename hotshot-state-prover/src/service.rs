@@ -363,9 +363,8 @@ mod test {
     use std::process::Command;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
-    const BLOCKS_PER_EPOCH: usize = 10;
-    const NUM_INIT_VALIDATORS: usize = STAKE_TABLE_CAPACITY_FOR_TEST / 2;
-
+    const BLOCKS_PER_EPOCH: u32 = 10;
+    const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
@@ -378,12 +377,8 @@ mod test {
         Vec<(StateSignKey, StateVerKey)>,
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) {
-        // TODO (Philippe) make a parameter when calling LightClient.s.sol
-        let blocks_per_epoch = 10;
-        let num_init_validators = 5;
-
-        let pp = MockSystemParam::init(blocks_per_epoch);
-        let ledger = MockLedger::init(pp, num_init_validators as usize);
+        let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+        let ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
 
         let genesis = ledger.get_state();
         let qc_keys = ledger.qc_keys;
@@ -533,7 +528,7 @@ mod test {
         let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
 
         // now test if we can read from the contract
-        assert_eq!(contract.blocks_per_epoch().call().await?, 10);
+        assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
         // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
         assert_eq!(genesis.view_num, 0);
