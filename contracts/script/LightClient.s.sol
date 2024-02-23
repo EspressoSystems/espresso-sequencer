@@ -11,7 +11,7 @@ contract DeployLightClientContractScript is Script {
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function run()
+    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -20,10 +20,6 @@ contract DeployLightClientContractScript is Script {
         vm.startBroadcast(admin);
 
         // TODO for a production deployment provide the right genesis state and value
-
-        // TODO Philippe parametrize run with these variables
-        uint32 numBlocksPerEpoch = 10;
-        uint32 numInitValidators = 5;
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
