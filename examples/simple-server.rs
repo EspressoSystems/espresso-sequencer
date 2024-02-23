@@ -199,7 +199,7 @@ async fn init_consensus(
                     MemoryStorage::empty(),
                     memberships,
                     networks,
-                    HotShotInitializer::from_genesis(&TestInstanceState {}).unwrap(),
+                    HotShotInitializer::from_genesis(TestInstanceState {}).unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                 )
                 .await

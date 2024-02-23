@@ -433,7 +433,7 @@ mod test {
         let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
         // Generate some test VID data.
-        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+        let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common but no share. We use height `FIRST_VID_VIEW` to avoid
