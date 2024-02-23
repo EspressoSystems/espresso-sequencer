@@ -54,10 +54,10 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
-hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
-#hs-builder-api = { path = "../hs-builder-api" }
-#hs-builder-core = { path = "../hs-builder-core" }
-hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "builder_executable_changes" }
+#hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
+hs-builder-api = { path = "../hs-builder-api" }
+hs-builder-core = { path = "../hs-builder-core" }
+#hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "builder_executable_changes" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
