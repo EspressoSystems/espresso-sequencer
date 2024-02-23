@@ -356,8 +356,8 @@ impl NamespaceProof {
                     },
                     ns_proof,
                 )
-                .ok()?
-                .ok()?;
+                .unwrap()
+                .unwrap();
 
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
