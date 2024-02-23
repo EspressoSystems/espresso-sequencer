@@ -48,15 +48,15 @@ hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-quer
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
-] }
+], rev = "d9c1b634a" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "std",
   "test-srs",
-] }
+], rev = "d9c1b634a"}
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "std",
-] }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish" }
+], rev = "d9c1b634a"}
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "d9c1b634a" }
 snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.6" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.6" }
