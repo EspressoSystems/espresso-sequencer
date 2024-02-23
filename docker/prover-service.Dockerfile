@@ -27,7 +27,6 @@ COPY target/$TARGETARCH/release/state-prover /usr/local/bin/state-prover
 COPY target/$TARGETARCH/release/gen-demo-contract /usr/local/bin/gen-demo-contract
 COPY scripts/launch-prover-service /usr/local/bin/launch-prover-service
 RUN chmod +x /usr/local/bin/state-prover
-RUN chmod +x /usr/local/bin/gen-demo-contract
 RUN chmod +x /usr/local/bin/launch-prover-service
 
 # When running as a Docker service, we always want a healthcheck endpoint, so set a default for the
