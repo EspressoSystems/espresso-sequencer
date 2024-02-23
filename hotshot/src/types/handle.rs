@@ -171,9 +171,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.public_key.clone()
     }
 
-    /// Wrapper to get this node's current view
-    #[cfg(feature = "hotshot-testing")]
-    pub async fn get_current_view(&self) -> TYPES::Time {
+    /// Wrapper to get the view number this node is on.
+    pub async fn get_cur_view(&self) -> TYPES::Time {
         self.hotshot.consensus.read().await.cur_view
     }
 }

@@ -119,7 +119,8 @@ async fn test_consensus_task() {
         TestTypes,
         MemoryImpl,
         SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle);
+    >::create_from(&handle)
+    .await;
 
     inject_consensus_polls(&consensus_state).await;
 
@@ -169,7 +170,8 @@ async fn test_consensus_vote() {
         TestTypes,
         MemoryImpl,
         SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle);
+    >::create_from(&handle)
+    .await;
 
     inject_consensus_polls(&consensus_state).await;
 
@@ -289,7 +291,8 @@ async fn test_consensus_with_vid() {
         TestTypes,
         MemoryImpl,
         SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle);
+    >::create_from(&handle)
+    .await;
 
     inject_consensus_polls(&consensus_state).await;
 

@@ -1,13 +1,20 @@
 use std::collections::HashMap;
 
-use hotshot::traits::TestableNodeImplementation;
-
 use crate::test_runner::HotShotTaskCompleted;
-use crate::test_runner::LateStartNode;
-use crate::test_runner::Node;
+use crate::test_runner::{LateStartNode, Node, TestRunner};
+use either::{Left, Right};
+use hotshot::{traits::TestableNodeImplementation, HotShotInitializer};
+use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_task::task::{Task, TaskState, TestTaskState};
-use hotshot_types::traits::network::ConnectedNetwork;
-use hotshot_types::{event::Event, traits::node_implementation::NodeType};
+use hotshot_types::{data::Leaf, ValidatorConfig};
+use hotshot_types::{
+    event::Event,
+    message::Message,
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeImplementation, NodeType},
+    },
+};
 use snafu::Snafu;
 use std::collections::BTreeMap;
 /// convience type for state and block
@@ -29,6 +36,8 @@ pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) changes: BTreeMap<TYPES::Time, Vec<ChangeNode>>,
     /// most recent view seen by spinning task
     pub(crate) latest_view: Option<TYPES::Time>,
+    /// Last decided leaf that can be used as the anchor leaf to initialize the node.
+    pub(crate) last_decided_leaf: Leaf<TYPES>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState for SpinningTask<TYPES, I> {
@@ -48,8 +57,14 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState for Spinni
     }
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
-    for SpinningTask<TYPES, I>
+impl<
+        TYPES: NodeType<InstanceState = TestInstanceState>,
+        I: TestableNodeImplementation<TYPES>,
+        N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    > TestTaskState for SpinningTask<TYPES, I>
+where
+    I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
+    I: NodeImplementation<TYPES, QuorumNetwork = N, CommitteeNetwork = N>,
 {
     type Message = Event<TYPES>;
 
@@ -79,6 +94,34 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                             let node_id = idx.try_into().unwrap();
                             if let Some(node) = state.late_start.remove(&node_id) {
                                 tracing::error!("Node {} spinning up late", idx);
+                                let node_id = idx.try_into().unwrap();
+                                let context = match node.context {
+                                    Left(context) => context,
+                                    // Node not initialized. Initialize it
+                                    // based on the received leaf.
+                                    Right((storage, memberships, config)) => {
+                                        let initializer = HotShotInitializer::<TYPES>::from_reload(
+                                            state.last_decided_leaf.clone(),
+                                            TestInstanceState {},
+                                            view_number,
+                                        );
+                                        // We assign node's public key and stake value rather than read from config file since it's a test
+                                        let validator_config =
+                                            ValidatorConfig::generated_from_seed_indexed(
+                                                [0u8; 32], node_id, 1,
+                                            );
+                                        TestRunner::add_node_with_config(
+                                            node_id,
+                                            node.networks.clone(),
+                                            storage,
+                                            memberships,
+                                            initializer,
+                                            config,
+                                            validator_config,
+                                        )
+                                        .await
+                                    }
+                                };
 
                                 // Create the node and add it to the state, so we can shut them
                                 // down properly later to avoid the overflow error in the overall
@@ -86,7 +129,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                                 let node = Node {
                                     node_id,
                                     networks: node.networks,
-                                    handle: node.context.run_tasks().await,
+                                    handle: context.run_tasks().await,
                                 };
                                 state.handles.push(node.clone());
 

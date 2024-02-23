@@ -146,6 +146,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
+                self.consensus.write().await.update_view(view);
 
                 // Start polling for VID disperse for the new view
                 self.network

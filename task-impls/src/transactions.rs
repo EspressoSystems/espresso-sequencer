@@ -184,6 +184,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     make_block = self.membership.get_leader(view) == self.public_key;
                 }
                 self.cur_view = view;
+                self.consensus.write().await.update_view(view);
 
                 // return if we aren't the next leader or we skipped last view and aren't the current leader.
                 if !make_block && self.membership.get_leader(self.cur_view + 1) != self.public_key {

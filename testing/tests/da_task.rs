@@ -88,6 +88,6 @@ async fn test_da_task() {
     .expect("Failed to sign DAData");
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
-    let da_state = DATaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle);
+    let da_state = DATaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle).await;
     run_harness(input, output, da_state, false).await;
 }

@@ -228,6 +228,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
+                self.consensus.write().await.update_view(view);
 
                 // Inject view info into network
                 let is_da = self

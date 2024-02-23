@@ -172,7 +172,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let consensus_state = ConsensusTaskState::create_from(handle);
+    let consensus_state = ConsensusTaskState::create_from(handle).await;
 
     inject_consensus_polls(&consensus_state).await;
 
@@ -187,7 +187,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let vid_state = VIDTaskState::create_from(handle);
+    let vid_state = VIDTaskState::create_from(handle).await;
     let task = Task::new(tx, rx, task_reg.clone(), vid_state);
     task_reg.run_task(task).await;
 }
@@ -199,7 +199,7 @@ pub async fn add_upgrade_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let upgrade_state = UpgradeTaskState::create_from(handle);
+    let upgrade_state = UpgradeTaskState::create_from(handle).await;
 
     let task = Task::new(tx, rx, task_reg.clone(), upgrade_state);
     task_reg.run_task(task).await;
@@ -212,7 +212,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &SystemContextHandle<TYPES, I>,
 ) {
     // build the da task
-    let da_state = DATaskState::create_from(handle);
+    let da_state = DATaskState::create_from(handle).await;
 
     let task = Task::new(tx, rx, task_reg.clone(), da_state);
     task_reg.run_task(task).await;
@@ -225,7 +225,7 @@ pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let transactions_state = TransactionTaskState::create_from(handle);
+    let transactions_state = TransactionTaskState::create_from(handle).await;
 
     let task = Task::new(tx, rx, task_reg.clone(), transactions_state);
     task_reg.run_task(task).await;
@@ -238,7 +238,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<HotShotEvent<TYPES>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let view_sync_state = ViewSyncTaskState::create_from(handle);
+    let view_sync_state = ViewSyncTaskState::create_from(handle).await;
 
     let task = Task::new(tx, rx, task_reg.clone(), view_sync_state);
     task_reg.run_task(task).await;

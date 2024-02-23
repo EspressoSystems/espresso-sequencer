@@ -10,15 +10,15 @@ use hotshot_types::{
 };
 
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
+use super::{
+    overall_safety_task::OverallSafetyPropertiesDescription, txn_task::TxnTaskDescription,
+};
 use crate::{
     spinning_task::SpinningTaskDescription,
     test_launcher::{ResourceGenerators, TestLauncher},
     view_sync_task::ViewSyncTaskDescription,
 };
-
-use super::{
-    overall_safety_task::OverallSafetyPropertiesDescription, txn_task::TxnTaskDescription,
-};
+use hotshot_example_types::state_types::TestInstanceState;
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {
@@ -43,6 +43,9 @@ pub struct TestMetadata {
     pub total_nodes: usize,
     /// nodes available at start
     pub start_nodes: usize,
+    /// Whether to skip initializing nodes that will start late, which will catch up later with
+    /// `HotShotInitializer::from_reload` in the spinning task.
+    pub skip_late: bool,
     /// number of bootstrap nodes (libp2p usage only)
     pub num_bootstrap_nodes: usize,
     /// Size of the DA committee for the test
@@ -177,6 +180,7 @@ impl Default for TestMetadata {
             min_transactions: 0,
             total_nodes: num_nodes,
             start_nodes: num_nodes,
+            skip_late: false,
             num_bootstrap_nodes: num_nodes,
             da_committee_size: num_nodes,
             spinning_properties: SpinningTaskDescription {
@@ -203,7 +207,10 @@ impl TestMetadata {
     /// # Panics
     /// if some of the the configuration values are zero
     #[must_use]
-    pub fn gen_launcher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
+    pub fn gen_launcher<
+        TYPES: NodeType<InstanceState = TestInstanceState>,
+        I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
+    >(
         self,
         node_id: u64,
     ) -> TestLauncher<TYPES, I>

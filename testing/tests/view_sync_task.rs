@@ -52,6 +52,7 @@ async fn test_view_sync_task() {
         TestTypes,
         MemoryImpl,
         SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle);
+    >::create_from(&handle)
+    .await;
     run_harness(input, output, view_sync_state, false).await;
 }
