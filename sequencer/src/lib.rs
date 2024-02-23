@@ -272,7 +272,7 @@ pub async fn init_node(
     let private_staking_key = network_params.private_staking_key;
     let public_staking_key = BLSPubKey::from_private(&private_staking_key);
 
-    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
@@ -317,8 +317,8 @@ pub async fn init_node(
     let state_ver_keys = (0..num_nodes)
         .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
         .collect::<Vec<_>>();
-
-    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
+    let state_key_pair = StateKeyPair::generate_from_seed_indexed(config.seed, node_index);
+    config.config.my_own_validator_config.state_key_pair = state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
