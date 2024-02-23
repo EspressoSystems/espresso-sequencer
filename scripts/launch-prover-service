@@ -10,8 +10,8 @@ if [[ -z "${ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS}" ]]; then
     echo "Light client contract address not found, deploying it now."
     forge fmt
     forge build
-    forge script LightClient --fork-url $ESPRESSO_SEQUENCER_L1_PROVIDER --broadcast
-    ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS=$(cat contracts/broadcast/LightClientDemo.s.sol/*/run-latest.json | jq -r '.receipts[1].contractAddress')
+    forge script contracts/scripts/LightClient.s.sol --fork-url $ESPRESSO_SEQUENCER_L1_PROVIDER --broadcast
+    ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS=$(cat contracts/broadcast/LightClient.s.sol/*/run-latest.json | jq -r '.receipts[1].contractAddress')
     echo "Light client contract address: $ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS"
   else
     echo "ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS not provided and deployment is not enabled. Exiting."
