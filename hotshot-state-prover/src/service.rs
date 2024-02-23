@@ -471,11 +471,12 @@ mod test {
         let signer = Wallet::from(anvil.keys()[0].clone());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        Command::new("just")
+        let status = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
             .status()
             .expect("fail to deploy");
+        assert!(status.success());
 
         let last_blk_num = provider.get_block_number().await?;
         // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
