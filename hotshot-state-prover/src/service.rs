@@ -363,6 +363,10 @@ mod test {
     use std::process::Command;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+    const BLOCKS_PER_EPOCH: usize = 10;
+    const NUM_INIT_VALIDATORS: usize = STAKE_TABLE_CAPACITY_FOR_TEST / 2;
+
+    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
     /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
@@ -474,6 +478,9 @@ mod test {
         let status = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
+            .arg(TEST_MNEMONIC)
+            .arg(BLOCKS_PER_EPOCH.to_string())
+            .arg(NUM_INIT_VALIDATORS.to_string())
             .status()
             .expect("fail to deploy");
         assert!(status.success());

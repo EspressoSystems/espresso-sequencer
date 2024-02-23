@@ -78,7 +78,8 @@ sol-test:
     forge test
 
 # Deploy contracts to local blockchain for development and testing
-dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk":
+dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk" num_blocks_per_epoch="10" num_init_validators="5":
     forge build
-    MNEMONICS="{{mnemonics}}" forge script 'contracts/script/LightClientTest.s.sol' \
+    MNEMONICS="{{mnemonics}}" forge script 'contracts/test/LightClientTest.s.sol' \
+    --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
     --fork-url {{url}} --broadcast

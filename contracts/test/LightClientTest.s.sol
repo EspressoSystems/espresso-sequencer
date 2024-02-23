@@ -12,16 +12,10 @@ import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
 /// @dev for production deployment script, please use `gen-light-client-deploy/main.rs` to
 /// generate `LightClient.s.sol` with proper genesis block values.
 contract DeployLightClientTestScript is Script {
-    function run() external {
+    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators) external {
         string memory seedPhrase = vm.envString("MNEMONIC");
         uint256 privateKey = vm.deriveKey(seedPhrase, 0);
         vm.startBroadcast(privateKey);
-
-        // TODO for a production deployment provide the right genesis state and value
-
-        // TODO Philippe parametrize run with these variables
-        uint32 numBlocksPerEpoch = 10;
-        uint32 numInitValidators = 5;
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
