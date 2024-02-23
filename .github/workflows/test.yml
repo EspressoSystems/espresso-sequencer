@@ -32,7 +32,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-            version: v1.1.1
+            version: nightly-2cb875799419c907cc3709e586ece2559e6b340e
 
       - name: Install just command runner
         run: |
