@@ -27,6 +27,7 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
+    cargo build --bin diff-test --release
     cargo test --release --all-features
 
 # Helpful shortcuts for local development
