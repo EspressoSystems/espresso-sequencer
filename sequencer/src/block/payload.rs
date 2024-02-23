@@ -418,6 +418,7 @@ impl hotshot_types::traits::block_contents::TestableBlock
 mod test {
 
     use super::{test_vid_factory, NamespaceProof};
+    use crate::api::endpoints::NamespaceProofQueryData;
     use crate::block::payload::{Payload, TableWordTraits};
     use crate::block::tables::{NameSpaceTable, Table};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -731,6 +732,21 @@ mod test {
             // assert_eq!(tx_index_offset, block.len());
             assert_eq!(block.raw_payload, derived_block_payload);
         }
+    }
+
+    #[test]
+    fn test_inclusion_proof() {
+        let mock_response: NamespaceProofQueryData =
+            serde_json::from_str(include_str!("./proof.json")).unwrap();
+        let vid = test_vid_factory();
+        mock_response
+            .proof
+            .verify(
+                &vid,
+                &mock_response.header.payload_commitment,
+                &mock_response.header.ns_table,
+            )
+            .unwrap();
     }
 
     #[test]
