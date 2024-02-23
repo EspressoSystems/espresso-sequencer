@@ -104,8 +104,8 @@ pub fn vid_commitment(
 
     // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
     let srs = test_srs(num_storage_nodes);
-
-    let vid = VidScheme::new(num_chunks, num_storage_nodes, srs).unwrap();
+    let multiplicity = 1;
+    let vid = VidScheme::new(num_chunks, num_storage_nodes, multiplicity, srs).unwrap();
     vid.commit_only(encoded_transactions).unwrap()
 }
 

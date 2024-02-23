@@ -371,6 +371,6 @@ pub fn vid_init<TYPES: NodeType>(
 
     // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
     let srs = hotshot_types::data::test_srs(num_committee);
-
-    VidScheme::new(chunk_size, num_committee, srs).unwrap()
+    let multiplicity = 1;
+    VidScheme::new(chunk_size, num_committee, multiplicity, srs).unwrap()
 }
