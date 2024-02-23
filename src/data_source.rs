@@ -669,7 +669,7 @@ pub mod node_tests {
         let mut ds = D::connect(&storage).await;
 
         // Set up a mock VID scheme to use for generating test data.
-        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+        let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
 
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
@@ -867,7 +867,7 @@ pub mod node_tests {
         let mut ds = D::connect(&storage).await;
 
         // Generate some test VID data.
-        let vid = VidScheme::new(2, 2, test_srs(2)).unwrap();
+        let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common and a share. We use height `FIRST_VID_VIEW` to avoid
@@ -930,7 +930,7 @@ pub mod node_tests {
 
         // Set up a test VID scheme.
         let num_nodes = network.num_nodes();
-        let vid = VidScheme::new(num_nodes, num_nodes, test_srs(num_nodes)).unwrap();
+        let vid = VidScheme::new(num_nodes, num_nodes, 1, test_srs(num_nodes)).unwrap();
 
         // Get VID common data and verify it.
         tracing::info!("fetching common data");
