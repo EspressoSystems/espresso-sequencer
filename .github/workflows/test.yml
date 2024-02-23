@@ -48,5 +48,6 @@ jobs:
       - name: Test
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           just test
         timeout-minutes: 30
