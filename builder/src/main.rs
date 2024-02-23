@@ -77,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting Builder Core from main.rs");
     // get options
     let opt = SeqOptions::parse();
+    tracing::info!("Options: {:?}", opt);
     // call the init_node function and get the builder context
 
     // first create network params
@@ -103,9 +104,6 @@ async fn main() -> anyhow::Result<()> {
 
     let (res_sender, res_receiver) = unbounded();
 
-    let global_state = GlobalState::<SeqTypes>::new(req_sender, res_receiver);
-    let arc_global_state = Arc::new(RwLock::new(global_state));
-
     let mut commitee_stake_table_entries = vec![];
     // form the quorum election config, required for the VID computation inside the builder_state
     let quorum_election_config: StaticElectionConfig =
@@ -120,6 +118,14 @@ async fn main() -> anyhow::Result<()> {
         commitee_stake_table_entries,
         quorum_election_config,
     );
+    let global_state: GlobalState<SeqTypes> =
+        GlobalState::<SeqTypes>::new(req_sender, res_receiver);
+
+    let arc_rwlock_global_state: Arc<RwLock<GlobalState<SeqTypes>>> =
+        Arc::new(RwLock::new(global_state));
+
+    let arc_rwlock_global_state_clone: Arc<RwLock<GlobalState<SeqTypes>>> =
+        Arc::clone(&arc_rwlock_global_state);
 
     let builder_state = BuilderState::<SeqTypes>::new(
         (builder_pub_key, builder_private_key),
@@ -133,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
         da_receiver,
         qc_receiver,
         req_receiver,
-        arc_global_state,
+        arc_rwlock_global_state,
         res_sender,
         Arc::new(quorum_membership),
     );
@@ -148,13 +154,17 @@ async fn main() -> anyhow::Result<()> {
     builder_context.start_consensus().await;
 
     async_spawn(async move {
-        let builder_api = hs_builder_api::builder::define_api::<GlobalState<SeqTypes>, SeqTypes>(
-            &BuilderApiOptions::default(),
-        )
+        let builder_api = hs_builder_api::builder::define_api::<
+            Arc<RwLock<GlobalState<SeqTypes>>>,
+            SeqTypes,
+        >(&BuilderApiOptions::default())
         .expect("Failed to construct the builder API");
+        // Acquire a read lock
 
-        let mut app: App<GlobalState<SeqTypes>, hs_builder_api::builder::Error> =
-            App::with_state(global_state);
+        // Access the inner value
+        //let inner_value = global_state;
+        let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, hs_builder_api::builder::Error> =
+            App::with_state(arc_rwlock_global_state_clone);
 
         app.register_module("builder", builder_api)
             .expect("Failed to register the builder API");
