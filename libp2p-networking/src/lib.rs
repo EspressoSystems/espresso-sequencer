@@ -1,8 +1,5 @@
 //! Library for p2p communication
 
-/// Example message used by the UI library
-pub mod message;
-
 /// Network logic
 pub mod network;
 

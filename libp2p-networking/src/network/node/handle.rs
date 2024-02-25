@@ -6,8 +6,8 @@ use async_compatibility_layer::{
     art::{async_sleep, async_spawn, async_timeout, future::to, stream},
     async_primitives::subscribable_mutex::SubscribableMutex,
     channel::{
-        bounded, oneshot, OneShotReceiver, OneShotSender, Receiver, SendError, Sender,
-        UnboundedReceiver, UnboundedRecvError, UnboundedSender,
+        oneshot, OneShotReceiver, OneShotSender, SendError, UnboundedReceiver, UnboundedRecvError,
+        UnboundedSender,
     },
 };
 use async_lock::Mutex;
@@ -51,9 +51,6 @@ pub struct NetworkNodeHandle<S> {
 
     /// human readable id
     id: usize,
-
-    /// A list of webui listeners that are listening for changes on this node
-    webui_listeners: Arc<Mutex<Vec<Sender<()>>>>,
 
     /// network node receiver
     receiver: NetworkNodeReceiver,
@@ -124,7 +121,6 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
             listen_addr,
             peer_id,
             id,
-            webui_listeners: Arc::default(),
             receiver: NetworkNodeReceiver {
                 kill_switch,
                 killed: AtomicBool::new(false),
@@ -141,9 +137,6 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     ///
     /// Will panic if a handler is already spawned
     #[allow(clippy::unused_async)]
-    // // Tokio and async_std disagree how this function should be linted
-    // #[allow(clippy::ignored_unit_patterns)]
-
     pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future
     where
         F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,
@@ -396,26 +389,6 @@ impl<S> NetworkNodeHandle<S> {
         }
     }
 
-    /// Notify the webui that either the `state` or `connection_state` has changed.
-    ///
-    /// If the webui is not started, this will do nothing.
-    /// # Errors
-    /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
-    pub async fn notify_webui(&self) {
-        let mut lock = self.webui_listeners.lock().await;
-        // Keep a list of indexes that are unable to send the update
-        let mut indexes_to_remove = Vec::new();
-        for (idx, sender) in lock.iter().enumerate() {
-            if sender.send(()).await.is_err() {
-                indexes_to_remove.push(idx);
-            }
-        }
-        // Make sure to remove the indexes in reverse other, else removing an index will invalidate the following indexes.
-        for idx in indexes_to_remove.into_iter().rev() {
-            lock.remove(idx);
-        }
-    }
-
     /// Subscribe to a topic
     /// # Errors
     /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
@@ -606,14 +579,6 @@ impl<S> NetworkNodeHandle<S> {
     /// Returns `true` if the network state is killed
     pub fn is_killed(&self) -> bool {
         self.receiver.killed.load(Ordering::Relaxed)
-    }
-
-    /// Register a webui listener
-    pub async fn register_webui_listener(&self) -> Receiver<()> {
-        let (sender, receiver) = bounded(100);
-        let mut lock = self.webui_listeners.lock().await;
-        lock.push(sender);
-        receiver
     }
 
     /// Call `wait_timeout_until` on the state's [`SubscribableMutex`]

@@ -510,18 +510,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         });
     }
 
-    /// make network aware of known peers
-    async fn _add_known_peers(
-        &self,
-        known_peers: Vec<(Option<PeerId>, Multiaddr)>,
-    ) -> Result<(), NetworkError> {
-        self.inner
-            .handle
-            .add_known_peers(known_peers)
-            .await
-            .map_err(Into::<NetworkError>::into)
-    }
-
     /// Handle events for Version 0.1 of the protocol.
     async fn handle_recvd_events_0_1(
         &self,

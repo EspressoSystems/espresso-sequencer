@@ -34,8 +34,8 @@ use libp2p::{
 use libp2p_identity::PeerId;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, str::FromStr, sync::Arc, time::Duration};
-use tracing::{info, instrument};
+use std::{collections::HashSet, fmt::Debug, str::FromStr, sync::Arc};
+use tracing::instrument;
 
 #[cfg(async_executor_impl = "async-std")]
 use libp2p::dns::async_std::Transport as DnsTransport;
@@ -227,23 +227,6 @@ pub async fn gen_transport(identity: Keypair) -> Result<BoxedTransport, NetworkE
     Ok(dns_quic
         .map(|(peer_id, connection), _| (peer_id, StreamMuxerBox::new(connection)))
         .boxed())
-}
-
-/// a single node, connects them to each other
-/// and waits for connections to propagate to all nodes.
-#[instrument]
-pub async fn spin_up_swarm<S: Debug + Default>(
-    timeout_len: Duration,
-    known_nodes: Vec<(Option<PeerId>, Multiaddr)>,
-    config: NetworkNodeConfig,
-    idx: usize,
-    handle: &Arc<NetworkNodeHandle<S>>,
-) -> Result<(), NetworkNodeHandleError> {
-    info!("known_nodes{:?}", known_nodes);
-    handle.add_known_peers(known_nodes).await?;
-    handle.subscribe("global".to_string()).await?;
-
-    Ok(())
 }
 
 /// Given a slice of handles assumed to be larger than 0,

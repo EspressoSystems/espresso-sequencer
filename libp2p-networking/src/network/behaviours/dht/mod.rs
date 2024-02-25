@@ -108,7 +108,6 @@ impl DHTBehaviour {
         mut kadem: KademliaBehaviour<MemoryStore>,
         pid: PeerId,
         replication_factor: NonZeroUsize,
-        _: Option<String>,
     ) -> Self {
         // needed because otherwise we stay in client mode when testing locally
         // and don't publish keys stuff

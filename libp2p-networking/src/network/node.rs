@@ -286,7 +286,6 @@ impl NetworkNode {
                     config
                         .replication_factor
                         .unwrap_or_else(|| NonZeroUsize::new(4).unwrap()),
-                    config.dht_cache_location.clone(),
                 ),
                 identify,
                 DMBehaviour::new(request_response),
