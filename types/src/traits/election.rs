@@ -5,7 +5,7 @@
 
 use super::node_implementation::NodeType;
 
-use crate::traits::signature_key::SignatureKey;
+use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
 use snafu::Snafu;
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, num::NonZeroU64};
@@ -43,7 +43,7 @@ pub trait Membership<TYPES: NodeType>:
     /// create an election
     /// TODO may want to move this to a testableelection trait
     fn create_election(
-        entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        entries: Vec<PeerConfig<TYPES::SignatureKey>>,
         config: TYPES::ElectionConfigType,
     ) -> Self;
 

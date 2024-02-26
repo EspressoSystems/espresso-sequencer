@@ -6,7 +6,10 @@ pub mod client;
 pub mod config;
 
 use async_lock::RwLock;
-use hotshot_types::traits::{election::ElectionConfig, signature_key::SignatureKey};
+use hotshot_types::{
+    traits::{election::ElectionConfig, signature_key::SignatureKey},
+    PeerConfig,
+};
 use std::{
     collections::HashSet,
     io,
@@ -48,6 +51,8 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
 struct OrchestratorState<KEY: SignatureKey, ELECTION: ElectionConfig> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
+    /// Tracks the latest temporary index we have generated for init validator's key pair
+    tmp_latest_index: u16,
     /// The network configuration
     config: NetworkConfig<KEY, ELECTION>,
     /// The total nodes that have posted their public keys
@@ -70,6 +75,7 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     pub fn new(network_config: NetworkConfig<KEY, ELECTION>) -> Self {
         OrchestratorState {
             latest_index: 0,
+            tmp_latest_index: 0,
             config: network_config,
             nodes_with_pubkey: 0,
             peer_pub_ready: false,
@@ -93,6 +99,10 @@ pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
         &mut self,
         _node_index: u16,
     ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>;
+    /// get endpoint for the next available temporary node index
+    /// # Errors
+    /// if unable to serve
+    fn get_tmp_node_index(&mut self) -> Result<u16, ServerError>;
     /// post endpoint for each node's public key
     /// # Errors
     /// if unable to serve
@@ -181,6 +191,21 @@ where
         Ok(self.config.clone())
     }
 
+    // Assumes one node do not get twice
+    fn get_tmp_node_index(&mut self) -> Result<u16, ServerError> {
+        let tmp_node_index = self.tmp_latest_index;
+        self.tmp_latest_index += 1;
+
+        if usize::from(tmp_node_index) >= self.config.config.total_nodes.get() {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::BadRequest,
+                message: "Node index getter for key pair generation has reached capacity"
+                    .to_string(),
+            });
+        }
+        Ok(tmp_node_index)
+    }
+
     #[allow(clippy::cast_possible_truncation)]
     fn register_public_key(
         &mut self,
@@ -195,11 +220,9 @@ where
         }
         self.pub_posted.insert(node_index);
 
-        // Sishan NOTE: let me know if there's a better way to remove the first extra 8 bytes
-        // The guess is extra bytes are from orchestrator serialization
+        // The guess is extra 8 starting bytes are from orchestrator serialization
         pubkey.drain(..8);
-        let register_pub_key = <KEY as SignatureKey>::from_bytes(pubkey).unwrap();
-        let register_pub_key_with_stake = register_pub_key.get_stake_table_entry(1u64);
+        let register_pub_key_with_stake = PeerConfig::<KEY>::from_bytes(pubkey).unwrap();
         self.config.config.known_nodes_with_stake[node_index as usize] =
             register_pub_key_with_stake;
         self.nodes_with_pubkey += 1;
@@ -294,6 +317,9 @@ where
             state.post_getconfig(node_index)
         }
         .boxed()
+    })?
+    .post("tmp_node_index", |_req, state| {
+        async move { state.get_tmp_node_index() }.boxed()
     })?
     .post("postpubkey", |req, state| {
         async move {

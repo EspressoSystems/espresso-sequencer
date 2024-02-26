@@ -1,6 +1,6 @@
 use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use serde_inline_default::serde_inline_default;
 use std::{
@@ -208,14 +208,16 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
                     // fallback to orchestrator
                     error!("{e}, falling back to orchestrator");
 
-                    let config = client.get_config(client.identity.clone()).await;
+                    let config = client
+                        .get_config_without_peer(client.identity.clone())
+                        .await;
 
                     // save to file if we fell back
                     if let Err(e) = config.to_file(file) {
                         error!("{e}");
                     };
 
-                    (config, NetworkConfigSource::Orchestrator)
+                    (config, NetworkConfigSource::File)
                 }
             }
         } else {
@@ -223,10 +225,56 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
 
             // otherwise just get from orchestrator
             (
-                client.get_config(client.identity.clone()).await,
+                client
+                    .get_config_without_peer(client.identity.clone())
+                    .await,
                 NetworkConfigSource::Orchestrator,
             )
         }
+    }
+
+    /// Get a temporary node index for generating a validator config
+    pub async fn generate_init_validator_config(client: &OrchestratorClient) -> ValidatorConfig<K> {
+        // This cur_node_index is only used for key pair generation, it's not bound with the node,
+        // lather the node with the generated key pair will get a new node_index from orchestrator.
+        let cur_node_index = client.get_node_index_for_init_validator_config().await;
+        ValidatorConfig::generated_from_seed_indexed([0u8; 32], cur_node_index.into(), 1)
+    }
+
+    /// Asynchronously retrieves a `NetworkConfig` from an orchestrator.
+    /// The retrieved one includes correct `node_index` and peer's public config.
+    pub async fn get_complete_config(
+        client: &OrchestratorClient,
+        my_own_validator_config: ValidatorConfig<K>,
+        file: Option<String>,
+    ) -> (NetworkConfig<K, E>, NetworkConfigSource) {
+        let (mut run_config, source) = Self::from_file_or_orchestrator(client, file).await;
+        let node_index = run_config.node_index;
+
+        // Assign my_own_validator_config to the run_config if not loading from file
+        match source {
+            NetworkConfigSource::Orchestrator => {
+                run_config.config.my_own_validator_config = my_own_validator_config;
+            }
+            NetworkConfigSource::File => {
+                // do nothing, my_own_validator_config has already been loaded from file
+            }
+        }
+
+        // one more round of orchestrator here to get peer's public key/config
+        let updated_config: NetworkConfig<K, E> = client
+            .post_and_wait_all_public_keys::<K, E>(
+                run_config.node_index,
+                run_config
+                    .config
+                    .my_own_validator_config
+                    .get_public_config(),
+            )
+            .await;
+        run_config.config.known_nodes_with_stake = updated_config.config.known_nodes_with_stake;
+
+        error!("Retrieved config; our node index is {node_index}");
+        (run_config, source)
     }
 
     /// Loads a `NetworkConfig` from a file.
@@ -436,7 +484,7 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub my_own_validator_config: ValidatorConfig<KEY>,
     #[serde(skip)]
     /// The known nodes' public key and stake value
-    pub known_nodes_with_stake: Vec<KEY::StakeTableEntry>,
+    pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// Number of committee nodes
     pub committee_nodes: usize,
     /// Maximum transactions per block
@@ -561,10 +609,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             .map(|node_id| {
                 let cur_validator_config: ValidatorConfig<KEY> =
                     ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
-
-                cur_validator_config
-                    .public_key
-                    .get_stake_table_entry(cur_validator_config.stake_value)
+                cur_validator_config.get_public_config()
             })
             .collect();
         Self {

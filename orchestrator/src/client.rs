@@ -7,11 +7,10 @@ use futures::{Future, FutureExt};
 
 use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
-    ValidatorConfig,
+    PeerConfig,
 };
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
-
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client
@@ -102,13 +101,13 @@ impl OrchestratorClient {
     }
 
     /// Sends an identify message to the orchestrator and attempts to get its config
-    /// Returns both the `node_index` and the run configuration from the orchestrator
+    /// Returns both the `node_index` and the run configuration without peer's public config from the orchestrator
     /// Will block until both are returned
     /// # Panics
     /// if unable to convert the node index from usize into u64
     /// (only applicable on 32 bit systems)
     #[allow(clippy::type_complexity)]
-    pub async fn get_config<K: SignatureKey, E: ElectionConfig>(
+    pub async fn get_config_without_peer<K: SignatureKey, E: ElectionConfig>(
         &self,
         identity: String,
     ) -> NetworkConfig<K, E> {
@@ -140,11 +139,24 @@ impl OrchestratorClient {
 
         let mut config = self.wait_for_fn_from_orchestrator(f).await;
         config.node_index = From::<u16>::from(node_index);
-        // The orchestrator will generate keys for validator if it doesn't load keys from file
-        config.config.my_own_validator_config =
-            ValidatorConfig::<K>::generated_from_seed_indexed(config.seed, config.node_index, 1);
 
         config
+    }
+
+    /// Post to the orchestrator and get the latest `node_index`
+    /// Then return it for the init validator config
+    /// # Panics
+    /// if unable to post
+    pub async fn get_node_index_for_init_validator_config(&self) -> u16 {
+        let cur_node_index = |client: Client<ClientError>| {
+            async move {
+                let cur_node_index: Result<u16, ClientError> =
+                    client.post("api/tmp_node_index").send().await;
+                cur_node_index
+            }
+            .boxed()
+        };
+        self.wait_for_fn_from_orchestrator(cur_node_index).await
     }
 
     /// Sends my public key to the orchestrator so that it can collect all public keys
@@ -155,13 +167,13 @@ impl OrchestratorClient {
     pub async fn post_and_wait_all_public_keys<K: SignatureKey, E: ElectionConfig>(
         &self,
         node_index: u64,
-        my_pub_key: K,
+        my_pub_key: PeerConfig<K>,
     ) -> NetworkConfig<K, E> {
         // send my public key
         let _send_pubkey_ready_f: Result<(), ClientError> = self
             .client
             .post(&format!("api/pubkey/{node_index}"))
-            .body_binary(&my_pub_key.to_bytes())
+            .body_binary(&PeerConfig::<K>::to_bytes(&my_pub_key)) //&my_pub_key.stake_table_entry.get_public_key().to_bytes()
             .unwrap()
             .send()
             .await;

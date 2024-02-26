@@ -5,6 +5,7 @@ use hotshot_types::traits::{
     node_implementation::NodeType,
     signature_key::SignatureKey,
 };
+use hotshot_types::PeerConfig;
 #[allow(deprecated)]
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, num::NonZeroU64};
@@ -99,14 +100,18 @@ where
     }
 
     fn create_election(
-        keys_qc: Vec<PUBKEY::StakeTableEntry>,
+        entries: Vec<PeerConfig<PUBKEY>>,
         config: TYPES::ElectionConfigType,
     ) -> Self {
-        let mut committee_nodes_with_stake = keys_qc.clone();
+        let nodes_with_stake: Vec<PUBKEY::StakeTableEntry> = entries
+            .iter()
+            .map(|x| x.stake_table_entry.clone())
+            .collect();
+        let mut committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry> = nodes_with_stake.clone();
         debug!("Election Membership Size: {}", config.num_nodes);
         committee_nodes_with_stake.truncate(config.num_nodes.try_into().unwrap());
         Self {
-            nodes_with_stake: keys_qc,
+            nodes_with_stake,
             committee_nodes_with_stake,
             _type_phantom: PhantomData,
         }

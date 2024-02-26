@@ -23,6 +23,14 @@ This must be a POST request so we can update the OrchestratorState in the server
 received from the 'identity' endpoint
 """
 
+# GET the latest temporary node index only for generating validator's key pair
+[route.tmp_node_index]
+PATH = ["tmp_node_index"]
+METHOD = "POST"
+DOC = """
+Get the latest temporary node index only for generating validator's key pair for testing in hotshot, later the generated key pairs might be bound with other node_index.
+"""
+
 # POST the node's node index to generate public key for pubkey collection
 [route.postpubkey]
 PATH = ["pubkey/:node_index"]

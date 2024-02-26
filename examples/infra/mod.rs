@@ -26,6 +26,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
+use hotshot_types::PeerConfig;
 use hotshot_types::ValidatorConfig;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -111,14 +112,9 @@ pub fn load_config_from_file<TYPES: NodeType>(
     // but its type is too complex to load so we'll generate it from seed now
     config.config.my_own_validator_config =
         ValidatorConfig::generated_from_seed_indexed(config.seed, config.node_index, 1);
-    let my_own_validator_config_with_stake = config
-        .config
-        .my_own_validator_config
-        .public_key
-        .get_stake_table_entry(1u64);
-    // initialize it with size for better assignment of other peers' config
+    // initialize it with size for better assignment of peers' config
     config.config.known_nodes_with_stake =
-        vec![my_own_validator_config_with_stake; config.config.total_nodes.get() as usize];
+        vec![PeerConfig::default(); config.config.total_nodes.get() as usize];
 
     config
 }
@@ -768,26 +764,24 @@ pub async fn main_entry_point<
     let orchestrator_client: OrchestratorClient =
         OrchestratorClient::new(args.clone(), public_ip.to_string());
 
+    // We assume one node will not call this twice to generate two validator_config-s with same identity.
+    let my_own_validator_config = NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::generate_init_validator_config(
+        &orchestrator_client,
+    ).await;
+
     // conditionally save/load config from file or orchestrator
-    let (mut run_config, source) =
-        NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::from_file_or_orchestrator(
+    // This is a function that will return correct complete config from orchestrator.
+    // It takes in a valid args.network_config_file when loading from file, or valid validator_config when loading from orchestrator, the invalid one will be ignored.
+    // It returns the complete config which also includes peer's public key and public config.
+    // This function will be taken solely by sequencer right after OrchestratorClient::new,
+    // which means the previous `generate_validator_config_when_init` will not be taken by sequencer, it's only for key pair generation for testing in hotshot.
+    let (run_config, source) =
+        NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::get_complete_config(
             &orchestrator_client,
+            my_own_validator_config,
             args.clone().network_config_file,
         )
         .await;
-
-    let node_index = run_config.node_index;
-    error!("Retrieved config; our node index is {node_index}");
-
-    // one more round of orchestrator here to get peer's public key/config
-    let updated_config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> =
-        orchestrator_client
-            .post_and_wait_all_public_keys::<TYPES::SignatureKey, TYPES::ElectionConfigType>(
-                run_config.node_index,
-                run_config.config.my_own_validator_config.public_key.clone(),
-            )
-            .await;
-    run_config.config.known_nodes_with_stake = updated_config.config.known_nodes_with_stake;
 
     error!("Initializing networking");
     let run = RUNDA::initialize_networking(run_config.clone()).await;

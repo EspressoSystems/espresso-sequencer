@@ -1,6 +1,11 @@
 //! Types and Traits for the `HotShot` consensus module
+use bincode::Options;
 use displaydoc::Display;
+use hotshot_utils::bincode::bincode_opts;
+use light_client::StateVerKey;
+use std::fmt::Debug;
 use std::{future::Future, num::NonZeroUsize, pin::Pin, time::Duration};
+use tracing::error;
 use traits::{election::ElectionConfig, signature_key::SignatureKey};
 pub mod consensus;
 pub mod data;
@@ -74,11 +79,64 @@ impl<KEY: SignatureKey> ValidatorConfig<KEY> {
             state_key_pair: state_key_pairs,
         }
     }
+
+    /// get the public config of the validator
+    pub fn get_public_config(&self) -> PeerConfig<KEY> {
+        PeerConfig {
+            stake_table_entry: self.public_key.get_stake_table_entry(self.stake_value),
+            state_ver_key: self.state_key_pair.0.ver_key(),
+        }
+    }
 }
 
 impl<KEY: SignatureKey> Default for ValidatorConfig<KEY> {
     fn default() -> Self {
         Self::generated_from_seed_indexed([0u8; 32], 0, 1)
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Display)]
+#[serde(bound(deserialize = ""))]
+/// structure of peers' config, including public key, stake value, and state key.
+pub struct PeerConfig<KEY: SignatureKey> {
+    /// The peer's public key and stake value
+    pub stake_table_entry: KEY::StakeTableEntry,
+    /// the peer's state public key
+    pub state_ver_key: StateVerKey,
+}
+
+impl<KEY: SignatureKey> PeerConfig<KEY> {
+    /// Serialize a peer's config to bytes
+    pub fn to_bytes(config: &Self) -> Vec<u8> {
+        let x = bincode_opts().serialize(config);
+        match x {
+            Ok(x) => x,
+            Err(e) => {
+                error!(?e, "Failed to serialize public key");
+                vec![]
+            }
+        }
+    }
+
+    /// Deserialize a peer's config from bytes
+    /// # Errors
+    /// Will return `None` if deserialization fails
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let x: Result<PeerConfig<KEY>, _> = bincode_opts().deserialize(bytes);
+        match x {
+            Ok(pub_key) => Some(pub_key),
+            Err(e) => {
+                error!(?e, "Failed to deserialize public key");
+                None
+            }
+        }
+    }
+}
+
+impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
+    fn default() -> Self {
+        let default_validator_config = ValidatorConfig::<KEY>::default();
+        default_validator_config.get_public_config()
     }
 }
 
@@ -95,7 +153,7 @@ pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     /// Maximum transactions per block
     pub max_transactions: NonZeroUsize,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
-    pub known_nodes_with_stake: Vec<KEY::StakeTableEntry>,
+    pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// My own validator config, including my public key, private key, stake value, serving as private parameter
     pub my_own_validator_config: ValidatorConfig<KEY>,
     /// List of DA committee nodes for static DA committe

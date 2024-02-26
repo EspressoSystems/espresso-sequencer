@@ -1,4 +1,4 @@
-use hotshot::{traits::NetworkReliability, types::SignatureKey};
+use hotshot::traits::NetworkReliability;
 use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
@@ -233,10 +233,7 @@ impl TestMetadata {
             .map(|node_id_| {
                 let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> =
                     ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id_ as u64, 1);
-
-                cur_validator_config
-                    .public_key
-                    .get_stake_table_entry(cur_validator_config.stake_value)
+                cur_validator_config.get_public_config()
             })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
