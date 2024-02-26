@@ -48,7 +48,7 @@ surf-disco = { workspace = true }
 time = { workspace = true }
 derive_more = "0.99.17"
 portpicker = "0.1.1"
-lru = "0.12.2"
+lru = "0.12.3"
 hotshot-task = { path = "../task" }
 
 tracing = { workspace = true }
