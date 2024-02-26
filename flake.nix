@@ -34,15 +34,8 @@
   outputs = { self, nixpkgs, flake-utils, rust-overlay, pre-commit-hooks, poetry2nixFlake, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        git-overlay = self: super: {
-          # Some libgit validations are broken in the latest nixpkgs. These should not affect
-          # anything in our workflow. Since libgit is a dependency of cargo-audit, we need it to
-          # build the dev shell. Force Nix to build this package by disabling validations.
-          libgit2 = super.libgit2.overrideAttrs (_: { doCheck = false; });
-        };
         overlays = [
           (import rust-overlay)
-          git-overlay
         ];
         pkgs = import nixpkgs { inherit system overlays; };
         poetry2nix = poetry2nixFlake.lib.mkPoetry2Nix { inherit pkgs; };
