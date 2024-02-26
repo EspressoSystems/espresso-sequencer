@@ -1,5 +1,6 @@
 pub mod api;
 pub mod block;
+pub mod catchup;
 mod chain_variables;
 pub mod context;
 mod header;
@@ -8,6 +9,7 @@ pub mod options;
 pub mod state_signature;
 
 use block::entry::TxTableEntryWord;
+use catchup::{MockStateCatchup, StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -173,9 +175,10 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type CommitteeNetwork = N::DAChannel;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeState {
     l1_client: L1Client,
+    peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
 }
@@ -183,18 +186,6 @@ pub struct NodeState {
 impl NodeState {
     fn l1_client(&self) -> &L1Client {
         &self.l1_client
-    }
-}
-
-impl Default for NodeState {
-    fn default() -> Self {
-        let wallet = FeeAccount::test_wallet();
-
-        Self {
-            genesis_state: ValidatedState::default(),
-            builder_address: wallet,
-            l1_client: L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-        }
     }
 }
 
@@ -246,6 +237,7 @@ pub struct NetworkParams {
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: SchnorrPrivKey,
+    pub state_peers: Vec<Url>,
 }
 
 #[derive(Clone, Debug)]
@@ -346,6 +338,7 @@ pub async fn init_node(
         l1_client,
         builder_address: wallet,
         genesis_state,
+        peers: Arc::new(StatePeers::from_urls(network_params.state_peers)),
     };
 
     let mut ctx = SequencerContext::init(

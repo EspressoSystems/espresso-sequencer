@@ -16,10 +16,12 @@ use entry::TxTableEntryWord;
 use payload::Payload;
 use tables::NameSpaceTable;
 
+pub type NsTable = NameSpaceTable<TxTableEntryWord>;
+
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = NameSpaceTable<TxTableEntryWord>;
+    type Metadata = NsTable;
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
     // https://github.com/EspressoSystems/HotShot/issues/2115
