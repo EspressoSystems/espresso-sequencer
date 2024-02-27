@@ -133,7 +133,7 @@ mod test {
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::{mock_transaction, MockTypes},
-            setup_test, sleep, FIRST_VID_VIEW,
+            setup_test, sleep,
         },
     };
     use async_std::task::spawn;
@@ -524,7 +524,7 @@ mod test {
         // Subscribe to objects from the future.
         let blocks = data_source.subscribe_blocks(0).await;
         let leaves = data_source.subscribe_leaves(0).await;
-        let common = data_source.subscribe_vid_common(FIRST_VID_VIEW).await;
+        let common = data_source.subscribe_vid_common(0).await;
 
         // Wait for a few blocks to be finalized.
         let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
@@ -541,17 +541,12 @@ mod test {
         // Check the subscriptions.
         let blocks = blocks.take(5).collect::<Vec<_>>().await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
-        let common = common.take(5 - FIRST_VID_VIEW).collect::<Vec<_>>().await;
+        let common = common.take(5).collect::<Vec<_>>().await;
         for i in 0..5 {
             tracing::info!("checking block {i}");
             assert_eq!(leaves[i], finalized_leaves[i]);
             assert_eq!(blocks[i].header(), finalized_leaves[i].header());
-            if i >= FIRST_VID_VIEW {
-                assert_eq!(
-                    common[i - FIRST_VID_VIEW],
-                    data_source.get_vid_common(i).await.await
-                );
-            }
+            assert_eq!(common[i], data_source.get_vid_common(i).await.await);
         }
     }
 

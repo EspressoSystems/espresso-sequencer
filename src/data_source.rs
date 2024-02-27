@@ -124,7 +124,6 @@ pub mod availability_tests {
         node::NodeDataSource,
         testing::{
             consensus::{MockNetwork, TestableDataSource},
-            has_vid,
             mocks::{mock_transaction, MockTypes},
             setup_test,
         },
@@ -218,33 +217,31 @@ pub mod availability_tests {
                     .await;
             }
 
-            // Look up the common VID data. Skip the genesis block, as there is no VID for it.
-            if has_vid(i) {
-                tracing::info!("looking up VID common {i} various ways");
-                let common = ds.get_vid_common(block.height() as usize).await.await;
-                assert_eq!(common, ds.get_vid_common(block.hash()).await.await);
-                // Similar to the above, we can't guarantee which index we will get when passively
-                // fetching this data, so only check the index if the data is available locally.
-                if let Ok(res) = ds
+            // Look up the common VID data.
+            tracing::info!("looking up VID common {i} various ways");
+            let common = ds.get_vid_common(block.height() as usize).await.await;
+            assert_eq!(common, ds.get_vid_common(block.hash()).await.await);
+            // Similar to the above, we can't guarantee which index we will get when passively
+            // fetching this data, so only check the index if the data is available locally.
+            if let Ok(res) = ds
+                .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
+                .await
+                .try_resolve()
+            {
+                if *ix == i as u64 {
+                    assert_eq!(res, common);
+                }
+            } else {
+                tracing::warn!(
+                    "skipping VID common index check for missing data {:?}",
+                    block.header()
+                );
+                // At least check that _some_ data can be fetched.
+                let res = ds
                     .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
                     .await
-                    .try_resolve()
-                {
-                    if *ix == i as u64 {
-                        assert_eq!(res, common);
-                    }
-                } else {
-                    tracing::warn!(
-                        "skipping VID common index check for missing data {:?}",
-                        block.header()
-                    );
-                    // At least check that _some_ data can be fetched.
-                    let res = ds
-                        .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
-                        .await
-                        .await;
-                    assert_eq!(res.payload_hash(), common.payload_hash());
-                }
+                    .await;
+                assert_eq!(res.payload_hash(), common.payload_hash());
             }
 
             for (j, txn) in block.enumerate() {
@@ -400,14 +397,10 @@ pub mod availability_tests {
             tracing::info!(i, "check entries");
             let leaf = leaves.next().await.unwrap().await;
             let block = blocks.next().await.unwrap().await;
-            let common = vid_common.next().await.unwrap();
+            let common = vid_common.next().await.unwrap().await;
             assert_eq!(leaf.height(), i);
             assert_eq!(block.height(), i);
-            if has_vid(i as usize) {
-                assert_eq!(common.await, ds.get_vid_common(i as usize).await.await);
-            } else {
-                common.try_resolve().unwrap_err();
-            }
+            assert_eq!(common, ds.get_vid_common(i as usize).await.await);
         }
 
         if range.end_bound() == Bound::Unbounded {
@@ -565,7 +558,7 @@ pub mod node_tests {
         testing::{
             consensus::{MockNetwork, TestableDataSource},
             mocks::{mock_transaction, MockPayload, MockTypes},
-            setup_test, FIRST_VID_VIEW,
+            setup_test,
         },
         VidShare,
     };
@@ -836,15 +829,8 @@ pub mod node_tests {
 
         network.start().await;
 
-        // Check VID shares for a few blocks. We skip the genesis leaf as there is no VID for the
-        // genesis block.
-        let mut leaves = {
-            ds.read()
-                .await
-                .subscribe_leaves(FIRST_VID_VIEW)
-                .await
-                .take(2)
-        };
+        // Check VID shares for a few blocks.
+        let mut leaves = { ds.read().await.subscribe_leaves(0).await.take(3) };
         while let Some(leaf) = leaves.next().await {
             tracing::info!("got leaf {}", leaf.height());
             let ds = ds.read().await;
@@ -870,10 +856,8 @@ pub mod node_tests {
         let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
         let disperse = vid.disperse([]).unwrap();
 
-        // Insert test data with VID common and a share. We use height `FIRST_VID_VIEW` to avoid
-        // confusing the data source, which assumes VID cannot exist at lower heights.
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
-        leaf.leaf.block_header.block_number = FIRST_VID_VIEW as u64;
+        // Insert test data with VID common and a share.
+        let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
         ds.insert_leaf(leaf).await.unwrap();
         ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
@@ -881,21 +865,15 @@ pub mod node_tests {
             .unwrap();
         ds.commit().await.unwrap();
 
-        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
-        assert_eq!(
-            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
-            disperse.shares[0]
-        );
+        assert_eq!(ds.get_vid_common(0).await.await, common);
+        assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
 
         // Re-insert the common data, without a share. This should not overwrite the share we
         // already have.
         ds.insert_vid(common.clone(), None).await.unwrap();
         ds.commit().await.unwrap();
-        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
-        assert_eq!(
-            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
-            disperse.shares[0]
-        );
+        assert_eq!(ds.get_vid_common(0).await.await, common);
+        assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
     }
 
     // This test is currently ignored, as all nodes are temporarily storing the same share, so

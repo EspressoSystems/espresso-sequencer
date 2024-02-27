@@ -11,14 +11,22 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
-use crate::availability::{
-    BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
+use crate::{
+    availability::{
+        BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
+    },
+    status::UpdateStatusData,
+    Leaf, Payload,
 };
-use crate::status::UpdateStatusData;
-use crate::Payload;
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::{test_srs, VidScheme, VidSchemeTrait},
+    traits::{
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::{ConsensusTime, NodeType},
+    },
+};
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -91,6 +99,8 @@ where
                         Some(vid.shares.first_key_value().unwrap().1.clone()),
                     )
                     .await?;
+                } else if leaf.view_number.get_u64() < 2 {
+                    store_genesis_vid(self, leaf).await;
                 } else {
                     tracing::error!(
                         "VID info for block {} not available at decide",
@@ -110,6 +120,55 @@ where
             }
         }
         Ok(())
+    }
+}
+
+async fn store_genesis_vid<Types: NodeType>(
+    storage: &mut impl UpdateAvailabilityData<Types>,
+    leaf: &Leaf<Types>,
+) {
+    // HotShot does not run VID in consensus for the genesis block (and, as a special case, for view
+    // 1). In these cases, the block payload is guaranteed to always be empty, so VID isn't really
+    // necessary. But for consistency, we will still store the VID dispersal data. By convention,
+    // since VID is not part of consensus for these views, we take the number of storage nodes to be
+    // 1.
+    let vid = match VidScheme::new(1, 1, 1, test_srs(1)) {
+        Ok(vid) => vid,
+        Err(err) => {
+            tracing::error!(%err, "unable to construct genesis VID scheme");
+            return;
+        }
+    };
+    let payload = Payload::<Types>::genesis().0;
+    let bytes = match payload.encode() {
+        Ok(bytes) => bytes.collect::<Vec<_>>(),
+        Err(err) => {
+            tracing::error!(%err, "unable to encode genesis payload");
+            return;
+        }
+    };
+    match vid.disperse(bytes) {
+        Ok(disperse) if disperse.commit != leaf.block_header.payload_commitment() => {
+            tracing::error!(
+                computed = %disperse.commit,
+                header = %leaf.block_header.payload_commitment(),
+                "computed VID commit for genesis block does not match header",
+            );
+        }
+        Ok(mut disperse) => {
+            if let Err(err) = storage
+                .insert_vid(
+                    VidCommonQueryData::new(leaf.block_header.clone(), disperse.common),
+                    Some(disperse.shares.remove(0)),
+                )
+                .await
+            {
+                tracing::error!(%err, "unable to store genesis VID");
+            }
+        }
+        Err(err) => {
+            tracing::error!(%err, "unable to compute VID dispersal for genesis block");
+        }
     }
 }
 
