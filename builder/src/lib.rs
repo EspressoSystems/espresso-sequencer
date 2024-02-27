@@ -403,7 +403,7 @@ mod test {
 
         let handles = init_hotshot_handles(num_nodes, num_builders).await;
         // trying to listen events fron the builder handle
-        let mut events = handles[num_nodes + num_builders - 2].get_event_stream();
+        let mut events = handles[num_nodes + num_builders - 1].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
