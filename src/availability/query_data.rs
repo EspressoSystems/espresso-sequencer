@@ -285,8 +285,8 @@ impl<Types: NodeType> BlockQueryData<Types> {
     where
         Payload<Types>: QueryablePayload,
     {
-        let (header, payload, _) = Types::BlockHeader::genesis(instance_state);
-        Self::new(header, payload)
+        let leaf = Leaf::<Types>::genesis(instance_state);
+        Self::new(leaf.block_header, leaf.block_payload.unwrap())
     }
 
     pub fn header(&self) -> &Header<Types> {

@@ -2074,8 +2074,8 @@ checksum = "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d"
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.16"
-source = "git+https://github.com/dtolnay/dyn-clone?tag=1.0.16#f2f0a02f1f7190048153e5ea8f554db7377a50a9"
+version = "1.0.17"
+source = "git+https://github.com/dtolnay/dyn-clone?tag=1.0.17#51bf8816be5a73e38b59fd4d9dda2bc18e9c2429"
 
 [[package]]
 name = "ed25519"
@@ -2848,7 +2848,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "serde",
 ]
@@ -2895,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2926,7 +2926,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2999,7 +2999,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3012,7 +3012,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3039,7 +3039,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "ark-bls12-381",
  "ark-ed-on-bn254",
@@ -3058,7 +3058,7 @@ dependencies = [
  "derivative",
  "digest 0.10.7",
  "displaydoc",
- "dyn-clone 1.0.16 (git+https://github.com/dtolnay/dyn-clone?tag=1.0.16)",
+ "dyn-clone 1.0.17",
  "either",
  "espresso-systems-common 0.4.1",
  "ethereum-types",
@@ -3084,7 +3084,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "bincode",
  "hotshot-constants",
@@ -3093,7 +3093,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -3545,7 +3545,7 @@ dependencies = [
  "derivative",
  "displaydoc",
  "downcast-rs",
- "dyn-clone 1.0.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dyn-clone 1.0.16",
  "espresso-systems-common 0.4.0",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
@@ -3623,7 +3623,7 @@ dependencies = [
  "derivative",
  "displaydoc",
  "downcast-rs",
- "dyn-clone 1.0.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dyn-clone 1.0.16",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
  "jf-utils",
@@ -4017,7 +4017,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
