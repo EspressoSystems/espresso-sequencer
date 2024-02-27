@@ -6,20 +6,19 @@ use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 
-pub mod entry;
 pub mod payload;
 pub mod queryable;
+pub mod table_word;
 pub mod tables;
 pub mod tx_iterator;
 
-use entry::TxTableEntryWord;
 use payload::Payload;
 use tables::NameSpaceTable;
 
-impl BlockPayload for Payload<TxTableEntryWord> {
+impl BlockPayload for Payload {
     type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = NameSpaceTable<TxTableEntryWord>;
+    type Metadata = NameSpaceTable;
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
     // https://github.com/EspressoSystems/HotShot/issues/2115
@@ -149,7 +148,7 @@ mod reference {
 
     #[test]
     fn test_reference_ns_table() {
-        reference_test::<NameSpaceTable<TxTableEntryWord>, _>(
+        reference_test::<NameSpaceTable, _>(
             NS_TABLE.clone(),
             "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn9vNzdIAL8W9ENOuh_",
             |ns_table| ns_table.commit(),

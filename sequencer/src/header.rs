@@ -1,5 +1,5 @@
 use crate::{
-    block::{entry::TxTableEntryWord, tables::NameSpaceTable},
+    block::tables::NameSpaceTable,
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     state::{fetch_fee_receipts, BlockMerkleCommitment, FeeInfo, FeeMerkleCommitment},
     L1BlockInfo, Payload, ValidatedState,
@@ -73,7 +73,7 @@ pub struct Header {
     pub l1_finalized: Option<L1BlockInfo>,
 
     pub payload_commitment: VidCommitment,
-    pub ns_table: NameSpaceTable<TxTableEntryWord>,
+    pub ns_table: NameSpaceTable,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Root Commitment of `FeeMerkleTree`
@@ -112,7 +112,7 @@ impl Committable for Header {
     }
 }
 
-impl Committable for NameSpaceTable<TxTableEntryWord> {
+impl Committable for NameSpaceTable {
     fn commit(&self) -> Commitment<Self> {
         RawCommitmentBuilder::new(&Self::tag())
             .var_size_bytes(self.get_bytes())
@@ -129,7 +129,7 @@ impl Header {
     // TODO pub or merely pub(super)?
     pub fn from_info(
         payload_commitment: VidCommitment,
-        ns_table: NameSpaceTable<TxTableEntryWord>,
+        ns_table: NameSpaceTable,
         parent: &Self,
         mut l1: L1Snapshot,
         mut timestamp: u64,
@@ -234,7 +234,7 @@ impl Header {
 }
 
 impl BlockHeader for Header {
-    type Payload = Payload<TxTableEntryWord>;
+    type Payload = Payload;
     type State = ValidatedState;
 
     fn new(
