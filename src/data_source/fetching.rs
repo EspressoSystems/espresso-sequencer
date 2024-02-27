@@ -265,7 +265,6 @@ where
     metrics: PrometheusMetrics,
     // The proactive scanner task. This is only saved here so that we can cancel it on drop.
     scanner: Option<BackgroundTask>,
-    // The pruner task. This is only saved here so that we can cancel it on drop.
     pruner: Pruner<Types, S, P>,
 }
 
@@ -294,7 +293,7 @@ where
             .await
             .storage
             .get_pruning_config();
-        
+
         let task = cfg.map(|cfg| {
             BackgroundTask::spawn("pruner", async move {
                 for i in 1.. {
@@ -305,7 +304,7 @@ where
                         let height = fetcher.storage.read().await.storage.pruned_height().await;
 
                         if let Some(height) = height {
-                            PRUNED_HEIGHT.store(height, Ordering::SeqCst);
+                            PRUNED_HEIGHT.store(height, Ordering::Release);
                         }
                     }
                     sleep(cfg.interval()).await;
@@ -344,7 +343,6 @@ where
             .unwrap_or(builder.range_chunk_size);
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
-
         let scanner = if proactive_fetching {
             Some(BackgroundTask::spawn(
                 "proactive scanner",
@@ -453,7 +451,6 @@ impl<Types, S, P> AvailabilityDataSource<Types> for FetchingDataSource<Types, S,
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -539,7 +536,6 @@ impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S,
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: UpdateAvailabilityData<Types> + Send + Sync,
     P: Send + Sync,
 {
@@ -640,7 +636,6 @@ where
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
     vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
     range_chunk_size: usize,
-    pruned_height: Arc<AtomicU64>,
 }
 
 #[derive(Debug)]
@@ -724,7 +719,6 @@ where
         }
 
         let height = builder.storage.block_height().await? as u64;
-
         Ok(Self {
             storage: RwLock::new(NotifyStorage {
                 height,
@@ -739,7 +733,6 @@ where
             leaf_fetcher: Arc::new(leaf_fetcher),
             vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
-            pruned_height: Arc::new(AtomicU64::new(0)),
         })
     }
 }
@@ -748,7 +741,6 @@ impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -763,7 +755,7 @@ where
         // necessary, since sending notifications requires a write lock. Hence, we will not miss a
         // notification.
         let storage = self.storage.read().await;
-        let pruned_height = self.pruned_height.load(Ordering::Relaxed);
+        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
 
         // Fall back to fetching early and quietly if it is impossible for the object to exist.
         if !req.might_exist(storage.height as usize, pruned_height as usize) {
@@ -825,7 +817,7 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
-        let pruned_height = storage.storage.pruned_height().await.unwrap_or(0);
+        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
         // We can avoid touching storage if it is not possible for any entry in the entire range to
         // exist given the current block height. In this case, we know storage would return an empty
         // range.
@@ -976,7 +968,7 @@ where
         //   unblock the task waiting for a write lock, which in turn means we can never become
         //   unblocked ourselves.
 
-        let pruned_height = self.pruned_height.load(Ordering::Relaxed);
+        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
 
         if req.might_exist(storage.height as usize, pruned_height as usize) {
             T::active_fetch(self.clone(), storage, req).await;
@@ -1005,12 +997,7 @@ where
         let mut prev_height = 0;
 
         for i in 0.. {
-            tracing::info!(
-                "fetcher pruned_height {:?}",
-                PRUNED_HEIGHT.load(Ordering::SeqCst) as usize
-            );
-
-            let minimum_block_height = PRUNED_HEIGHT.load(Ordering::SeqCst) as usize;
+            let minimum_block_height = PRUNED_HEIGHT.load(Ordering::Acquire) as usize;
             // Get the block height; we will look for any missing blocks up to `block_height`.
             let block_height = { self.storage.read().await.height } as usize;
 
@@ -1051,7 +1038,7 @@ where
             while vid.next().await.is_some() {}
 
             tracing::info!("completed proactive scan {i} of blocks from {start}-{block_height}, will scan again in {minor_interval:?}");
-            sleep(Duration::from_secs(3)).await;
+            sleep(minor_interval).await;
         }
     }
 }

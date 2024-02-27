@@ -131,7 +131,6 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -195,7 +194,6 @@ impl<Types: NodeType, S, P> PartialOrd for VidCommonCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {

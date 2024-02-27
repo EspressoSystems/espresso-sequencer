@@ -399,15 +399,13 @@ impl SqlStorage {
             }
         }
 
-        let storage = Self {
+        Ok(Self {
             client: Arc::new(client),
             tx_in_progress: false,
             kill: Some(kill),
             pruner_cfg: config.pruner_cfg,
             pruned_height: None,
-        };
-
-        Ok(storage)
+        })
     }
 
     /// Access the transaction which is accumulating all uncommitted changes to the data source.
@@ -427,10 +425,6 @@ impl SqlStorage {
 }
 
 impl PrunerConfig for SqlStorage {
-    fn pruning_enabled(&self) -> bool {
-        self.pruner_cfg.is_some()
-    }
-
     fn set_pruning_config(&mut self, cfg: PrunerCfg) {
         self.pruner_cfg = Some(cfg);
     }
@@ -1866,75 +1860,6 @@ mod test {
 
     use super::{testing::TmpDb, *};
     use crate::testing::setup_test;
-
-    // async fn test_pruning() {
-    //     setup_test();
-
-    //     let db = TmpDb::init().await;
-    //     let port = db.port();
-    //     let host = &db.host();
-
-    //     let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
-    //     let cfg = Config::default()
-    //         .user("postgres")
-    //         .password("password")
-    //         .host(host)
-    //         .port(port)
-    //         .migrations(migrations);
-
-    //     let storage = SqlStorage::connect(cfg).await.unwrap();
-
-    //     // Create the consensus network.
-    //     let mut network = MockNetwork::<MockDataSource>::init().await;
-
-    //     // Start a web server that the non-consensus node can use to fetch blocks.
-    //     let port = pick_unused_port().unwrap();
-    //     let mut app = App::<_, Error>::with_state(network.data_source());
-    //     app.register_module("availability", define_api(&Default::default()).unwrap())
-    //         .unwrap();
-    //     spawn(app.serve(format!("0.0.0.0:{port}")));
-
-    //     // Start a data source which is not receiving events from consensus. We don't give it a
-    //     // fetcher since transactions are always fetched passively anyways.
-    //     let db = TmpDb::init().await;
-    //     let mut data_source = data_source(&db, &NoFetching).await;
-
-    //     // Subscribe to blocks.
-    //     let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
-    //     let mut blocks = { network.data_source().read().await.subscribe_blocks(1).await };
-
-    //     // Start consensus.
-    //     network.start().await;
-
-    //     for _ in 1..30 {
-    //         let leaf = leaves.next().await.unwrap();
-    //         let block = blocks.next().await.unwrap();
-
-    //         data_source.insert_leaf(leaf).await.unwrap();
-    //         data_source.insert_block(block.clone()).await.unwrap();
-    //         data_source.commit().await.unwrap();
-    //     }
-
-    //     network.shut_down().await;
-
-    //     let usage_before_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
-    //     tracing::info!("disk usage before pruning: {}", usage_before_pruning);
-
-    //     // Pruning should reduce the disk usage.
-    //     // Some data will be pruned as minimum retention is set to 0 days
-    //     data_source
-    //         .storage_mut()
-    //         .await
-    //         .set_pruning_config(PrunerCfg::new(50, 0, 7));
-
-    //     data_source.storage_mut().await.prune().await.unwrap();
-
-    //     let disk_usage_after_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
-    //     tracing::info!("disk usage after pruning: {}", disk_usage_after_pruning);
-
-    //     assert!(disk_usage_after_pruning < usage_before_pruning)
-    // }
-
     #[async_std::test]
     async fn test_migrations() {
         setup_test();

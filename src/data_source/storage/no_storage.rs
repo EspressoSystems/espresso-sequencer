@@ -14,7 +14,6 @@
 
 use super::AvailabilityStorage;
 use crate::data_source::storage::pruning::{PruneStorage, PrunerConfig};
-
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,

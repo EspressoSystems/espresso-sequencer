@@ -55,9 +55,6 @@ pub trait PruneStorage: PrunerConfig {
 }
 
 pub trait PrunerConfig {
-    fn pruning_enabled(&self) -> bool {
-        false
-    }
     fn set_pruning_config(&mut self, _cfg: PrunerCfg) {}
     fn get_pruning_config(&self) -> Option<PrunerCfg> {
         None

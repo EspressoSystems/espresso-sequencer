@@ -342,7 +342,6 @@ impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
