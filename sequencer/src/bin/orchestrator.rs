@@ -3,7 +3,6 @@ use clap::Parser;
 use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
-use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
@@ -191,15 +190,7 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
-    let (pub_keys, _): (Vec<_>, Vec<_>) = (0..args.num_nodes.into())
-        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64))
-        .unzip();
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
-        (0..args.num_nodes.into())
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
-            .collect();
     config.config.total_nodes = args.num_nodes;
-    config.config.known_nodes_with_stake = known_nodes_with_stake;
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();

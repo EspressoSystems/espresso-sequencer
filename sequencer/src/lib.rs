@@ -24,6 +24,9 @@ mod state;
 pub mod transaction;
 mod vm;
 
+use ark_ec::models::CurveConfig;
+use ark_ed_on_bn254::EdwardsConfig;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot::{
@@ -34,8 +37,10 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_types::traits::network::ConnectedNetwork;
-use jf_primitives::signatures::bls_over_bn254::VerKey;
+use hotshot_types::{traits::network::ConnectedNetwork, ValidatorConfig};
+use jf_primitives::signatures::schnorr;
+use tagged_base64::tagged;
+use zeroize::Zeroize;
 
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -47,6 +52,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
+        election::Membership,
         metrics::Metrics,
         node_implementation::{NodeImplementation, NodeType},
         states::InstanceState,
@@ -137,6 +143,36 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
+/// A private signing key for the Schnorr signature scheme.
+///
+/// This key is used to sign state commitments for use with the light client.
+// Note: defining this type here, rather than using `SignKey` from jf-primitives, is a workaround to
+// allow us to extract the inner field element and thus generate a `KeyPair`.
+// See https://github.com/EspressoSystems/jellyfish/issues/497.
+#[tagged("STATEKEY")]
+#[derive(Clone, Copy, Debug, Default, CanonicalSerialize, CanonicalDeserialize, Zeroize)]
+pub struct SchnorrPrivKey(<EdwardsConfig as CurveConfig>::ScalarField);
+
+pub type SchnorrPubKey = schnorr::VerKey<EdwardsConfig>;
+
+impl SchnorrPrivKey {
+    pub fn generate_from_seed_indexed(seed: [u8; 32], index: u64) -> Self {
+        Self(
+            *StateKeyPair::generate_from_seed_indexed(seed, index)
+                .0
+                .sign_key_internal(),
+        )
+    }
+
+    pub fn key_pair(self) -> StateKeyPair {
+        StateKeyPair(schnorr::KeyPair::generate_with_sign_key(self.0))
+    }
+
+    pub fn pub_key(self) -> SchnorrPubKey {
+        self.key_pair().0.ver_key()
+    }
+}
+
 type ElectionConfig = StaticElectionConfig;
 
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
@@ -203,16 +239,23 @@ pub enum Error {
 
 #[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
-    nodes_pub_keys: Vec<PubKey>,
-    known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
     node_id: usize,
     priv_key: PrivKey,
     networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
     metrics: &dyn Metrics,
-    instance_state: &NodeState,
+    instance_state: NodeState,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
+    let pub_key = config.known_nodes_with_stake[node_id]
+        .stake_table_entry
+        .stake_key;
+    let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
+        config.total_nodes.get() as u64,
+    );
+    let membership = GeneralStaticCommittee::create_election(
+        config.known_nodes_with_stake.clone(),
+        election_config,
+    );
     let memberships = Memberships {
         quorum_membership: membership.clone(),
         da_membership: membership.clone(),
@@ -221,7 +264,7 @@ async fn init_hotshot<N: network::Type>(
     };
 
     SystemContext::init(
-        nodes_pub_keys[node_id],
+        pub_key,
         priv_key,
         node_id as u64,
         config,
@@ -244,6 +287,7 @@ pub struct NetworkParams {
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
+    pub private_state_key: SchnorrPrivKey,
 }
 
 #[derive(Clone, Debug)]
@@ -268,70 +312,43 @@ pub async fn init_node(
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+    let my_config = ValidatorConfig {
+        public_key: BLSPubKey::from_private(&network_params.private_staking_key),
+        private_key: network_params.private_staking_key,
+        stake_value: 1,
+        state_key_pair: network_params.private_state_key.key_pair(),
+    };
 
-    let private_staking_key = network_params.private_staking_key;
-    let public_staking_key = BLSPubKey::from_private(&private_staking_key);
-
-    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
         }
         None => {
             tracing::info!("loading network config from orchestrator");
-            let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
-                orchestrator_client.get_config(public_ip.to_string()).await;
-            let node_index = config.node_index;
-
-            // Get updated config from orchestrator containing all peer's public keys
-            config = orchestrator_client
-                .post_and_wait_all_public_keys(config.node_index, public_staking_key)
-                .await;
-
-            // `post_and_wait_all_public_keys` does not set `config.node_index` properly, so we fix
-            // it by using the `node_index` from `get_config`. This will be fixed by
-            // https://github.com/EspressoSystems/HotShot/issues/2618, after which we can remove
-            // this line.
-            config.node_index = node_index;
-
-            config.config.my_own_validator_config.private_key = private_staking_key.clone();
-            config.config.my_own_validator_config.public_key = public_staking_key;
-
+            let config =
+                NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
+                    .await
+                    .0;
             tracing::info!("loaded config, we are node {}", config.node_index);
             persistence.save_config(&config).await?;
             (config, true)
         }
     };
     let node_index = config.node_index;
-    let num_nodes = config.config.total_nodes.get();
-
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
-        config.config.known_nodes_with_stake.clone();
-
-    let pub_keys = known_nodes_with_stake
-        .iter()
-        .map(|entry| entry.stake_key)
-        .collect::<Vec<_>>();
-
-    // TODO: fetch from orchestrator?
-    let state_ver_keys = (0..num_nodes)
-        .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
-        .collect::<Vec<_>>();
-    let state_key_pair = StateKeyPair::generate_from_seed_indexed(config.seed, node_index);
-    config.config.my_own_validator_config.state_key_pair = state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
         da_network: Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            my_config.public_key,
             true,
         )),
         quorum_network: Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            my_config.public_key,
             false,
         )),
         _pd: Default::default(),
@@ -359,26 +376,23 @@ pub async fn init_node(
         builder_address: wallet,
         genesis_state,
     };
+    let stake_table_comm =
+        static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
+
     let hotshot = init_hotshot(
-        pub_keys.clone(),
-        known_nodes_with_stake.clone(),
         node_index as usize,
-        private_staking_key,
+        my_config.private_key,
         networks,
         config.config,
         metrics,
-        &instance_state,
+        instance_state,
     )
     .await;
     let mut ctx = SequencerContext::new(
         hotshot,
         node_index,
-        state_key_pair,
-        static_stake_table_commitment(
-            &known_nodes_with_stake,
-            &state_ver_keys,
-            STAKE_TABLE_CAPACITY,
-        ),
+        my_config.state_key_pair,
+        stake_table_comm,
     )
     .with_state_relay_server(network_params.state_relay_server_url);
     if wait_for_orchestrator {
@@ -395,7 +409,10 @@ pub mod testing {
     use futures::{Stream, StreamExt};
     use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
-    use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
+    use hotshot_types::{
+        traits::block_contents::{BlockHeader, BlockPayload},
+        PeerConfig,
+    };
 
     use hotshot_types::{
         light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
@@ -423,9 +440,17 @@ pub mod testing {
             .iter()
             .map(PubKey::from_private)
             .collect::<Vec<_>>();
-        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
-            .collect();
+        let state_key_pairs = (0..num_nodes)
+            .map(|_| StateKeyPair::generate())
+            .collect::<Vec<_>>();
+        let known_nodes_with_stake = pub_keys
+            .iter()
+            .zip(&state_key_pairs)
+            .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
+                stake_table_entry: pub_key.get_stake_table_entry(1),
+                state_ver_key: state_key_pair.ver_key(),
+            })
+            .collect::<Vec<_>>();
 
         let mut handles = vec![];
 
@@ -436,7 +461,7 @@ pub mod testing {
             total_nodes: num_nodes.try_into().unwrap(),
             min_transactions: 1,
             max_transactions: 10000.try_into().unwrap(),
-            known_nodes_with_stake: known_nodes_with_stake.clone(),
+            known_nodes_with_stake,
             next_view_timeout: Duration::from_secs(5).as_millis() as u64,
             timeout_ratio: (10, 11),
             round_start_delay: Duration::from_millis(1).as_millis() as u64,
@@ -457,8 +482,11 @@ pub mod testing {
             config.my_own_validator_config = ValidatorConfig {
                 public_key: pub_keys[node_id],
                 private_key: priv_keys[node_id].clone(),
-                stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
-                state_key_pair: StateKeyPair::generate(),
+                stake_value: config.known_nodes_with_stake[node_id]
+                    .stake_table_entry
+                    .stake_amount
+                    .as_u64(),
+                state_key_pair: state_key_pairs[node_id].clone(),
             };
 
             let network = Arc::new(MemoryNetwork::new(
@@ -472,10 +500,8 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
-            let instance_state = &NodeState::default();
+            let instance_state = NodeState::default();
             let handle = init_hotshot(
-                pub_keys.clone(),
-                known_nodes_with_stake.clone(),
                 node_id,
                 priv_keys[node_id].clone(),
                 networks,

@@ -273,7 +273,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// TODO temporary VID constructor.
 pub(crate) fn test_vid_factory() -> VidScheme {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-    let (payload_chunk_size, num_storage_nodes) = (8, 10);
+    let (payload_chunk_size, num_storage_nodes, multiplicity) = (8, 10, 1);
 
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
@@ -281,7 +281,7 @@ pub(crate) fn test_vid_factory() -> VidScheme {
         checked_fft_size(payload_chunk_size - 1).unwrap(),
     )
     .unwrap();
-    VidScheme::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+    VidScheme::new(payload_chunk_size, num_storage_nodes, multiplicity, srs).unwrap()
 }
 
 // TODO type alias needed only because nested impl Trait is not allowed
