@@ -102,7 +102,6 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
     I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
@@ -210,7 +209,6 @@ impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
