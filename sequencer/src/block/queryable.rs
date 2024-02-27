@@ -74,7 +74,10 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
             return None; // error: index out of bounds
         }
 
-        let vid = test_vid_factory(); // TODO temporary VID construction
+        // TODO temporary VID construction. We need to get the number of storage nodes from the VID
+        // common data. May need the query service to pass common into this function along with
+        // metadata.
+        let vid = test_vid_factory(10);
 
         // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
         //

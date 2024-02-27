@@ -433,8 +433,11 @@ mod generic_tests {
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
-    use futures::FutureExt;
-    use hotshot_query_service::availability::BlockQueryData;
+    use futures::{FutureExt, StreamExt};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        testing::FIRST_VID_VIEW,
+    };
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -495,6 +498,17 @@ mod generic_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
+        // Wait for at least one empty block to be sequenced (after consensus starts VID).
+        client
+            .socket(&format!("availability/stream/leaves/{FIRST_VID_VIEW}"))
+            .subscribe::<LeafQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -505,11 +519,11 @@ mod generic_tests {
         assert_eq!(txn.commit(), hash);
 
         // Wait for a Decide event containing transaction matching the one we sent
-        let block_height = wait_for_decide_on_handle(&mut events, &txn).await;
+        let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
         let mut found_txn = false;
         let mut found_empty_block = false;
-        for block_num in 0..=block_height {
+        for block_num in FIRST_VID_VIEW..=block_height {
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()
