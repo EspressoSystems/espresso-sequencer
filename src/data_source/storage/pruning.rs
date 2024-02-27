@@ -9,18 +9,19 @@ pub struct PrunerCfg {
     /// Disk space threshold (in bytes).
     ///
     /// If the disk usage exceeds this threshold, pruning of data starts from
-    /// the oldest data and continues until the disk usage falls below `MAX_USAGE`.
+    /// the oldest data and continues until the disk usage falls below `MAX_USAGE
+    /// or until the oldest data is younger than `MINIMUM_RETENTION`
     pruning_threshold: Option<u64>,
 
-    /// Minimum data retention period (in seconds).
+    /// Minimum data retention period
     ///
     /// Data younger than this is never pruned, regardless of disk usage.
     minimum_retention: Duration,
 
-    /// Target data retention period (in seconds).
+    /// Target data retention period
     ///
-    /// This is the ideal period for which data should be retained. Data younger
-    /// than this and older than minimum_retention may be pruned if disk usage exceeds the `pruning_threshold`.
+    /// This is the ideal period for which data should be retained
+    /// data younger than this and older than `MINIMUM_RETENTION` may be pruned if disk usage exceeds the `pruning_threshold`.
     target_retention: Duration,
 
     /// Number of blocks to remove in a single pruning operation.
@@ -29,7 +30,7 @@ pub struct PrunerCfg {
     /// Maximum disk usage (in basis points).
     ///
     /// Pruning stops once the disk usage falls below this value, even if
-    /// some data older than the `minimum_retention` remains. Values range
+    /// some data older than the `MINIMUM_RETENTION` remains. Values range
     /// from 0 (0%) to 10000 (100%).
     max_usage: u16,
     /// Pruning interval

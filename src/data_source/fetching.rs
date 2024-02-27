@@ -122,8 +122,6 @@ use leaf::LeafFetcher;
 use transaction::TransactionRequest;
 use vid::{VidCommonFetcher, VidCommonRequest};
 
-static PRUNED_HEIGHT: AtomicU64 = AtomicU64::new(0);
-
 /// Builder for [`FetchingDataSource`] with configuration.
 pub struct Builder<Types, S, P> {
     storage: S,
@@ -304,7 +302,7 @@ where
                         let height = fetcher.storage.read().await.storage.pruned_height();
 
                         if let Some(height) = height {
-                            PRUNED_HEIGHT.store(height, Ordering::Release);
+                            fetcher.pruned_height.store(height, Ordering::Release);
                         }
                     }
                     sleep(cfg.interval()).await;
@@ -636,6 +634,7 @@ where
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
     vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
     range_chunk_size: usize,
+    pruned_height: AtomicU64,
 }
 
 #[derive(Debug)]
@@ -733,6 +732,7 @@ where
             leaf_fetcher: Arc::new(leaf_fetcher),
             vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
+            pruned_height: AtomicU64::new(0),
         })
     }
 }
@@ -755,7 +755,7 @@ where
         // necessary, since sending notifications requires a write lock. Hence, we will not miss a
         // notification.
         let storage = self.storage.read().await;
-        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
+        let pruned_height = self.pruned_height.load(Ordering::Acquire);
 
         // Fall back to fetching early and quietly if it is impossible for the object to exist.
         if !req.might_exist(storage.height as usize, pruned_height as usize) {
@@ -817,7 +817,7 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
-        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
+        let pruned_height = self.pruned_height.load(Ordering::Acquire);
         // We can avoid touching storage if it is not possible for any entry in the entire range to
         // exist given the current block height. In this case, we know storage would return an empty
         // range.
@@ -968,7 +968,7 @@ where
         //   unblock the task waiting for a write lock, which in turn means we can never become
         //   unblocked ourselves.
 
-        let pruned_height = PRUNED_HEIGHT.load(Ordering::Acquire);
+        let pruned_height = self.pruned_height.load(Ordering::Acquire);
 
         if req.might_exist(storage.height as usize, pruned_height as usize) {
             T::active_fetch(self.clone(), storage, req).await;
@@ -997,7 +997,7 @@ where
         let mut prev_height = 0;
 
         for i in 0.. {
-            let minimum_block_height = PRUNED_HEIGHT.load(Ordering::Acquire) as usize;
+            let minimum_block_height = self.pruned_height.load(Ordering::Acquire) as usize;
             // Get the block height; we will look for any missing blocks up to `block_height`.
             let block_height = { self.storage.read().await.height } as usize;
 

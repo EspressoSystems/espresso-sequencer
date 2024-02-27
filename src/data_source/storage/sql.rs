@@ -498,8 +498,11 @@ impl PruneStorage for SqlStorage {
                 if let Some(target_height) = target_height {
                     while height < target_height {
                         height = min(height + batch_size, target_height);
-                        self.query_opt("DELETE FROM header WHERE height < $1", &[&(height as i64)])
-                            .await?;
+                        self.query_opt(
+                            "DELETE FROM header WHERE height <= $1",
+                            &[&(height as i64)],
+                        )
+                        .await?;
                         tracing::info!("Pruned data up to height {}", height);
                     }
                     self.pruned_height = Some(target_height);
@@ -530,7 +533,7 @@ impl PruneStorage for SqlStorage {
                             {
                                 height = min(height + batch_size, min_retention_height);
                                 self.query_opt(
-                                    "DELETE FROM header WHERE height < $1",
+                                    "DELETE FROM header WHERE height <= $1",
                                     &[&(height as i64)],
                                 )
                                 .await?;
@@ -544,10 +547,13 @@ impl PruneStorage for SqlStorage {
                 // Vacuum the database to reclaim space.
                 // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
                 // cause downtime for the query service.
-                self.query_opt_static("VACUUM;").await?;
+                self.client
+                    .batch_execute("VACUUM")
+                    .await
+                    .map_err(postgres_err)?;
             }
             None => {
-                tracing::info!("No data to prune");
+                tracing::info!("database is empty, nothing to prune");
             }
         }
 
@@ -1931,13 +1937,11 @@ mod test {
         let port = db.port();
         let host = &db.host();
 
-        let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
         let cfg = Config::default()
             .user("postgres")
             .password("password")
             .host(host)
-            .port(port)
-            .migrations(migrations);
+            .port(port);
 
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
         let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
@@ -1948,29 +1952,52 @@ mod test {
             storage.commit().await.unwrap();
         }
 
+        let height_before_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
         // Set pruner config to default which has minimum retention set to 1 day
         storage.set_pruning_config(PrunerCfg::new());
-        sleep(Duration::from_secs(2)).await;
         // No data will be pruned
         storage.prune().await.unwrap();
         // Pruned height should be none
         assert!(storage.pruned_height().is_none());
 
+        let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
+        assert_eq!(
+            height_after_pruning, height_before_pruning,
+            "some data has been pruned"
+        );
+
         // Set pruner config to target retention set to 1s
         storage.set_pruning_config(PrunerCfg::new().with_target_retention(Duration::from_secs(1)));
-        // All of the data is now atleast one sec old
+        sleep(Duration::from_secs(2)).await;
+        // All of the data is now older than 1s.
+        // This would prune all the data as the target retention is set to 1s
         storage.prune().await.unwrap();
 
         // Pruned height should be some
-        // the table should now contain only 1 row as data with height < target height is pruned
         assert!(storage.pruned_height().is_some());
 
-        let count = storage
+        // All the tables should be empty
+        // counting rows in header table
+        let header_rows = storage
             .query_one_static("select count(*) as count from header")
             .await
             .unwrap()
             .get::<_, i64>("count");
-        assert_eq!(count, 1);
+        // the table should be empty
+        assert_eq!(header_rows, 0);
+
+        // counting rows in leaf table.
+        // Deleting rows from header table would delete rows in all the tables
+        // as each of table implement "ON DELETE CASCADE" fk constraint with the header table.
+        let leaf_rows = storage
+            .query_one_static("select count(*) as count from leaf")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        // the table should be empty
+        assert_eq!(leaf_rows, 0);
     }
 
     #[async_std::test]
@@ -1981,13 +2008,11 @@ mod test {
         let port = db.port();
         let host = &db.host();
 
-        let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
         let cfg = Config::default()
             .user("postgres")
             .password("password")
             .host(host)
-            .port(port)
-            .migrations(migrations);
+            .port(port);
 
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
         let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
@@ -2000,27 +2025,38 @@ mod test {
 
         // Set pruner config to min retention set to 1s and pruning_threshold to 1
         // SQL storage size is more than 1000 bytes even without any data indexed
+        // Hence, pruning would delete all the data from the database since threshold will always be > disk usage
         storage.set_pruning_config(
             PrunerCfg::new()
                 .with_minimum_retention(Duration::from_secs(1))
                 .with_pruning_threshold(1),
         );
 
+        // Sleeping for 2s so that all the data is atleast 2s old
         sleep(Duration::from_secs(2)).await;
-
-        // All of the data is now atleast one sec old
+        // Pruning would delete all the data from the database
+        // All the data is older than minimum retention period and threshold is met.
         storage.prune().await.unwrap();
 
         // Pruned height should be some
-        // the table should now contain only 1 row
-        // as data with timestamp < minimum retention timestamp is pruned
         assert!(storage.pruned_height().is_some());
 
-        let count = storage
+        // The database should be empty as all the data is deleted
+        // Counting rows from header table.
+        // Count should be 0
+        let header_rows = storage
             .query_one_static("select count(*) as count from header")
             .await
             .unwrap()
             .get::<_, i64>("count");
-        assert_eq!(count, 1);
+        assert_eq!(header_rows, 0);
+
+        let leaf_rows = storage
+            .query_one_static("select count(*) as count from leaf")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        // the table should be empty
+        assert_eq!(leaf_rows, 0);
     }
 }
