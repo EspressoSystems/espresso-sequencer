@@ -2848,7 +2848,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "serde",
 ]
@@ -2895,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2926,7 +2926,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -3000,7 +3000,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3013,7 +3013,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3040,7 +3040,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "ark-bls12-381",
  "ark-ed-on-bn254",
@@ -3085,7 +3085,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "bincode",
  "hotshot-constants",
@@ -3094,7 +3094,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4018,7 +4018,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=refactor-genesis-commitment#0211d6f3b935be5e260c8de903ff749c6d13d3c5"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.18#be36bb0e3e8596f7adad3606cf833f9117e028bd"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
