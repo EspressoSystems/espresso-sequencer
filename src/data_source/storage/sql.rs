@@ -2034,6 +2034,9 @@ mod test {
 
         // Sleeping for 2s so that all the data is atleast 2s old
         sleep(Duration::from_secs(2)).await;
+
+        let usage_before_pruning = storage.get_disk_usage().await.unwrap();
+
         // Pruning would delete all the data from the database
         // All the data is older than minimum retention period and threshold is met.
         storage.prune().await.unwrap();
@@ -2058,5 +2061,12 @@ mod test {
             .get::<_, i64>("count");
         // the table should be empty
         assert_eq!(leaf_rows, 0);
+
+        let usage_after_pruning = storage.get_disk_usage().await.unwrap();
+
+        assert!(
+            usage_before_pruning > usage_after_pruning,
+            " disk usage should decrease after pruning"
+        );
     }
 }
