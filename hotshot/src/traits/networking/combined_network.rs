@@ -26,7 +26,7 @@ use hotshot_types::{
     data::ViewNumber,
     message::Message,
     traits::{
-        network::{ConnectedNetwork, ConsensusIntentEvent, TransmitType},
+        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::NodeType,
     },
     BoxSyncFuture,
@@ -319,7 +319,6 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
 
     fn recv_msgs<'a, 'b>(
         &'a self,
-        transmit_type: TransmitType,
     ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
@@ -328,8 +327,8 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         // recv on both networks because nodes may be accessible only on either. discard duplicates
         // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
         let closure = async move {
-            let mut primary_msgs = self.primary().recv_msgs(transmit_type).await?;
-            let mut secondary_msgs = self.secondary().recv_msgs(transmit_type).await?;
+            let mut primary_msgs = self.primary().recv_msgs().await?;
+            let mut secondary_msgs = self.secondary().recv_msgs().await?;
 
             primary_msgs.append(secondary_msgs.as_mut());
 

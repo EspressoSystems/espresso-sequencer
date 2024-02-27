@@ -28,7 +28,7 @@ use hotshot_types::{
 use hotshot_types::{
     message::Messages,
     traits::{
-        network::{ConsensusIntentEvent, TransmitType},
+        network::ConsensusIntentEvent,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
@@ -63,12 +63,12 @@ pub async fn add_network_message_task<
     // https://github.com/EspressoSystems/HotShot/issues/2377
     let network = net.clone();
     let mut state = network_state.clone();
-    let broadcast_handle = async_spawn(async move {
+    let handle = async_spawn(async move {
         loop {
-            let msgs = match network.recv_msgs(TransmitType::Broadcast).await {
+            let msgs = match network.recv_msgs().await {
                 Ok(msgs) => Messages(msgs),
                 Err(err) => {
-                    error!("failed to receive broadcast messages: {err}");
+                    error!("failed to receive messages: {err}");
 
                     // return zero messages so we sleep and try again
                     Messages(vec![])
@@ -82,29 +82,7 @@ pub async fn add_network_message_task<
             }
         }
     });
-    let network = net.clone();
-    let mut state = network_state.clone();
-    let direct_handle = async_spawn(async move {
-        loop {
-            let msgs = match network.recv_msgs(TransmitType::Direct).await {
-                Ok(msgs) => Messages(msgs),
-                Err(err) => {
-                    error!("failed to receive direct messages: {err}");
-
-                    // return zero messages so we sleep and try again
-                    Messages(vec![])
-                }
-            };
-            if msgs.0.is_empty() {
-                // TODO: Stop sleeping here: https://github.com/EspressoSystems/HotShot/issues/2558
-                async_sleep(Duration::from_millis(100)).await;
-            } else {
-                state.handle_messages(msgs.0).await;
-            }
-        }
-    });
-    task_reg.register(direct_handle).await;
-    task_reg.register(broadcast_handle).await;
+    task_reg.register(handle).await;
 }
 /// Add the network task to handle events and send messages.
 pub async fn add_network_event_task<

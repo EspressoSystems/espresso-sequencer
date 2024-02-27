@@ -26,10 +26,8 @@ pub struct NetworkingMetricsValue {
     #[allow(dead_code)]
     /// A [`Gauge`] which tracks how many peers are connected
     pub connected_peers: Box<dyn Gauge>,
-    /// A [`Counter`] which tracks how many messages have been received directly
-    pub incoming_direct_message_count: Box<dyn Counter>,
-    /// A [`Counter`] which tracks how many messages have been received by broadcast
-    pub incoming_broadcast_message_count: Box<dyn Counter>,
+    /// A [`Counter`] which tracks how many messages have been received
+    pub incoming_message_count: Box<dyn Counter>,
     /// A [`Counter`] which tracks how many messages have been send directly
     pub outgoing_direct_message_count: Box<dyn Counter>,
     /// A [`Counter`] which tracks how many messages have been send by broadcast
@@ -163,10 +161,8 @@ impl NetworkingMetricsValue {
     pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
             connected_peers: metrics.create_gauge(String::from("connected_peers"), None),
-            incoming_direct_message_count: metrics
-                .create_counter(String::from("incoming_direct_message_count"), None),
-            incoming_broadcast_message_count: metrics
-                .create_counter(String::from("incoming_broadcast_message_count"), None),
+            incoming_message_count: metrics
+                .create_counter(String::from("incoming_message_count"), None),
             outgoing_direct_message_count: metrics
                 .create_counter(String::from("outgoing_direct_message_count"), None),
             outgoing_broadcast_message_count: metrics

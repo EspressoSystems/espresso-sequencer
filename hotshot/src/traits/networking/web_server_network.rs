@@ -19,7 +19,7 @@ use hotshot_types::{
     traits::{
         network::{
             ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
-            TestableNetworkingImplementation, TransmitType, WebServerNetworkError,
+            TestableNetworkingImplementation, WebServerNetworkError,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -169,10 +169,8 @@ impl<K: SignatureKey> TaskMap<K> {
 struct Inner<TYPES: NodeType> {
     /// Our own key
     _own_key: TYPES::SignatureKey,
-    /// Queue for broadcasted messages
-    broadcast_poll_queue_0_1: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
-    /// Queue for direct messages
-    direct_poll_queue_0_1: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
+    /// Queue for messages
+    poll_queue_0_1: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
     /// Client is running
     running: AtomicBool,
     /// The web server connection is ready
@@ -215,7 +213,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
     /// * `first_tx_index` - the index of the first transaction received from the server in the latest batch.
     /// * `tx_index` - the last transaction index we saw from the web server.
     async fn handle_tx_0_1(&self, tx: Vec<u8>, first_tx_index: u64, tx_index: &mut u64) {
-        let broadcast_poll_queue = &self.broadcast_poll_queue_0_1;
+        let poll_queue = &self.poll_queue_0_1;
         if first_tx_index > *tx_index + 1 {
             debug!(
                 "missed txns from {} to {}",
@@ -231,7 +229,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
             let deserialized_message = RecvMsg {
                 message: Some(deserialized_message_inner),
             };
-            broadcast_poll_queue
+            poll_queue
                 .write()
                 .await
                 .push(deserialized_message.clone());
@@ -257,8 +255,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
         seen_proposals: &mut LruCache<u64, ()>,
         seen_view_sync_certificates: &mut LruCache<u64, ()>,
     ) -> bool {
-        let broadcast_poll_queue = &self.broadcast_poll_queue_0_1;
-        let direct_poll_queue = &self.direct_poll_queue_0_1;
+        let poll_queue = &self.poll_queue_0_1;
         if let Ok(deserialized_message_inner) = bincode::deserialize::<Message<TYPES>>(&message) {
             let deserialized_message = RecvMsg {
                 message: Some(deserialized_message_inner),
@@ -269,7 +266,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
                 MessagePurpose::Proposal => {
                     let proposal = deserialized_message.clone();
-                    broadcast_poll_queue.write().await.push(proposal);
+                    poll_queue.write().await.push(proposal);
 
                     // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                     return true;
@@ -279,7 +276,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                     let hash = hash(&proposal);
                     // Only allow unseen proposals to be pushed to the queue
                     if seen_proposals.put(hash, ()).is_none() {
-                        broadcast_poll_queue.write().await.push(proposal);
+                        poll_queue.write().await.push(proposal);
                     }
 
                     // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
@@ -289,14 +286,14 @@ impl<TYPES: NodeType> Inner<TYPES> {
                     let cert = deserialized_message.clone();
                     let hash = hash(&cert);
                     if seen_view_sync_certificates.put(hash, ()).is_none() {
-                        broadcast_poll_queue.write().await.push(cert);
+                        poll_queue.write().await.push(cert);
                     }
                     return false;
                 }
-                MessagePurpose::Vote | MessagePurpose::ViewSyncVote => {
+                MessagePurpose::Vote | MessagePurpose::ViewSyncVote | MessagePurpose::ViewSyncCertificate => {
                     let vote = deserialized_message.clone();
                     *vote_index += 1;
-                    direct_poll_queue.write().await.push(vote);
+                    poll_queue.write().await.push(vote);
 
                     return false;
                 }
@@ -305,7 +302,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                         "Received DAC from web server for view {} {}",
                         view_number, self.is_da
                     );
-                    broadcast_poll_queue
+                    poll_queue
                         .write()
                         .await
                         .push(deserialized_message.clone());
@@ -318,22 +315,13 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 MessagePurpose::VidDisperse => {
                     // TODO copy-pasted from `MessagePurpose::Proposal` https://github.com/EspressoSystems/HotShot/issues/1690
 
-                    self.broadcast_poll_queue_0_1
+                    self.poll_queue_0_1
                         .write()
                         .await
                         .push(deserialized_message.clone());
 
                     // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                     return true;
-                }
-                MessagePurpose::ViewSyncCertificate => {
-                    // TODO ED Special case this for view sync
-                    // TODO ED Need to add vote indexing to web server for view sync certs
-                    let cert = deserialized_message.clone();
-                    *vote_index += 1;
-                    broadcast_poll_queue.write().await.push(cert);
-
-                    return false;
                 }
 
                 MessagePurpose::Internal => {
@@ -343,7 +331,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
 
                 MessagePurpose::Upgrade => {
-                    broadcast_poll_queue
+                    poll_queue
                         .write()
                         .await
                         .push(deserialized_message.clone());
@@ -636,8 +624,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
         let client = surf_disco::Client::<ClientError>::new(url);
 
         let inner = Arc::new(Inner {
-            broadcast_poll_queue_0_1: Arc::default(),
-            direct_poll_queue_0_1: Arc::default(),
+            poll_queue_0_1: Arc::default(),
             running: AtomicBool::new(true),
             connected: AtomicBool::new(false),
             client,
@@ -860,45 +847,25 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         }
     }
 
-    /// Moves out the entire queue of received messages of 'transmit_type`
+    /// Moves out the entire queue of received messages
     ///
     /// Will unwrap the underlying `NetworkMessage`
     /// blocking
     fn recv_msgs<'a, 'b>(
         &'a self,
-        transmit_type: TransmitType,
     ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
     {
         let closure = async move {
-            match transmit_type {
-                TransmitType::Direct => {
-                    let mut queue = self.inner.direct_poll_queue_0_1.write().await;
-                    Ok(queue
-                        .drain(..)
-                        .collect::<Vec<_>>()
-                        .iter()
-                        .map(|x| x.get_message().unwrap())
-                        .collect())
-                }
-                TransmitType::Broadcast => {
-                    let mut queue = self.inner.broadcast_poll_queue_0_1.write().await;
-                    Ok(queue
-                        .drain(..)
-                        .collect::<Vec<_>>()
-                        .iter()
-                        .map(|x| x.get_message().unwrap())
-                        .collect())
-                }
-                TransmitType::DACommitteeBroadcast => {
-                    error!("Received DACommitteeBroadcast, it should have not happened.");
-                    Err(NetworkError::WebServer {
-                        source: WebServerNetworkError::ClientDisconnected,
-                    })
-                }
-            }
+            let mut queue = self.inner.poll_queue_0_1.write().await;
+            Ok(queue
+                .drain(..)
+                .collect::<Vec<_>>()
+                .iter()
+                .map(|x| x.get_message().unwrap())
+                .collect())
         };
         boxed_sync(closure)
     }

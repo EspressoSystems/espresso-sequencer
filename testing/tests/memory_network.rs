@@ -18,7 +18,7 @@ use hotshot_example_types::{
 use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
-use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
+use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
     data::ViewNumber,
@@ -188,7 +188,7 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to message node");
         let mut recv_messages = network2
-            .recv_msgs(TransmitType::Direct)
+            .recv_msgs()
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
@@ -206,7 +206,7 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to message node");
         let mut recv_messages = network1
-            .recv_msgs(TransmitType::Direct)
+            .recv_msgs()
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
@@ -255,7 +255,7 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to message node");
         let mut recv_messages = network2
-            .recv_msgs(TransmitType::Broadcast)
+            .recv_msgs()
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
@@ -276,7 +276,7 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to message node");
         let mut recv_messages = network1
-            .recv_msgs(TransmitType::Broadcast)
+            .recv_msgs()
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
@@ -339,15 +339,15 @@ async fn memory_network_test_in_flight_message_count() {
     }
 
     while network1.in_flight_message_count().unwrap() > 0 {
-        network1.recv_msgs(TransmitType::Broadcast).await.unwrap();
+        network1.recv_msgs().await.unwrap();
     }
 
     while network2.in_flight_message_count().unwrap() > messages.len() {
-        network2.recv_msgs(TransmitType::Direct).await.unwrap();
+        network2.recv_msgs().await.unwrap();
     }
 
     while network2.in_flight_message_count().unwrap() > 0 {
-        network2.recv_msgs(TransmitType::Broadcast).await.unwrap();
+        network2.recv_msgs().await.unwrap();
     }
 
     assert_eq!(network1.in_flight_message_count(), Some(0));

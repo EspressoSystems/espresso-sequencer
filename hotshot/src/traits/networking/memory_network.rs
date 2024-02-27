@@ -6,19 +6,18 @@
 use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
 use async_compatibility_layer::{
     art::async_spawn,
-    channel::{bounded, Receiver, SendError, Sender},
+    channel::{bounded, Receiver, SendError, Sender, BoundedStream},
 };
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 use bincode::Options;
 use dashmap::DashMap;
-use futures::StreamExt;
-use hotshot_types::traits::network::MemoryNetworkError;
+use futures::{StreamExt};
 use hotshot_types::{
     boxed_sync,
     message::Message,
     traits::{
-        network::{ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation, TransmitType},
+        network::{ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -61,25 +60,13 @@ impl<M: NetworkMsg, K: SignatureKey> MasterMap<M, K> {
     }
 }
 
-/// Internal enum for combining streams
-enum Combo<T> {
-    /// Direct message
-    Direct(T),
-    /// Broadcast message
-    Broadcast(T),
-}
-
 /// Internal state for a `MemoryNetwork` instance
 #[derive(Debug)]
 struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
-    /// Input for broadcast messages
-    broadcast_input: RwLock<Option<Sender<Vec<u8>>>>,
-    /// Input for direct messages
-    direct_input: RwLock<Option<Sender<Vec<u8>>>>,
-    /// Output for broadcast messages
-    broadcast_output: Mutex<Receiver<M>>,
-    /// Output for direct messages
-    direct_output: Mutex<Receiver<M>>,
+    /// Input for messages
+    input: RwLock<Option<Sender<Vec<u8>>>>,
+    /// Output for messages
+    output: Mutex<Receiver<M>>,
     /// The master map
     master_map: Arc<MasterMap<M, K>>,
 
@@ -124,68 +111,36 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
         reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> MemoryNetwork<M, K> {
         info!("Attaching new MemoryNetwork");
-        let (broadcast_input, broadcast_task_recv) = bounded(128);
-        let (direct_input, direct_task_recv) = bounded(128);
-        let (broadcast_task_send, broadcast_output) = bounded(128);
-        let (direct_task_send, direct_output) = bounded(128);
+        let (input, task_recv) = bounded(128);
+        let (task_send, output) = bounded(128);
         let in_flight_message_count = AtomicUsize::new(0);
         trace!("Channels open, spawning background task");
 
         async_spawn(
             async move {
                 debug!("Starting background task");
-                // direct input is right stream
-                let direct = direct_task_recv.into_stream().map(Combo::<Vec<u8>>::Direct);
-                // broadcast input is left stream
-                let broadcast = broadcast_task_recv
-                    .into_stream()
-                    .map(Combo::<Vec<u8>>::Broadcast);
-                // Combine the streams
-                let mut combined = futures::stream::select(direct, broadcast);
+                let mut task_stream: BoundedStream<Vec<u8>> = task_recv.into_stream();
                 trace!("Entering processing loop");
-                while let Some(message) = combined.next().await {
-                    match message {
-                        Combo::Direct(vec) => {
-                            trace!(?vec, "Incoming direct message");
-                            // Attempt to decode message
-                            let x = bincode_opts().deserialize(&vec);
-                            match x {
-                                Ok(x) => {
-                                    let dts = direct_task_send.clone();
-                                    let res = dts.send(x).await;
-                                    if res.is_ok() {
-                                        trace!("Passed message to output queue");
-                                    } else {
-                                        error!("Output queue receivers are shutdown");
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!(?e, "Failed to decode incoming message, skipping");
-                                }
+                while let Some(vec) = task_stream.next().await {
+                    trace!(?vec, "Incoming message");
+                    // Attempt to decode message
+                    let x = bincode_opts().deserialize(&vec);
+                    match x {
+                        Ok(x) => {
+                            let ts = task_send.clone();
+                            let res = ts.send(x).await;
+                            if res.is_ok() {
+                                trace!("Passed message to output queue");
+                            } else {
+                                error!("Output queue receivers are shutdown");
                             }
                         }
-                        Combo::Broadcast(vec) => {
-                            trace!(?vec, "Incoming broadcast message");
-                            // Attempt to decode message
-                            let x = bincode_opts().deserialize(&vec);
-                            match x {
-                                Ok(x) => {
-                                    let bts = broadcast_task_send.clone();
-                                    let res = bts.send(x).await;
-                                    if res.is_ok() {
-                                        trace!("Passed message to output queue");
-                                    } else {
-                                        warn!("dropping packet!");
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!(?e, "Failed to decode incoming message, skipping");
-                                }
-                            }
+                        Err(e) => {
+                            warn!(?e, "Failed to decode incoming message, skipping");
                         }
                     }
+                    warn!("Stream shutdown");
                 }
-                warn!("Stream shutdown");
             }
             .instrument(info_span!("MemoryNetwork Background task", map = ?master_map)),
         );
@@ -193,10 +148,8 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
         trace!("Task spawned, creating MemoryNetwork");
         let mn = MemoryNetwork {
             inner: Arc::new(MemoryNetworkInner {
-                broadcast_input: RwLock::new(Some(broadcast_input)),
-                direct_input: RwLock::new(Some(direct_input)),
-                broadcast_output: Mutex::new(broadcast_output),
-                direct_output: Mutex::new(direct_output),
+                input: RwLock::new(Some(input)),
+                output: Mutex::new(output),
                 master_map: master_map.clone(),
                 in_flight_message_count,
                 metrics,
@@ -209,26 +162,12 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
         mn
     }
 
-    /// Send a [`Vec<u8>`] message to the inner `broadcast_input`
-    async fn broadcast_input(&self, message: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
+    /// Send a [`Vec<u8>`] message to the inner `input`
+    async fn input(&self, message: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
         self.inner
             .in_flight_message_count
             .fetch_add(1, Ordering::Relaxed);
-        let input = self.inner.broadcast_input.read().await;
-        if let Some(input) = &*input {
-            self.inner.metrics.outgoing_broadcast_message_count.add(1);
-            input.send(message).await
-        } else {
-            Err(SendError(message))
-        }
-    }
-
-    /// Send a [`Vec<u8>`] message to the inner `direct_input`
-    async fn direct_input(&self, message: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
-        self.inner
-            .in_flight_message_count
-            .fetch_add(1, Ordering::Relaxed);
-        let input = self.inner.direct_input.read().await;
+        let input = self.inner.input.read().await;
         if let Some(input) = &*input {
             self.inner.metrics.outgoing_direct_message_count.add(1);
             input.send(message).await
@@ -295,8 +234,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
         Self: 'b,
     {
         let closure = async move {
-            *self.inner.broadcast_input.write().await = None;
-            *self.inner.direct_input.write().await = None;
+            *self.inner.input.write().await = None;
         };
         boxed_sync(closure)
     }
@@ -328,7 +266,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                         Arc::new(move |msg: Vec<u8>| {
                             let node3 = (node2).clone();
                             boxed_sync(async move {
-                                let _res = node3.broadcast_input(msg).await;
+                                let _res = node3.input(msg).await;
                                 // NOTE we're dropping metrics here but this is only for testing
                                 // purposes. I think that should be okay
                             })
@@ -337,7 +275,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     async_spawn(fut);
                 }
             } else {
-                let res = node.broadcast_input(vec.clone()).await;
+                let res = node.input(vec.clone()).await;
                 match res {
                     Ok(()) => {
                         self.inner.metrics.outgoing_broadcast_message_count.add(1);
@@ -379,7 +317,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                         Arc::new(move |msg: Vec<u8>| {
                             let node2 = node.clone();
                             boxed_sync(async move {
-                                let _res = node2.direct_input(msg).await;
+                                let _res = node2.input(msg).await;
                                 // NOTE we're dropping metrics here but this is only for testing
                                 // purposes. I think that should be okay
                             })
@@ -389,7 +327,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                 }
                 Ok(())
             } else {
-                let res = node.direct_input(vec).await;
+                let res = node.input(vec).await;
                 match res {
                     Ok(()) => {
                         self.inner.metrics.outgoing_direct_message_count.add(1);
@@ -416,57 +354,28 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
     #[instrument(name = "MemoryNetwork::recv_msgs", skip_all)]
     fn recv_msgs<'a, 'b>(
         &'a self,
-        transmit_type: TransmitType,
     ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
     {
         let closure = async move {
-            match transmit_type {
-                TransmitType::Direct => {
-                    let ret = self
-                        .inner
-                        .direct_output
-                        .lock()
-                        .await
-                        .drain_at_least_one()
-                        .await
-                        .map_err(|_x| NetworkError::ShutDown)?;
-                    self.inner
-                        .in_flight_message_count
-                        .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner
-                        .metrics
-                        .incoming_direct_message_count
-                        .add(ret.len());
-                    Ok(ret)
-                }
-                TransmitType::Broadcast => {
-                    let ret = self
-                        .inner
-                        .broadcast_output
-                        .lock()
-                        .await
-                        .drain_at_least_one()
-                        .await
-                        .map_err(|_x| NetworkError::ShutDown)?;
-                    self.inner
-                        .in_flight_message_count
-                        .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner
-                        .metrics
-                        .incoming_broadcast_message_count
-                        .add(ret.len());
-                    Ok(ret)
-                }
-                TransmitType::DACommitteeBroadcast => {
-                    error!("Received DACommitteeBroadcast, it should have not happened.");
-                    Err(NetworkError::MemoryNetwork {
-                        source: MemoryNetworkError::Stub,
-                    })
-                }
-            }
+            let ret = self
+                .inner
+                .output
+                .lock()
+                .await
+                .drain_at_least_one()
+                .await
+                .map_err(|_x| NetworkError::ShutDown)?;
+            self.inner
+                .in_flight_message_count
+                .fetch_sub(ret.len(), Ordering::Relaxed);
+            self.inner
+                .metrics
+                .incoming_message_count
+                .add(ret.len());
+            Ok(ret)
         };
         boxed_sync(closure)
     }
