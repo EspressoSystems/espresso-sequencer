@@ -103,6 +103,7 @@ where
                                         let initializer = HotShotInitializer::<TYPES>::from_reload(
                                             state.last_decided_leaf.clone(),
                                             TestInstanceState {},
+                                            None,
                                             view_number,
                                         );
                                         // We assign node's public key and stake value rather than read from config file since it's a test

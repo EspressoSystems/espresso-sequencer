@@ -185,11 +185,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .await
             .context(StorageSnafu)?;
 
-        // insert genesis (or latest block) to state map
+        // Get the validated state from the initializer or construct an incomplete one from the
+        // block header.
+        let validated_state = match initializer.validated_state {
+            Some(state) => state,
+            None => Arc::new(TYPES::ValidatedState::from_header(
+                &anchored_leaf.block_header,
+            )),
+        };
+
+        // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();
-        let validated_state = Arc::new(TYPES::ValidatedState::from_header(
-            &anchored_leaf.block_header,
-        ));
         validated_state_map.insert(
             anchored_leaf.get_view_number(),
             View {
@@ -612,6 +618,12 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// Instance-level state.
     instance_state: TYPES::InstanceState,
 
+    /// Optional validated state.
+    ///
+    /// If it's given, we'll use it to constrcut the `SystemContext`. Otherwise, we'll construct
+    /// the state from the block header.
+    validated_state: Option<Arc<TYPES::ValidatedState>>,
+
     /// Starting view number that we are confident won't lead to a double vote after restart.
     start_view: TYPES::Time,
 }
@@ -621,9 +633,11 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
     pub fn from_genesis(instance_state: TYPES::InstanceState) -> Result<Self, HotShotError<TYPES>> {
+        let validated_state = Some(Arc::new(TYPES::ValidatedState::genesis(&instance_state)));
         Ok(Self {
             inner: Leaf::genesis(&instance_state),
             instance_state,
+            validated_state,
             start_view: TYPES::Time::new(0),
         })
     }
@@ -633,14 +647,18 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// # Arguments
     /// *  `start_view` - The minimum view number that we are confident won't lead to a double vote
     /// after restart.
+    /// * `validated_state` - Optional validated state that if given, will be used to constrcut the
+    /// `SystemContext`.
     pub fn from_reload(
         anchor_leaf: Leaf<TYPES>,
         instance_state: TYPES::InstanceState,
+        validated_state: Option<Arc<TYPES::ValidatedState>>,
         start_view: TYPES::Time,
     ) -> Self {
         Self {
             inner: anchor_leaf,
             instance_state,
+            validated_state,
             start_view,
         }
     }
