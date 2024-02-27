@@ -1,12 +1,9 @@
 use commit::Committable;
 use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::Storage;
-use hotshot_example_types::{
-    block_types::{genesis_vid_commitment, TestBlockHeader, TestBlockPayload},
-    node_types::TestTypes,
-};
+use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
-    data::{fake_commitment, Leaf},
+    data::Leaf,
     simple_certificate::QuorumCertificate,
     traits::{
         node_implementation::{ConsensusTime, NodeType},
@@ -18,15 +15,10 @@ use std::marker::PhantomData;
 use tracing::instrument;
 
 fn random_stored_view(view_number: <TestTypes as NodeType>::Time) -> StoredView<TestTypes> {
-    let payload = TestBlockPayload::genesis();
-    let header = TestBlockHeader {
-        block_number: 0,
-        payload_commitment: genesis_vid_commitment(),
-    };
-    let dummy_leaf_commit = fake_commitment::<Leaf<TestTypes>>();
-    let data = hotshot_types::simple_vote::QuorumData {
-        leaf_commit: dummy_leaf_commit,
-    };
+    let mut leaf = Leaf::genesis(&Default::default());
+    leaf.view_number = view_number;
+    let leaf_commit = leaf.commit();
+    let data = hotshot_types::simple_vote::QuorumData { leaf_commit };
     let commit = data.commit();
     StoredView::from_qc_block_and_state(
         QuorumCertificate {
@@ -37,9 +29,9 @@ fn random_stored_view(view_number: <TestTypes as NodeType>::Time) -> StoredView<
             view_number,
             _pd: PhantomData,
         },
-        header,
-        Some(payload),
-        dummy_leaf_commit,
+        leaf.block_header,
+        leaf.block_payload,
+        leaf_commit,
         <<TestTypes as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
     )
 }

@@ -7,7 +7,9 @@ use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
     simple_vote::UpgradeProposalData,
     traits::{
-        block_contents::{vid_commitment, BlockHeader, TestableBlock},
+        block_contents::{
+            vid_commitment, BlockHeader, TestableBlock, GENESIS_VID_NUM_STORAGE_NODES,
+        },
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
@@ -330,15 +332,27 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 
 impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the genesis payload (`TYPES::BlockPayload::genesis()`) is malformed (unable to be
+    /// interpreted as bytes).
     #[must_use]
     pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
-        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis(instance_state);
+        let (payload, metadata) = TYPES::BlockPayload::genesis();
+        let payload_bytes = payload
+            .encode()
+            .expect("unable to encode genesis payload")
+            .collect();
+        let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
+        let block_header =
+            TYPES::BlockHeader::genesis(instance_state, payload_commitment, metadata);
         Self {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),
             parent_commitment: fake_commitment(),
             block_header: block_header.clone(),
-            block_payload: Some(block_payload),
+            block_payload: Some(payload),
             proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }

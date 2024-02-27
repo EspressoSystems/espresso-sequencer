@@ -59,9 +59,7 @@ pub trait ValidatedState:
 
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis(instance: &Self::Instance) -> Self {
-        Self::from_header(&Self::BlockHeader::genesis(instance).0)
-    }
+    fn genesis(instance: &Self::Instance) -> Self;
 
     /// Gets called to notify the persistence backend that this state has been committed
     fn on_commit(&self);
