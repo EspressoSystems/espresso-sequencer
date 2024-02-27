@@ -74,7 +74,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
             return None; // error: index out of bounds
         }
 
-        let vid = test_vid_factory(); // TODO temporary VID construction
+        let vid = test_vid_factory(None); // TODO temporary VID construction
 
         // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
         //

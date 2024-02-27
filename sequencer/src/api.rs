@@ -425,6 +425,7 @@ mod generic_tests {
         *,
     };
     use crate::{
+        block::payload::test_vid_factory,
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         Header, Transaction, VmId,
     };
@@ -463,6 +464,9 @@ mod generic_tests {
     pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
         setup_logging();
         setup_backtrace();
+
+        let num_storage_nodes = 5;
+        let vid = test_vid_factory(Some(num_storage_nodes));
 
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
@@ -511,12 +515,22 @@ mod generic_tests {
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
             let ns_query_res: NamespaceProofQueryData = client
-                .get(&format!("availability/block/{block_num}/namespace/0"))
+                .get(&format!(
+                    "availability/block/{block_num}/namespace/0/nodes/5"
+                ))
                 .send()
                 .await
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
+            ns_query_res
+                .proof
+                .verify(
+                    &vid,
+                    &ns_query_res.header.payload_commitment,
+                    &ns_query_res.header.ns_table,
+                )
+                .unwrap();
 
             for txn in ns_query_res.transactions {
                 if txn.commit() == hash {

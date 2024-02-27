@@ -1,8 +1,9 @@
 [route.getnamespaceproof]
-PATH = ["block/:height/namespace/:namespace"]
+PATH = ["block/:height/namespace/:namespace/nodes/:nodes"]
 ":height" = "Integer"
 ":namespace" = "Integer"
-DOC = "Get the namespace proof for a set of VM transactions and the NMT root"
+":nodes" = "Integer"
+DOC = "Get the namespace proof for a set of VM transactions. The `:nodes` parameter specifies the chunk size for the ADVZ scheme. "
 
 [route.gettimestampwindow]
 PATH = [

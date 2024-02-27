@@ -79,6 +79,7 @@ where
         async move {
             let height: usize = req.integer_param("height")?;
             let ns_id = VmId(req.integer_param("namespace")?);
+            let num_storage_nodes = req.integer_param("nodes")?;
             let block = state.get_block(height).await.context(FetchBlockSnafu {
                 resource: height.to_string(),
             })?;
@@ -87,7 +88,7 @@ where
             // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
             // TODO do not disperse here!
             // https://github.com/EspressoSystems/espresso-sequencer/issues/1093
-            let vid = crate::block::payload::test_vid_factory();
+            let vid = crate::block::payload::test_vid_factory(Some(num_storage_nodes));
             use hotshot::traits::BlockPayload;
             let disperse_data = vid
                 .disperse(

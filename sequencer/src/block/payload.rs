@@ -271,9 +271,10 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// https://stackoverflow.com/a/52886787
 ///
 /// TODO temporary VID constructor.
-pub(crate) fn test_vid_factory() -> VidScheme {
+pub(crate) fn test_vid_factory(num_storage_nodes: Option<usize>) -> VidScheme {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-    let (payload_chunk_size, num_storage_nodes) = (8, 10);
+    let num_storage_nodes = num_storage_nodes.unwrap_or(10);
+    let payload_chunk_size = 1 << num_storage_nodes.ilog2();
 
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
@@ -480,7 +481,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(None);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -779,7 +780,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(None);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.into_iter().enumerate() {
             let payload_byte_len = test_case.payload.len();
@@ -848,7 +849,7 @@ mod test {
         // test: cannot make a proof for such a small block
         // assert!(block.transaction_with_proof(&0).is_none());
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(None);
         let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
         // make a fake proof for a nonexistent tx in the small block
