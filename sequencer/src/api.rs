@@ -425,6 +425,7 @@ mod generic_tests {
         *,
     };
     use crate::{
+        block::payload::test_vid_factory,
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         Header, Transaction, VmId,
     };
@@ -467,6 +468,7 @@ mod generic_tests {
         setup_logging();
         setup_backtrace();
 
+        let vid = test_vid_factory(5);
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
         // Create sequencer network.
@@ -528,6 +530,14 @@ mod generic_tests {
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()
                 .await
+                .unwrap();
+            ns_query_res
+                .proof
+                .verify(
+                    &vid,
+                    &ns_query_res.header.payload_commitment,
+                    &ns_query_res.header.ns_table,
+                )
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
