@@ -37,9 +37,9 @@ impl<Types> FetchRequest for LeafId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
         if let LeafId::Number(n) = self {
-            n < block_height
+            n < block_height && n >= pruned_height
         } else {
             true
         }
@@ -102,6 +102,7 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
     I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
@@ -209,6 +210,7 @@ impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
+
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {

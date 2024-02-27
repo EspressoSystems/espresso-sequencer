@@ -13,6 +13,10 @@
 #![cfg(feature = "sql-data-source")]
 
 use super::AvailabilityStorage;
+use crate::availability::QueryableHeader;
+use crate::data_source::storage::pruning::PruneStorage;
+use crate::data_source::storage::pruning::PrunerCfg;
+use crate::data_source::storage::pruning::PrunerConfig;
 use crate::{
     availability::{
         get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
@@ -200,6 +204,7 @@ pub struct Config {
     migrations: Vec<Migration>,
     no_migrations: bool,
     tls: bool,
+    pruner_cfg: Option<PrunerCfg>,
 }
 
 impl Default for Config {
@@ -213,6 +218,7 @@ impl Default for Config {
             migrations: vec![],
             no_migrations: false,
             tls: false,
+            pruner_cfg: None,
         }
     }
 }
@@ -318,6 +324,12 @@ impl Config {
         self.tls = true;
         self
     }
+
+    pub fn pruner_cfg(mut self, cfg: PrunerCfg) -> Result<Self, Error> {
+        cfg.validate()?;
+        self.pruner_cfg = Some(cfg);
+        Ok(self)
+    }
 }
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
@@ -326,6 +338,8 @@ pub struct SqlStorage {
     client: Arc<Client>,
     tx_in_progress: bool,
     kill: Option<oneshot::Sender<()>>,
+    pruner_cfg: Option<PrunerCfg>,
+    pruned_height: Option<u64>,
 }
 
 impl SqlStorage {
@@ -385,11 +399,15 @@ impl SqlStorage {
             }
         }
 
-        Ok(Self {
+        let storage = Self {
             client: Arc::new(client),
             tx_in_progress: false,
             kill: Some(kill),
-        })
+            pruner_cfg: config.pruner_cfg,
+            pruned_height: None,
+        };
+
+        Ok(storage)
     }
 
     /// Access the transaction which is accumulating all uncommitted changes to the data source.
@@ -405,6 +423,154 @@ impl SqlStorage {
         Ok(Transaction {
             client: Cow::Borrowed(&self.client),
         })
+    }
+}
+
+impl PrunerConfig for SqlStorage {
+    fn pruning_enabled(&self) -> bool {
+        self.pruner_cfg.is_some()
+    }
+
+    fn set_pruning_config(&mut self, cfg: PrunerCfg) {
+        self.pruner_cfg = Some(cfg);
+    }
+
+    fn get_pruning_config(&self) -> Option<PrunerCfg> {
+        self.pruner_cfg.clone()
+    }
+}
+
+impl SqlStorage {
+    async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
+        let row = self
+            .query_one_static("SELECT MIN(height) as height FROM header")
+            .await?;
+
+        let height = row.get::<_, Option<i64>>(0).map(|h| h as u64);
+
+        Ok(height)
+    }
+}
+
+#[async_trait]
+impl PruneStorage for SqlStorage {
+    type Error = QueryError;
+
+    async fn get_disk_usage(&self) -> QueryResult<u64> {
+        let row = self
+            .query_one_static("SELECT pg_database_size(current_database())")
+            .await?;
+        let size: i64 = row.get(0);
+        Ok(size as u64)
+    }
+
+    async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
+        let row = self
+            .query_opt(
+                "SELECT height FROM header WHERE timestamp < $1 ORDER BY height DESC LIMIT 1",
+                [&timestamp],
+            )
+            .await?;
+
+        let height = row.map(|row| row.get::<_, i64>(0) as u64);
+
+        Ok(height)
+    }
+
+    async fn pruned_height(&self) -> Option<u64> {
+        self.pruned_height
+    }
+
+    async fn prune(&mut self) -> Result<(), QueryError> {
+        let cfg = self.get_pruning_config().ok_or(QueryError::Error {
+            message: "Pruning config not found".to_string(),
+        })?;
+
+        let batch_size = cfg.batch_size();
+        let max_usage = cfg.max_usage();
+
+        // Prune data exceeding target retention in batches
+        let target_height = self
+            .get_height_by_timestamp(
+                chrono::Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
+            )
+            .await?;
+
+        if let Some(height) = target_height {
+            let mut current_height = self.get_minimum_height().await?.ok_or(QueryError::Error {
+                message: "Minimum height not found".to_string(),
+            })?;
+
+            while current_height < height {
+                let next_height = std::cmp::min(current_height + batch_size, height);
+
+                self.query_opt(
+                    "DELETE FROM header WHERE height < $1",
+                    &[&(next_height as i64)],
+                )
+                .await?;
+
+                current_height = next_height;
+
+                tracing::info!("Pruned data up to height {}", current_height);
+            }
+
+            self.pruned_height = Some(height);
+        }
+
+        // If threshold is set, prune data exceeding minimum retention in batches
+        // This parameter is needed for SQL storage as there is no direct way to get free space.
+        if let Some(threshold) = cfg.pruning_threshold() {
+            let mut usage = self.get_disk_usage().await?;
+
+            // Prune data exceeding minimum retention in batches  starting from minimum height.
+            if usage > threshold {
+                tracing::warn!(
+                    "Disk usage {} exceeds pruning threshold {:?}",
+                    usage,
+                    cfg.pruning_threshold()
+                );
+                let minimum_retention_height = self
+                    .get_height_by_timestamp(
+                        chrono::Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
+                    )
+                    .await?;
+
+                if let Some(height) = minimum_retention_height {
+                    let mut current_height =
+                        self.get_minimum_height().await?.ok_or(QueryError::Error {
+                            message: "Minimum height not found".to_string(),
+                        })?;
+
+                    while (usage as f64 / threshold as f64) > (max_usage as f64 / 10000.0)
+                        && current_height < height
+                    {
+                        let next_height = std::cmp::min(current_height + batch_size, height);
+
+                        self.query_opt(
+                            "DELETE FROM header WHERE height < $1",
+                            &[&(next_height as i64)],
+                        )
+                        .await?;
+
+                        current_height = next_height;
+
+                        usage = self.get_disk_usage().await?;
+
+                        tracing::info!("Pruned data up to height {}", current_height);
+                    }
+
+                    self.pruned_height = Some(current_height);
+                }
+            }
+        }
+
+        // Vacuum the database to reclaim space.
+        // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
+        // cause downtime for the query service.
+        self.query_opt_static("VACUUM;").await?;
+
+        Ok(())
     }
 }
 
@@ -455,6 +621,7 @@ impl<Types> AvailabilityStorage<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
@@ -641,6 +808,7 @@ impl<Types> UpdateAvailabilityData<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
 {
     type Error = QueryError;
 
@@ -655,13 +823,14 @@ where
             })?;
         tx.upsert(
             "header",
-            ["height", "hash", "payload_hash", "data"],
+            ["height", "hash", "payload_hash", "data", "timestamp"],
             ["height"],
             [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf.leaf().block_header.payload_commitment().to_string()),
                 sql_param(&header_json),
+                sql_param(&(leaf.leaf().block_header.timestamp() as i64)),
             ]],
         )
         .await?;
@@ -1694,8 +1863,77 @@ pub mod testing {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
+
     use super::{testing::TmpDb, *};
     use crate::testing::setup_test;
+
+    // async fn test_pruning() {
+    //     setup_test();
+
+    //     let db = TmpDb::init().await;
+    //     let port = db.port();
+    //     let host = &db.host();
+
+    //     let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
+    //     let cfg = Config::default()
+    //         .user("postgres")
+    //         .password("password")
+    //         .host(host)
+    //         .port(port)
+    //         .migrations(migrations);
+
+    //     let storage = SqlStorage::connect(cfg).await.unwrap();
+
+    //     // Create the consensus network.
+    //     let mut network = MockNetwork::<MockDataSource>::init().await;
+
+    //     // Start a web server that the non-consensus node can use to fetch blocks.
+    //     let port = pick_unused_port().unwrap();
+    //     let mut app = App::<_, Error>::with_state(network.data_source());
+    //     app.register_module("availability", define_api(&Default::default()).unwrap())
+    //         .unwrap();
+    //     spawn(app.serve(format!("0.0.0.0:{port}")));
+
+    //     // Start a data source which is not receiving events from consensus. We don't give it a
+    //     // fetcher since transactions are always fetched passively anyways.
+    //     let db = TmpDb::init().await;
+    //     let mut data_source = data_source(&db, &NoFetching).await;
+
+    //     // Subscribe to blocks.
+    //     let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+    //     let mut blocks = { network.data_source().read().await.subscribe_blocks(1).await };
+
+    //     // Start consensus.
+    //     network.start().await;
+
+    //     for _ in 1..30 {
+    //         let leaf = leaves.next().await.unwrap();
+    //         let block = blocks.next().await.unwrap();
+
+    //         data_source.insert_leaf(leaf).await.unwrap();
+    //         data_source.insert_block(block.clone()).await.unwrap();
+    //         data_source.commit().await.unwrap();
+    //     }
+
+    //     network.shut_down().await;
+
+    //     let usage_before_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
+    //     tracing::info!("disk usage before pruning: {}", usage_before_pruning);
+
+    //     // Pruning should reduce the disk usage.
+    //     // Some data will be pruned as minimum retention is set to 0 days
+    //     data_source
+    //         .storage_mut()
+    //         .await
+    //         .set_pruning_config(PrunerCfg::new(50, 0, 7));
+
+    //     data_source.storage_mut().await.prune().await.unwrap();
+
+    //     let disk_usage_after_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
+    //     tracing::info!("disk usage after pruning: {}", disk_usage_after_pruning);
+
+    //     assert!(disk_usage_after_pruning < usage_before_pruning)
+    // }
 
     #[async_std::test]
     async fn test_migrations() {
@@ -1749,6 +1987,25 @@ mod test {
 
         // Connecting with the customized schema should work even without running migrations.
         connect(true, migrations).await.unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_current_migrations() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port)
+            .migrations(migrations);
+
+        SqlStorage::connect(cfg).await.unwrap();
     }
 
     #[test]

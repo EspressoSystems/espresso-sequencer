@@ -10,7 +10,8 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::availability::QueryablePayload;
+use crate::availability::{QueryableHeader, QueryablePayload};
+use chrono::Utc;
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
     implementations::{MemoryNetwork, MemoryStorage},
@@ -35,6 +36,12 @@ pub type MockTransaction = TestTransaction;
 
 pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
     TestTransaction(payload)
+}
+
+impl QueryableHeader for MockHeader {
+    fn timestamp(&self) -> u64 {
+        Utc::now().timestamp() as u64
+    }
 }
 
 impl QueryablePayload for MockPayload {

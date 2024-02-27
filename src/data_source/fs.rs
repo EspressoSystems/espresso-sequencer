@@ -13,7 +13,10 @@
 #![cfg(feature = "file-system-data-source")]
 
 use super::{storage::FileSystemStorage, AvailabilityProvider, FetchingDataSource};
-use crate::{availability::query_data::QueryablePayload, Payload};
+use crate::{
+    availability::{query_data::QueryablePayload, QueryableHeader},
+    Header, Payload,
+};
 use atomic_store::AtomicStoreLoader;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::path::Path;
@@ -146,6 +149,7 @@ pub type FileSystemDataSource<Types, P> = FetchingDataSource<Types, FileSystemSt
 impl<Types: NodeType, P> FileSystemDataSource<Types, P>
 where
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
     P: AvailabilityProvider<Types>,
 {
     /// Create a new [FileSystemDataSource] with storage at `path`.

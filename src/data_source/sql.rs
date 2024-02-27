@@ -17,17 +17,17 @@ use super::{
     storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
-use crate::{availability::QueryablePayload, Payload, QueryResult};
+use crate::availability::QueryableHeader;
+pub use crate::include_migrations;
+use crate::{availability::QueryablePayload, Header, Payload, QueryResult};
+pub use anyhow::Error;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::borrow::Cow;
-use tokio_postgres::Client;
-
-pub use crate::include_migrations;
-pub use anyhow::Error;
 pub use refinery::Migration;
+use std::borrow::Cow;
 pub use tokio_postgres as postgres;
+use tokio_postgres::Client;
 
 pub use sql::{Config, Query, Transaction};
 
@@ -41,6 +41,7 @@ impl Config {
     ) -> Result<SqlDataSource<Types, P>, Error>
     where
         Types: NodeType,
+        Header<Types>: QueryableHeader,
         Payload<Types>: QueryablePayload,
     {
         self.builder(provider).await?.build().await
@@ -54,6 +55,7 @@ impl Config {
     ) -> Result<Builder<Types, P>, Error>
     where
         Types: NodeType,
+        Header<Types>: QueryableHeader,
         Payload<Types>: QueryablePayload,
     {
         SqlDataSource::connect(self, provider).await
@@ -306,6 +308,7 @@ pub type SqlDataSource<Types, P> = FetchingDataSource<Types, SqlStorage, P>;
 impl<Types, P: AvailabilityProvider<Types>> SqlDataSource<Types, P>
 where
     Types: NodeType,
+    Header<Types>: QueryableHeader,
     Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
@@ -315,7 +318,9 @@ where
     /// [`build`](fetching::Builder::build). For a convenient constructor that uses the default
     /// fetching options, see [`Config::connect`].
     pub async fn connect(config: Config, provider: P) -> Result<Builder<Types, P>, Error> {
-        Ok(Self::builder(SqlStorage::connect(config).await?, provider))
+        let builder = Self::builder(SqlStorage::connect(config).await?, provider);
+
+        Ok(builder)
     }
 }
 

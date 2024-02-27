@@ -16,6 +16,8 @@ use super::{
     ledger_log::{Iter, LedgerLog},
     AvailabilityStorage,
 };
+use crate::data_source::storage::pruning::PruneStorage;
+use crate::data_source::storage::pruning::PrunerConfig;
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -37,6 +39,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
+use std::convert::Infallible;
 use std::hash::Hash;
 use std::ops::{Bound, RangeBounds};
 use std::path::Path;
@@ -68,6 +71,17 @@ where
     leaf_storage: LedgerLog<LeafQueryData<Types>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     vid_storage: LedgerLog<(VidCommonQueryData<Types>, Option<VidShare>)>,
+}
+
+impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
+    Payload<Types>: QueryablePayload
+{
+}
+impl<Types: NodeType> PruneStorage for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    type Error = Infallible;
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>

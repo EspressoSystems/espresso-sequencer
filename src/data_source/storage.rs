@@ -39,6 +39,7 @@ use std::ops::RangeBounds;
 pub mod fs;
 mod ledger_log;
 pub mod no_storage;
+pub mod pruning;
 pub mod sql;
 
 #[cfg(feature = "file-system-data-source")]
@@ -47,6 +48,8 @@ pub use fs::FileSystemStorage;
 pub use no_storage::NoStorage;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlStorage;
+
+use self::pruning::PruneStorage;
 
 /// Persistent storage for a HotShot blockchain.
 ///
@@ -64,7 +67,7 @@ pub use sql::SqlStorage;
 /// better interface.
 #[async_trait]
 pub trait AvailabilityStorage<Types>:
-    UpdateAvailabilityData<Types> + VersionedDataSource + Send + Sync
+    UpdateAvailabilityData<Types> + VersionedDataSource + PruneStorage + Send + Sync
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,

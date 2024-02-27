@@ -46,8 +46,8 @@ impl<Types> FetchRequest for VidCommonRequest<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize) -> bool {
-        self.0.might_exist(block_height)
+    fn might_exist(self, block_height: usize , pruned_height: usize) -> bool {
+        self.0.might_exist(block_height, pruned_height: usize)
     }
 }
 
@@ -131,6 +131,7 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -194,6 +195,7 @@ impl<Types: NodeType, S, P> PartialOrd for VidCommonCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
+
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {

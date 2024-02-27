@@ -93,9 +93,9 @@ impl<Types> FetchRequest for BlockId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
         if let BlockId::Number(n) = self {
-            n < block_height
+            n < block_height && n >= pruned_height
         } else {
             true
         }
@@ -106,9 +106,9 @@ impl<Types> FetchRequest for BlockRequest<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
         if let BlockRequest::Id(id) = self {
-            id.might_exist(block_height)
+            id.might_exist(block_height, pruned_height)
         } else {
             true
         }
@@ -342,6 +342,7 @@ impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload,
+
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
