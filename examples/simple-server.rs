@@ -39,7 +39,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 
@@ -134,11 +134,18 @@ async fn init_consensus(
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..data_sources.len())
         .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
         .unzip();
+    let state_key_pairs = (0..data_sources.len())
+        .map(|i| StateKeyPair::generate_from_seed_indexed([0; 32], i as u64))
+        .collect::<Vec<_>>();
     let master_map = MasterMap::new();
-    let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = pub_keys
+    let known_nodes_with_stake = pub_keys
         .iter()
-        .map(|pub_key| pub_key.get_stake_table_entry(1u64))
-        .collect();
+        .zip(&state_key_pairs)
+        .map(|(pub_key, state_key_pair)| PeerConfig::<BLSPubKey> {
+            stake_table_entry: pub_key.get_stake_table_entry(1u64),
+            state_ver_key: state_key_pair.ver_key(),
+        })
+        .collect::<Vec<_>>();
     let config = HotShotConfig {
         total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
         known_nodes_with_stake: known_nodes_with_stake.clone(),
@@ -160,6 +167,7 @@ async fn init_consensus(
         |(node_id, (priv_key, data_source))| {
             let pub_keys = pub_keys.clone();
             let known_nodes_with_stake = known_nodes_with_stake.clone();
+            let state_key_pairs = state_key_pairs.clone();
             let mut config = config.clone();
             let master_map = master_map.clone();
 
@@ -167,11 +175,19 @@ async fn init_consensus(
                 config.my_own_validator_config = ValidatorConfig {
                     public_key: pub_keys[node_id],
                     private_key: priv_key.clone(),
-                    stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
-                    state_key_pair: StateKeyPair::generate(),
+                    stake_value: known_nodes_with_stake[node_id]
+                        .stake_table_entry
+                        .stake_amount
+                        .as_u64(),
+                    state_key_pair: state_key_pairs[node_id].clone(),
                 };
 
-                let membership = MockMembership::new(&pub_keys, known_nodes_with_stake.clone());
+                let election_config =
+                    MockMembership::default_election_config(config.total_nodes.get() as u64);
+                let membership = MockMembership::create_election(
+                    known_nodes_with_stake.clone(),
+                    election_config,
+                );
                 let memberships = Memberships {
                     quorum_membership: membership.clone(),
                     da_membership: membership.clone(),
