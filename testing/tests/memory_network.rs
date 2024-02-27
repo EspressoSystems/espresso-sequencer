@@ -17,8 +17,8 @@ use hotshot_example_types::{
 };
 use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
-use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::ConnectedNetwork;
+use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
     data::ViewNumber,

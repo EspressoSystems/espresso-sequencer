@@ -6,13 +6,13 @@
 use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
 use async_compatibility_layer::{
     art::async_spawn,
-    channel::{bounded, Receiver, SendError, Sender, BoundedStream},
+    channel::{bounded, BoundedStream, Receiver, SendError, Sender},
 };
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 use bincode::Options;
 use dashmap::DashMap;
-use futures::{StreamExt};
+use futures::StreamExt;
 use hotshot_types::{
     boxed_sync,
     message::Message,
@@ -352,9 +352,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
     }
 
     #[instrument(name = "MemoryNetwork::recv_msgs", skip_all)]
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -371,10 +369,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             self.inner
                 .in_flight_message_count
                 .fetch_sub(ret.len(), Ordering::Relaxed);
-            self.inner
-                .metrics
-                .incoming_message_count
-                .add(ret.len());
+            self.inner.metrics.incoming_message_count.add(ret.len());
             Ok(ret)
         };
         boxed_sync(closure)

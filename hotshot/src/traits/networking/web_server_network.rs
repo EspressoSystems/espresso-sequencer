@@ -229,10 +229,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
             let deserialized_message = RecvMsg {
                 message: Some(deserialized_message_inner),
             };
-            poll_queue
-                .write()
-                .await
-                .push(deserialized_message.clone());
+            poll_queue.write().await.push(deserialized_message.clone());
         } else {
             async_sleep(self.wait_between_polls).await;
         }
@@ -290,7 +287,9 @@ impl<TYPES: NodeType> Inner<TYPES> {
                     }
                     return false;
                 }
-                MessagePurpose::Vote | MessagePurpose::ViewSyncVote | MessagePurpose::ViewSyncCertificate => {
+                MessagePurpose::Vote
+                | MessagePurpose::ViewSyncVote
+                | MessagePurpose::ViewSyncCertificate => {
                     let vote = deserialized_message.clone();
                     *vote_index += 1;
                     poll_queue.write().await.push(vote);
@@ -302,10 +301,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                         "Received DAC from web server for view {} {}",
                         view_number, self.is_da
                     );
-                    poll_queue
-                        .write()
-                        .await
-                        .push(deserialized_message.clone());
+                    poll_queue.write().await.push(deserialized_message.clone());
 
                     // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                     // return if we found a DAC, since there will only be 1 per view
@@ -331,10 +327,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
 
                 MessagePurpose::Upgrade => {
-                    poll_queue
-                        .write()
-                        .await
-                        .push(deserialized_message.clone());
+                    poll_queue.write().await.push(deserialized_message.clone());
 
                     return true;
                 }
@@ -851,9 +844,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
     ///
     /// Will unwrap the underlying `NetworkMessage`
     /// blocking
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
+    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,

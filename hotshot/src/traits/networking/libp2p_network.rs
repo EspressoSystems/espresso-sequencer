@@ -558,10 +558,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
 
     /// task to propagate messages to handlers
     /// terminates on shut down of network
-    fn handle_event_generator(
-        &self,
-        sender: UnboundedSender<M>,
-    ) {
+    fn handle_event_generator(&self, sender: UnboundedSender<M>) {
         let handle = self.clone();
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         async_spawn(async move {
@@ -574,9 +571,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                         let message_version = read_version(raw);
                         match message_version {
                             Some(VERSION_0_1) => {
-                                let _ = handle
-                                    .handle_recvd_events_0_1(message, &sender)
-                                    .await;
+                                let _ = handle.handle_recvd_events_0_1(message, &sender).await;
                             }
                             Some(version) => {
                                 warn!(
@@ -819,9 +814,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
     }
 
     #[instrument(name = "Libp2pNetwork::recv_msgs", skip_all)]
-    fn recv_msgs<'a, 'b>(
-        &'a self,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -836,10 +829,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                     .drain_at_least_one()
                     .await
                     .map_err(|_x| NetworkError::ShutDown)?;
-                self.inner
-                    .metrics
-                    .incoming_message_count
-                    .add(result.len());
+                self.inner.metrics.incoming_message_count.add(result.len());
                 Ok(result)
             }
         };
