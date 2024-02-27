@@ -13,11 +13,11 @@
 use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::{Leaf, VidCommitment},
+    data::{test_srs, Leaf, VidCommitment, VidScheme, VidSchemeTrait},
     simple_certificate::QuorumCertificate,
     traits::{
         self,
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::NodeType,
     },
 };
@@ -386,6 +386,13 @@ impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
 }
 
 impl<Types: NodeType> PayloadQueryData<Types> {
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self
+    where
+        Payload<Types>: QueryablePayload,
+    {
+        BlockQueryData::genesis(instance_state).into()
+    }
+
     pub fn height(&self) -> u64 {
         self.height
     }
@@ -424,6 +431,26 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
             payload_hash: header.payload_commitment(),
             common,
         }
+    }
+
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+        let leaf = Leaf::<Types>::genesis(instance_state);
+        let payload = leaf.block_payload.unwrap();
+
+        let num_storage_nodes = GENESIS_VID_NUM_STORAGE_NODES;
+        let num_chunks = 1 << num_storage_nodes.ilog2();
+        let multiplicity = 1;
+        let vid = VidScheme::new(
+            num_chunks,
+            num_storage_nodes,
+            multiplicity,
+            test_srs(num_storage_nodes),
+        )
+        .unwrap();
+        let bytes = payload.encode().unwrap().collect::<Vec<_>>();
+        let disperse = vid.disperse(bytes).unwrap();
+
+        Self::new(leaf.block_header, disperse.common)
     }
 
     pub fn height(&self) -> u64 {
