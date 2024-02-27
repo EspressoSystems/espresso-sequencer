@@ -177,9 +177,14 @@ pub async fn submit_state_and_proof(
     let tx = contract.new_finalized_state(new_state.into(), proof.into());
 
     // send the tx
-    let (_receipt, _included_block) = sequencer_utils::contract_send(&tx)
+    let (receipt, included_block) = sequencer_utils::contract_send(&tx)
         .await
         .map_err(ProverError::ContractError)?;
+
+    tracing::info!(
+        "Submitted state and proof to L1: tx={:x} block={included_block}",
+        receipt.transaction_hash,
+    );
 
     Ok(())
 }
