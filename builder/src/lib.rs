@@ -62,6 +62,7 @@ pub async fn init_node(
     };
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    // surf disco client
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
     let private_staking_key = network_params.private_staking_key;
@@ -198,7 +199,9 @@ async fn init_hotshot<N: network::Type>(
 pub mod testing {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use clap::builder;
     use commit::Committable;
+    use core::num;
     use futures::{Stream, StreamExt};
     use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
@@ -206,41 +209,49 @@ pub mod testing {
     use hotshot_types::{
         light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
     };
+
     use sequencer::{transaction::Transaction, Event};
     use std::time::Duration;
 
-    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
-    {
-        init_hotshot_handles_with_metrics(&NoMetrics).await
+    pub async fn init_hotshot_handles(
+        num_nodes: usize,
+        num_builders: usize,
+    ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
+        init_hotshot_handles_with_metrics(num_nodes, num_builders, &NoMetrics).await
     }
 
     pub async fn init_hotshot_handles_with_metrics(
+        num_nodes: usize,
+        num_builders: usize,
         metrics: &dyn Metrics,
     ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
         setup_backtrace();
+        tracing::info!("Coming into init hotshot handles");
+        let total_nodes = num_nodes + num_builders;
 
-        let num_nodes = 5;
-
-        // Generate keys for the nodes.
-        let priv_keys = (0..num_nodes)
+        // Generate the pub and the private keys for everyone
+        let priv_keys = (0..total_nodes)
             .map(|_| PrivKey::generate(&mut rand::thread_rng()))
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
             .map(PubKey::from_private)
             .collect::<Vec<_>>();
+
+        // known nodes with stake only for the hotshot nodes
         let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
             .map(|id| pub_keys[id].get_stake_table_entry(1u64))
             .collect();
 
-        let mut handles = vec![];
+        // TODO check total_nodes and da_committee_size
 
+        let mut handles = vec![];
         let master_map = MasterMap::new();
 
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
-            total_nodes: num_nodes.try_into().unwrap(),
+            total_nodes: total_nodes.try_into().unwrap(),
             min_transactions: 1,
             max_transactions: 10000.try_into().unwrap(),
             known_nodes_with_stake: known_nodes_with_stake.clone(),
@@ -252,7 +263,7 @@ pub mod testing {
             propose_min_round_time: Duration::from_secs(0),
             propose_max_round_time: Duration::from_secs(1),
             election_config: None,
-            da_committee_size: num_nodes,
+            da_committee_size: num_nodes, // TODO keep da commitee size as num_nodes for now
             my_own_validator_config: Default::default(),
         };
 
@@ -274,7 +285,7 @@ pub mod testing {
                 master_map.clone(),
                 None,
             ));
-            let networks = Networks {
+            let networks: Networks<SeqTypes, Node<network::Memory>> = Networks {
                 da_network: network.clone(),
                 quorum_network: network,
                 _pd: Default::default(),
@@ -295,9 +306,39 @@ pub mod testing {
             handles.push(handle);
         }
 
-        // Now try to join the hotshot network as external node i.e as builder
-        // which won't participate in the consensus but will be able to receive events from
-        // the consensus network
+        // create builder instances
+        for builder_id in 0..num_builders {
+            // Now try to join the hotshot network as external node i.e as builder
+            // which won't participate in the consensus but will be able to receive events from
+            // the consensus network
+            let network = Arc::new(MemoryNetwork::new(
+                pub_keys[num_nodes + builder_id],
+                NetworkingMetricsValue::new(metrics),
+                master_map.clone(),
+                None,
+            ));
+
+            let networks: Networks<SeqTypes, Node<network::Memory>> = Networks {
+                da_network: network.clone(),
+                quorum_network: network,
+                _pd: Default::default(),
+            };
+            let instance_state = &NodeState::default();
+
+            let builder_handle = init_hotshot(
+                pub_keys.clone(),
+                known_nodes_with_stake.clone(),
+                num_nodes + builder_id,
+                priv_keys[num_nodes + builder_id].clone(),
+                networks,
+                config.clone(),
+                metrics,
+                instance_state,
+            )
+            .await;
+            // push the builder handle to hotshot handles and then try to read from the last handle
+            handles.push(builder_handle);
+        }
 
         handles
     }
@@ -339,26 +380,64 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
+    use core::num;
 
     use crate::testing::{init_hotshot_handles, wait_for_decide_on_handle};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use futures::{Stream, StreamExt};
+    use hotshot::types::EventType::Decide;
+    use hotshot_types::traits::block_contents::BlockHeader;
+    use sequencer::{Header, NodeState};
     #[async_std::test]
-    async fn functional_builder() {
+    async fn test_functional_builder() {
         // setup logging and bactrace
         // setup logging and backtrace
         setup_logging();
         setup_backtrace();
 
-        tracing::info!("Starting Builder Core from main.rs");
+        tracing::info!("Starting Test: functional_builder");
 
         let success_height = 5;
+        let num_nodes = 5;
+        let num_builders = 1;
 
-        let handles = init_hotshot_handles().await;
-        let mut events = handles[0].get_event_stream();
+        let handles = init_hotshot_handles(num_nodes, num_builders).await;
+        // trying to listen events fron the builder handle
+        let mut events = handles[num_nodes + num_builders - 2].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
 
         // Join as a builder in running hotshot network
+        let mut parent = Header::genesis(&NodeState::default()).0;
+
+        loop {
+            let event = events.next().await.unwrap();
+            println!("Received event from handle: {event:?}");
+            let Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            println!("Got decide {leaf_chain:?}");
+
+            // Check that each successive header satisfies invariants relative to its parent: all
+            // the fields which should be monotonic are.
+            for (leaf, _) in leaf_chain.iter().rev() {
+                let header = leaf.block_header.clone();
+                if header.height == 0 {
+                    parent = header;
+                    continue;
+                }
+                dbg!(header.height, parent.height);
+                assert_eq!(header.height, parent.height + 1);
+                assert!(header.timestamp >= parent.timestamp);
+                assert!(header.l1_head >= parent.l1_head);
+                assert!(header.l1_finalized >= parent.l1_finalized);
+                parent = header;
+            }
+
+            if parent.height >= success_height {
+                break;
+            }
+        }
     }
 }

@@ -5,8 +5,12 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
+[features]
+testing = ["hotshot-testing"]
+
 [dependencies]
 anyhow = { workspace = true }
+hotshot-testing = { workspace = true, optional = true }
 async-broadcast = "0.7.0"
 async-lock = "2.8"
 async-trait = { workspace = true }

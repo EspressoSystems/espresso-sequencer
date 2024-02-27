@@ -1278,8 +1278,14 @@ dependencies = [
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-stake-table",
+<<<<<<< HEAD
  "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.14)",
  "hs-builder-api 0.1.1",
+=======
+ "hotshot-testing",
+ "hotshot-types",
+ "hs-builder-api",
+>>>>>>> 1ccc9fc (test non-staking hotshot instance)
  "hs-builder-core",
  "jf-primitives 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?tag=0.4.0)",
  "portpicker",
