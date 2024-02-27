@@ -2848,7 +2848,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "serde",
 ]
@@ -2895,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -2926,7 +2926,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -2999,7 +2999,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3012,7 +3012,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3039,7 +3039,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "ark-bls12-381",
  "ark-ed-on-bn254",
@@ -3084,7 +3084,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "bincode",
  "hotshot-constants",
@@ -3093,7 +3093,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4017,7 +4017,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.16#d0a26384cc122881abc7db39d3f118c7f9c19b7a"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.17#5e6730a2e313e64498be9c7e66848b63aa389d4a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4461,9 +4461,9 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db2c024b41519440580066ba82aab04092b333e09066a5eb86c7c4890df31f22"
+checksum = "d3262e75e648fce39813cb56ac41f3c3e3f65217ebf3844d818d1f9398cfb0dc"
 dependencies = [
  "hashbrown 0.14.3",
 ]

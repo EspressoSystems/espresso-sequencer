@@ -36,7 +36,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, signature_key::SignatureKey as _},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -64,13 +64,17 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
             .unzip();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
+        let state_key_pairs = (0..total_nodes.into())
+            .map(|i| StateKeyPair::generate_from_seed_indexed([0; 32], i as u64))
+            .collect::<Vec<_>>();
         let master_map = MasterMap::new();
         let stake = 1u64;
-        let known_nodes_with_stake: Vec<
-            <BLSPubKey as hotshot::types::SignatureKey>::StakeTableEntry,
-        > = (0..total_nodes.into())
-            .map(|id| pub_keys[id].get_stake_table_entry(stake))
-            .collect();
+        let known_nodes_with_stake = (0..total_nodes.into())
+            .map(|id| PeerConfig {
+                stake_table_entry: pub_keys[id].get_stake_table_entry(stake),
+                state_ver_key: state_key_pairs[id].ver_key(),
+            })
+            .collect::<Vec<_>>();
         let nodes = join_all(
             priv_keys
                 .into_iter()
@@ -80,10 +84,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         public_key: pub_keys[node_id],
                         private_key: priv_key.clone(),
                         stake_value: stake,
-                        state_key_pair: StateKeyPair::generate_from_seed_indexed(
-                            [0; 32],
-                            node_id as u64,
-                        ),
+                        state_key_pair: state_key_pairs[node_id].clone(),
                     };
                     let config = HotShotConfig {
                         total_nodes,
