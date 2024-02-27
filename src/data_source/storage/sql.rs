@@ -12,22 +12,17 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::AvailabilityStorage;
-use crate::availability::QueryableHeader;
-use crate::data_source::storage::pruning::PruneStorage;
-use crate::data_source::storage::pruning::PrunerCfg;
-use crate::data_source::storage::pruning::PrunerConfig;
-use crate::{
-    availability::{
-        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
-        VidCommonQueryData,
-    },
-    data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus},
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
-    VidShare,
+use std::{
+    borrow::Cow,
+    cmp::min,
+    fmt::Display,
+    ops::{Bound, RangeBounds},
+    pin::Pin,
+    str::FromStr,
+    time::Duration,
 };
+
+pub use anyhow::Error;
 use async_std::{
     net::ToSocketAddrs,
     sync::Arc,
@@ -50,18 +45,15 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
+// This needs to be reexported so that we can reference it by absolute path relative to this crate
+// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
+// crate which doesn't have `include_dir` as a dependency.
+pub use include_dir::include_dir;
 use itertools::{izip, Itertools};
 use postgres_native_tls::TlsConnector;
+pub use refinery::Migration;
 use snafu::OptionExt;
-use std::cmp::min;
-use std::{
-    borrow::Cow,
-    fmt::Display,
-    ops::{Bound, RangeBounds},
-    pin::Pin,
-    str::FromStr,
-    time::Duration,
-};
+pub use tokio_postgres as postgres;
 use tokio_postgres::{
     config::Host,
     tls::TlsConnect,
@@ -69,15 +61,22 @@ use tokio_postgres::{
     Client, NoTls, Row, ToStatement,
 };
 
+use super::AvailabilityStorage;
 pub use crate::include_migrations;
-pub use anyhow::Error;
-pub use refinery::Migration;
-pub use tokio_postgres as postgres;
-
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use include_dir::include_dir;
+use crate::{
+    availability::{
+        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
+        QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
+        UpdateAvailabilityData, VidCommonQueryData,
+    },
+    data_source::{
+        storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
+        VersionedDataSource,
+    },
+    node::{NodeDataSource, SyncStatus},
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
+    VidShare,
+};
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -98,7 +97,8 @@ pub use include_dir::include_dir;
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// let migrations: Vec<Migration> = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
+/// let migrations: Vec<Migration> =
+///     include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
 /// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
@@ -386,7 +386,9 @@ impl SqlStorage {
             let last_applied = runner.get_last_applied_migration_async(&mut client).await?;
             let last_expected = migrations.last();
             if last_applied.as_ref() != last_expected {
-                return Err(Error::msg(format!("DB is out of date: last applied migration is {last_applied:?}, but expected {last_expected:?}")));
+                return Err(Error::msg(format!(
+                    "DB is out of date: last applied migration is {last_applied:?}, but expected {last_expected:?}"
+                )));
             }
         } else {
             // Run migrations using `refinery`.
@@ -528,7 +530,8 @@ impl PruneStorage for SqlStorage {
                             .await?;
 
                         if let Some(min_retention_height) = minimum_retention_height {
-                            while (usage as f64 / threshold as f64) > (max_usage as f64 / 10000.0)
+                            while (usage as f64 / threshold as f64)
+                                > (f64::from(max_usage) / 10000.0)
                                 && height < min_retention_height
                             {
                                 height = min(height + batch_size, min_retention_height);
@@ -1525,8 +1528,7 @@ where
     parse_block(row).map(PayloadQueryData::from)
 }
 
-const VID_COMMON_COLUMNS: &str =
-    "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
+const VID_COMMON_COLUMNS: &str = "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
 
 fn parse_vid_common<Types>(row: Row) -> QueryResult<VidCommonQueryData<Types>>
 where
@@ -1732,15 +1734,17 @@ impl tokio::io::AsyncWrite for TcpStream {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    use super::Config;
-    use crate::testing::sleep;
-    use portpicker::pick_unused_port;
     use std::{
         env,
         process::{Command, Stdio},
         str,
         time::Duration,
     };
+
+    use portpicker::pick_unused_port;
+
+    use super::Config;
+    use crate::testing::sleep;
 
     #[derive(Debug)]
     pub struct TmpDb {
@@ -1892,11 +1896,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V32__create_test_table.sql",
+                "V12__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V31__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+            Migration::unapplied("V11__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 

@@ -95,7 +95,7 @@ where
 {
     fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
         if let BlockId::Number(n) = self {
-            n < block_height && n >= pruned_height
+            n < block_height && n > pruned_height
         } else {
             true
         }
