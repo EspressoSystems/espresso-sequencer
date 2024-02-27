@@ -283,7 +283,6 @@ impl<Types, S, P> Pruner<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -295,9 +294,9 @@ where
             .await
             .storage
             .get_pruning_config();
-
-        let task = if cfg.is_some() {
-            Some(BackgroundTask::spawn("pruner", async move {
+        
+        let task = cfg.map(|cfg| {
+            BackgroundTask::spawn("pruner", async move {
                 for i in 1.. {
                     {
                         let mut storage = fetcher.storage.write().await;
@@ -309,14 +308,12 @@ where
                             PRUNED_HEIGHT.store(height, Ordering::SeqCst);
                         }
                     }
-                    sleep(Duration::from_secs(15 * 60)).await;
+                    sleep(cfg.interval()).await;
 
                     tracing::info!("pruner woke up for the {}th time", i);
                 }
-            }))
-        } else {
-            None
-        };
+            })
+        });
 
         Self {
             handle: task,

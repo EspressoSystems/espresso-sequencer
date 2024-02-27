@@ -218,29 +218,6 @@ mod test {
         builder(db, provider).await.build().await.unwrap()
     }
 
-    /// A data source suitable for this suite of tests, with the default options.
-    async fn data_source_with_pruning<P: AvailabilityProvider<MockTypes> + Clone>(
-        db: &TmpDb,
-        provider: &P,
-    ) -> SqlDataSource<MockTypes, P> {
-        db.config()
-            .pruner_cfg(
-                PrunerCfg::new()
-                    .with_pruning_threshold(50)
-                    .with_minimum_retention(Duration::from_secs(0)),
-            )
-            .unwrap()
-            .builder((*provider).clone())
-            .await
-            .unwrap()
-            // We disable proactive fetching for these tests, since we are intending to test on
-            // demand fetching, and proactive fetching could lead to false successes.
-            .disable_proactive_fetching()
-            .build()
-            .await
-            .unwrap()
-    }
-
     #[async_std::test]
     async fn test_fetch_on_request() {
         setup_test();
@@ -764,7 +741,7 @@ mod test {
         // Start a data source which is not receiving events from consensus. We don't give it a
         // fetcher since transactions are always fetched passively anyways.
         let db = TmpDb::init().await;
-        let mut data_source = data_source_with_pruning(&db, &NoFetching).await;
+        let mut data_source = data_source(&db, &NoFetching).await;
 
         // Subscribe to blocks.
         let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
