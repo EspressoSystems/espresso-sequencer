@@ -694,9 +694,6 @@ mod test {
             let leaf = leaves.next().await.unwrap();
             let block = blocks.next().await.unwrap();
 
-            println!("leaf: {:?}", leaf);
-            println!("block: {:?}", block);
-
             data_source.insert_leaf(leaf).await.unwrap();
             data_source.insert_block(block.clone()).await.unwrap();
             data_source.commit().await.unwrap();

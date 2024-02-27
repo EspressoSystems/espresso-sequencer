@@ -49,7 +49,7 @@ pub trait PruneStorage: PrunerConfig {
     async fn prune(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
-    async fn pruned_height(&self) -> Option<u64> {
+    fn pruned_height(&self) -> Option<u64> {
         None
     }
 }
@@ -138,11 +138,16 @@ impl PrunerCfg {
 impl Default for PrunerCfg {
     fn default() -> Self {
         Self {
-            pruning_threshold: Some(100),
-            minimum_retention: Duration::from_secs(0),
+            // 100 GB
+            pruning_threshold: Some(100 * 1024 * 1024 * 1024),
+            // 24 hours
+            minimum_retention: Duration::from_secs(24 * 60 * 60),
+            // 30 days
             target_retention: Duration::from_secs(30 * 24 * 60 * 60),
             batch_size: 1000,
+            // 80%
             max_usage: 8000,
+            // 15 minutes
             interval: Duration::from_secs(15 * 60),
         }
     }

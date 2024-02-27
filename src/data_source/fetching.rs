@@ -301,7 +301,7 @@ where
                         let mut storage = fetcher.storage.write().await;
                         storage.storage.prune().await.expect("pruning failed");
 
-                        let height = fetcher.storage.read().await.storage.pruned_height().await;
+                        let height = fetcher.storage.read().await.storage.pruned_height();
 
                         if let Some(height) = height {
                             PRUNED_HEIGHT.store(height, Ordering::Release);

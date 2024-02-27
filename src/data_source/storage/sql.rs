@@ -463,7 +463,7 @@ impl PruneStorage for SqlStorage {
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
         let row = self
             .query_opt(
-                "SELECT height FROM header WHERE timestamp < $1 ORDER BY height DESC LIMIT 1",
+                "SELECT height FROM header WHERE timestamp <= $1 ORDER BY height DESC LIMIT 1",
                 [&timestamp],
             )
             .await?;
@@ -473,7 +473,7 @@ impl PruneStorage for SqlStorage {
         Ok(height)
     }
 
-    async fn pruned_height(&self) -> Option<u64> {
+    fn pruned_height(&self) -> Option<u64> {
         self.pruned_height
     }
 
@@ -1845,8 +1845,10 @@ pub mod testing {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
 
+    use hotshot_example_types::state_types::TestInstanceState;
+
     use super::{testing::TmpDb, *};
-    use crate::testing::setup_test;
+    use crate::testing::{mocks::MockTypes, setup_test};
     #[async_std::test]
     async fn test_migrations() {
         setup_test();
@@ -1938,5 +1940,106 @@ mod test {
         // Default values.
         assert_eq!(cfg.host, "localhost");
         assert_eq!(cfg.port, 5432);
+    }
+
+    #[async_std::test]
+    async fn test_target_period_pruning() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port)
+            .migrations(migrations);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        // insert some mock data
+        for i in 0..20 {
+            leaf.leaf.block_header.block_number = i;
+            storage.insert_leaf(leaf.clone()).await.unwrap();
+            storage.commit().await.unwrap();
+        }
+
+        // Set pruner config to default which has minimum retention set to 1 day
+        storage.set_pruning_config(PrunerCfg::new());
+        sleep(Duration::from_secs(2)).await;
+        // No data will be pruned
+        storage.prune().await.unwrap();
+        // Pruned height should be none
+        assert!(storage.pruned_height().is_none());
+
+        // Set pruner config to target retention set to 1s
+        storage.set_pruning_config(PrunerCfg::new().with_target_retention(Duration::from_secs(1)));
+        // All of the data is now atleast one sec old
+        storage.prune().await.unwrap();
+
+        // Pruned height should be some
+        // the table should now contain only 1 row as data with height < target height is pruned
+        assert!(storage.pruned_height().is_some());
+
+        let count = storage
+            .query_one_static("select count(*) as count from header")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        assert_eq!(count, 1);
+    }
+
+    #[async_std::test]
+    async fn test_minimum_retention_pruning() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port)
+            .migrations(migrations);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        // insert some mock data
+        for i in 0..20 {
+            leaf.leaf.block_header.block_number = i;
+            storage.insert_leaf(leaf.clone()).await.unwrap();
+            storage.commit().await.unwrap();
+        }
+
+        // Set pruner config to min retention set to 1s and pruning_threshold to 1
+        // SQL storage size is more than 1000 bytes even without any data indexed
+        storage.set_pruning_config(
+            PrunerCfg::new()
+                .with_minimum_retention(Duration::from_secs(1))
+                .with_pruning_threshold(1),
+        );
+
+        sleep(Duration::from_secs(2)).await;
+
+        // All of the data is now atleast one sec old
+        storage.prune().await.unwrap();
+
+        // Pruned height should be some
+        // the table should now contain only 1 row
+        // as data with timestamp < minimum retention timestamp is pruned
+        assert!(storage.pruned_height().is_some());
+
+        let count = storage
+            .query_one_static("select count(*) as count from header")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        assert_eq!(count, 1);
     }
 }
