@@ -6,52 +6,37 @@ use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct PrunerCfg {
-    /// Disk space threshold (in bytes).
-    ///
-    /// If the disk usage exceeds this threshold, pruning of data starts from
-    /// the oldest data and continues until the disk usage falls below `MAX_USAGE
-    /// or until the oldest data is younger than `MINIMUM_RETENTION`
     pruning_threshold: Option<u64>,
-
-    /// Minimum data retention period
-    ///
-    /// Data younger than this is never pruned, regardless of disk usage.
     minimum_retention: Duration,
-
-    /// Target data retention period
-    ///
-    /// This is the ideal period for which data should be retained
-    /// data younger than this and older than `MINIMUM_RETENTION` may be pruned if disk usage exceeds the `pruning_threshold`.
     target_retention: Duration,
-
-    /// Number of blocks to remove in a single pruning operation.
     batch_size: u64,
-
-    /// Maximum disk usage (in basis points).
-    ///
-    /// Pruning stops once the disk usage falls below this value, even if
-    /// some data older than the `MINIMUM_RETENTION` remains. Values range
-    /// from 0 (0%) to 10000 (100%).
     max_usage: u16,
-    /// Pruning interval
     interval: Duration,
 }
 
 #[async_trait]
-pub trait PruneStorage: PrunerConfig {
-    type Error: Error + Debug + Send + Sync + 'static;
-
+pub trait PruneStorage: PrunerConfig + PrunedHeightStorage {
     async fn get_disk_usage(&self) -> Result<u64, Self::Error> {
         Ok(0)
     }
-    async fn get_height_by_timestamp(&self, _timestamp: i64) -> Result<Option<u64>, Self::Error> {
+
+    async fn prune(&mut self) -> Result<Option<u64>, Self::Error> {
         Ok(None)
     }
-    async fn prune(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
+
     fn pruned_height(&self) -> Option<u64> {
         None
+    }
+}
+
+#[async_trait]
+pub trait PrunedHeightStorage {
+    type Error: Error + Debug + Send + Sync + 'static;
+    async fn save_pruned_height(&mut self, _height: u64) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
+        Ok(None)
     }
 }
 
@@ -111,26 +96,45 @@ impl PrunerCfg {
         self
     }
 
+    /// Disk space threshold (in bytes).
+    ///
+    /// If the disk usage exceeds this threshold, pruning of data starts from
+    /// the oldest data and continues until the disk usage falls below `MAX_USAGE
+    /// or until the oldest data is younger than `MINIMUM_RETENTION`
     pub fn pruning_threshold(&self) -> Option<u64> {
         self.pruning_threshold
     }
 
+    /// Minimum data retention period
+    ///
+    /// Data younger than this is never pruned, regardless of disk usage.
     pub fn minimum_retention(&self) -> Duration {
         self.minimum_retention
     }
 
+    /// Target data retention period
+    ///
+    /// This is the ideal period for which data should be retained
+    /// data younger than this and older than `MINIMUM_RETENTION` may be pruned if disk usage exceeds the `pruning_threshold`.
     pub fn target_retention(&self) -> Duration {
         self.target_retention
     }
 
+    /// Number of blocks to remove in a single pruning operation.
     pub fn batch_size(&self) -> u64 {
         self.batch_size
     }
 
+    /// Maximum disk usage (in basis points).
+    ///
+    /// Pruning stops once the disk usage falls below this value, even if
+    /// some data older than the `MINIMUM_RETENTION` remains. Values range
+    /// from 0 (0%) to 10000 (100%).
     pub fn max_usage(&self) -> u16 {
         self.max_usage
     }
 
+    /// Pruning interval
     pub fn interval(&self) -> Duration {
         self.interval
     }

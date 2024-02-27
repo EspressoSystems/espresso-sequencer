@@ -93,9 +93,9 @@ impl<Types> FetchRequest for BlockId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
         if let BlockId::Number(n) = self {
-            n < block_height && n > pruned_height
+            n < block_height && pruned_height.map_or(true, |ph| n > ph)
         } else {
             true
         }
@@ -106,7 +106,7 @@ impl<Types> FetchRequest for BlockRequest<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
         if let BlockRequest::Id(id) = self {
             id.might_exist(block_height, pruned_height)
         } else {

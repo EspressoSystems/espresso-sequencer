@@ -13,6 +13,7 @@
 #![cfg(feature = "no-storage")]
 
 use super::AvailabilityStorage;
+use crate::data_source::storage::pruning::PrunedHeightStorage;
 use crate::data_source::storage::pruning::{PruneStorage, PrunerConfig};
 use crate::{
     availability::{
@@ -46,7 +47,8 @@ impl VersionedDataSource for NoStorage {
     async fn revert(&mut self) {}
 }
 impl PrunerConfig for NoStorage {}
-impl PruneStorage for NoStorage {
+impl PruneStorage for NoStorage {}
+impl PrunedHeightStorage for NoStorage {
     type Error = Infallible;
 }
 

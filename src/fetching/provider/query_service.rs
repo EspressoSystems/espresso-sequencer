@@ -162,7 +162,7 @@ where
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use super::*;
-    use crate::data_source::storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig};
+
     use crate::{
         api::load_api,
         availability::{define_api, AvailabilityDataSource, Fetch, UpdateAvailabilityData},
@@ -719,62 +719,6 @@ mod test {
                 .await
                 .await
         );
-    }
-
-    #[async_std::test]
-    async fn test_pruning() {
-        setup_test();
-
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
-
-        // Start a web server that the non-consensus node can use to fetch blocks.
-        let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
-
-        // Start a data source which is not receiving events from consensus. We don't give it a
-        // fetcher since transactions are always fetched passively anyways.
-        let db = TmpDb::init().await;
-        let mut data_source = data_source(&db, &NoFetching).await;
-
-        // Subscribe to blocks.
-        let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
-        let mut blocks = { network.data_source().read().await.subscribe_blocks(1).await };
-
-        // Start consensus.
-        network.start().await;
-
-        for _ in 1..10 {
-            let leaf = leaves.next().await.unwrap();
-            let block = blocks.next().await.unwrap();
-
-            data_source.insert_leaf(leaf).await.unwrap();
-            data_source.insert_block(block.clone()).await.unwrap();
-            data_source.commit().await.unwrap();
-        }
-
-        network.shut_down().await;
-
-        let usage_before_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
-        tracing::info!("disk usage before pruning: {}", usage_before_pruning);
-
-        // Pruning should reduce the disk usage.
-        // Some data will be pruned as minimum retention is set to 0 days
-        data_source.storage_mut().await.set_pruning_config(
-            PrunerCfg::new()
-                .with_minimum_retention(Duration::from_secs(0))
-                .with_pruning_threshold(100),
-        );
-
-        data_source.storage_mut().await.prune().await.unwrap();
-
-        let disk_usage_after_pruning = data_source.storage().await.get_disk_usage().await.unwrap();
-        tracing::info!("disk usage after pruning: {}", disk_usage_after_pruning);
-
-        assert!(disk_usage_after_pruning < usage_before_pruning)
     }
 
     #[async_std::test]

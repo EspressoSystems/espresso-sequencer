@@ -14,10 +14,9 @@
 
 use super::{
     ledger_log::{Iter, LedgerLog},
+    pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
-use crate::data_source::storage::pruning::PruneStorage;
-use crate::data_source::storage::pruning::PrunerConfig;
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -77,11 +76,15 @@ impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
     Payload<Types>: QueryablePayload
 {
 }
-impl<Types: NodeType> PruneStorage for FileSystemStorage<Types>
+impl<Types: NodeType> PrunedHeightStorage for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
 {
     type Error = Infallible;
+}
+impl<Types: NodeType> PruneStorage for FileSystemStorage<Types> where
+    Payload<Types>: QueryablePayload
+{
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>

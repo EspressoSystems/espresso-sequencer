@@ -46,7 +46,7 @@ impl<Types> FetchRequest for VidCommonRequest<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
         self.0.might_exist(block_height, pruned_height)
     }
 }

@@ -62,3 +62,9 @@ CREATE TABLE transaction
 ALTER TABLE transaction ADD CONSTRAINT transaction_pk PRIMARY KEY (block_height, index);
 -- This index is not unique, because nothing stops HotShot from sequencing duplicate transactions.
 CREATE INDEX transaction_hash ON transaction (hash);
+
+CREATE TABLE pruned_height (
+    id SERIAL PRIMARY KEY,
+    -- The height of the last pruned block.
+    last_height BIGINT NOT NULL
+);

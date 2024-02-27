@@ -61,7 +61,7 @@ use tokio_postgres::{
     Client, NoTls, Row, ToStatement,
 };
 
-use super::AvailabilityStorage;
+use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
 pub use crate::include_migrations;
 use crate::{
     availability::{
@@ -448,19 +448,6 @@ impl SqlStorage {
 
         Ok(height)
     }
-}
-
-#[async_trait]
-impl PruneStorage for SqlStorage {
-    type Error = QueryError;
-
-    async fn get_disk_usage(&self) -> QueryResult<u64> {
-        let row = self
-            .query_one_static("SELECT pg_database_size(current_database())")
-            .await?;
-        let size: i64 = row.get(0);
-        Ok(size as u64)
-    }
 
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
         let row = self
@@ -474,93 +461,120 @@ impl PruneStorage for SqlStorage {
 
         Ok(height)
     }
+}
+
+#[async_trait]
+impl PrunedHeightStorage for SqlStorage {
+    type Error = QueryError;
+    async fn save_pruned_height(&mut self, height: u64) -> Result<(), Self::Error> {
+        // id is set to 1 so that there is only one row in the table.
+        // height is updated if the row already exists.
+        self.query_opt(
+            "INSERT INTO pruned_height (id, last_height) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET last_height = $1;",
+            &[&(height as i64)],
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
+        let row = self
+            .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
+            .await?;
+
+        let height: Option<i64> = row.map(|row| row.get(0));
+        Ok(height.map(|h| h as u64))
+    }
+}
+
+#[async_trait]
+impl PruneStorage for SqlStorage {
+    async fn get_disk_usage(&self) -> QueryResult<u64> {
+        let row = self
+            .query_one_static("SELECT pg_database_size(current_database())")
+            .await?;
+        let size: i64 = row.get(0);
+        Ok(size as u64)
+    }
 
     fn pruned_height(&self) -> Option<u64> {
         self.pruned_height
     }
 
-    async fn prune(&mut self) -> Result<(), QueryError> {
+    async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
         let cfg = self.get_pruning_config().ok_or(QueryError::Error {
             message: "Pruning config not found".to_string(),
         })?;
 
+        let Some(mut height) = self.get_minimum_height().await? else {
+            tracing::info!("database is empty, nothing to prune");
+            return Ok(None);
+        };
+
         let batch_size = cfg.batch_size();
         let max_usage = cfg.max_usage();
-        let minimum_height = self.get_minimum_height().await?;
+        // Prune data exceeding target retention in batches
+        let target_height = self
+            .get_height_by_timestamp(
+                Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
+            )
+            .await?;
 
-        match minimum_height {
-            Some(mut height) => {
-                // Prune data exceeding target retention in batches
-                let target_height = self
+        if let Some(target_height) = target_height {
+            while height < target_height {
+                height = min(height + batch_size, target_height);
+                self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
+                    .await?;
+                tracing::info!("Pruned data up to height {}", height);
+            }
+            self.pruned_height = Some(target_height);
+        }
+
+        // If threshold is set, prune data exceeding minimum retention in batches
+        // This parameter is needed for SQL storage as there is no direct way to get free space.
+        if let Some(threshold) = cfg.pruning_threshold() {
+            let mut usage = self.get_disk_usage().await?;
+
+            // Prune data exceeding minimum retention in batches starting from minimum height
+            // until usage is below threshold
+            if usage > threshold {
+                tracing::warn!(
+                    "Disk usage {} exceeds pruning threshold {:?}",
+                    usage,
+                    cfg.pruning_threshold()
+                );
+                let minimum_retention_height = self
                     .get_height_by_timestamp(
-                        Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
+                        Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
                     )
                     .await?;
 
-                if let Some(target_height) = target_height {
-                    while height < target_height {
-                        height = min(height + batch_size, target_height);
+                if let Some(min_retention_height) = minimum_retention_height {
+                    while (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
+                        && height < min_retention_height
+                    {
+                        height = min(height + batch_size, min_retention_height);
                         self.query_opt(
                             "DELETE FROM header WHERE height <= $1",
                             &[&(height as i64)],
                         )
                         .await?;
+                        usage = self.get_disk_usage().await?;
                         tracing::info!("Pruned data up to height {}", height);
                     }
-                    self.pruned_height = Some(target_height);
+                    self.pruned_height = Some(height);
                 }
-
-                // If threshold is set, prune data exceeding minimum retention in batches
-                // This parameter is needed for SQL storage as there is no direct way to get free space.
-                if let Some(threshold) = cfg.pruning_threshold() {
-                    let mut usage = self.get_disk_usage().await?;
-
-                    // Prune data exceeding minimum retention in batches starting from minimum height
-                    // until usage is below threshold
-                    if usage > threshold {
-                        tracing::warn!(
-                            "Disk usage {} exceeds pruning threshold {:?}",
-                            usage,
-                            cfg.pruning_threshold()
-                        );
-                        let minimum_retention_height = self
-                            .get_height_by_timestamp(
-                                Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
-                            )
-                            .await?;
-
-                        if let Some(min_retention_height) = minimum_retention_height {
-                            while (usage as f64 / threshold as f64)
-                                > (f64::from(max_usage) / 10000.0)
-                                && height < min_retention_height
-                            {
-                                height = min(height + batch_size, min_retention_height);
-                                self.query_opt(
-                                    "DELETE FROM header WHERE height <= $1",
-                                    &[&(height as i64)],
-                                )
-                                .await?;
-                                usage = self.get_disk_usage().await?;
-                                tracing::info!("Pruned data up to height {}", height);
-                            }
-                            self.pruned_height = Some(height);
-                        }
-                    }
-                }
-                // Vacuum the database to reclaim space.
-                // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
-                // cause downtime for the query service.
-                self.client
-                    .batch_execute("VACUUM")
-                    .await
-                    .map_err(postgres_err)?;
-            }
-            None => {
-                tracing::info!("database is empty, nothing to prune");
             }
         }
+        // Vacuum the database to reclaim space.
+        // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
+        // cause downtime for the query service.
+        self.client
+            .batch_execute("VACUUM")
+            .await
+            .map_err(postgres_err)?;
 
-        Ok(())
+        Ok(Some(height))
     }
 }
 
@@ -1975,13 +1989,14 @@ mod test {
         // Set pruner config to target retention set to 1s
         storage.set_pruning_config(PrunerCfg::new().with_target_retention(Duration::from_secs(1)));
         sleep(Duration::from_secs(2)).await;
+        let usage_before_pruning = storage.get_disk_usage().await.unwrap();
         // All of the data is now older than 1s.
         // This would prune all the data as the target retention is set to 1s
         storage.prune().await.unwrap();
 
         // Pruned height should be some
         assert!(storage.pruned_height().is_some());
-
+        let usage_after_pruning = storage.get_disk_usage().await.unwrap();
         // All the tables should be empty
         // counting rows in header table
         let header_rows = storage
@@ -2002,6 +2017,11 @@ mod test {
             .get::<_, i64>("count");
         // the table should be empty
         assert_eq!(leaf_rows, 0);
+
+        assert!(
+            usage_before_pruning > usage_after_pruning,
+            " disk usage should decrease after pruning"
+        )
     }
 
     #[async_std::test]
@@ -2027,50 +2047,70 @@ mod test {
             storage.commit().await.unwrap();
         }
 
-        // Set pruner config to min retention set to 1s and pruning_threshold to 1
+        let height_before_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+        let cfg = PrunerCfg::new();
+        // Set pruning_threshold to 1
         // SQL storage size is more than 1000 bytes even without any data indexed
-        // Hence, pruning would delete all the data from the database since threshold will always be > disk usage
-        storage.set_pruning_config(
-            PrunerCfg::new()
-                .with_minimum_retention(Duration::from_secs(1))
-                .with_pruning_threshold(1),
+        // This would mean that the threshold would always be greater than the disk usage
+        // However, minimum retention is set to 24 hours by default so the data would not be pruned
+        storage.set_pruning_config(cfg.clone().with_pruning_threshold(1));
+        println!("{:?}", storage.get_pruning_config().unwrap());
+        // Pruning would not delete any data
+        // All the data is younger than minimum retention period even though the usage > threshold
+        storage.prune().await.unwrap();
+
+        // Pruned height should be none
+        assert!(storage.pruned_height().is_none());
+
+        let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
+        assert_eq!(
+            height_after_pruning, height_before_pruning,
+            "some data has been pruned"
         );
 
-        // Sleeping for 2s so that all the data is atleast 2s old
+        // Change minimum retention to 1s
+        storage.set_pruning_config(
+            cfg.with_minimum_retention(Duration::from_secs(1))
+                .with_pruning_threshold(1),
+        );
+        // sleep for 2s to make sure the data is older than minimum retention
         sleep(Duration::from_secs(2)).await;
-
-        let usage_before_pruning = storage.get_disk_usage().await.unwrap();
-
-        // Pruning would delete all the data from the database
-        // All the data is older than minimum retention period and threshold is met.
+        // This would prune all the data
         storage.prune().await.unwrap();
 
         // Pruned height should be some
         assert!(storage.pruned_height().is_some());
-
-        // The database should be empty as all the data is deleted
-        // Counting rows from header table.
-        // Count should be 0
+        // All the tables should be empty
+        // counting rows in header table
         let header_rows = storage
             .query_one_static("select count(*) as count from header")
             .await
             .unwrap()
             .get::<_, i64>("count");
-        assert_eq!(header_rows, 0);
-
-        let leaf_rows = storage
-            .query_one_static("select count(*) as count from leaf")
-            .await
-            .unwrap()
-            .get::<_, i64>("count");
         // the table should be empty
-        assert_eq!(leaf_rows, 0);
+        assert_eq!(header_rows, 0);
+    }
 
-        let usage_after_pruning = storage.get_disk_usage().await.unwrap();
+    #[async_std::test]
+    async fn test_pruned_height_storage() {
+        setup_test();
 
-        assert!(
-            usage_before_pruning > usage_after_pruning,
-            " disk usage should decrease after pruning"
-        );
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        assert!(storage.load_pruned_height().await.unwrap().is_none());
+        storage.save_pruned_height(10).await.unwrap();
+        storage.save_pruned_height(20).await.unwrap();
+        storage.save_pruned_height(30).await.unwrap();
+        assert_eq!(storage.load_pruned_height().await.unwrap(), Some(30));
     }
 }
