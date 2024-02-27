@@ -193,3 +193,172 @@ async fn init_hotshot<N: network::Type>(
     .unwrap()
     .0
 }
+
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use commit::Committable;
+    use futures::{Stream, StreamExt};
+    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
+    use hotshot::types::EventType::Decide;
+    use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
+    use hotshot_types::{
+        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
+    };
+    use sequencer::{transaction::Transaction, Event};
+    use std::time::Duration;
+
+    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
+    {
+        init_hotshot_handles_with_metrics(&NoMetrics).await
+    }
+
+    pub async fn init_hotshot_handles_with_metrics(
+        metrics: &dyn Metrics,
+    ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
+        setup_logging();
+        setup_backtrace();
+
+        let num_nodes = 5;
+
+        // Generate keys for the nodes.
+        let priv_keys = (0..num_nodes)
+            .map(|_| PrivKey::generate(&mut rand::thread_rng()))
+            .collect::<Vec<_>>();
+        let pub_keys = priv_keys
+            .iter()
+            .map(PubKey::from_private)
+            .collect::<Vec<_>>();
+        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
+            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .collect();
+
+        let mut handles = vec![];
+
+        let master_map = MasterMap::new();
+
+        let config: HotShotConfig<_, _> = HotShotConfig {
+            execution_type: ExecutionType::Continuous,
+            total_nodes: num_nodes.try_into().unwrap(),
+            min_transactions: 1,
+            max_transactions: 10000.try_into().unwrap(),
+            known_nodes_with_stake: known_nodes_with_stake.clone(),
+            next_view_timeout: Duration::from_secs(5).as_millis() as u64,
+            timeout_ratio: (10, 11),
+            round_start_delay: Duration::from_millis(1).as_millis() as u64,
+            start_delay: Duration::from_millis(1).as_millis() as u64,
+            num_bootstrap: 1usize,
+            propose_min_round_time: Duration::from_secs(0),
+            propose_max_round_time: Duration::from_secs(1),
+            election_config: None,
+            da_committee_size: num_nodes,
+            my_own_validator_config: Default::default(),
+        };
+
+        // Create HotShot instances.
+        for node_id in 0..num_nodes {
+            let metrics = if node_id == 0 { metrics } else { &NoMetrics };
+
+            let mut config = config.clone();
+            config.my_own_validator_config = ValidatorConfig {
+                public_key: pub_keys[node_id],
+                private_key: priv_keys[node_id].clone(),
+                stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
+                state_key_pair: StateKeyPair::generate(),
+            };
+
+            let network = Arc::new(MemoryNetwork::new(
+                pub_keys[node_id],
+                NetworkingMetricsValue::new(metrics),
+                master_map.clone(),
+                None,
+            ));
+            let networks = Networks {
+                da_network: network.clone(),
+                quorum_network: network,
+                _pd: Default::default(),
+            };
+            let instance_state = &NodeState::default();
+            let handle = init_hotshot(
+                pub_keys.clone(),
+                known_nodes_with_stake.clone(),
+                node_id,
+                priv_keys[node_id].clone(),
+                networks,
+                config,
+                metrics,
+                instance_state,
+            )
+            .await;
+
+            handles.push(handle);
+        }
+
+        // Now try to join the hotshot network as external node i.e as builder
+        // which won't participate in the consensus but will be able to receive events from
+        // the consensus network
+
+        handles
+    }
+
+    // Wait for decide event, make sure it matches submitted transaction. Return the block number
+    // containing the transaction.
+    pub async fn wait_for_decide_on_handle(
+        events: &mut (impl Stream<Item = Event> + Unpin),
+        submitted_txn: &Transaction,
+    ) -> u64 {
+        let commitment = submitted_txn.commit();
+
+        // Keep getting events until we see a Decide event
+        loop {
+            let event = events.next().await.unwrap();
+            tracing::info!("Received event from handle: {event:?}");
+
+            if let Decide { leaf_chain, .. } = event.event {
+                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                    if leaf
+                        .block_payload
+                        .as_ref()?
+                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .contains(&commitment)
+                    {
+                        Some(leaf.get_block_header().block_number())
+                    } else {
+                        None
+                    }
+                }) {
+                    return height;
+                }
+            } else {
+                // Keep waiting
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::testing::{init_hotshot_handles, wait_for_decide_on_handle};
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    #[async_std::test]
+    async fn functional_builder() {
+        // setup logging and bactrace
+        // setup logging and backtrace
+        setup_logging();
+        setup_backtrace();
+
+        tracing::info!("Starting Builder Core from main.rs");
+
+        let success_height = 5;
+
+        let handles = init_hotshot_handles().await;
+        let mut events = handles[0].get_event_stream();
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        // Join as a builder in running hotshot network
+    }
+}

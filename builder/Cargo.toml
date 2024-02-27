@@ -24,6 +24,7 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git"
 hs-builder-api = { workspace = true }
 hs-builder-core = { workspace = true }
 portpicker = "0.1.1"
+rand = "0.8.5"
 sequencer = { path = "../sequencer" }
 tracing = { workspace = true }
 tide-disco = { workspace = true }

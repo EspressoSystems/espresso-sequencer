@@ -1283,6 +1283,7 @@ dependencies = [
  "hs-builder-core",
  "jf-primitives 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?tag=0.4.0)",
  "portpicker",
+ "rand 0.8.5",
  "sequencer",
  "tagged-base64",
  "tide-disco",

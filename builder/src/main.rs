@@ -95,12 +95,12 @@ async fn main() -> anyhow::Result<()> {
     let (builder_pub_key, builder_private_key) =
         BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-    let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(usize::MAX);
-    let (decide_sender, decide_receiver) = broadcast::<MessageType<SeqTypes>>(usize::MAX);
-    let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(usize::MAX);
-    let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(usize::MAX);
+    let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+    let (decide_sender, decide_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+    let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+    let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(15);
 
-    let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(usize::MAX);
+    let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(15);
 
     let (res_sender, res_receiver) = unbounded();
 
@@ -148,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
     let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
     // get handle to the hotshot context
-    let mut builder_context = init_node(network_params, &NoMetrics).await?;
+    let builder_context = init_node(network_params, &NoMetrics).await?;
 
     // start doing consensus i.e. in this case be passive member of the consensus network
     builder_context.start_consensus().await;
@@ -170,7 +170,7 @@ async fn main() -> anyhow::Result<()> {
             .expect("Failed to register the builder API");
 
         async_spawn(async move {
-            app.serve(api_url).await;
+            app.serve(api_url).await.unwrap();
         });
         async_spawn(async move {
             run_standalone_builder_service(
@@ -180,8 +180,10 @@ async fn main() -> anyhow::Result<()> {
                 da_sender,
                 qc_sender,
             )
-            .await;
-        });
+            .await
+            .unwrap();
+        })
+        .await;
         builder_state.event_loop();
     })
     .await;
