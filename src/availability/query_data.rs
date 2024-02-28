@@ -13,14 +13,16 @@
 use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::{Leaf, VidCommitment},
+    data::Leaf,
     simple_certificate::QuorumCertificate,
     traits::{
         self,
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::NodeType,
     },
+    vid::{vid_scheme, VidCommitment},
 };
+use jf_primitives::vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::fmt::Debug;
@@ -285,8 +287,8 @@ impl<Types: NodeType> BlockQueryData<Types> {
     where
         Payload<Types>: QueryablePayload,
     {
-        let (header, payload, _) = Types::BlockHeader::genesis(instance_state);
-        Self::new(header, payload)
+        let leaf = Leaf::<Types>::genesis(instance_state);
+        Self::new(leaf.block_header, leaf.block_payload.unwrap())
     }
 
     pub fn header(&self) -> &Header<Types> {
@@ -386,6 +388,13 @@ impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
 }
 
 impl<Types: NodeType> PayloadQueryData<Types> {
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self
+    where
+        Payload<Types>: QueryablePayload,
+    {
+        BlockQueryData::genesis(instance_state).into()
+    }
+
     pub fn height(&self) -> u64 {
         self.height
     }
@@ -424,6 +433,17 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
             payload_hash: header.payload_commitment(),
             common,
         }
+    }
+
+    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+        let leaf = Leaf::<Types>::genesis(instance_state);
+        let payload = leaf.block_payload.unwrap();
+        let bytes = payload.encode().unwrap().collect::<Vec<_>>();
+        let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
+            .disperse(bytes)
+            .unwrap();
+
+        Self::new(leaf.block_header, disperse.common)
     }
 
     pub fn height(&self) -> u64 {

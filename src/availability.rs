@@ -484,15 +484,14 @@ mod test {
         status::StatusDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork, TestableDataSource},
-            has_vid,
             mocks::{mock_transaction, MockHeader, MockPayload, MockTypes},
-            setup_test, FIRST_VID_VIEW,
+            setup_test,
         },
         Error, Header,
     };
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
-    use futures::{future::FutureExt, stream};
+    use futures::future::FutureExt;
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::data::Leaf;
     use portpicker::pick_unused_port;
@@ -599,27 +598,22 @@ mod test {
                     .unwrap(),
             );
             // Look up the common VID data.
-            let common = if has_vid(i as usize) {
-                let common: VidCommonQueryData<MockTypes> = client
-                    .get(&format!("vid/common/{}", block.height()))
+            let common: VidCommonQueryData<MockTypes> = client
+                .get(&format!("vid/common/{}", block.height()))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(common.height(), block.height());
+            assert_eq!(common.block_hash(), block.hash());
+            assert_eq!(common.payload_hash(), block.payload_hash());
+            assert_eq!(
+                common,
+                client
+                    .get(&format!("vid/common/hash/{}", block.hash()))
                     .send()
                     .await
-                    .unwrap();
-                assert_eq!(common.height(), block.height());
-                assert_eq!(common.block_hash(), block.hash());
-                assert_eq!(common.payload_hash(), block.payload_hash());
-                assert_eq!(
-                    common,
-                    client
-                        .get(&format!("vid/common/hash/{}", block.hash()))
-                        .send()
-                        .await
-                        .unwrap()
-                );
-                Some(common)
-            } else {
-                None
-            };
+                    .unwrap()
+            );
 
             let block_summary = client
                 .get(&format!("block/summary/{}", i))
@@ -682,20 +676,18 @@ mod test {
                     .unwrap()
                     .data(),
             );
-            if let Some(common) = common {
-                assert_eq!(
-                    common.common(),
-                    client
-                        .get::<VidCommonQueryData<MockTypes>>(&format!(
-                            "vid/common/payload-hash/{}",
-                            block.payload_hash()
-                        ))
-                        .send()
-                        .await
-                        .unwrap()
-                        .common()
-                );
-            }
+            assert_eq!(
+                common.common(),
+                client
+                    .get::<VidCommonQueryData<MockTypes>>(&format!(
+                        "vid/common/payload-hash/{}",
+                        block.payload_hash()
+                    ))
+                    .send()
+                    .await
+                    .unwrap()
+                    .common()
+            );
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
@@ -827,16 +819,11 @@ mod test {
             .subscribe::<BlockQueryData<MockTypes>>()
             .await
             .unwrap();
-        // Skip block 0 in the VID stream, as there is not VID for the genesis block.
-        const MISSING_VID: Option<VidCommonQueryData<MockTypes>> = None;
-        let vid_common = stream::iter([MISSING_VID; FIRST_VID_VIEW]).chain(
-            client
-                .socket(&format!("stream/vid/common/{FIRST_VID_VIEW}"))
-                .subscribe::<VidCommonQueryData<MockTypes>>()
-                .await
-                .unwrap()
-                .map(|res| res.ok()),
-        );
+        let vid_common = client
+            .socket("stream/vid/common/0")
+            .subscribe::<VidCommonQueryData<MockTypes>>()
+            .await
+            .unwrap();
         let mut chain = leaves.zip(headers.zip(blocks.zip(vid_common))).enumerate();
         for nonce in 0..3 {
             let txn = mock_transaction(vec![nonce]);
@@ -850,12 +837,11 @@ mod test {
                 let leaf = leaf.unwrap();
                 let header = header.unwrap();
                 let block = block.unwrap();
+                let common = common.unwrap();
                 assert_eq!(leaf.height() as usize, i);
                 assert_eq!(leaf.block_hash(), block.hash());
                 assert_eq!(block.header(), &header);
-                if has_vid(i) {
-                    assert!(common.is_some());
-                }
+                assert_eq!(common.height() as usize, i);
                 if !block.is_empty() {
                     break (i, leaf, block, common);
                 }
@@ -868,12 +854,10 @@ mod test {
                 block,
                 client.get(&format!("block/{}", i)).send().await.unwrap()
             );
-            if let Some(common) = common {
-                assert_eq!(
-                    common,
-                    client.get(&format!("vid/common/{i}")).send().await.unwrap()
-                );
-            }
+            assert_eq!(
+                common,
+                client.get(&format!("vid/common/{i}")).send().await.unwrap()
+            );
 
             validate(&client, (i + 1) as u64).await;
         }

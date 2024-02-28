@@ -17,12 +17,12 @@ use super::{
         TransactionHash, TransactionIndex, VidCommonQueryData,
     },
 };
-use crate::{Payload, VidShare};
+use crate::{Payload, VidCommitment, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::{BoxStream, Stream, StreamExt};
-use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::{cmp::Ordering, error::Error, fmt::Debug, ops::RangeBounds};
 
 #[derive(Derivative, From, Display)]

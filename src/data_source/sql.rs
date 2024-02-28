@@ -416,10 +416,11 @@ mod test {
         data_source::VersionedDataSource,
         fetching::provider::NoFetching,
         node::NodeDataSource,
-        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test, FIRST_VID_VIEW},
+        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
     use hotshot_example_types::state_types::TestInstanceState;
-    use hotshot_types::data::{test_srs, VidScheme, VidSchemeTrait};
+    use hotshot_types::vid::vid_scheme;
+    use jf_primitives::vid::VidScheme;
 
     type D = SqlDataSource<MockTypes, NoFetching>;
 
@@ -433,30 +434,24 @@ mod test {
         let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
         // Generate some test VID data.
-        let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
-        let disperse = vid.disperse([]).unwrap();
+        let disperse = vid_scheme(2).disperse([]).unwrap();
 
-        // Insert test data with VID common but no share. We use height `FIRST_VID_VIEW` to avoid
-        // confusing the data source, which assumes VID cannot exist at lower heights.
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
-        leaf.leaf.block_header.block_number = FIRST_VID_VIEW as u64;
+        // Insert test data with VID common but no share.
+        let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
         ds.insert_leaf(leaf).await.unwrap();
         ds.insert_vid(common.clone(), None).await.unwrap();
         ds.commit().await.unwrap();
 
-        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
-        ds.vid_share(FIRST_VID_VIEW).await.unwrap_err();
+        assert_eq!(ds.get_vid_common(0).await.await, common);
+        ds.vid_share(0).await.unwrap_err();
 
         // Re-insert the common data with the share.
         ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
             .await
             .unwrap();
         ds.commit().await.unwrap();
-        assert_eq!(ds.get_vid_common(FIRST_VID_VIEW).await.await, common);
-        assert_eq!(
-            ds.vid_share(FIRST_VID_VIEW).await.unwrap(),
-            disperse.shares[0]
-        );
+        assert_eq!(ds.get_vid_common(0).await.await, common);
+        assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
     }
 }

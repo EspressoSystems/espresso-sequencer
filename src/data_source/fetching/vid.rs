@@ -47,11 +47,7 @@ where
     Types: NodeType,
 {
     fn might_exist(self, block_height: usize) -> bool {
-        if let BlockId::Number(n) = self.0 {
-            n > 0 && n < block_height
-        } else {
-            true
-        }
+        self.0.might_exist(block_height)
     }
 }
 

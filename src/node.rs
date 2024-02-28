@@ -184,9 +184,8 @@ mod test {
         data_source::ExtensibleDataSource,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            has_vid,
             mocks::MockTypes,
-            setup_test, FIRST_VID_VIEW,
+            setup_test,
         },
         Error, VidShare,
     };
@@ -226,12 +225,10 @@ mod test {
             Client::<Error>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
-        // Wait until the block height is high enough that:
-        // * each node has proposed a block
-        // * there is more than one block for which VID is available
+        // Wait until the block height is high enough that each node has proposed a block.
         let block_height = loop {
             let block_height = client.get::<usize>("block-height").send().await.unwrap();
-            if block_height > network.num_nodes() && block_height > FIRST_VID_VIEW + 1 {
+            if block_height > network.num_nodes() {
                 break block_height;
             }
             sleep(Duration::from_secs(1)).await;
@@ -310,10 +307,6 @@ mod test {
                 continue;
             };
             for (leaf, vid) in leaf_chain.iter().rev() {
-                if !has_vid(leaf.block_header.block_number as usize) {
-                    // Skip the genesis leaf, it has no VID.
-                    continue;
-                }
                 if leaf.block_header.block_number >= block_height as u64 {
                     break 'outer;
                 }
@@ -324,10 +317,9 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(
-                    share,
-                    *vid.as_ref().unwrap().shares.first_key_value().unwrap().1
-                );
+                if let Some(vid) = vid.as_ref() {
+                    assert_eq!(share, *vid.shares.first_key_value().unwrap().1);
+                }
 
                 // Query various other ways.
                 assert_eq!(

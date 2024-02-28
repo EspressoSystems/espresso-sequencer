@@ -17,7 +17,12 @@ use crate::{
     Error, Payload, VidCommon,
 };
 use async_trait::async_trait;
-use hotshot_types::traits::node_implementation::NodeType;
+use futures::try_join;
+use hotshot_types::{
+    traits::{node_implementation::NodeType, BlockPayload},
+    vid::{vid_scheme, VidSchemeType},
+};
+use jf_primitives::vid::VidScheme;
 use surf_disco::{Client, Url};
 
 /// Data availability provider backed by another instance of this query service.
@@ -43,15 +48,47 @@ where
     Types: NodeType,
 {
     async fn fetch(&self, req: PayloadRequest) -> Option<Payload<Types>> {
-        match self
-            .client
-            .get::<PayloadQueryData<Types>>(&format!("availability/payload/hash/{}", req.0))
-            .send()
-            .await
-        {
-            Ok(payload) => {
-                // TODO Verify that the data we retrieved is consistent with the request we made.
-                // https://github.com/EspressoSystems/hotshot-query-service/issues/355
+        // Fetch the payload and the VID common data. We need the common data to recompute the VID
+        // commitment, to ensure the payload we received is consistent with the commitment we
+        // requested.
+        let res = try_join!(
+            self.client
+                .get::<PayloadQueryData<Types>>(&format!("availability/payload/hash/{}", req.0))
+                .send(),
+            self.client
+                .get::<VidCommonQueryData<Types>>(&format!(
+                    "availability/vid/common/payload-hash/{}",
+                    req.0
+                ))
+                .send()
+        );
+        match res {
+            Ok((payload, common)) => {
+                // Verify that the data we retrieved is consistent with the request we made.
+                let num_storage_nodes = VidSchemeType::get_num_storage_nodes(common.common());
+                let bytes = match payload.data().encode() {
+                    Ok(bytes) => bytes.collect::<Vec<_>>(),
+                    Err(err) => {
+                        tracing::error!(
+                            %err,
+                            ?payload,
+                            "received malformed payload (unable to encode to bytes)",
+                        );
+                        return None;
+                    }
+                };
+                let commit = match vid_scheme(num_storage_nodes).commit_only(bytes) {
+                    Ok(commit) => commit,
+                    Err(err) => {
+                        tracing::error!(%err, "unable to compute VID commitment");
+                        return None;
+                    }
+                };
+                if commit != req.0 {
+                    tracing::error!(?req, ?commit, "received inconsistent payload");
+                    return None;
+                }
+
                 Some(payload.data)
             }
             Err(err) => {
@@ -105,10 +142,12 @@ where
             .send()
             .await
         {
-            Ok(res) => {
-                // TODO Verify that the data we retrieved is consistent with the request we made.
-                // https://github.com/EspressoSystems/hotshot-query-service/issues/355
+            Ok(res) if VidSchemeType::is_consistent(&req.0, &res.common).is_ok() => {
                 Some(res.common)
+            }
+            Ok(res) => {
+                tracing::error!(?req, ?res, "fetched inconsistent VID common data");
+                None
             }
             Err(err) => {
                 tracing::error!("failed to fetch VID common {req:?}: {err}");
@@ -123,25 +162,33 @@ where
 mod test {
     use super::*;
     use crate::{
+        api::load_api,
         availability::{define_api, AvailabilityDataSource, Fetch, UpdateAvailabilityData},
         data_source::{
             sql::{self, SqlDataSource},
             storage::sql::testing::TmpDb,
             AvailabilityProvider, VersionedDataSource,
         },
-        fetching::provider::{NoFetching, TestProvider},
+        fetching::provider::{NoFetching, Provider as ProviderTrait, TestProvider},
+        task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::{mock_transaction, MockTypes},
-            setup_test, sleep, FIRST_VID_VIEW,
+            setup_test, sleep,
         },
+        VidCommitment,
     };
     use async_std::task::spawn;
     use commit::Committable;
-    use futures::{future::join, stream::StreamExt};
+    use futures::{
+        future::{join, FutureExt},
+        stream::StreamExt,
+    };
+    use generic_array::GenericArray;
     use portpicker::pick_unused_port;
+    use rand::RngCore;
     use std::{future::IntoFuture, time::Duration};
-    use tide_disco::App;
+    use tide_disco::{error::ServerError, App};
 
     type Provider = TestProvider<QueryServiceProvider>;
 
@@ -524,7 +571,7 @@ mod test {
         // Subscribe to objects from the future.
         let blocks = data_source.subscribe_blocks(0).await;
         let leaves = data_source.subscribe_leaves(0).await;
-        let common = data_source.subscribe_vid_common(FIRST_VID_VIEW).await;
+        let common = data_source.subscribe_vid_common(0).await;
 
         // Wait for a few blocks to be finalized.
         let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
@@ -541,17 +588,12 @@ mod test {
         // Check the subscriptions.
         let blocks = blocks.take(5).collect::<Vec<_>>().await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
-        let common = common.take(5 - FIRST_VID_VIEW).collect::<Vec<_>>().await;
+        let common = common.take(5).collect::<Vec<_>>().await;
         for i in 0..5 {
             tracing::info!("checking block {i}");
             assert_eq!(leaves[i], finalized_leaves[i]);
             assert_eq!(blocks[i].header(), finalized_leaves[i].header());
-            if i >= FIRST_VID_VIEW {
-                assert_eq!(
-                    common[i - FIRST_VID_VIEW],
-                    data_source.get_vid_common(i).await.await
-                );
-            }
+            assert_eq!(common[i], data_source.get_vid_common(i).await.await);
         }
     }
 
@@ -740,5 +782,67 @@ mod test {
                 .await,
             *test_leaf
         );
+    }
+
+    fn random_vid_commit() -> VidCommitment {
+        let mut bytes = [0; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        VidCommitment::from(GenericArray::from(bytes))
+    }
+
+    async fn malicious_server(port: u16) {
+        let mut api = load_api::<(), ServerError>(
+            None::<std::path::PathBuf>,
+            include_str!("../../../api/availability.toml"),
+            vec![],
+        )
+        .unwrap();
+
+        api.get("get_payload", move |_, _| {
+            async move {
+                // No matter what data we are asked for, always respond with dummy data.
+                Ok(PayloadQueryData::<MockTypes>::genesis(&Default::default()))
+            }
+            .boxed()
+        })
+        .unwrap()
+        .get("get_vid_common", move |_, _| {
+            async move {
+                // No matter what data we are asked for, always respond with dummy data.
+                Ok(VidCommonQueryData::<MockTypes>::genesis(&Default::default()))
+            }
+            .boxed()
+        })
+        .unwrap();
+
+        let mut app = App::<(), ServerError>::with_state(());
+        app.register_module("availability", api).unwrap();
+        app.serve(format!("0.0.0.0:{port}")).await.ok();
+    }
+
+    #[async_std::test]
+    async fn test_fetch_from_malicious_server() {
+        setup_test();
+
+        let port = pick_unused_port().unwrap();
+        let _server = BackgroundTask::spawn("malicious server", malicious_server(port));
+
+        let provider =
+            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap());
+        provider.client.connect(None).await;
+
+        // Query for a random payload, the server will respond with a different payload, and we
+        // should detect the error.
+        let res =
+            ProviderTrait::<MockTypes, _>::fetch(&provider, PayloadRequest(random_vid_commit()))
+                .await;
+        assert_eq!(res, None);
+
+        // Query for a random VID common, the server will respond with a different one, and we
+        // should detect the error.
+        let res =
+            ProviderTrait::<MockTypes, _>::fetch(&provider, VidCommonRequest(random_vid_commit()))
+                .await;
+        assert_eq!(res, None);
     }
 }
