@@ -1,10 +1,13 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
+use crate::{Leaf, ValidatedState, ViewNumber};
+use anyhow::bail;
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_query_service::data_source::{
-    storage::sql::{include_migrations, Config, Query, SqlStorage},
+    storage::sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage},
     VersionedDataSource,
 };
+use hotshot_types::traits::node_implementation::ConsensusTime;
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
@@ -121,4 +124,112 @@ impl SequencerPersistence for Persistence {
         self.commit().await?;
         Ok(())
     }
+
+    async fn save_voted_view(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+        let stmt = "
+            INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
+            ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)
+        ";
+        self.transaction()
+            .await?
+            .execute_one_with_retries(stmt, [view.get_u64() as i64])
+            .await?;
+        self.commit().await?;
+        Ok(())
+    }
+
+    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
+        let stmt = "
+            INSERT INTO anchor_leaf (id, height, leaf) VALUES (0, $1, $2)
+            ON CONFLICT (id) DO UPDATE SET (height, leaf) = ROW (
+                GREATEST(anchor_leaf.height, excluded.height),
+                CASE
+                    WHEN excluded.height > anchor_leaf.height THEN excluded.leaf
+                    ELSE anchor_leaf.leaf
+                END
+            )
+        ";
+        let leaf_bytes = bincode::serialize(leaf)?;
+        self.transaction()
+            .await?
+            .execute_one_with_retries(
+                stmt,
+                [
+                    sql_param(&(leaf.get_height() as i64)),
+                    sql_param(&leaf_bytes),
+                ],
+            )
+            .await?;
+        self.commit().await?;
+        Ok(())
+    }
+
+    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+        Ok(self
+            .query_opt_static("SELECT view FROM highest_voted_view WHERE id = 0")
+            .await?
+            .map(|row| {
+                let view: i64 = row.get("view");
+                ViewNumber::new(view as u64)
+            }))
+    }
+
+    async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
+        self.query_opt_static("SELECT leaf FROM anchor_leaf WHERE id = 0")
+            .await?
+            .map(|row| {
+                let bytes: Vec<u8> = row.get("leaf");
+                Ok(bincode::deserialize(&bytes)?)
+            })
+            .transpose()
+    }
+
+    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
+    }
+}
+
+fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+    param
+}
+
+#[cfg(test)]
+mod testing {
+    use super::super::testing::TestablePersistence;
+    use super::*;
+    use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
+
+    #[async_trait]
+    impl TestablePersistence for Persistence {
+        type Storage = TmpDb;
+
+        async fn tmp_storage() -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        async fn connect(db: &Self::Storage) -> Self {
+            Options {
+                port: Some(db.port()),
+                host: Some(db.host()),
+                user: Some("postgres".into()),
+                password: Some("password".into()),
+                ..Default::default()
+            }
+            .create()
+            .await
+            .unwrap()
+        }
+    }
+}
+
+#[cfg(test)]
+mod generic_tests {
+    use super::super::persistence_tests;
+    use super::Persistence;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_persistence_tests!(Persistence);
 }

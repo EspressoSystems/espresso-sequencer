@@ -149,15 +149,28 @@ fn index_block_by_time(
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use crate::{
+        api::{self, data_source::testing::TestableSequencerDataSource},
+        persistence::{fs, PersistenceOptions},
+    };
     use tempfile::TempDir;
 
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TempDir;
+        type Persistence = fs::Persistence;
 
         async fn create_storage() -> Self::Storage {
             TempDir::new().unwrap()
+        }
+
+        async fn connect(storage: &Self::Storage) -> Self::Persistence {
+            Options {
+                path: storage.path().into(),
+            }
+            .create()
+            .await
+            .unwrap()
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
@@ -173,12 +186,12 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::generic_tests;
+    use super::super::api_tests;
     use super::DataSource;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_generic_tests!(DataSource);
+    instantiate_api_tests!(DataSource);
 }

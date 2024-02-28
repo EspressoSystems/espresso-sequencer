@@ -181,39 +181,49 @@ fn parse_header(row: Row) -> QueryResult<Header> {
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
-    use hotshot_query_service::data_source::sql::testing::TmpDb;
+    use crate::{
+        api::{self, data_source::testing::TestableSequencerDataSource},
+        persistence::PersistenceOptions,
+    };
+    use hotshot_query_service::data_source::storage::sql::{testing::TmpDb, SqlStorage};
+
+    fn tmp_options(db: &TmpDb) -> Options {
+        Options {
+            port: Some(db.port()),
+            host: Some(db.host()),
+            user: Some("postgres".into()),
+            password: Some("password".into()),
+            ..Default::default()
+        }
+    }
 
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TmpDb;
+        type Persistence = SqlStorage;
 
         async fn create_storage() -> Self::Storage {
             TmpDb::init().await
         }
 
+        async fn connect(storage: &Self::Storage) -> Self::Persistence {
+            tmp_options(storage).create().await.unwrap()
+        }
+
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
-            opt.query_sql(
-                Default::default(),
-                Options {
-                    port: Some(storage.port()),
-                    user: Some("postgres".into()),
-                    password: Some("password".into()),
-                    ..Default::default()
-                },
-            )
+            opt.query_sql(Default::default(), tmp_options(storage))
         }
     }
 }
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::generic_tests;
+    use super::super::api_tests;
     use super::DataSource;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_generic_tests!(DataSource);
+    instantiate_api_tests!(DataSource);
 }

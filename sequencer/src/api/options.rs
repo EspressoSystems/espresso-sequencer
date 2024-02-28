@@ -6,18 +6,12 @@ use super::{
     },
     endpoints, fs, sql,
     update::update_loop,
-    AppState, SequencerNode,
 };
-use crate::{
-    api::state_signature::state_signature_loop, context::SequencerContext, network, persistence,
-};
+use crate::{context::SequencerContext, network, persistence};
 use anyhow::bail;
-use async_std::{
-    sync::{Arc, RwLock},
-    task::spawn,
-};
+use async_std::sync::{Arc, RwLock};
 use clap::Parser;
-use futures::future::{BoxFuture, TryFutureExt};
+use futures::future::BoxFuture;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
     status::{self, UpdateStatusData},
@@ -94,23 +88,23 @@ impl Options {
 
     /// Start the server.
     ///
-    /// The function `init_context` is used to create a sequencer context from a metrics object. The
-    /// metrics object is created from the API data source, so that consensus will populuate metrics
-    /// that can then be read and served by the API.
-    pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerNode<N>>
+    /// The function `init_context` is used to create a sequencer context from a metrics object and
+    /// optional saved consensus state. The metrics object is created from the API data source, so
+    /// that consensus will populuate metrics that can then be read and served by the API.
+    pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerContext<N>>
     where
         N: network::Type,
         F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
-        let node = if let Some(query_opt) = self.query.take() {
+        if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
                 self.init_with_query_module::<N, sql::DataSource>(query_opt, opt, init_context)
-                    .await?
+                    .await
             } else if let Some(opt) = self.storage_fs.take() {
                 self.init_with_query_module::<N, fs::DataSource>(query_opt, opt, init_context)
-                    .await?
+                    .await
             } else {
                 bail!("query module requested but not storage provided");
             }
@@ -120,63 +114,36 @@ impl Options {
             let ds = MetricsDataSource::default();
             let mut context = init_context(ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
-                ExtensibleDataSource::new(ds, context.clone()),
+                ExtensibleDataSource::new(ds, super::State::from(&context)),
             )));
-
-            // Get an event stream from the handle to use for populating the query data with
-            // consensus events.
-            //
-            // We must do this _before_ starting consensus on the handle, otherwise we could miss
-            // the first events emitted by consensus.
-            let events = context.consensus_mut().get_event_stream();
 
             // Initialize status API.
             let status_api = status::define_api(&Default::default())?;
             app.register_module("status", status_api)?;
 
             self.init_hotshot_modules(&mut app)?;
-
-            SequencerNode {
-                context: context.clone(),
-                update_task: spawn(async move {
-                    futures::join!(
-                        app.serve(format!("0.0.0.0:{}", self.http.port))
-                            .map_err(anyhow::Error::from),
-                        state_signature_loop(context, events),
-                    )
-                    .0
-                }),
-            }
+            context.spawn(
+                "API server",
+                app.serve(format!("0.0.0.0:{}", self.http.port)),
+            );
+            Ok(context)
         } else {
             // If no status or availability API is requested, we don't need metrics or a query
             // service data source. The only app state is the HotShot handle, which we use to submit
             // transactions.
-            let mut context = init_context(Box::new(NoMetrics)).await;
-            let mut app = App::<_, Error>::with_state(RwLock::new(context.clone()));
-
-            // Get an event stream from the handle to use for populating the query data with
-            // consensus events.
             //
-            // We must do this _before_ starting consensus on the handle, otherwise we could miss
-            // the first events emitted by consensus.
-            let events = context.consensus_mut().get_event_stream();
+            // If we have no availability API, we cannot load a saved leaf from local storage, so we
+            // better have been provided the leaf ahead of time if we want it at all.
+            let mut context = init_context(Box::new(NoMetrics)).await;
+            let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
 
             self.init_hotshot_modules(&mut app)?;
-
-            SequencerNode {
-                context: context.clone(),
-                update_task: spawn(async move {
-                    futures::join!(
-                        app.serve(format!("0.0.0.0:{}", self.http.port))
-                            .map_err(anyhow::Error::from),
-                        state_signature_loop(context, events),
-                    )
-                    .0
-                }),
-            }
-        };
-
-        Ok(node)
+            context.spawn(
+                "API server",
+                app.serve(format!("0.0.0.0:{}", self.http.port)),
+            );
+            Ok(context)
+        }
     }
 
     async fn init_with_query_module<N, D>(
@@ -184,13 +151,11 @@ impl Options {
         query_opt: Query,
         mod_opt: D::Options,
         init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
-    ) -> anyhow::Result<SequencerNode<N>>
+    ) -> anyhow::Result<SequencerContext<N>>
     where
         N: network::Type,
         D: SequencerDataSource + Send + Sync + 'static,
     {
-        type State<N, D> = Arc<RwLock<AppState<N, D>>>;
-
         let ds = D::create(mod_opt, provider(query_opt.peers), false).await?;
         let metrics = ds.populate_metrics();
 
@@ -202,17 +167,18 @@ impl Options {
         //
         // We must do this _before_ starting consensus on the handle, otherwise we could miss
         // the first events emitted by consensus.
-        let events = context.consensus_mut().get_event_stream();
+        let events = context.get_event_stream();
 
-        let events_for_state_signature = context.consensus_mut().get_event_stream();
-
-        let state: State<N, D> =
-            Arc::new(RwLock::new(ExtensibleDataSource::new(ds, context.clone())));
+        let state: endpoints::AvailState<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(
+            ds,
+            (&context).into(),
+        )));
         let mut app = App::<_, Error>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
-            let status_api = status::define_api::<State<N, D>>(&Default::default())?;
+            let status_api =
+                status::define_api::<endpoints::AvailState<N, D>>(&Default::default())?;
             app.register_module("status", status_api)?;
         }
 
@@ -222,19 +188,13 @@ impl Options {
         app.register_module("node", endpoints::node::<N, D>()?)?;
 
         self.init_hotshot_modules(&mut app)?;
+        context.spawn("query storage updater", update_loop(state, events));
+        context.spawn(
+            "API server",
+            app.serve(format!("0.0.0.0:{}", self.http.port)),
+        );
 
-        Ok(SequencerNode {
-            context: context.clone(),
-            update_task: spawn(async move {
-                futures::join!(
-                    app.serve(format!("0.0.0.0:{}", self.http.port))
-                        .map_err(anyhow::Error::from),
-                    update_loop(state, events),
-                    state_signature_loop(context, events_for_state_signature),
-                )
-                .0
-            }),
-        })
+        Ok(context)
     }
 
     /// Initialize the modules for interacting with HotShot.

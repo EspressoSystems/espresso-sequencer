@@ -1,9 +1,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use futures::{future::FutureExt, stream::StreamExt};
+use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{self, data_source::DataSourceOptions, SequencerNode},
+    api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
     init_node, init_static, network,
     options::{Modules, Options},
@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     let mut modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
 
-    let mut context = if let Some(storage) = modules.storage_fs.take() {
+    let ctx = if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(modules, opt, storage).await?
     } else if let Some(storage) = modules.storage_sql.take() {
         init_with_storage(modules, opt, storage).await?
@@ -32,14 +32,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Start doing consensus.
-    context.start_consensus().await;
-
-    // Wait for events just to keep the process from exiting before consensus exits.
-    let mut events = context.consensus_mut().get_event_stream();
-    while let Some(event) = events.next().await {
-        tracing::debug!(?event);
-    }
-    tracing::debug!("event stream ended");
+    ctx.start_consensus().await;
+    ctx.join().await;
     Ok(())
 }
 
@@ -69,7 +63,7 @@ where
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    Ok(match modules.http {
+    match modules.http {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
@@ -82,27 +76,25 @@ where
             if let Some(status) = modules.status {
                 opt = opt.status(status);
             }
-            let mut storage = storage_opt.create().await?;
-            let SequencerNode { context, .. } = opt
-                .serve(move |metrics| {
-                    async move {
-                        init_node(network_params, &*metrics, &mut storage, builder_params)
-                            .await
-                            .unwrap()
-                    }
-                    .boxed()
-                })
-                .await?;
-            context
+            let storage = storage_opt.create().await?;
+            opt.serve(move |metrics| {
+                async move {
+                    init_node(network_params, &*metrics, storage, builder_params)
+                        .await
+                        .unwrap()
+                }
+                .boxed()
+            })
+            .await
         }
         None => {
             init_node(
                 network_params,
                 &NoMetrics,
-                &mut storage_opt.create().await?,
+                storage_opt.create().await?,
                 builder_params,
             )
-            .await?
+            .await
         }
-    })
+    }
 }

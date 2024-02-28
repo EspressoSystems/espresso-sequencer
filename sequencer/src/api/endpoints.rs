@@ -4,7 +4,7 @@ use super::{
     data_source::{
         SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
     },
-    AppState,
+    StorageState,
 };
 use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
@@ -63,7 +63,7 @@ pub struct AccountQueryData {
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
-pub(super) type AvailState<N, D> = Arc<RwLock<AppState<N, D>>>;
+pub(super) type AvailState<N, D> = Arc<RwLock<StorageState<N, D>>>;
 
 pub(super) fn availability<N, D>() -> anyhow::Result<Api<AvailState<N, D>, availability::Error>>
 where
