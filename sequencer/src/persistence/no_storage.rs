@@ -2,7 +2,8 @@
 #![cfg(any(test, feature = "testing"))]
 
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, ViewNumber};
+use crate::{Leaf, ValidatedState, ViewNumber};
+use anyhow::bail;
 use async_trait::async_trait;
 
 #[derive(Clone, Copy, Debug)]
@@ -47,5 +48,9 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
         Ok(None)
+    }
+
+    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }

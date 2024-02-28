@@ -8,11 +8,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{ElectionConfig, Leaf, NodeState, PubKey, SeqTypes, ViewNumber};
+use crate::{ElectionConfig, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber};
 use anyhow::Context;
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use commit::Committable;
 use hotshot::{
+    traits::ValidatedState as _,
     types::{Event, EventType},
     HotShotInitializer,
 };
@@ -61,6 +63,9 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>>;
 
+    /// Load the validated state after block `height`, if available.
+    async fn load_validated_state(&self, height: u64) -> anyhow::Result<ValidatedState>;
+
     /// Load the latest known consensus state.
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
@@ -83,18 +88,30 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let leaf = match self
+        let (leaf, validated_state) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
         {
             Some(leaf) => {
                 tracing::info!(?leaf, "starting from saved leaf");
-                leaf
+                let validated_state = match self.load_validated_state(leaf.get_height()).await {
+                    Ok(validated_state) => Some(Arc::new(validated_state)),
+                    Err(err) => {
+                        tracing::error!(
+                            "unable to load validated state, will need to catchup: {err:#}"
+                        );
+                        None
+                    }
+                };
+                (leaf, validated_state)
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
-                Leaf::genesis(&state)
+                (
+                    Leaf::genesis(&state),
+                    Some(Arc::new(ValidatedState::genesis(&state))),
+                )
             }
         };
 
@@ -105,7 +122,12 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         let view = max(highest_voted_view, leaf.view_number);
         tracing::info!(?leaf, ?view, "loaded consensus state");
 
-        Ok(HotShotInitializer::from_reload(leaf, state, None, view))
+        Ok(HotShotInitializer::from_reload(
+            leaf,
+            state,
+            validated_state,
+            view,
+        ))
     }
 
     /// Update storage based on an event from consensus.

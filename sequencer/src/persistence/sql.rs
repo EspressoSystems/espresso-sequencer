@@ -1,5 +1,6 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, ViewNumber};
+use crate::{Leaf, ValidatedState, ViewNumber};
+use anyhow::bail;
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_query_service::data_source::{
@@ -181,6 +182,10 @@ impl SequencerPersistence for Persistence {
                 Ok(bincode::deserialize(&bytes)?)
             })
             .transpose()
+    }
+
+    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }
 

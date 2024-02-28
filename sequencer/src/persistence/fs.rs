@@ -1,6 +1,6 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, ViewNumber};
-use anyhow::{anyhow, Context};
+use crate::{Leaf, ValidatedState, ViewNumber};
+use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_types::traits::node_implementation::ConsensusTime;
@@ -145,6 +145,10 @@ impl SequencerPersistence for Persistence {
             .collect::<Result<Vec<_>, _>>()
             .context("read")?;
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+    }
+
+    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }
 
