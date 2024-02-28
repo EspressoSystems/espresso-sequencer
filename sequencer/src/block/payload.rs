@@ -6,7 +6,7 @@ use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
-    LargeRangeProofType, SmallRangeProofType, VidCommitment, VidCommon, VidSchemeType,
+    vid_scheme, LargeRangeProofType, SmallRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
 use jf_primitives::vid::{
     payload_prover::{PayloadProver, Statement},
@@ -107,7 +107,6 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         &self,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
         ns_id: VmId,
-        vid: &VidSchemeType,
         vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
         if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
@@ -127,7 +126,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         Some(NamespaceProof::Existence {
             ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
-            ns_proof: vid
+            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
             vid_common,
@@ -567,12 +566,7 @@ mod test {
 
                 // test ns proof
                 let ns_proof = block
-                    .namespace_with_proof(
-                        &actual_ns_table,
-                        ns_id,
-                        &vid,
-                        disperse_data.common.clone(),
-                    )
+                    .namespace_with_proof(&actual_ns_table, ns_id, disperse_data.common.clone())
                     .unwrap();
 
                 if let NamespaceProof::Existence {

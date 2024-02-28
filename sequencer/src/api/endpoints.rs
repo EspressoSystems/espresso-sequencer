@@ -20,12 +20,8 @@ use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
     node, Error,
 };
-use hotshot_types::{
-    data::ViewNumber,
-    traits::node_implementation::ConsensusTime,
-    vid::{vid_scheme, VidSchemeType},
-};
-use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tide_disco::{
@@ -107,17 +103,12 @@ where
                         })
                 }
             )?;
-            let num_storage_nodes =
-                <VidSchemeType as VidScheme>::get_num_storage_nodes(common.common());
-
-            let vid = vid_scheme(num_storage_nodes);
 
             let proof = block
                 .payload()
                 .namespace_with_proof(
                     block.payload().get_ns_table(),
                     ns_id,
-                    &vid,
                     common.common().clone(),
                 )
                 .context(CustomSnafu {
