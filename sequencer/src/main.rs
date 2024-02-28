@@ -81,9 +81,15 @@ where
             let storage = storage_opt.create().await?;
             opt.serve(move |metrics| {
                 async move {
-                    init_node(network_params, &*metrics, storage, builder_params)
-                        .await
-                        .unwrap()
+                    init_node(
+                        network_params,
+                        &*metrics,
+                        storage,
+                        builder_params,
+                        l1_params,
+                    )
+                    .await
+                    .unwrap()
                 }
                 .boxed()
             })

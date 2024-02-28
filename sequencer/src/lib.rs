@@ -16,7 +16,7 @@ use ethers::{
 };
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+
 use l1_client::L1Client;
 
 use state::FeeAccount;
@@ -544,7 +544,7 @@ mod test {
 
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::utils::Anvil;
+
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
