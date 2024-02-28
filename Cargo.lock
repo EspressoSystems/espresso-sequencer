@@ -3814,6 +3814,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-types",
+ "itertools 0.12.1",
  "jf-plonk",
  "jf-primitives",
  "jf-relation",

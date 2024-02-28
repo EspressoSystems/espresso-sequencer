@@ -6,6 +6,7 @@ out/
 !/broadcast
 /broadcast/*/31337/
 /broadcast/*/1337/
+/broadcast/*/900/
 /broadcast/**/dry-run/
 
 # Dotenv file
