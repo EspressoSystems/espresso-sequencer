@@ -5,15 +5,11 @@ use ethers::types::U256;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot_contract_adapter::jellyfish::u256_to_field;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
-use hotshot_stake_table::{config::STAKE_TABLE_CAPACITY, vec_based::StakeTable};
+use hotshot_state_prover::service::init_stake_table;
 use hotshot_types::light_client::GenericPublicInput;
 use hotshot_types::{
-    light_client::{CircuitField, StateKeyPair, StateVerKey},
-    signature_key::BLSPubKey,
-    traits::{
-        signature_key::SignatureKey as _,
-        stake_table::{SnapshotVersion, StakeTableScheme as _},
-    },
+    light_client::CircuitField,
+    traits::stake_table::{SnapshotVersion, StakeTableScheme as _},
 };
 use snafu::Snafu;
 
@@ -59,14 +55,7 @@ pub fn stake_table_commitment_for_demo(
 ) -> ((CircuitField, CircuitField, CircuitField), U256) {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
-    (0..num_nodes).for_each(|id| {
-        let bls_key = BLSPubKey::generated_from_seed_indexed(keygen_seed, id as u64).0;
-        let state_ver_key =
-            StateKeyPair::generate_from_seed_indexed(keygen_seed, id as u64).ver_key();
-        st.register(bls_key, U256::from(1u64), state_ver_key)
-            .expect("Key registration shouldn't fail.");
-    });
+    let mut st = init_stake_table(num_nodes, keygen_seed);
     st.advance();
     st.advance();
     (

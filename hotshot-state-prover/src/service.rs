@@ -21,6 +21,7 @@ use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
@@ -32,6 +33,7 @@ use hotshot_types::{
     traits::signature_key::SignatureKey,
 };
 use jf_plonk::errors::PlonkError;
+use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
 use std::time::Duration;
@@ -66,21 +68,28 @@ pub struct StateProverConfig {
     pub port: Option<u16>,
 }
 
-pub async fn init_stake_table(
-    config: &StateProverConfig,
+pub fn init_stake_table(
+    num_node: usize,
+    seed: [u8; 32],
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
-    (0..config.num_nodes).for_each(|id| {
-        let bls_key = BLSPubKey::generated_from_seed_indexed(config.seed, id as u64).0;
-        let state_ver_key =
-            StateKeyPair::generate_from_seed_indexed(config.seed, id as u64).ver_key();
+    (0..num_node).for_each(|id| {
+        let bls_key = BLSPubKey::generated_from_seed_indexed(seed, id as u64).0;
+        let state_ver_key = StateKeyPair::generate_from_seed_indexed(seed, id as u64).ver_key();
         st.register(bls_key, U256::from(1u64), state_ver_key)
             .expect("Key registration shouldn't fail.");
     });
     st.advance();
     st.advance();
+    st
+}
+
+pub async fn init_stake_table_from_config(
+    config: &StateProverConfig,
+) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+    let st = init_stake_table(config.num_nodes, config.seed);
     std::println!("Stake table initialized.");
     st
 }
@@ -215,9 +224,13 @@ pub async fn sync_state(
     let mut accumulated_weight = U256::zero();
     entries.iter().enumerate().for_each(|(i, (key, stake))| {
         if let Some(sig) = bundle.signatures.get(key) {
-            signer_bit_vec[i] = true;
-            signatures[i] = sig.clone();
-            accumulated_weight += *stake;
+            // Check if the signature is valid
+            let state_msg: [FieldType; 7] = (&bundle.state).into();
+            if key.verify(&state_msg, sig, CS_ID_SCHNORR).is_ok() {
+                signer_bit_vec[i] = true;
+                signatures[i] = sig.clone();
+                accumulated_weight += *stake;
+            }
         }
     });
 
@@ -226,6 +239,11 @@ pub async fn sync_state(
             "The signers' total weight doesn't reach the threshold.".to_string(),
         ));
     }
+
+    assert_eq!(
+        bundle.state.stake_table_comm,
+        st.commitment(SnapshotVersion::LastEpochStart).unwrap()
+    );
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = time::Instant::now();
@@ -269,7 +287,7 @@ fn start_http_server(port: u16, lightclient_address: Address) -> io::Result<()> 
 
 pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(init_stake_table(&config).await);
+    let st = Arc::new(init_stake_table_from_config(&config).await);
     let proving_key = Arc::new(load_proving_key());
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
@@ -301,7 +319,7 @@ pub async fn run_prover_service(config: StateProverConfig) {
 
 /// Run light client state prover once
 pub async fn run_prover_once(config: StateProverConfig) {
-    let st = init_stake_table(&config).await;
+    let st = init_stake_table_from_config(&config).await;
     let proving_key = load_proving_key();
     let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
 
