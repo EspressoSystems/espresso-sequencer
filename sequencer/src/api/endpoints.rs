@@ -20,10 +20,7 @@ use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
     node, Error,
 };
-use hotshot_types::{
-    data::{VidScheme, VidSchemeTrait, ViewNumber},
-    traits::node_implementation::ConsensusTime,
-};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -106,19 +103,12 @@ where
                         })
                 }
             )?;
-            let num_storage_nodes =
-                <VidScheme as VidSchemeTrait>::get_num_storage_nodes(common.common());
-
-            // TODO fake VidScheme construction
-            // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
-            let vid = crate::block::payload::test_vid_factory(num_storage_nodes);
 
             let proof = block
                 .payload()
                 .namespace_with_proof(
                     block.payload().get_ns_table(),
                     ns_id,
-                    &vid,
                     common.common().clone(),
                 )
                 .context(CustomSnafu {

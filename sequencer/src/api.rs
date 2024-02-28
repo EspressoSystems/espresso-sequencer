@@ -408,7 +408,6 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
-        block::payload::test_vid_factory,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction, VmId,
     };
@@ -421,10 +420,8 @@ mod api_tests {
         future::join_all,
         stream::{StreamExt, TryStreamExt},
     };
-    use hotshot_query_service::{
-        availability::{BlockQueryData, LeafQueryData},
-        testing::FIRST_VID_VIEW,
-    };
+    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -457,7 +454,7 @@ mod api_tests {
         setup_logging();
         setup_backtrace();
 
-        let vid = test_vid_factory(5);
+        let vid = vid_scheme(5);
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -476,7 +473,7 @@ mod api_tests {
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
         client
-            .socket(&format!("availability/stream/leaves/{FIRST_VID_VIEW}"))
+            .socket("availability/stream/leaves/0")
             .subscribe::<LeafQueryData<SeqTypes>>()
             .await
             .unwrap()
@@ -499,7 +496,7 @@ mod api_tests {
         tracing::info!(block_height, "transaction sequenced");
         let mut found_txn = false;
         let mut found_empty_block = false;
-        for block_num in FIRST_VID_VIEW..=block_height {
+        for block_num in 0..=block_height {
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()

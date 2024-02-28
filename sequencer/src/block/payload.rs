@@ -1,19 +1,16 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::{BlockBuildingSnafu, Error, Transaction, VmId};
-use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
-use hotshot_types::data::VidScheme;
-use jf_primitives::{
-    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{
-        advz::payload_prover::{LargeRangeProof, SmallRangeProof},
-        payload_prover::{PayloadProver, Statement},
-        VidScheme as VidSchemeTrait,
-    },
+use hotshot_types::vid::{
+    vid_scheme, LargeRangeProofType, SmallRangeProofType, VidCommitment, VidCommon, VidSchemeType,
+};
+use jf_primitives::vid::{
+    payload_prover::{PayloadProver, Statement},
+    VidScheme,
 };
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
@@ -79,11 +76,11 @@ pub struct Payload<TableWord: TableWordTraits> {
 
     // cache frequently used items
     //
-    // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
+    // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[serde(skip)]
-    pub tx_table_len_proof: OnceLock<Option<RangeProof>>,
+    pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
 }
 
 impl<TableWord: TableWordTraits> Payload<TableWord> {
@@ -110,10 +107,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         &self,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
         ns_id: VmId,
-        vid: &VidScheme,
-        vid_common: <VidScheme as VidSchemeTrait>::Common,
+        vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
-        if self.raw_payload.len() != VidScheme::get_payload_byte_len(&vid_common) {
+        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
             return None; // error: vid_common inconsistent with self
         }
 
@@ -130,7 +126,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         Some(NamespaceProof::Existence {
             ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
-            ns_proof: vid
+            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
             vid_common,
@@ -154,8 +150,8 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     // Returns `None` if an error occurred.
     pub fn get_tx_table_len_proof(
         &self,
-        vid: &impl PayloadProver<RangeProof>,
-    ) -> Option<&RangeProof> {
+        vid: &impl PayloadProver<SmallRangeProofType>,
+    ) -> Option<&SmallRangeProofType> {
         self.tx_table_len_proof
             .get_or_init(|| {
                 vid.payload_proof(&self.raw_payload, self.tx_table_len_range())
@@ -262,61 +258,14 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
     }
 }
 
-/// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
-///
-/// Unfortunately, [`PayloadProver`] has a generic type param.
-/// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
-/// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
-/// TODO Workaround using generic params, which is allows the caller to influence the return type:
-/// https://stackoverflow.com/a/52886787
-///
-/// TODO temporary VID constructor.
-pub(crate) fn test_vid_factory(num_storage_nodes: usize) -> VidScheme {
-    // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-    // calculate the last power of two
-    // TODO change after https://github.com/EspressoSystems/jellyfish/issues/339
-    let chunk_size = 1 << num_storage_nodes.ilog2();
-    let multiplicity = 1;
-
-    let mut rng = jf_utils::test_rng();
-    let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
-        &mut rng,
-        checked_fft_size(chunk_size - 1).unwrap(),
-    )
-    .unwrap();
-    VidScheme::new(chunk_size, num_storage_nodes, multiplicity, srs).unwrap()
-}
-
-// TODO type alias needed only because nested impl Trait is not allowed
-// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-pub(super) type RangeProof =
-    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
-
-/// Namespace proof type
-///
-/// # Type complexity
-///
-/// Jellyfish's `LargeRangeProof` type has a prime field generic parameter `F`.
-/// This `F` is determined by the pairing parameter for `Advz` currently returned by `test_vid_factory()`.
-/// Jellyfish needs a more ergonomic way for downstream users to refer to this type.
-///
-/// There is a `KzgEval` type alias in jellyfish that helps a little, but it's currently private.
-/// If it were public then we could instead use
-/// ```compile_fail
-/// LargeRangeProof<KzgEval<Bls12_281>>
-/// ```
-/// but that's still pretty crufty.
-pub type JellyfishNamespaceProof =
-    LargeRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation>;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
     Existence {
         ns_payload_flat: Vec<u8>,
         ns_id: VmId,
-        ns_proof: JellyfishNamespaceProof,
-        vid_common: <VidScheme as VidSchemeTrait>::Common,
+        ns_proof: LargeRangeProofType,
+        vid_common: VidCommon,
     },
     NonExistence {
         ns_id: VmId,
@@ -330,8 +279,8 @@ impl NamespaceProof {
     #[allow(dead_code)] // TODO temporary
     pub fn verify(
         &self,
-        vid: &VidScheme,
-        commit: &<VidScheme as VidSchemeTrait>::Commit,
+        vid: &VidSchemeType,
+        commit: &VidCommitment,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
     ) -> Option<(Vec<Transaction>, VmId)> {
         match self {
@@ -346,7 +295,7 @@ impl NamespaceProof {
                 // TODO rework NameSpaceTable struct
                 // TODO merge get_ns_payload_range with get_ns_table_entry ?
                 let ns_payload_range = ns_table
-                    .get_payload_range(ns_index, VidScheme::get_payload_byte_len(vid_common));
+                    .get_payload_range(ns_index, VidSchemeType::get_payload_byte_len(vid_common));
                 let ns_id = ns_table.get_table_entry(ns_index).0;
 
                 // verify self against args
@@ -419,24 +368,24 @@ impl hotshot_types::traits::block_contents::TestableBlock
 
 #[cfg(test)]
 mod test {
-
-    use super::{test_vid_factory, NamespaceProof};
-    use crate::block::payload::{Payload, TableWordTraits};
-    use crate::block::tables::{NameSpaceTable, Table};
+    use super::NamespaceProof;
+    use crate::{
+        block::{
+            entry::{TxTableEntry, TxTableEntryWord},
+            payload::{Payload, TableWordTraits},
+            queryable,
+            tables::{test::TxTableTest, NameSpaceTable, Table},
+            tx_iterator::TxIndex,
+        },
+        Transaction,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use hotshot_types::traits::BlockPayload;
+    use hotshot_types::{traits::BlockPayload, vid::vid_scheme};
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
-
-    use crate::block::entry::{TxTableEntry, TxTableEntryWord};
-    use crate::block::queryable;
-    use crate::block::tables::test::TxTableTest;
-    use crate::block::tx_iterator::TxIndex;
-    use crate::Transaction;
     use rand::RngCore;
-    use std::marker::PhantomData;
-    use std::{collections::HashMap, ops::Range};
+    use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
     const NUM_STORAGE_NODES: usize = 10;
 
@@ -485,7 +434,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        let vid = test_vid_factory(NUM_STORAGE_NODES);
+        let vid = vid_scheme(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -617,12 +566,7 @@ mod test {
 
                 // test ns proof
                 let ns_proof = block
-                    .namespace_with_proof(
-                        &actual_ns_table,
-                        ns_id,
-                        &vid,
-                        disperse_data.common.clone(),
-                    )
+                    .namespace_with_proof(&actual_ns_table, ns_id, disperse_data.common.clone())
                     .unwrap();
 
                 if let NamespaceProof::Existence {
@@ -784,7 +728,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let vid = test_vid_factory(NUM_STORAGE_NODES);
+        let vid = vid_scheme(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.into_iter().enumerate() {
             let payload_byte_len = test_case.payload.len();
@@ -853,7 +797,7 @@ mod test {
         // test: cannot make a proof for such a small block
         // assert!(block.transaction_with_proof(&0).is_none());
 
-        let vid = test_vid_factory(NUM_STORAGE_NODES);
+        let vid = vid_scheme(NUM_STORAGE_NODES);
         let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
         // make a fake proof for a nonexistent tx in the small block

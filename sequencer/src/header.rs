@@ -13,11 +13,11 @@ use ethers::{
     types,
 };
 use hotshot_types::{
-    data::VidCommitment,
     traits::{
-        block_contents::{vid_commitment, BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload},
         ValidatedState as HotShotState,
     },
+    vid::VidCommitment,
 };
 use jf_primitives::merkle_tree::prelude::*;
 use lazy_static::lazy_static;
@@ -272,16 +272,11 @@ impl BlockHeader for Header {
         )
     }
 
-    // TODO return metadata must be cloned from returned Payload; don't return metadata??
     fn genesis(
         instance_state: &<Self::State as HotShotState>::Instance,
-    ) -> (
-        Self,
-        Self::Payload,
-        <Self::Payload as BlockPayload>::Metadata,
-    ) {
-        let (payload, ns_table) = Self::Payload::genesis();
-        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
+        payload_commitment: VidCommitment,
+        ns_table: <Self::Payload as BlockPayload>::Metadata,
+    ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
@@ -289,7 +284,7 @@ impl BlockHeader for Header {
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
-        let header = Self {
+        Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.
             height: 0,
@@ -297,13 +292,12 @@ impl BlockHeader for Header {
             l1_head: 0,
             l1_finalized: None,
             payload_commitment,
-            ns_table: ns_table.clone(), // TODO forced clone
+            ns_table,
             block_merkle_tree_root,
             fee_merkle_tree_root,
             fee_info: FeeInfo::new(instance_state.builder_address.address().into()),
             builder_signature: None,
-        };
-        (header, payload, ns_table)
+        }
     }
 
     fn block_number(&self) -> u64 {
@@ -370,14 +364,14 @@ lazy_static! {
 
 #[cfg(test)]
 mod test_headers {
+    use super::*;
     use crate::{
         state::{validate_proposal, BlockMerkleTree, FeeMerkleTree},
         NodeState,
     };
-
-    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::RecoveryMessage;
+    use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -408,10 +402,20 @@ mod test_headers {
             assert!(self.expected_l1_head >= self.parent_l1_head);
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
-            let state = NodeState::default();
-            let (genesis, _, metadata) = Header::genesis(&state);
+            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let genesis_commitment = {
+                // TODO we should not need to collect payload bytes just to compute vid_commitment
+                let payload_bytes = genesis_payload
+                    .encode()
+                    .expect("unable to encode genesis payload")
+                    .collect();
+                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+            };
+            let genesis_state = NodeState::default();
+            let genesis_header =
+                Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table.clone());
 
-            let mut parent = genesis.clone();
+            let mut parent = genesis_header.clone();
             parent.timestamp = self.parent_timestamp;
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
@@ -431,8 +435,8 @@ mod test_headers {
             };
 
             let header = Header::from_info(
-                genesis.payload_commitment,
-                metadata,
+                genesis_header.payload_commitment,
+                genesis_ns_table,
                 &parent,
                 L1Snapshot {
                     head: self.l1_head,
@@ -440,7 +444,7 @@ mod test_headers {
                 },
                 self.timestamp,
                 &validated_state,
-                state.builder_address,
+                genesis_state.builder_address,
             );
             assert_eq!(header.height, parent.height + 1);
             assert_eq!(header.timestamp, self.expected_timestamp);
@@ -575,16 +579,30 @@ mod test_headers {
 
     #[test]
     fn test_validate_proposal_error_cases() {
-        let (mut header, ..) = Header::genesis(&NodeState::default());
+        let mut genesis_header = {
+            // TODO refactor repeated code from other tests
+            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let genesis_commitment = {
+                // TODO we should not need to collect payload bytes just to compute vid_commitment
+                let payload_bytes = genesis_payload
+                    .encode()
+                    .expect("unable to encode genesis payload")
+                    .collect();
+                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+            };
+            let genesis_state = NodeState::default();
+            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+        };
+
         let mut validated_state = ValidatedState::default();
         let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
 
         // Populate the tree with an initial `push`.
-        block_merkle_tree.push(header.commit()).unwrap();
+        block_merkle_tree.push(genesis_header.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         validated_state.block_merkle_tree = block_merkle_tree.clone();
-        header.block_merkle_tree_root = block_merkle_tree_root;
-        let parent = header.clone();
+        genesis_header.block_merkle_tree_root = block_merkle_tree_root;
+        let parent = genesis_header.clone();
         let mut proposal = parent.clone();
 
         // Advance `proposal.height` to trigger validation error.
@@ -606,30 +624,41 @@ mod test_headers {
 
     #[test]
     fn test_validate_proposal_success() {
-        let state = NodeState::default();
-        let (mut header, _, metadata) = Header::genesis(&state);
-        let mut parent_state = ValidatedState::genesis(&state);
+        // TODO refactor repeated code from other tests
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let genesis_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload")
+                .collect();
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+        let genesis_state = NodeState::default();
+        let mut genesis_header =
+            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table.clone());
+        let mut parent_state = ValidatedState::genesis(&genesis_state);
         let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
         let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
 
         // Populate the tree with an initial `push`.
-        block_merkle_tree.push(header.commit()).unwrap();
+        block_merkle_tree.push(genesis_header.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
         parent_state.block_merkle_tree = block_merkle_tree.clone();
         parent_state.fee_merkle_tree = fee_merkle_tree.clone();
-        header.block_merkle_tree_root = block_merkle_tree_root;
-        header.fee_merkle_tree_root = fee_merkle_tree_root;
+        genesis_header.block_merkle_tree_root = block_merkle_tree_root;
+        genesis_header.fee_merkle_tree_root = fee_merkle_tree_root;
 
-        let parent = header.clone();
+        let parent = genesis_header.clone();
 
         // get a proposal from a parent
         let proposal = Header::new(
             &parent_state,
-            &state,
+            &genesis_state,
             &parent,
             parent.payload_commitment,
-            metadata,
+            genesis_ns_table,
         );
 
         let mut proposal_state = parent_state.clone();

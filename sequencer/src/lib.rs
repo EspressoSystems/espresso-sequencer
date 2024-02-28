@@ -531,7 +531,9 @@ mod test {
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
-    use hotshot_types::traits::block_contents::BlockHeader;
+    use hotshot_types::traits::block_contents::{
+        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+    };
     use testing::{wait_for_decide_on_handle, TestConfig};
 
     #[async_std::test]
@@ -570,7 +572,20 @@ mod test {
             handle.start_consensus().await;
         }
 
-        let mut parent = Header::genesis(&NodeState::default()).0;
+        let mut parent = {
+            // TODO refactor repeated code from other tests
+            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let genesis_commitment = {
+                // TODO we should not need to collect payload bytes just to compute vid_commitment
+                let payload_bytes = genesis_payload
+                    .encode()
+                    .expect("unable to encode genesis payload")
+                    .collect();
+                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+            };
+            let genesis_state = NodeState::default();
+            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+        };
 
         loop {
             let event = events.next().await.unwrap();

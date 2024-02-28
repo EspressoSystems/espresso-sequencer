@@ -1,7 +1,8 @@
 use crate::block::entry::TxTableEntryWord;
-use crate::block::payload::{test_vid_factory, Payload, RangeProof};
+use crate::block::payload::Payload;
 use crate::block::tables::TxTable;
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::vid::{vid_scheme, SmallRangeProofType};
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -77,7 +78,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // TODO temporary VID construction. We need to get the number of storage nodes from the VID
         // common data. May need the query service to pass common into this function along with
         // metadata.
-        let vid = test_vid_factory(10);
+        let vid = vid_scheme(10);
 
         // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
         //
@@ -177,13 +178,13 @@ fn tx_payload_range(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
-    tx_table_len_proof: RangeProof,
+    tx_table_len_proof: SmallRangeProofType,
 
     tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
     tx_table_range_end: TxTableEntry,
-    tx_table_range_proof: RangeProof,
+    tx_table_range_proof: SmallRangeProofType,
 
-    tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
+    tx_payload_proof: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
 
 impl TxInclusionProof {
@@ -203,7 +204,7 @@ impl TxInclusionProof {
         vid_common: &V::Common,
     ) -> Option<Result<(), ()>>
     where
-        V: PayloadProver<RangeProof>,
+        V: PayloadProver<SmallRangeProofType>,
     {
         V::is_consistent(vid_commit, vid_common).ok()?;
 
@@ -303,8 +304,8 @@ impl TxInclusionProof {
 #[cfg(test)]
 pub(crate) fn gen_tx_proof_for_testing(
     tx_table_len: TxTableEntry,
-    tx_table_len_proof: RangeProof,
-    payload_proof: RangeProof,
+    tx_table_len_proof: SmallRangeProofType,
+    payload_proof: SmallRangeProofType,
 ) -> TxInclusionProof {
     TxInclusionProof {
         tx_table_len,
