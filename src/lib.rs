@@ -488,6 +488,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload,
+    Header<Types>: availability::QueryableHeader,
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource

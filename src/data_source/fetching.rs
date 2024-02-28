@@ -73,7 +73,9 @@
 //! different request for the same object, one that permitted an active fetch. Or it may have been
 //! fetched [proactively](#proactive-fetching).
 
+use super::storage::pruning::PruneStorage;
 use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
+use crate::availability::QueryableHeader;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -85,7 +87,7 @@ use crate::{
     node::{NodeDataSource, SyncStatus},
     status::StatusDataSource,
     task::BackgroundTask,
-    Payload, QueryResult, SignatureKey, VidShare,
+    Header, Payload, QueryResult, SignatureKey, VidShare,
 };
 use anyhow::Context;
 use async_std::{
@@ -100,6 +102,7 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
+
 use std::{
     cmp::min,
     fmt::{Debug, Display},
@@ -219,6 +222,7 @@ impl<Types, S, P> Builder<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -259,12 +263,77 @@ where
     metrics: PrometheusMetrics,
     // The proactive scanner task. This is only saved here so that we can cancel it on drop.
     scanner: Option<BackgroundTask>,
+    pruner: Pruner<Types, S, P>,
+}
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Debug(bound = "S: Debug, P: Debug"))]
+pub struct Pruner<Types, S, P>
+where
+    Types: NodeType,
+{
+    handle: Option<BackgroundTask>,
+    _types: PhantomData<(Types, S, P)>,
+}
+
+impl<Types, S, P> Pruner<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: AvailabilityStorage<Types> + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    async fn new(fetcher: Arc<Fetcher<Types, S, P>>) -> Self {
+        let cfg = fetcher.storage.read().await.storage.get_pruning_config();
+        let Some(cfg) = cfg else {
+            return Self {
+                handle: None,
+                _types: Default::default(),
+            };
+        };
+
+        let task = {
+            BackgroundTask::spawn("pruner", async move {
+                for i in 1.. {
+                    sleep(cfg.interval()).await;
+                    tracing::info!("pruner woke up for the {i}th time",);
+
+                    {
+                        let mut storage = fetcher.storage.write().await;
+
+                        match storage.storage.prune().await {
+                            Ok(Some(height)) => {
+                                storage.pruned_height = Some(height);
+                                if let Err(e) = storage.storage.save_pruned_height(height).await {
+                                    tracing::error!("failed to save pruned height: {e:?}");
+                                    continue;
+                                }
+                                if let Err(e) = storage.commit().await {
+                                    tracing::error!("failed to commit: {e:?}")
+                                }
+                            }
+                            Ok(None) => (),
+                            Err(e) => {
+                                tracing::error!("pruning failed: {e:?}");
+                            }
+                        }
+                    }
+                }
+            })
+        };
+
+        Self {
+            handle: Some(task),
+            _types: Default::default(),
+        }
+    }
 }
 
 impl<Types, S, P> FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -295,9 +364,11 @@ where
             None
         };
 
+        let pruner = Pruner::new(fetcher.clone()).await;
         let ds = Self {
             fetcher,
             scanner,
+            pruner,
             metrics: Default::default(),
         };
 
@@ -584,6 +655,7 @@ where
     height: u64,
     // The block height at the last commit, which we will roll back to on `revert`.
     committed_height: u64,
+    pruned_height: Option<u64>,
     block_notifier: Notifier<BlockQueryData<Types>>,
     leaf_notifier: Notifier<LeafQueryData<Types>>,
     vid_common_notifier: Notifier<VidCommonQueryData<Types>>,
@@ -643,7 +715,7 @@ where
 impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
-    S: NodeDataSource<Types>,
+    S: NodeDataSource<Types> + PruneStorage + Sync + Send,
 {
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
@@ -656,10 +728,12 @@ where
         }
 
         let height = builder.storage.block_height().await? as u64;
+        let pruned_height = builder.storage.load_pruned_height().await?;
         Ok(Self {
             storage: RwLock::new(NotifyStorage {
                 height,
                 committed_height: height,
+                pruned_height,
                 storage: builder.storage,
                 block_notifier: Notifier::new(),
                 leaf_notifier: Notifier::new(),
@@ -692,8 +766,10 @@ where
         // necessary, since sending notifications requires a write lock. Hence, we will not miss a
         // notification.
         let storage = self.storage.read().await;
+        let pruned_height = storage.pruned_height.map(|h| h as usize);
+
         // Fall back to fetching early and quietly if it is impossible for the object to exist.
-        if !req.might_exist(storage.height as usize) {
+        if !req.might_exist(storage.height as usize, pruned_height) {
             tracing::debug!(
                 "not loading object {req:?} that cannot exist at height {}",
                 storage.height
@@ -752,12 +828,13 @@ where
         T: RangedFetchable<Types>,
     {
         let storage = self.storage.read().await;
+        let pruned_height = storage.pruned_height.map(|h| h as usize);
         // We can avoid touching storage if it is not possible for any entry in the entire range to
         // exist given the current block height. In this case, we know storage would return an empty
         // range.
         let ts = if chunk
             .clone()
-            .any(|i| T::Request::from(i).might_exist(storage.height as usize))
+            .any(|i| T::Request::from(i).might_exist(storage.height as usize, pruned_height))
         {
             T::load_range(&storage, chunk.clone())
                 .await
@@ -902,7 +979,10 @@ where
         //   can never release the _original_ read lock we had on `storage`, and so we can never
         //   unblock the task waiting for a write lock, which in turn means we can never become
         //   unblocked ourselves.
-        if req.might_exist(storage.height as usize) {
+
+        let pruned_height = storage.pruned_height.map(|h| h as usize);
+
+        if req.might_exist(storage.height as usize, pruned_height) {
             T::active_fetch(self.clone(), storage, req).await;
         } else {
             tracing::debug!(
@@ -929,13 +1009,20 @@ where
         let mut prev_height = 0;
 
         for i in 0.. {
-            // Get the block height; we will look for any missing blocks up to `block_height`.
-            let block_height = { self.storage.read().await.height } as usize;
+            let (minimum_block_height, block_height) = {
+                let storage = self.storage.read().await;
+                // Get the pruned height or default to 0 if it is not set.
+                // We will start looking for missing blocks from the pruned height.
+                let pruned_height = storage.pruned_height.unwrap_or(0) as usize;
+                // Get the block height; we will look for any missing blocks up to `block_height`.
+                let block_height = storage.height as usize;
+                (pruned_height, block_height)
+            };
 
             // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
             // (much more frequent) we fetch blocks that are missing since the last scan.
             let start = if i % major_interval == 0 {
-                0
+                minimum_block_height
             } else {
                 prev_height
             };
@@ -1003,7 +1090,7 @@ trait FetchRequest: Copy + Debug + Send + Sync + 'static {
     ///
     /// This method is conservative: it returns `true` if it cannot tell whether the given object
     /// could exist or not.
-    fn might_exist(self, _block_height: usize) -> bool {
+    fn might_exist(self, _block_height: usize, _pruned_height: Option<usize>) -> bool {
         true
     }
 }

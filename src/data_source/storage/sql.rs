@@ -12,24 +12,24 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::AvailabilityStorage;
-use crate::{
-    availability::{
-        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
-        VidCommonQueryData,
-    },
-    data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus},
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
-    VidShare,
+use std::{
+    borrow::Cow,
+    cmp::min,
+    fmt::Display,
+    ops::{Bound, RangeBounds},
+    pin::Pin,
+    str::FromStr,
+    time::Duration,
 };
+
+pub use anyhow::Error;
 use async_std::{
     net::ToSocketAddrs,
     sync::Arc,
     task::{sleep, spawn},
 };
 use async_trait::async_trait;
+use chrono::Utc;
 use commit::Committable;
 use futures::{
     channel::oneshot,
@@ -45,17 +45,15 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
+// This needs to be reexported so that we can reference it by absolute path relative to this crate
+// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
+// crate which doesn't have `include_dir` as a dependency.
+pub use include_dir::include_dir;
 use itertools::{izip, Itertools};
 use postgres_native_tls::TlsConnector;
+pub use refinery::Migration;
 use snafu::OptionExt;
-use std::{
-    borrow::Cow,
-    fmt::Display,
-    ops::{Bound, RangeBounds},
-    pin::Pin,
-    str::FromStr,
-    time::Duration,
-};
+pub use tokio_postgres as postgres;
 use tokio_postgres::{
     config::Host,
     tls::TlsConnect,
@@ -63,15 +61,22 @@ use tokio_postgres::{
     Client, NoTls, Row, ToStatement,
 };
 
+use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
 pub use crate::include_migrations;
-pub use anyhow::Error;
-pub use refinery::Migration;
-pub use tokio_postgres as postgres;
-
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use include_dir::include_dir;
+use crate::{
+    availability::{
+        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
+        QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
+        UpdateAvailabilityData, VidCommonQueryData,
+    },
+    data_source::{
+        storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
+        VersionedDataSource,
+    },
+    node::{NodeDataSource, SyncStatus},
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
+    VidShare,
+};
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -92,7 +97,8 @@ pub use include_dir::include_dir;
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// let migrations: Vec<Migration> = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
+/// let migrations: Vec<Migration> =
+///     include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
 /// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
@@ -200,6 +206,7 @@ pub struct Config {
     migrations: Vec<Migration>,
     no_migrations: bool,
     tls: bool,
+    pruner_cfg: Option<PrunerCfg>,
 }
 
 impl Default for Config {
@@ -213,6 +220,7 @@ impl Default for Config {
             migrations: vec![],
             no_migrations: false,
             tls: false,
+            pruner_cfg: None,
         }
     }
 }
@@ -318,6 +326,12 @@ impl Config {
         self.tls = true;
         self
     }
+
+    pub fn pruner_cfg(mut self, cfg: PrunerCfg) -> Result<Self, Error> {
+        cfg.validate()?;
+        self.pruner_cfg = Some(cfg);
+        Ok(self)
+    }
 }
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
@@ -326,6 +340,7 @@ pub struct SqlStorage {
     client: Arc<Client>,
     tx_in_progress: bool,
     kill: Option<oneshot::Sender<()>>,
+    pruner_cfg: Option<PrunerCfg>,
 }
 
 impl SqlStorage {
@@ -370,7 +385,9 @@ impl SqlStorage {
             let last_applied = runner.get_last_applied_migration_async(&mut client).await?;
             let last_expected = migrations.last();
             if last_applied.as_ref() != last_expected {
-                return Err(Error::msg(format!("DB is out of date: last applied migration is {last_applied:?}, but expected {last_expected:?}")));
+                return Err(Error::msg(format!(
+                    "DB is out of date: last applied migration is {last_applied:?}, but expected {last_expected:?}"
+                )));
             }
         } else {
             // Run migrations using `refinery`.
@@ -389,6 +406,7 @@ impl SqlStorage {
             client: Arc::new(client),
             tx_in_progress: false,
             kill: Some(kill),
+            pruner_cfg: config.pruner_cfg,
         })
     }
 
@@ -405,6 +423,157 @@ impl SqlStorage {
         Ok(Transaction {
             client: Cow::Borrowed(&self.client),
         })
+    }
+}
+
+impl PrunerConfig for SqlStorage {
+    fn set_pruning_config(&mut self, cfg: PrunerCfg) {
+        self.pruner_cfg = Some(cfg);
+    }
+
+    fn get_pruning_config(&self) -> Option<PrunerCfg> {
+        self.pruner_cfg.clone()
+    }
+}
+
+impl SqlStorage {
+    async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
+        let row = self
+            .query_one_static("SELECT MIN(height) as height FROM header")
+            .await?;
+
+        let height = row.get::<_, Option<i64>>(0).map(|h| h as u64);
+
+        Ok(height)
+    }
+
+    async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
+        let row = self
+            .query_opt(
+                "SELECT height FROM header WHERE timestamp <= $1 ORDER BY height DESC LIMIT 1",
+                [&timestamp],
+            )
+            .await?;
+
+        let height = row.map(|row| row.get::<_, i64>(0) as u64);
+
+        Ok(height)
+    }
+}
+
+#[async_trait]
+impl PrunedHeightStorage for SqlStorage {
+    type Error = QueryError;
+    async fn save_pruned_height(&mut self, height: u64) -> Result<(), Self::Error> {
+        // id is set to 1 so that there is only one row in the table.
+        // height is updated if the row already exists.
+        self.transaction()
+            .await?
+            .upsert(
+                "pruned_height",
+                ["id", "last_height"],
+                ["id"],
+                [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
+            )
+            .await
+    }
+
+    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
+        let row = self
+            .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
+            .await?;
+
+        let height = row.map(|row| row.get::<_, i64>(0) as u64);
+
+        Ok(height)
+    }
+}
+
+#[async_trait]
+impl PruneStorage for SqlStorage {
+    async fn get_disk_usage(&self) -> QueryResult<u64> {
+        let row = self
+            .query_one_static("SELECT pg_database_size(current_database())")
+            .await?;
+        let size: i64 = row.get(0);
+        Ok(size as u64)
+    }
+
+    async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
+        let cfg = self.get_pruning_config().ok_or(QueryError::Error {
+            message: "Pruning config not found".to_string(),
+        })?;
+
+        let Some(mut height) = self.get_minimum_height().await? else {
+            tracing::info!("database is empty, nothing to prune");
+            return Ok(None);
+        };
+
+        let batch_size = cfg.batch_size();
+        let max_usage = cfg.max_usage();
+        let mut pruned_height = None;
+        // Prune data exceeding target retention in batches
+        let target_height = self
+            .get_height_by_timestamp(
+                Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
+            )
+            .await?;
+
+        if let Some(target_height) = target_height {
+            while height < target_height {
+                height = min(height + batch_size, target_height);
+                self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
+                    .await?;
+                pruned_height = Some(height);
+
+                tracing::info!("Pruned data up to height {height}");
+            }
+        }
+
+        // If threshold is set, prune data exceeding minimum retention in batches
+        // This parameter is needed for SQL storage as there is no direct way to get free space.
+        if let Some(threshold) = cfg.pruning_threshold() {
+            let mut usage = self.get_disk_usage().await?;
+
+            // Prune data exceeding minimum retention in batches starting from minimum height
+            // until usage is below threshold
+            if usage > threshold {
+                tracing::warn!(
+                    "Disk usage {usage} exceeds pruning threshold {:?}",
+                    cfg.pruning_threshold()
+                );
+                let minimum_retention_height = self
+                    .get_height_by_timestamp(
+                        Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
+                    )
+                    .await?;
+
+                if let Some(min_retention_height) = minimum_retention_height {
+                    while (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
+                        && height < min_retention_height
+                    {
+                        height = min(height + batch_size, min_retention_height);
+                        self.query_opt(
+                            "DELETE FROM header WHERE height <= $1",
+                            &[&(height as i64)],
+                        )
+                        .await?;
+                        usage = self.get_disk_usage().await?;
+                        pruned_height = Some(height);
+                        tracing::info!("Pruned data up to height {height}");
+                    }
+                }
+            }
+        }
+        // Vacuum the database to reclaim space.
+        // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
+        // cause downtime for the query service.
+        self.client
+            .batch_execute("VACUUM")
+            .await
+            .map_err(postgres_err)?;
+
+        Ok(pruned_height)
     }
 }
 
@@ -455,6 +624,7 @@ impl<Types> AvailabilityStorage<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
@@ -641,6 +811,7 @@ impl<Types> UpdateAvailabilityData<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader,
 {
     type Error = QueryError;
 
@@ -655,13 +826,14 @@ where
             })?;
         tx.upsert(
             "header",
-            ["height", "hash", "payload_hash", "data"],
+            ["height", "hash", "payload_hash", "data", "timestamp"],
             ["height"],
             [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf.leaf().block_header.payload_commitment().to_string()),
                 sql_param(&header_json),
+                sql_param(&(leaf.leaf().block_header.timestamp() as i64)),
             ]],
         )
         .await?;
@@ -920,14 +1092,16 @@ where
         // NULL share.
         let row = self
             .query_one_static(
-                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid FROM
+                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid, pruned_height FROM
                     (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
                     (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
                     (SELECT count(*) AS total_vid FROM vid),
-                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL)
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL),
+                    coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
                 ",
             )
             .await?;
+
         let block_height = match row.get::<_, Option<i64>>("max_height") {
             Some(height) => {
                 // The height of the block is the number of blocks below it, so the total number of
@@ -943,6 +1117,9 @@ where
         let null_payloads = row.get::<_, i64>("null_payloads") as usize;
         let total_vid = row.get::<_, i64>("total_vid") as usize;
         let null_vid = row.get::<_, i64>("null_vid") as usize;
+        let pruned_height = row
+            .get::<_, Option<i64>>("pruned_height")
+            .map(|h| h as usize);
 
         let missing_leaves = block_height.saturating_sub(total_leaves);
         let missing_blocks = missing_leaves + null_payloads;
@@ -954,6 +1131,7 @@ where
             missing_blocks,
             missing_vid_common,
             missing_vid_shares,
+            pruned_height,
         })
     }
 }
@@ -1369,8 +1547,7 @@ where
     parse_block(row).map(PayloadQueryData::from)
 }
 
-const VID_COMMON_COLUMNS: &str =
-    "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
+const VID_COMMON_COLUMNS: &str = "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
 
 fn parse_vid_common<Types>(row: Row) -> QueryResult<VidCommonQueryData<Types>>
 where
@@ -1576,15 +1753,17 @@ impl tokio::io::AsyncWrite for TcpStream {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    use super::Config;
-    use crate::testing::sleep;
-    use portpicker::pick_unused_port;
     use std::{
         env,
         process::{Command, Stdio},
         str,
         time::Duration,
     };
+
+    use portpicker::pick_unused_port;
+
+    use super::Config;
+    use crate::testing::sleep;
 
     #[derive(Debug)]
     pub struct TmpDb {
@@ -1694,9 +1873,11 @@ pub mod testing {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use super::{testing::TmpDb, *};
-    use crate::testing::setup_test;
 
+    use hotshot_example_types::state_types::TestInstanceState;
+
+    use super::{testing::TmpDb, *};
+    use crate::testing::{mocks::MockTypes, setup_test};
     #[async_std::test]
     async fn test_migrations() {
         setup_test();
@@ -1769,5 +1950,172 @@ mod test {
         // Default values.
         assert_eq!(cfg.host, "localhost");
         assert_eq!(cfg.port, 5432);
+    }
+
+    #[async_std::test]
+    async fn test_target_period_pruning() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        // insert some mock data
+        for i in 0..20 {
+            leaf.leaf.block_header.block_number = i;
+            storage.insert_leaf(leaf.clone()).await.unwrap();
+            storage.commit().await.unwrap();
+        }
+
+        let height_before_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
+        // Set pruner config to default which has minimum retention set to 1 day
+        storage.set_pruning_config(PrunerCfg::new());
+        // No data will be pruned
+        let pruned_height = storage.prune().await.unwrap();
+        // Pruned height should be none
+        assert!(pruned_height.is_none());
+
+        let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
+        assert_eq!(
+            height_after_pruning, height_before_pruning,
+            "some data has been pruned"
+        );
+
+        // Set pruner config to target retention set to 1s
+        storage.set_pruning_config(PrunerCfg::new().with_target_retention(Duration::from_secs(1)));
+        sleep(Duration::from_secs(2)).await;
+        let usage_before_pruning = storage.get_disk_usage().await.unwrap();
+        // All of the data is now older than 1s.
+        // This would prune all the data as the target retention is set to 1s
+        let pruned_height = storage.prune().await.unwrap();
+
+        // Pruned height should be some
+        assert!(pruned_height.is_some());
+        let usage_after_pruning = storage.get_disk_usage().await.unwrap();
+        // All the tables should be empty
+        // counting rows in header table
+        let header_rows = storage
+            .query_one_static("select count(*) as count from header")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        // the table should be empty
+        assert_eq!(header_rows, 0);
+
+        // counting rows in leaf table.
+        // Deleting rows from header table would delete rows in all the tables
+        // as each of table implement "ON DELETE CASCADE" fk constraint with the header table.
+        let leaf_rows = storage
+            .query_one_static("select count(*) as count from leaf")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        // the table should be empty
+        assert_eq!(leaf_rows, 0);
+
+        assert!(
+            usage_before_pruning > usage_after_pruning,
+            " disk usage should decrease after pruning"
+        )
+    }
+
+    #[async_std::test]
+    async fn test_minimum_retention_pruning() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        // insert some mock data
+        for i in 0..20 {
+            leaf.leaf.block_header.block_number = i;
+            storage.insert_leaf(leaf.clone()).await.unwrap();
+            storage.commit().await.unwrap();
+        }
+
+        let height_before_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+        let cfg = PrunerCfg::new();
+        // Set pruning_threshold to 1
+        // SQL storage size is more than 1000 bytes even without any data indexed
+        // This would mean that the threshold would always be greater than the disk usage
+        // However, minimum retention is set to 24 hours by default so the data would not be pruned
+        storage.set_pruning_config(cfg.clone().with_pruning_threshold(1));
+        println!("{:?}", storage.get_pruning_config().unwrap());
+        // Pruning would not delete any data
+        // All the data is younger than minimum retention period even though the usage > threshold
+        let pruned_height = storage.prune().await.unwrap();
+
+        // Pruned height should be none
+        assert!(pruned_height.is_none());
+
+        let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
+
+        assert_eq!(
+            height_after_pruning, height_before_pruning,
+            "some data has been pruned"
+        );
+
+        // Change minimum retention to 1s
+        storage.set_pruning_config(
+            cfg.with_minimum_retention(Duration::from_secs(1))
+                .with_pruning_threshold(1),
+        );
+        // sleep for 2s to make sure the data is older than minimum retention
+        sleep(Duration::from_secs(2)).await;
+        // This would prune all the data
+        let pruned_height = storage.prune().await.unwrap();
+
+        // Pruned height should be some
+        assert!(pruned_height.is_some());
+        // All the tables should be empty
+        // counting rows in header table
+        let header_rows = storage
+            .query_one_static("select count(*) as count from header")
+            .await
+            .unwrap()
+            .get::<_, i64>("count");
+        // the table should be empty
+        assert_eq!(header_rows, 0);
+    }
+
+    #[async_std::test]
+    async fn test_pruned_height_storage() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        assert!(storage.load_pruned_height().await.unwrap().is_none());
+        storage.save_pruned_height(10).await.unwrap();
+        storage.save_pruned_height(20).await.unwrap();
+        storage.save_pruned_height(30).await.unwrap();
+        assert_eq!(storage.load_pruned_height().await.unwrap(), Some(30));
     }
 }

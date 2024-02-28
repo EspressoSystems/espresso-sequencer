@@ -37,9 +37,9 @@ impl<Types> FetchRequest for LeafId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize) -> bool {
+    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
         if let LeafId::Number(n) = self {
-            n < block_height
+            n < block_height && pruned_height.map_or(true, |ph| n > ph)
         } else {
             true
         }

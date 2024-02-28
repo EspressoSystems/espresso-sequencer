@@ -39,6 +39,10 @@ pub type TransactionInclusionProof<Types> = <Payload<Types> as QueryablePayload>
 
 pub type Timestamp = time::OffsetDateTime;
 
+pub trait QueryableHeader: BlockHeader {
+    fn timestamp(&self) -> u64;
+}
+
 /// A block payload whose contents (e.g. individual transactions) can be examined.
 ///
 /// Note to implementors: this trait has only a few required methods. The provided methods, for

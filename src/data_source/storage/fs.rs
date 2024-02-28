@@ -14,6 +14,7 @@
 
 use super::{
     ledger_log::{Iter, LedgerLog},
+    pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
 use crate::{
@@ -37,6 +38,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
+use std::convert::Infallible;
 use std::hash::Hash;
 use std::ops::{Bound, RangeBounds};
 use std::path::Path;
@@ -68,6 +70,21 @@ where
     leaf_storage: LedgerLog<LeafQueryData<Types>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     vid_storage: LedgerLog<(VidCommonQueryData<Types>, Option<VidShare>)>,
+}
+
+impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
+    Payload<Types>: QueryablePayload
+{
+}
+impl<Types: NodeType> PrunedHeightStorage for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    type Error = Infallible;
+}
+impl<Types: NodeType> PruneStorage for FileSystemStorage<Types> where
+    Payload<Types>: QueryablePayload
+{
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>
@@ -568,6 +585,7 @@ where
             missing_leaves: self.leaf_storage.missing(height),
             missing_vid_common: missing_vid,
             missing_vid_shares: missing_vid + null_vid_shares,
+            pruned_height: None,
         })
     }
 }
