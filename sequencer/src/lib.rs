@@ -370,6 +370,7 @@ pub mod testing {
     use super::*;
     use crate::persistence::no_storage::NoStorage;
     use commit::Committable;
+    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -386,12 +387,13 @@ pub mod testing {
     };
     use std::time::Duration;
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey, ElectionConfig>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        anvil: Arc<AnvilInstance>,
     }
 
     impl Default for TestConfig {
@@ -443,6 +445,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
+                anvil: Arc::new(Anvil::new().spawn()),
             }
         }
     }
@@ -490,9 +493,15 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
+
+            let node_state = NodeState {
+                l1_client: L1Client::new(self.anvil.endpoint().parse().unwrap()),
+                ..Default::default()
+            };
+
             SequencerContext::init(
                 config,
-                NodeState::default(),
+                node_state,
                 persistence,
                 networks,
                 None,
