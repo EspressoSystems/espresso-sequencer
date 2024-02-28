@@ -23,10 +23,6 @@ pub trait PruneStorage: PrunerConfig + PrunedHeightStorage {
     async fn prune(&mut self) -> Result<Option<u64>, Self::Error> {
         Ok(None)
     }
-
-    fn pruned_height(&self) -> Option<u64> {
-        None
-    }
 }
 
 #[async_trait]
@@ -35,7 +31,7 @@ pub trait PrunedHeightStorage {
     async fn save_pruned_height(&mut self, _height: u64) -> Result<(), Self::Error> {
         Ok(())
     }
-    async fn load_pruned_height(&mut self) -> Result<Option<u64>, Self::Error> {
+    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
         Ok(None)
     }
 }

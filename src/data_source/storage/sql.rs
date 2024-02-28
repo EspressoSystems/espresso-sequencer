@@ -341,7 +341,6 @@ pub struct SqlStorage {
     tx_in_progress: bool,
     kill: Option<oneshot::Sender<()>>,
     pruner_cfg: Option<PrunerCfg>,
-    pruned_height: Option<u64>,
 }
 
 impl SqlStorage {
@@ -408,7 +407,6 @@ impl SqlStorage {
             tx_in_progress: false,
             kill: Some(kill),
             pruner_cfg: config.pruner_cfg,
-            pruned_height: None,
         })
     }
 
@@ -469,21 +467,29 @@ impl PrunedHeightStorage for SqlStorage {
     async fn save_pruned_height(&mut self, height: u64) -> Result<(), Self::Error> {
         // id is set to 1 so that there is only one row in the table.
         // height is updated if the row already exists.
-        self.query_opt(
-            "INSERT INTO pruned_height (id, last_height) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET last_height = $1;",
-            &[&(height as i64)],
-        )
-        .await?;
-        Ok(())
+        self.transaction()
+            .await?
+            .upsert(
+                "pruned_height",
+                ["id", "last_height"],
+                ["id"],
+                [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
+            )
+            .await?;
+
+        self.commit().await.map_err(|err| QueryError::Error {
+            message: format!(
+                "transaction failed to commit! unable to save pruned height into table: {err}"
+            ),
+        })
     }
 
-    async fn load_pruned_height(&mut self) -> Result<Option<u64>, Self::Error> {
+    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
         let row = self
             .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
             .await?;
 
         let height = row.map(|row| row.get::<_, i64>(0) as u64);
-        self.pruned_height = height;
 
         Ok(height)
     }
@@ -499,10 +505,6 @@ impl PruneStorage for SqlStorage {
         Ok(size as u64)
     }
 
-    fn pruned_height(&self) -> Option<u64> {
-        self.pruned_height
-    }
-
     async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
         let cfg = self.get_pruning_config().ok_or(QueryError::Error {
             message: "Pruning config not found".to_string(),
@@ -515,6 +517,7 @@ impl PruneStorage for SqlStorage {
 
         let batch_size = cfg.batch_size();
         let max_usage = cfg.max_usage();
+        let mut pruned_height = None;
         // Prune data exceeding target retention in batches
         let target_height = self
             .get_height_by_timestamp(
@@ -527,9 +530,10 @@ impl PruneStorage for SqlStorage {
                 height = min(height + batch_size, target_height);
                 self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
                     .await?;
+                pruned_height = Some(height);
+
                 tracing::info!("Pruned data up to height {height}");
             }
-            self.pruned_height = Some(target_height);
         }
 
         // If threshold is set, prune data exceeding minimum retention in batches
@@ -561,9 +565,9 @@ impl PruneStorage for SqlStorage {
                         )
                         .await?;
                         usage = self.get_disk_usage().await?;
+                        pruned_height = Some(height);
                         tracing::info!("Pruned data up to height {height}");
                     }
-                    self.pruned_height = Some(height);
                 }
             }
         }
@@ -575,7 +579,7 @@ impl PruneStorage for SqlStorage {
             .await
             .map_err(postgres_err)?;
 
-        Ok(Some(height))
+        Ok(pruned_height)
     }
 }
 
@@ -1976,9 +1980,9 @@ mod test {
         // Set pruner config to default which has minimum retention set to 1 day
         storage.set_pruning_config(PrunerCfg::new());
         // No data will be pruned
-        storage.prune().await.unwrap();
+        let pruned_height = storage.prune().await.unwrap();
         // Pruned height should be none
-        assert!(storage.pruned_height().is_none());
+        assert!(pruned_height.is_none());
 
         let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
 
@@ -1993,10 +1997,10 @@ mod test {
         let usage_before_pruning = storage.get_disk_usage().await.unwrap();
         // All of the data is now older than 1s.
         // This would prune all the data as the target retention is set to 1s
-        storage.prune().await.unwrap();
+        let pruned_height = storage.prune().await.unwrap();
 
         // Pruned height should be some
-        assert!(storage.pruned_height().is_some());
+        assert!(pruned_height.is_some());
         let usage_after_pruning = storage.get_disk_usage().await.unwrap();
         // All the tables should be empty
         // counting rows in header table
@@ -2058,10 +2062,10 @@ mod test {
         println!("{:?}", storage.get_pruning_config().unwrap());
         // Pruning would not delete any data
         // All the data is younger than minimum retention period even though the usage > threshold
-        storage.prune().await.unwrap();
+        let pruned_height = storage.prune().await.unwrap();
 
         // Pruned height should be none
-        assert!(storage.pruned_height().is_none());
+        assert!(pruned_height.is_none());
 
         let height_after_pruning = storage.get_minimum_height().await.unwrap().unwrap();
 
@@ -2078,10 +2082,10 @@ mod test {
         // sleep for 2s to make sure the data is older than minimum retention
         sleep(Duration::from_secs(2)).await;
         // This would prune all the data
-        storage.prune().await.unwrap();
+        let pruned_height = storage.prune().await.unwrap();
 
         // Pruned height should be some
-        assert!(storage.pruned_height().is_some());
+        assert!(pruned_height.is_some());
         // All the tables should be empty
         // counting rows in header table
         let header_rows = storage

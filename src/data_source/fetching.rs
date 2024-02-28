@@ -712,7 +712,7 @@ where
     Types: NodeType,
     S: NodeDataSource<Types> + PruneStorage + Sync + Send,
 {
-    async fn new(mut builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
         let mut vid_common_fetcher = fetching::Fetcher::default();
@@ -1004,10 +1004,15 @@ where
         let mut prev_height = 0;
 
         for i in 0.. {
-            let minimum_block_height =
-                self.storage.read().await.pruned_height.unwrap_or(0) as usize;
-            // Get the block height; we will look for any missing blocks up to `block_height`.
-            let block_height = { self.storage.read().await.height } as usize;
+            let (minimum_block_height, block_height) = {
+                let storage = self.storage.read().await;
+                // Get the pruned height or default to 0 if it is not set.
+                // We will start looking for missing blocks from the pruned height.
+                let pruned_height = storage.pruned_height.unwrap_or(0) as usize;
+                // Get the block height; we will look for any missing blocks up to `block_height`.
+                let block_height = storage.height as usize;
+                (pruned_height, block_height)
+            };
 
             // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
             // (much more frequent) we fetch blocks that are missing since the last scan.
