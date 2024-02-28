@@ -21,12 +21,13 @@ use crate::{
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
 use hotshot_types::{
-    data::{test_srs, VidScheme, VidSchemeTrait},
     traits::{
         block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
+    vid::vid_scheme,
 };
+use jf_primitives::vid::VidScheme;
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -137,23 +138,6 @@ async fn store_genesis_vid<Types: NodeType>(
     tracing::info!(?leaf, num_storage_nodes, "generating genesis VID");
 
     loop {
-        // Construct VID scheme.
-        // Find the preceding power of 2.
-        let num_chunks = 1 << num_storage_nodes.ilog2();
-        let multiplicity = 1;
-        let vid = match VidScheme::new(
-            num_chunks,
-            num_storage_nodes,
-            multiplicity,
-            test_srs(num_storage_nodes),
-        ) {
-            Ok(vid) => vid,
-            Err(err) => {
-                tracing::error!(%err, "unable to construct genesis VID scheme");
-                return;
-            }
-        };
-
         let payload = Payload::<Types>::genesis().0;
         let bytes = match payload.encode() {
             Ok(bytes) => bytes.collect::<Vec<_>>(),
@@ -162,7 +146,7 @@ async fn store_genesis_vid<Types: NodeType>(
                 return;
             }
         };
-        match vid.disperse(bytes) {
+        match vid_scheme(num_storage_nodes).disperse(bytes) {
             Ok(disperse) if disperse.commit != leaf.block_header.payload_commitment() => {
                 tracing::error!(
                     computed = %disperse.commit,

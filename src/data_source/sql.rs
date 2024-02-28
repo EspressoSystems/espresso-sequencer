@@ -419,7 +419,8 @@ mod test {
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
     use hotshot_example_types::state_types::TestInstanceState;
-    use hotshot_types::data::{test_srs, VidScheme, VidSchemeTrait};
+    use hotshot_types::vid::vid_scheme;
+    use jf_primitives::vid::VidScheme;
 
     type D = SqlDataSource<MockTypes, NoFetching>;
 
@@ -433,8 +434,7 @@ mod test {
         let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
         // Generate some test VID data.
-        let vid = VidScheme::new(2, 2, 1, test_srs(2)).unwrap();
-        let disperse = vid.disperse([]).unwrap();
+        let disperse = vid_scheme(2).disperse([]).unwrap();
 
         // Insert test data with VID common but no share.
         let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});

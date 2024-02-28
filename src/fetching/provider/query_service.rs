@@ -19,9 +19,10 @@ use crate::{
 use async_trait::async_trait;
 use futures::try_join;
 use hotshot_types::{
-    data::{test_srs, VidScheme, VidSchemeTrait},
     traits::{node_implementation::NodeType, BlockPayload},
+    vid::{vid_scheme, VidSchemeType},
 };
+use jf_primitives::vid::VidScheme;
 use surf_disco::{Client, Url};
 
 /// Data availability provider backed by another instance of this query service.
@@ -64,22 +65,7 @@ where
         match res {
             Ok((payload, common)) => {
                 // Verify that the data we retrieved is consistent with the request we made.
-                let num_storage_nodes = VidScheme::get_num_storage_nodes(common.common());
-                // Find the preceding power of 2.
-                let num_chunks = 1 << num_storage_nodes.ilog2();
-                let multiplicity = 1;
-                let vid = match VidScheme::new(
-                    num_chunks,
-                    num_storage_nodes,
-                    multiplicity,
-                    test_srs(num_storage_nodes),
-                ) {
-                    Ok(vid) => vid,
-                    Err(err) => {
-                        tracing::error!(%err, "failed to construct VID scheme");
-                        return None;
-                    }
-                };
+                let num_storage_nodes = VidSchemeType::get_num_storage_nodes(common.common());
                 let bytes = match payload.data().encode() {
                     Ok(bytes) => bytes.collect::<Vec<_>>(),
                     Err(err) => {
@@ -91,7 +77,7 @@ where
                         return None;
                     }
                 };
-                let commit = match vid.commit_only(bytes) {
+                let commit = match vid_scheme(num_storage_nodes).commit_only(bytes) {
                     Ok(commit) => commit,
                     Err(err) => {
                         tracing::error!(%err, "unable to compute VID commitment");
@@ -156,7 +142,9 @@ where
             .send()
             .await
         {
-            Ok(res) if VidScheme::is_consistent(&req.0, &res.common).is_ok() => Some(res.common),
+            Ok(res) if VidSchemeType::is_consistent(&req.0, &res.common).is_ok() => {
+                Some(res.common)
+            }
             Ok(res) => {
                 tracing::error!(?req, ?res, "fetched inconsistent VID common data");
                 None
@@ -188,6 +176,7 @@ mod test {
             mocks::{mock_transaction, MockTypes},
             setup_test, sleep,
         },
+        VidCommitment,
     };
     use async_std::task::spawn;
     use commit::Committable;
@@ -196,7 +185,6 @@ mod test {
         stream::StreamExt,
     };
     use generic_array::GenericArray;
-    use hotshot_types::data::VidCommitment;
     use portpicker::pick_unused_port;
     use rand::RngCore;
     use std::{future::IntoFuture, time::Duration};

@@ -26,13 +26,14 @@ use crate::{
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus},
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey, VidShare,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey, VidCommitment,
+    VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};

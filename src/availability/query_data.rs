@@ -13,14 +13,16 @@
 use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::{test_srs, Leaf, VidCommitment, VidScheme, VidSchemeTrait},
+    data::Leaf,
     simple_certificate::QuorumCertificate,
     traits::{
         self,
         block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::NodeType,
     },
+    vid::{vid_scheme, VidCommitment},
 };
+use jf_primitives::vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::fmt::Debug;
@@ -436,19 +438,10 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
     pub fn genesis(instance_state: &Types::InstanceState) -> Self {
         let leaf = Leaf::<Types>::genesis(instance_state);
         let payload = leaf.block_payload.unwrap();
-
-        let num_storage_nodes = GENESIS_VID_NUM_STORAGE_NODES;
-        let num_chunks = 1 << num_storage_nodes.ilog2();
-        let multiplicity = 1;
-        let vid = VidScheme::new(
-            num_chunks,
-            num_storage_nodes,
-            multiplicity,
-            test_srs(num_storage_nodes),
-        )
-        .unwrap();
         let bytes = payload.encode().unwrap().collect::<Vec<_>>();
-        let disperse = vid.disperse(bytes).unwrap();
+        let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
+            .disperse(bytes)
+            .unwrap();
 
         Self::new(leaf.block_header, disperse.common)
     }
