@@ -21,10 +21,11 @@ use hotshot_query_service::{
     node, Error,
 };
 use hotshot_types::{
-    data::{VidScheme, VidSchemeTrait, ViewNumber},
+    data::ViewNumber,
     traits::node_implementation::ConsensusTime,
+    vid::{vid_scheme, VidSchemeType},
 };
-use jf_primitives::merkle_tree::MerkleTreeScheme;
+use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tide_disco::{
@@ -107,11 +108,9 @@ where
                 }
             )?;
             let num_storage_nodes =
-                <VidScheme as VidSchemeTrait>::get_num_storage_nodes(common.common());
+                <VidSchemeType as VidScheme>::get_num_storage_nodes(common.common());
 
-            // TODO fake VidScheme construction
-            // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
-            let vid = crate::block::payload::test_vid_factory(num_storage_nodes);
+            let vid = vid_scheme(num_storage_nodes);
 
             let proof = block
                 .payload()

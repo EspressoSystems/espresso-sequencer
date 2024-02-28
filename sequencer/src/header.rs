@@ -13,11 +13,11 @@ use ethers::{
     types,
 };
 use hotshot_types::{
-    data::VidCommitment,
     traits::{
         block_contents::{vid_commitment, BlockHeader, BlockPayload},
         ValidatedState as HotShotState,
     },
+    vid::VidCommitment,
 };
 use jf_primitives::merkle_tree::prelude::*;
 use lazy_static::lazy_static;
@@ -272,14 +272,11 @@ impl BlockHeader for Header {
         )
     }
 
-    // TODO return metadata must be cloned from returned Payload; don't return metadata??
     fn genesis(
         instance_state: &<Self::State as HotShotState>::Instance,
-    ) -> (
-        Self,
-        Self::Payload,
-        <Self::Payload as BlockPayload>::Metadata,
-    ) {
+        _payload_commitment: VidCommitment,
+        _metadata: <Self::Payload as BlockPayload>::Metadata,
+    ) -> Self {
         let (payload, ns_table) = Self::Payload::genesis();
         let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let ValidatedState {
@@ -303,7 +300,7 @@ impl BlockHeader for Header {
             fee_info: FeeInfo::new(instance_state.builder_address.address().into()),
             builder_signature: None,
         };
-        (header, payload, ns_table)
+        header
     }
 
     fn block_number(&self) -> u64 {

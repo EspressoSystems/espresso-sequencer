@@ -8,13 +8,13 @@ edition = "2021"
 resolver = "2"
 
 members = [
-    "contract-bindings",
-    "contracts/rust/adapter",
-    "contracts/rust/diff-test",
-    "contracts/rust/gen-vk-contract",
-    "hotshot-state-prover",
-    "sequencer",
-    "utils"
+  "contract-bindings",
+  "contracts/rust/adapter",
+  "contracts/rust/diff-test",
+  "contracts/rust/gen-vk-contract",
+  "hotshot-state-prover",
+  "sequencer",
+  "utils",
 ]
 
 [workspace.dependencies]
@@ -28,7 +28,7 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
-    "logging-utils",
+  "logging-utils",
 ] }
 async-std = "1.12.0"
 async-trait = "0.1.77"
@@ -37,15 +37,15 @@ cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.9" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.10" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
   "test-apis",
   "test-srs",
