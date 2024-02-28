@@ -4,7 +4,10 @@ use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
-use futures::{future::join_all, stream::StreamExt};
+use futures::{
+    future,
+    stream::{self, StreamExt},
+};
 use hotshot_query_service::availability::LeafQueryData;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
@@ -186,28 +189,26 @@ async fn sync_with_l1(
     };
 
     // Download leaves between `contract_block_height` and `hotshot_block_height`.
-    let leaves = join_all(
-        (contract_block_height..hotshot_block_height)
-            .take(max_blocks)
-            .map(|height| hotshot.get_leaf(height)),
-    )
-    .await;
-    // It is possible that we failed to fetch some leaves. But as long as we successfully fetched a
-    // prefix of the desired list (since leaves must be sent to the contract in order) we can make
-    // some progress.
-    let leaves = leaves
-        .into_iter()
-        .scan(contract_block_height, |height, leaf| match leaf {
-            Ok(leaf) => {
-                *height += 1;
-                Some(leaf)
-            }
-            Err(err) => {
-                tracing::error!("error fetching leaf {height}: {err}");
-                None
-            }
+    let leaves = stream::iter(contract_block_height..hotshot_block_height)
+        .take(max_blocks)
+        .then(|height| hotshot.get_leaf(height))
+        // It is possible that we failed to fetch some leaves. But as long as we successfully
+        // fetched a prefix of the desired list (since leaves must be sent to the contract in order)
+        // we can make some progress.
+        .scan(contract_block_height, |height, leaf| {
+            future::ready(match leaf {
+                Ok(leaf) => {
+                    *height += 1;
+                    Some(leaf)
+                }
+                Err(err) => {
+                    tracing::error!("error fetching leaf {height}: {err}");
+                    None
+                }
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+        .await;
     if leaves.is_empty() {
         return Err(SyncError::Other(anyhow!("failed to fetch any leaves")));
     }
