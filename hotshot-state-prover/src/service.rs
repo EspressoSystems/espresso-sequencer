@@ -20,6 +20,7 @@ use ethers::{
 use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
@@ -38,8 +39,6 @@ use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
-
-const STAKE_TABLE_CAPACITY: usize = 200;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
