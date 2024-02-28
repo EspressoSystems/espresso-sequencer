@@ -271,17 +271,20 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 /// https://stackoverflow.com/a/52886787
 ///
 /// TODO temporary VID constructor.
-pub(crate) fn test_vid_factory() -> VidScheme {
+pub(crate) fn test_vid_factory(num_storage_nodes: usize) -> VidScheme {
     // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
-    let (payload_chunk_size, num_storage_nodes) = (8, 10);
+    // calculate the last power of two
+    // TODO change after https://github.com/EspressoSystems/jellyfish/issues/339
+    let chunk_size = 1 << num_storage_nodes.ilog2();
+    let multiplicity = 1;
 
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
         &mut rng,
-        checked_fft_size(payload_chunk_size - 1).unwrap(),
+        checked_fft_size(chunk_size - 1).unwrap(),
     )
     .unwrap();
-    VidScheme::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+    VidScheme::new(chunk_size, num_storage_nodes, multiplicity, srs).unwrap()
 }
 
 // TODO type alias needed only because nested impl Trait is not allowed
@@ -435,6 +438,8 @@ mod test {
     use std::marker::PhantomData;
     use std::{collections::HashMap, ops::Range};
 
+    const NUM_STORAGE_NODES: usize = 10;
+
     #[test]
     fn basic_correctness() {
         check_basic_correctness::<TxTableEntryWord>()
@@ -480,7 +485,7 @@ mod test {
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -779,7 +784,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.into_iter().enumerate() {
             let payload_byte_len = test_case.payload.len();
@@ -848,7 +853,7 @@ mod test {
         // test: cannot make a proof for such a small block
         // assert!(block.transaction_with_proof(&0).is_none());
 
-        let vid = test_vid_factory();
+        let vid = test_vid_factory(NUM_STORAGE_NODES);
         let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
         // make a fake proof for a nonexistent tx in the small block

@@ -5,7 +5,7 @@ use crate::{network, Leaf, SeqTypes};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use futures::stream::{Stream, StreamExt};
-use hotshot::types::{Event, SignatureKey};
+use hotshot::types::Event;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
@@ -14,6 +14,7 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme as _};
+use hotshot_types::PeerConfig;
 use jf_primitives::crhf::{VariableLengthRescueCRHF, CRHF};
 use jf_primitives::errors::PrimitivesError;
 use std::collections::{HashMap, VecDeque};
@@ -137,19 +138,19 @@ pub type StakeTableCommitmentType = (CircuitField, CircuitField, CircuitField);
 
 /// Helper function for stake table commitment
 pub fn static_stake_table_commitment(
-    known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
-    state_ver_keys: &[StateVerKey],
+    known_nodes_with_stakes: &[PeerConfig<BLSPubKey>],
     capacity: usize,
 ) -> (CircuitField, CircuitField, CircuitField) {
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(capacity);
-    known_nodes_with_stakes
-        .iter()
-        .zip(state_ver_keys)
-        .for_each(|(entry, schnorr_key)| {
-            // This `unwrap()` wont fail unless number of entries exceeds `capacity`
-            st.register(*entry.get_key(), entry.get_stake(), schnorr_key.clone())
-                .unwrap();
-        });
+    known_nodes_with_stakes.iter().for_each(|peer| {
+        // This `unwrap()` wont fail unless number of entries exceeds `capacity`
+        st.register(
+            *peer.stake_table_entry.get_key(),
+            peer.stake_table_entry.get_stake(),
+            peer.state_ver_key.clone(),
+        )
+        .unwrap();
+    });
     st.advance();
     st.advance();
     // This `unwrap()` won't fail

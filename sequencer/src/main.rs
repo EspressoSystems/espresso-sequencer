@@ -63,6 +63,7 @@ where
         state_relay_server_url: opt.state_relay_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: opt.private_staking_key,
+        private_state_key: opt.private_state_key,
     };
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in

@@ -3,10 +3,21 @@
 use async_compatibility_layer::logging::setup_logging;
 
 use anyhow::{self, bail, Context};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use derive_more::Display;
 use hotshot::types::SignatureKey;
 use hotshot_types::signature_key::BLSPubKey;
 use rand::{RngCore, SeedableRng};
+use sequencer::SchnorrPrivKey;
+
+#[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
+enum Scheme {
+    #[default]
+    #[display(fmt = "bls")]
+    Bls,
+    #[display(fmt = "schnorr")]
+    Schnorr,
+}
 
 /// Utility program to generate keypairs
 #[derive(Clone, Debug, Parser)]
@@ -15,6 +26,10 @@ struct Options {
     /// If not provided, a random seed will be generated.
     #[clap(long, short = 's', value_parser = parse_seed)]
     seed: Option<[u8; 32]>,
+
+    /// Signature scheme to generate.
+    #[clap(long, default_value = "bls")]
+    scheme: Scheme,
 
     /// Number of keypairs to generate.
     /// Default is 1.
@@ -52,7 +67,7 @@ fn main() {
 
     let opts = Options::parse();
 
-    tracing::info!("Generating {} keypairs", opts.num);
+    tracing::info!("Generating {} {} keypairs", opts.num, opts.scheme);
 
     let seed = opts.seed.unwrap_or_else(|| {
         tracing::info!("No seed provided, generating a random seed");
@@ -61,7 +76,15 @@ fn main() {
 
     println!("Seed: {:?}\n", seed);
     for index in 0..opts.num {
-        let (pubkey, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index as u64);
-        println!("PrivateKey: {} PublicKey: {}\n", priv_key, pubkey);
+        match opts.scheme {
+            Scheme::Bls => {
+                let (pubkey, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index as u64);
+                println!("PrivateKey: {} PublicKey: {}\n", priv_key, pubkey);
+            }
+            Scheme::Schnorr => {
+                let priv_key = SchnorrPrivKey::generate_from_seed_indexed(seed, index as u64);
+                println!("PrivateKey: {priv_key} PublicKey: {}\n", priv_key.pub_key(),);
+            }
+        }
     }
 }
