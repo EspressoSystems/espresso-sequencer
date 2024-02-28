@@ -40,7 +40,7 @@ futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.19" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.17" }
