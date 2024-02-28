@@ -205,6 +205,7 @@ pub async fn sync_state(
     }
 
     let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+    tracing::info!("Threshold before syncing state: {}", threshold);
     let entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
         .unwrap()
@@ -274,6 +275,10 @@ pub async fn run_prover_service(config: StateProverConfig) {
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
     let update_interval = config.update_interval;
+
+    tracing::info!("Seed: {:?}", config.seed);
+    tracing::info!("Number of nodes: {:?}", config.num_nodes);
+    tracing::info!("Light client address: {:?}", config.light_client_address);
 
     if let Some(port) = config.port {
         if let Err(err) = start_http_server(port, config.light_client_address) {

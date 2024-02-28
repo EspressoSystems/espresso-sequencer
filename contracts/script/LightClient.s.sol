@@ -7,18 +7,10 @@ import { LightClient as LC } from "../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientContractScript is Script {
-    /// @notice deploys the impl, proxy & initializes the impl
-    /// @return proxyAddress The address of the proxy
-    /// @return admin The address of the admin
-
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        (admin,) = deriveRememberKey(seedPhrase, 0);
-        vm.startBroadcast(admin);
-
         // TODO for a production deployment provide the right genesis state and value
 
         string[] memory cmds = new string[](4);
@@ -30,6 +22,34 @@ contract DeployLightClientContractScript is Script {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+
+        return deployContract(state, numBlocksPerEpoch);
+    }
+
+    function runDemo(uint32 numBlocksPerEpoch)
+        external
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    {
+        string[] memory cmds = new string[](1);
+        cmds[0] = "gen-demo-genesis";
+
+        bytes memory result = vm.ffi(cmds);
+        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+
+        return deployContract(state, numBlocksPerEpoch);
+    }
+
+    /// @notice deploys the impl, proxy & initializes the impl
+    /// @return proxyAddress The address of the proxy
+    /// @return admin The address of the admin
+
+    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+        private
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    {
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        (admin,) = deriveRememberKey(seedPhrase, 0);
+        vm.startBroadcast(admin);
 
         LC lightClientContract = new LC();
 
