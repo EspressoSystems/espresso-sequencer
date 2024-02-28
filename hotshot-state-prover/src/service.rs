@@ -528,7 +528,6 @@ mod test {
         }
     }
 
-    // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
