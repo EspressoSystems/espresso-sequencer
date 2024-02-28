@@ -16,10 +16,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
-use hotshot_types::{
-    data::ViewNumber,
-    light_client::{LightClientState, StateSignature, StateSignatureRequestBody},
-};
+use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 use tide_disco::Url;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
@@ -98,8 +95,6 @@ pub(crate) trait SubmitDataSource<N: network::Type> {
 #[async_trait]
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
-
-    async fn sign_new_state(&self, state: &LightClientState) -> StateSignature;
 }
 
 #[trait_variant::make(StateDataSource: Send)]
@@ -112,12 +107,16 @@ pub(crate) trait LocalStateDataSource {
 pub(crate) mod testing {
     use super::super::Options;
     use super::*;
+    use crate::persistence::SequencerPersistence;
+    use std::fmt::Debug;
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
         type Storage;
+        type Persistence: Debug + SequencerPersistence;
 
         async fn create_storage() -> Self::Storage;
+        async fn connect(storage: &Self::Storage) -> Self::Persistence;
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }

@@ -191,6 +191,7 @@ async fn main() {
         ..Default::default()
     };
     config.config.total_nodes = args.num_nodes;
+    config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();
