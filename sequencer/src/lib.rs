@@ -52,7 +52,6 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
         states::InstanceState,
     },
-    HotShotConfig,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -283,7 +282,11 @@ pub async fn init_node(
                 NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
                     .await
                     .0;
-            tracing::info!("loaded config, we are node {}", config.node_index);
+            tracing::info!(
+                node_id = config.node_index,
+                stake_table = ?config.config.known_nodes_with_stake,
+                "loaded config",
+            );
             persistence.save_config(&config).await?;
             (config, true)
         }
@@ -363,7 +366,7 @@ pub mod testing {
     use hotshot_types::{
         light_client::StateKeyPair,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
-        ExecutionType, PeerConfig, ValidatorConfig,
+        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use std::time::Duration;
 
