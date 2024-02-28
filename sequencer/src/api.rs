@@ -499,7 +499,7 @@ mod generic_tests {
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
         client
-            .socket(&format!("availability/stream/leaves/0"))
+            .socket("availability/stream/leaves/0")
             .subscribe::<LeafQueryData<SeqTypes>>()
             .await
             .unwrap()
