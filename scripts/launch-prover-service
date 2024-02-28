@@ -10,6 +10,7 @@ if [[ -z "${ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS}" ]]; then
     echo "Light client contract address not found, deploying it now."
     forge fmt
     forge build
+    # TODO specify the chain ID when calling the script
     forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript  \
      --sig "runDemo(uint32 numBlocksPerEpoch)" $ESPRESSO_SEQUENCER_HOTSHOT_NUM_BLOCKS_PER_EPOCH \
             --fork-url $ESPRESSO_SEQUENCER_L1_PROVIDER --broadcast
