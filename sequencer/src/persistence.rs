@@ -105,7 +105,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         let view = max(highest_voted_view, leaf.view_number);
         tracing::info!(?leaf, ?view, "loaded consensus state");
 
-        Ok(HotShotInitializer::from_reload(leaf, state))
+        Ok(HotShotInitializer::from_reload(leaf, state, None, view))
     }
 
     /// Update storage based on an event from consensus.

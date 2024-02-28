@@ -4,7 +4,7 @@ use crate::{Leaf, SeqTypes, StateKeyPair};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use async_std::sync::RwLock;
-use hotshot::types::{Event, EventType, SignatureKey};
+use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
@@ -17,6 +17,7 @@ use hotshot_types::{
         signature_key::StakeTableEntryType,
         stake_table::{SnapshotVersion, StakeTableScheme as _},
     },
+    PeerConfig,
 };
 use jf_primitives::{
     crhf::{VariableLengthRescueCRHF, CRHF},
@@ -194,19 +195,19 @@ pub type StakeTableCommitmentType = (CircuitField, CircuitField, CircuitField);
 
 /// Helper function for stake table commitment
 pub fn static_stake_table_commitment(
-    known_nodes_with_stakes: &[<BLSPubKey as SignatureKey>::StakeTableEntry],
-    state_ver_keys: &[StateVerKey],
+    known_nodes_with_stakes: &[PeerConfig<BLSPubKey>],
     capacity: usize,
 ) -> (CircuitField, CircuitField, CircuitField) {
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(capacity);
-    known_nodes_with_stakes
-        .iter()
-        .zip(state_ver_keys)
-        .for_each(|(entry, schnorr_key)| {
-            // This `unwrap()` wont fail unless number of entries exceeds `capacity`
-            st.register(*entry.get_key(), entry.get_stake(), schnorr_key.clone())
-                .unwrap();
-        });
+    known_nodes_with_stakes.iter().for_each(|peer| {
+        // This `unwrap()` wont fail unless number of entries exceeds `capacity`
+        st.register(
+            *peer.stake_table_entry.get_key(),
+            peer.stake_table_entry.get_stake(),
+            peer.state_ver_key.clone(),
+        )
+        .unwrap();
+    });
     st.advance();
     st.advance();
     // This `unwrap()` won't fail

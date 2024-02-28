@@ -1,4 +1,4 @@
-use crate::{api, persistence};
+use crate::{api, persistence, SchnorrPrivKey};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use ethers::types::Address;
@@ -83,8 +83,11 @@ pub struct Options {
     pub webserver_poll_interval: Duration,
 
     // Sequencer Private Staking key
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")]
     pub private_staking_key: BLSPrivKey,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")]
+    pub private_state_key: SchnorrPrivKey,
 
     /// Add optional modules to the service.
     ///

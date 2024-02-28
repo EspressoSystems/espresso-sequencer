@@ -15,13 +15,16 @@ use crate::{
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use ethers::prelude::U256;
-use futures::FutureExt;
+use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
     node, Error,
 };
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use jf_primitives::{merkle_tree::MerkleTreeScheme, vid::VidScheme};
+use hotshot_types::{
+    data::{VidScheme, VidSchemeTrait, ViewNumber},
+    traits::node_implementation::ConsensusTime,
+};
+use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tide_disco::{
@@ -73,35 +76,42 @@ where
     let mut options = availability::Options::default();
     let extension = toml::from_str(include_str!("../../api/availability.toml"))?;
     options.extensions.push(extension);
+    let timeout = options.fetch_timeout;
+
     let mut api = availability::define_api::<AvailState<N, D>, SeqTypes>(&options)?;
 
-    api.get("getnamespaceproof", |req, state| {
+    api.get("getnamespaceproof", move |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
             let ns_id = VmId(req.integer_param("namespace")?);
-            let block = state.get_block(height).await.context(FetchBlockSnafu {
-                resource: height.to_string(),
-            })?;
+            let (block, common) = try_join!(
+                async move {
+                    state
+                        .get_block(height)
+                        .await
+                        .with_timeout(timeout)
+                        .await
+                        .context(FetchBlockSnafu {
+                            resource: height.to_string(),
+                        })
+                },
+                async move {
+                    state
+                        .get_vid_common(height)
+                        .await
+                        .with_timeout(timeout)
+                        .await
+                        .context(FetchBlockSnafu {
+                            resource: height.to_string(),
+                        })
+                }
+            )?;
+            let num_storage_nodes =
+                <VidScheme as VidSchemeTrait>::get_num_storage_nodes(common.common());
 
             // TODO fake VidScheme construction
             // https://github.com/EspressoSystems/espresso-sequencer/issues/1047
-            // TODO do not disperse here!
-            // https://github.com/EspressoSystems/espresso-sequencer/issues/1093
-            let vid = crate::block::payload::test_vid_factory();
-            use hotshot::traits::BlockPayload;
-            let disperse_data = vid
-                .disperse(
-                    block
-                        .payload()
-                        .encode()
-                        .expect("should be infallible")
-                        .collect::<Vec<u8>>(),
-                )
-                .ok() // hack: VidError won't play with Snafu, so convert to Option
-                .context(CustomSnafu {
-                    message: format!("disperse failure for namespace {ns_id}"),
-                    status: StatusCode::InternalServerError,
-                })?;
+            let vid = crate::block::payload::test_vid_factory(num_storage_nodes);
 
             let proof = block
                 .payload()
@@ -109,7 +119,7 @@ where
                     block.payload().get_ns_table(),
                     ns_id,
                     &vid,
-                    disperse_data.common,
+                    common.common().clone(),
                 )
                 .context(CustomSnafu {
                     message: format!("failed to make proof for namespace {ns_id}"),

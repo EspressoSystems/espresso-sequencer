@@ -181,6 +181,7 @@
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
+            jq
 
             # Rust tools
             cargo-audit

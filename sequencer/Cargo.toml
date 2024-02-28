@@ -18,9 +18,10 @@ tempfile = "3.9.0"
 
 [dependencies]
 anyhow = { workspace = true }
-ark-bls12-381 = "0.4"
+ark-bls12-381 = { workspace = true }
+ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
-ark-ff = "0.4"
+ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
@@ -37,6 +38,8 @@ derive_more = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
+tagged-base64 = { workspace = true }
+zeroize = { workspace = true }
 
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
@@ -55,7 +58,7 @@ itertools = { workspace = true }
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 lazy_static = "1.4"
-num-traits = "0.2.17"
+num-traits = "0.2.18"
 rand = "0.8.5"
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }

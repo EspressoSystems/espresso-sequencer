@@ -6,7 +6,7 @@ import { Test } /*, console2*/ from "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
-import { DeployLightClientContractScript } from "../script/DeployLightClient.s.sol";
+import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
 import { UpgradeLightClientScript } from "../script/UpgradeLightClient.s.sol";
 
 contract LightClientUpgradeTest is Test {
@@ -23,7 +23,7 @@ contract LightClientUpgradeTest is Test {
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run();
+        (proxy, admin, stateV1) = deployer.run(10, 5);
         lcV1Proxy = LCV1(proxy);
     }
 

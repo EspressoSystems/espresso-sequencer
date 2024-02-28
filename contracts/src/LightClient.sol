@@ -23,9 +23,9 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// This contract also keeps track of the current epoch.
 /// For this version, the epoch is not used. <br>
 /// The light client state primarily consists of:<br>
-/// - the merkle root of finalized block committments,<br>
-/// - the fee ledger committment and <br>
-/// - the active stake table committment<br>
+/// - the merkle root of finalized block commitments,<br>
+/// - the fee ledger commitment and <br>
+/// - the active stake table commitment<br>
 /// @dev You can use this contract to keep track of its finalized states in safe,
 /// authenticated ways.
 contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
@@ -243,6 +243,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[5] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableBlsKeyComm);
         publicInput[6] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableSchnorrKeyComm);
         publicInput[7] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableAmountComm);
+
         return publicInput;
     }
 

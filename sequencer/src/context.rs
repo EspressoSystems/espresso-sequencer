@@ -16,7 +16,8 @@ use hotshot_orchestrator::client::OrchestratorClient;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
-    consensus::ConsensusMetricsValue, light_client::StateVerKey, traits::metrics::Metrics,
+    consensus::ConsensusMetricsValue,
+    traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
 use std::fmt::Display;
@@ -56,11 +57,9 @@ pub struct SequencerContext<N: network::Type> {
 }
 
 impl<N: network::Type> SequencerContext<N> {
-    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,
-        state_ver_keys: &[StateVerKey],
         persistence: impl SequencerPersistence,
         networks: Networks<SeqTypes, Node<N>>,
         state_relay_server: Option<Url>,
@@ -70,13 +69,13 @@ impl<N: network::Type> SequencerContext<N> {
         // Load saved consensus state from storage.
         let initializer = persistence.load_consensus_state(instance_state).await?;
 
-        let pub_keys = config
-            .known_nodes_with_stake
-            .iter()
-            .map(|entry| entry.stake_key)
-            .collect::<Vec<_>>();
-        let membership =
-            GeneralStaticCommittee::new(&pub_keys, config.known_nodes_with_stake.clone());
+        let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
+            config.total_nodes.get() as u64,
+        );
+        let membership = GeneralStaticCommittee::create_election(
+            config.known_nodes_with_stake.clone(),
+            election_config,
+        );
         let memberships = Memberships {
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
@@ -84,11 +83,8 @@ impl<N: network::Type> SequencerContext<N> {
             view_sync_membership: membership,
         };
 
-        let stake_table_commit = static_stake_table_commitment(
-            &config.known_nodes_with_stake,
-            state_ver_keys,
-            STAKE_TABLE_CAPACITY,
-        );
+        let stake_table_commit =
+            static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
         let handle = SystemContext::init(
@@ -196,6 +192,7 @@ impl<N: network::Type> SequencerContext<N> {
 
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
+        tracing::info!("shutting down SequencerContext");
         self.handle.shut_down().await;
         for (name, task) in self.tasks.drain(..).rev() {
             tracing::info!(name, "cancelling background task");

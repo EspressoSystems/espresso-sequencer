@@ -408,6 +408,7 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
+        block::payload::test_vid_factory,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction, VmId,
     };
@@ -420,7 +421,10 @@ mod api_tests {
         future::join_all,
         stream::{StreamExt, TryStreamExt},
     };
-    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        testing::FIRST_VID_VIEW,
+    };
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -453,6 +457,7 @@ mod api_tests {
         setup_logging();
         setup_backtrace();
 
+        let vid = test_vid_factory(5);
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -469,6 +474,17 @@ mod api_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
+        // Wait for at least one empty block to be sequenced (after consensus starts VID).
+        client
+            .socket(&format!("availability/stream/leaves/{FIRST_VID_VIEW}"))
+            .subscribe::<LeafQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -479,15 +495,23 @@ mod api_tests {
         assert_eq!(txn.commit(), hash);
 
         // Wait for a Decide event containing transaction matching the one we sent
-        let block_height = wait_for_decide_on_handle(&mut events, &txn).await;
+        let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
         let mut found_txn = false;
         let mut found_empty_block = false;
-        for block_num in 0..=block_height {
+        for block_num in FIRST_VID_VIEW..=block_height {
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()
                 .await
+                .unwrap();
+            ns_query_res
+                .proof
+                .verify(
+                    &vid,
+                    &ns_query_res.header.payload_commitment,
+                    &ns_query_res.header.ns_table,
+                )
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
