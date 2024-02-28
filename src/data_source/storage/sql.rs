@@ -475,13 +475,7 @@ impl PrunedHeightStorage for SqlStorage {
                 ["id"],
                 [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
             )
-            .await?;
-
-        self.commit().await.map_err(|err| QueryError::Error {
-            message: format!(
-                "transaction failed to commit! unable to save pruned height into table: {err}"
-            ),
-        })
+            .await
     }
 
     async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
