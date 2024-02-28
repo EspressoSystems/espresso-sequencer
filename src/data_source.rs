@@ -704,6 +704,7 @@ pub mod node_tests {
                 missing_vid_common: 1,
                 missing_vid_shares: 1,
                 missing_leaves: 0,
+                pruned_height: None,
             }
         );
 
@@ -718,6 +719,7 @@ pub mod node_tests {
                 missing_vid_common: 3,
                 missing_vid_shares: 3,
                 missing_leaves: 1,
+                pruned_height: None,
             }
         );
 
@@ -731,6 +733,7 @@ pub mod node_tests {
                 missing_vid_common: 2,
                 missing_vid_shares: 3,
                 missing_leaves: 1,
+                pruned_height: None,
             }
         );
 
@@ -767,6 +770,7 @@ pub mod node_tests {
             missing_leaves: expected_missing,
             missing_vid_common: 0,
             missing_vid_shares: expected_missing,
+            pruned_height: None,
         };
         assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
 

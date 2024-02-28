@@ -110,8 +110,11 @@ Get the node's progress in syncing with the latest state of the blockchain.
 Returns
 ```
 {
-	"missing_blocks": integer,
-	"missing_leaves": integer,
+    "missing_blocks": integer,
+    "missing_leaves": integer,
+    "missing_vid_common": integer,
+    "missing_vid_shares": integer,
+    "pruned_height": null | integer,
 }
 ```
 """

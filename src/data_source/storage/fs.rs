@@ -585,6 +585,7 @@ where
             missing_leaves: self.leaf_storage.missing(height),
             missing_vid_common: missing_vid,
             missing_vid_shares: missing_vid + null_vid_shares,
+            pruned_height: None,
         })
     }
 }

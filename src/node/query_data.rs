@@ -20,6 +20,7 @@ pub struct SyncStatus {
     pub missing_leaves: usize,
     pub missing_vid_common: usize,
     pub missing_vid_shares: usize,
+    pub pruned_height: Option<usize>,
 }
 
 impl SyncStatus {
@@ -29,6 +30,7 @@ impl SyncStatus {
             missing_leaves: 0,
             missing_vid_common: 0,
             missing_vid_shares: 0,
+            pruned_height: None,
         }
     }
 

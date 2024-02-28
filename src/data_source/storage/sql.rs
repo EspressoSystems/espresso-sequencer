@@ -1092,14 +1092,16 @@ where
         // NULL share.
         let row = self
             .query_one_static(
-                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid FROM
+                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid, pruned_height FROM
                     (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
                     (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
                     (SELECT count(*) AS total_vid FROM vid),
-                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL)
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL),
+                    coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
                 ",
             )
             .await?;
+
         let block_height = match row.get::<_, Option<i64>>("max_height") {
             Some(height) => {
                 // The height of the block is the number of blocks below it, so the total number of
@@ -1115,6 +1117,9 @@ where
         let null_payloads = row.get::<_, i64>("null_payloads") as usize;
         let total_vid = row.get::<_, i64>("total_vid") as usize;
         let null_vid = row.get::<_, i64>("null_vid") as usize;
+        let pruned_height = row
+            .get::<_, Option<i64>>("pruned_height")
+            .map(|h| h as usize);
 
         let missing_leaves = block_height.saturating_sub(total_leaves);
         let missing_blocks = missing_leaves + null_payloads;
@@ -1126,6 +1131,7 @@ where
             missing_blocks,
             missing_vid_common,
             missing_vid_shares,
+            pruned_height,
         })
     }
 }
