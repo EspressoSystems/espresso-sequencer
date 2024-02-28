@@ -302,21 +302,18 @@ where
                             Ok(Some(height)) => {
                                 storage.pruned_height = Some(height);
                                 if let Err(e) = storage.storage.save_pruned_height(height).await {
-                                    tracing::error!("failed to save pruned height: {:?}", e)
+                                    tracing::error!("failed to save pruned height: {e:?}")
                                 }
                             }
                             Ok(None) => (),
                             Err(e) => {
-                                tracing::error!("pruning failed: {:?}", e);
+                                tracing::error!("pruning failed: {e:?}");
                             }
                         }
                     }
                     sleep(cfg.interval()).await;
-
-                    tracing::info!("pruner woke up for the {}th time", i);
+                    tracing::info!("pruner woke up for the {i}th time",);
                 }
-
-                anyhow::Result::<_>::Ok(())
             })
         };
 
@@ -361,14 +358,6 @@ where
         } else {
             None
         };
-
-        fetcher
-            .storage
-            .write()
-            .await
-            .storage
-            .load_pruned_height()
-            .await?;
 
         let pruner = Pruner::new(fetcher.clone()).await;
         let ds = Self {
@@ -721,9 +710,9 @@ where
 impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
-    S: NodeDataSource<Types> + PruneStorage,
+    S: NodeDataSource<Types> + PruneStorage + Sync + Send,
 {
-    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+    async fn new(mut builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
         let mut vid_common_fetcher = fetching::Fetcher::default();
@@ -734,7 +723,7 @@ where
         }
 
         let height = builder.storage.block_height().await? as u64;
-        let pruned_height = builder.storage.pruned_height();
+        let pruned_height = builder.storage.load_pruned_height().await?;
         Ok(Self {
             storage: RwLock::new(NotifyStorage {
                 height,

@@ -477,13 +477,15 @@ impl PrunedHeightStorage for SqlStorage {
         Ok(())
     }
 
-    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
+    async fn load_pruned_height(&mut self) -> Result<Option<u64>, Self::Error> {
         let row = self
             .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
             .await?;
 
-        let height: Option<i64> = row.map(|row| row.get(0));
-        Ok(height.map(|h| h as u64))
+        let height = row.map(|row| row.get::<_, i64>(0) as u64);
+        self.pruned_height = height;
+
+        Ok(height)
     }
 }
 
@@ -525,7 +527,7 @@ impl PruneStorage for SqlStorage {
                 height = min(height + batch_size, target_height);
                 self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
                     .await?;
-                tracing::info!("Pruned data up to height {}", height);
+                tracing::info!("Pruned data up to height {height}");
             }
             self.pruned_height = Some(target_height);
         }
@@ -539,8 +541,7 @@ impl PruneStorage for SqlStorage {
             // until usage is below threshold
             if usage > threshold {
                 tracing::warn!(
-                    "Disk usage {} exceeds pruning threshold {:?}",
-                    usage,
+                    "Disk usage {usage} exceeds pruning threshold {:?}",
                     cfg.pruning_threshold()
                 );
                 let minimum_retention_height = self
@@ -560,7 +561,7 @@ impl PruneStorage for SqlStorage {
                         )
                         .await?;
                         usage = self.get_disk_usage().await?;
-                        tracing::info!("Pruned data up to height {}", height);
+                        tracing::info!("Pruned data up to height {height}");
                     }
                     self.pruned_height = Some(height);
                 }
