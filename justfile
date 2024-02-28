@@ -27,6 +27,7 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
+    cargo build --bin diff-test --release
     cargo test --release --all-features
 
 # Helpful shortcuts for local development
@@ -76,8 +77,9 @@ sol-test:
     cargo build --bin diff-test --release
     forge test
 
-# Develop contracts to local blockchain for development and testing
-dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk":
+# Deploy contracts to local blockchain for development and testing
+dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk" num_blocks_per_epoch="10" num_init_validators="5":
     forge build
-    MNEMONICS="{{mnemonics}}" forge script contracts/script/LightClientTest.s.sol \
+    MNEMONICS="{{mnemonics}}" forge script 'contracts/test/LightClientTest.s.sol' \
+    --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
     --fork-url {{url}} --broadcast

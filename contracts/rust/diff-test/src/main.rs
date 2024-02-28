@@ -7,14 +7,15 @@ use ark_poly::EvaluationDomain;
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::ParsedG2Point;
-use diff_test_hotshot::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
-};
+
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
 use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
+use hotshot_state_prover::mock_ledger::{
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
+};
 use itertools::multiunzip;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;

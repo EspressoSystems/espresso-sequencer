@@ -14,7 +14,7 @@ import { UUPSUpgradeable } from
 
 // Target contract
 import { FeeContract } from "../src/FeeContract.sol";
-import { DeployFeeContractScript } from "../script/DeployFeeContract.s.sol";
+import { DeployFeeContractScript } from "../script/Fee.s.sol";
 
 /// @title FeeContract Test
 contract FeeContractTest is Test {

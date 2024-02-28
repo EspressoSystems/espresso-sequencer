@@ -6,16 +6,17 @@ use ark_std::{
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-use diff_test_bn254::{field_to_u256, u256_to_field};
+
 use ethers::{abi, utils};
 use ethers::{
     abi::Token,
     types::{H256, U256},
 };
-use hotshot_contract_adapter::jellyfish::open_key;
+use hotshot_contract_adapter::jellyfish::{field_to_u256, open_key, u256_to_field};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_state_prover::{Proof, VerifyingKey};
+
+use crate::{generate_state_update_proof, preprocess, Proof, VerifyingKey};
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{
     light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
@@ -66,15 +67,15 @@ pub struct MockLedger {
     pub rng: StdRng,
     epoch: u64,
     state: GenericLightClientState<F>,
-    st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
+    pub(crate) st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
-    qc_keys: Vec<BLSVerKey>,
-    state_keys: Vec<(SchnorrSignKey, SchnorrVerKey)>,
+    pub(crate) qc_keys: Vec<BLSVerKey>,
+    pub(crate) state_keys: Vec<(SchnorrSignKey, SchnorrVerKey)>,
     key_archive: HashMap<BLSVerKey, SchnorrSignKey>,
 }
 
 impl MockLedger {
-    /// Initialzie the ledger with genesis state
+    /// Initialize the ledger with genesis state
     pub fn init(pp: MockSystemParam, num_validators: usize) -> Self {
         // credit: https://github.com/EspressoSystems/HotShot/blob/5554b7013b00e6034691b533299b44f3295fa10d/crates/hotshot-state-prover/src/lib.rs#L176
         let mut rng = test_rng();
@@ -253,7 +254,7 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = self
             .st
@@ -261,17 +262,16 @@ impl MockLedger {
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) =
-            hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
-                &mut self.rng,
-                &pk,
-                &stake_table_entries,
-                &bit_vec,
-                &sigs,
-                &self.state,
-                &self.threshold,
-            )
-            .expect("Fail to generate state proof");
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+            &mut self.rng,
+            &pk,
+            &stake_table_entries,
+            &bit_vec,
+            &sigs,
+            &self.state,
+            &self.threshold,
+        )
+        .expect("Fail to generate state proof");
         (pi, proof)
     }
 
@@ -312,24 +312,23 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = adv_st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) =
-            hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
-                &mut self.rng,
-                &pk,
-                &stake_table_entries,
-                &bit_vec,
-                &sigs,
-                &new_state,
-                &self.threshold, // it's fine to use the old threshold
-            )
-            .expect("Fail to generate state proof");
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+            &mut self.rng,
+            &pk,
+            &stake_table_entries,
+            &bit_vec,
+            &sigs,
+            &new_state,
+            &self.threshold, // it's fine to use the old threshold
+        )
+        .expect("Fail to generate state proof");
 
         (pi, proof)
     }

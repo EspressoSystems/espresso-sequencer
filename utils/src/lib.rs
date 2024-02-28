@@ -361,7 +361,7 @@ where
 
     let hash = pending.tx_hash();
     let provider = pending.provider();
-    tracing::debug!("submitted contract call {}", hash);
+    tracing::debug!("submitted contract call {:x}", hash);
 
     if !wait_for_transaction_to_be_mined(&provider, hash).await {
         return Err(anyhow!("transaction not mined"));
@@ -370,16 +370,16 @@ where
     let receipt = match provider.get_transaction_receipt(hash).await {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
-            return Err(anyhow!("contract call {hash}: no receipt"));
+            return Err(anyhow!("contract call {hash:x}: no receipt"));
         }
         Err(err) => {
             return Err(anyhow!(
-                "contract call {hash}: error getting transaction receipt: {err}"
+                "contract call {hash:x}: error getting transaction receipt: {err}"
             ))
         }
     };
     if receipt.status != Some(1.into()) {
-        return Err(anyhow!("contract call {hash}: transaction reverted"));
+        return Err(anyhow!("contract call {hash:x}: transaction reverted"));
     }
 
     // If a transaction is mined and we get a receipt for it, the block number should _always_ be

@@ -30,7 +30,11 @@ struct Args {
     update_interval: Duration,
 
     /// URL of layer 1 Ethereum JSON-RPC provider.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
+        default_value = "http://127.0.0.1:8545"
+    )]
     l1_provider: Url,
 
     /// Address of LightClient contract on layer 1.
