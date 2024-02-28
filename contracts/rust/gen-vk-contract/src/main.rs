@@ -34,9 +34,11 @@ fn main() {
     let mut path = PathBuf::new();
     path.push(env!("CARGO_MANIFEST_DIR"));
     path.pop();
+    path.pop();
     path.push("src/libraries");
     path.push(contract_name);
     path.set_extension("sol");
+    println!("Path:{:?}", path.to_str());
 
     // overwrite the file
     let mut file = OpenOptions::new()
