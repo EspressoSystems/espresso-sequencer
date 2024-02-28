@@ -4,7 +4,8 @@
 //! describe the behaviors that a block is expected to have.
 
 use crate::{
-    traits::ValidatedState,
+    data::Leaf,
+    traits::{node_implementation::NodeType, ValidatedState},
     utils::BuilderCommitment,
     vid::{vid_scheme, VidCommitment, VidSchemeType},
 };
@@ -114,30 +115,24 @@ pub fn vid_commitment(
 pub const GENESIS_VID_NUM_STORAGE_NODES: usize = 1;
 
 /// Header of a block, which commits to a [`BlockPayload`].
-pub trait BlockHeader:
+pub trait BlockHeader<TYPES: NodeType>:
     Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned + Committable
 {
-    /// Block payload associated with the commitment.
-    type Payload: BlockPayload;
-
-    /// Validated state.
-    type State: ValidatedState<BlockHeader = Self>;
-
-    /// Build a header with the payload commitment, metadata, instance-level state, parent header,
-    /// and parent state.
+    /// Build a header with the parent validate state, instance-level state, parent leaf, payload
+    /// commitment, and metadata.
     fn new(
-        parent_state: &Self::State,
-        instance_state: &<Self::State as ValidatedState>::Instance,
-        parent_header: &Self,
+        parent_state: &TYPES::ValidatedState,
+        instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
+        parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
-        metadata: <Self::Payload as BlockPayload>::Metadata,
+        metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     ) -> impl Future<Output = Self> + Send;
 
     /// Build the genesis header, payload, and metadata.
     fn genesis(
-        instance_state: &<Self::State as ValidatedState>::Instance,
+        instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         payload_commitment: VidCommitment,
-        metadata: <Self::Payload as BlockPayload>::Metadata,
+        metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     ) -> Self;
 
     /// Get the block number.
@@ -147,5 +142,5 @@ pub trait BlockHeader:
     fn payload_commitment(&self) -> VidCommitment;
 
     /// Get the metadata.
-    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata;
+    fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload>::Metadata;
 }

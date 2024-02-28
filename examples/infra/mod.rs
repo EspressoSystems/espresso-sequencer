@@ -304,7 +304,7 @@ pub trait RunDA<
         Storage = MemoryStorage<TYPES>,
     >,
 > where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
@@ -514,7 +514,7 @@ impl<
         >,
     > RunDA<TYPES, WebServerNetwork<TYPES>, WebServerNetwork<TYPES>, NODE> for WebServerDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -594,7 +594,7 @@ impl<
         NODE,
     > for Libp2pDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -658,7 +658,7 @@ impl<
         >,
     > RunDA<TYPES, CombinedNetworks<TYPES>, CombinedNetworks<TYPES>, NODE> for CombinedDARun<TYPES>
 where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -746,7 +746,7 @@ pub async fn main_entry_point<
 >(
     args: ValidatorArgs,
 ) where
-    <TYPES as NodeType>::ValidatedState: TestableState,
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
 {

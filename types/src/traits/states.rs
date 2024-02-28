@@ -4,8 +4,14 @@
 //! compatibilities over the current network state, which is modified by the transactions contained
 //! within blocks.
 
-use super::block_contents::{BlockHeader, TestableBlock};
-use crate::traits::{node_implementation::ConsensusTime, BlockPayload};
+use super::block_contents::TestableBlock;
+use crate::{
+    data::Leaf,
+    traits::{
+        node_implementation::{ConsensusTime, NodeType},
+        BlockPayload,
+    },
+};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt::Debug, future::Future, hash::Hash};
 
@@ -21,17 +27,13 @@ pub trait InstanceState: Clone + Debug + Send + Sync {}
 ///   * The ability to validate that a block header is actually a valid extension of this state and
 /// produce a new state, with the modifications from the block applied
 /// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
-pub trait ValidatedState:
+pub trait ValidatedState<TYPES: NodeType>:
     Serialize + DeserializeOwned + Debug + Default + Hash + PartialEq + Eq + Send + Sync
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
     /// The type of the instance-level state this state is assocaited with
     type Instance: InstanceState;
-    /// The type of block header this state is associated with
-    type BlockHeader: BlockHeader<State = Self>;
-    /// The type of block payload this state is associated with
-    type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
@@ -48,14 +50,14 @@ pub trait ValidatedState:
     fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
-        parent_header: &Self::BlockHeader,
-        proposed_header: &Self::BlockHeader,
+        parent_leaf: &Leaf<TYPES>,
+        proposed_header: &TYPES::BlockHeader,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
     /// Construct the state with the given block header.
     ///
     /// This can also be used to rebuild the state for catchup.
-    fn from_header(block_header: &Self::BlockHeader) -> Self;
+    fn from_header(block_header: &TYPES::BlockHeader) -> Self;
 
     /// Construct a genesis validated state.
     #[must_use]
@@ -66,9 +68,10 @@ pub trait ValidatedState:
 }
 
 /// extra functions required on state to be usable by hotshot-testing
-pub trait TestableState: ValidatedState
+pub trait TestableState<TYPES>: ValidatedState<TYPES>
 where
-    <Self as ValidatedState>::BlockPayload: TestableBlock,
+    TYPES: NodeType,
+    TYPES::BlockPayload: TestableBlock,
 {
     /// Creates random transaction if possible
     /// otherwise panics
@@ -77,5 +80,5 @@ where
         state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockPayload as BlockPayload>::Transaction;
+    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
 }

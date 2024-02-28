@@ -566,9 +566,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_payload: None,
                         proposer_id: sender,
                     };
-                    let state = Arc::new(<TYPES::ValidatedState as ValidatedState>::from_header(
-                        &proposal.data.block_header,
-                    ));
+                    let state = Arc::new(
+                        <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(
+                            &proposal.data.block_header,
+                        ),
+                    );
 
                     consensus.validated_state_map.insert(
                         view,
@@ -619,7 +621,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let Ok(state) = parent_state
                     .validate_and_apply_header(
                         &consensus.instance_state,
-                        &parent_leaf.block_header.clone(),
+                        &parent_leaf,
                         &proposal.data.block_header.clone(),
                     )
                     .await
@@ -1275,7 +1277,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
 
         let parent_leaf = leaf.clone();
-        let parent_header = parent_leaf.block_header.clone();
 
         let original_parent_hash = parent_leaf.commit();
 
@@ -1298,7 +1299,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             let block_header = TYPES::BlockHeader::new(
                 state,
                 &consensus.instance_state,
-                &parent_header,
+                &parent_leaf,
                 commit_and_metadata.commitment,
                 commit_and_metadata.metadata.clone(),
             )
