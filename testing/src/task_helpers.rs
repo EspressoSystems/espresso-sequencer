@@ -242,7 +242,8 @@ async fn build_quorum_proposal_and_signature(
         &parent_leaf.block_header,
         payload_commitment,
         (),
-    );
+    )
+    .await;
     // current leaf that can be re-assigned everytime when entering a new view
     let mut leaf = Leaf {
         view_number: ViewNumber::new(1),
@@ -269,6 +270,7 @@ async fn build_quorum_proposal_and_signature(
         let state_new_view = Arc::new(
             parent_state
                 .validate_and_apply_header(&TestInstanceState {}, &block_header, &block_header)
+                .await
                 .unwrap(),
         );
         // save states for the previous view to pass all the qc checks

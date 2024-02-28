@@ -184,7 +184,7 @@ impl BlockHeader for TestBlockHeader {
     type Payload = TestBlockPayload;
     type State = TestValidatedState;
 
-    fn new(
+    async fn new(
         _parent_state: &Self::State,
         _instance_state: &<Self::State as ValidatedState>::Instance,
         parent_header: &Self,
