@@ -36,7 +36,7 @@ cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.18" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
