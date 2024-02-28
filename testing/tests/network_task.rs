@@ -1,11 +1,12 @@
 use hotshot::types::SignatureKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::task_helpers::{build_quorum_proposal, vid_init};
+use hotshot_testing::task_helpers::{build_quorum_proposal, vid_scheme_from_view_number};
 use hotshot_types::{
-    data::{DAProposal, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
 };
+use jf_primitives::vid::VidScheme;
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, marker::PhantomData};
 
@@ -39,7 +40,7 @@ async fn test_network_task() {
             &encoded_transactions_hash,
         )
         .expect("Failed to sign block payload");
-    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
+    let vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let vid_signature =

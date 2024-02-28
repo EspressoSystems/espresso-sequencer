@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 use hotshot_constants::Version;
 
 use crate::{
-    data::{Leaf, VidCommitment},
+    data::Leaf,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
+    vid::VidCommitment,
     vote::{HasViewNumber, Vote},
 };
 

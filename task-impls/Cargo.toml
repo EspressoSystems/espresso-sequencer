@@ -16,6 +16,7 @@ tracing = { workspace = true }
 hotshot-constants = { path = "../constants", default-features = false }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }
+jf-primitives = { workspace = true }
 time = { workspace = true }
 commit = { workspace = true }
 bincode = { workspace = true }

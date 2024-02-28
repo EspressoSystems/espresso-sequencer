@@ -15,7 +15,7 @@ use hotshot_types::{
     simple_vote::QuorumData,
     traits::{consensus_api::ConsensusApi, election::Membership},
 };
-
+use jf_primitives::vid::VidScheme;
 use std::collections::HashMap;
 
 async fn build_vote(
@@ -196,8 +196,7 @@ async fn test_consensus_with_vid() {
     use hotshot_task_impls::{consensus::ConsensusTaskState, harness::run_harness};
     use hotshot_testing::task_helpers::build_cert;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_testing::task_helpers::vid_init;
-    use hotshot_types::data::VidSchemeTrait;
+    use hotshot_testing::task_helpers::vid_scheme_from_view_number;
     use hotshot_types::simple_certificate::DACertificate;
     use hotshot_types::simple_vote::DAData;
     use hotshot_types::simple_vote::DAVote;
@@ -218,7 +217,7 @@ async fn test_consensus_with_vid() {
     // For the test of vote logic with vid
     let pub_key = *handle.public_key();
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(2));
+    let vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();

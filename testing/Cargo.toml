@@ -18,14 +18,13 @@ bincode = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
-hotshot = { path = "../hotshot", features = [
-  "hotshot-testing",
-] }
+hotshot = { path = "../hotshot", features = ["hotshot-testing"] }
 hotshot-constants = { path = "../constants" }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+jf-primitives = { workspace = true }
 rand = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
@@ -41,4 +40,3 @@ hotshot-example-types = { path = "../example-types" }
 tokio = { workspace = true }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
-

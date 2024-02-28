@@ -17,18 +17,15 @@ use crate::{
         storage::StoredView,
         BlockPayload,
     },
+    vid::{VidCommitment, VidCommon, VidSchemeType, VidShare},
     vote::{Certificate, HasViewNumber},
 };
-use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
 use hotshot_utils::bincode::bincode_opts;
-use jf_primitives::{
-    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::VidDisperse as JfVidDisperse,
-};
+use jf_primitives::vid::VidDisperse as JfVidDisperse;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -137,15 +134,11 @@ where
     pub view_number: TYPES::Time,
 }
 
-/// The VID scheme type used in `HotShot`.
-pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
-pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
-/// VID commitment.
-pub type VidCommitment = <VidScheme as VidSchemeTrait>::Commit;
-
 /// VID dispersal data
 ///
 /// Like [`DAProposal`].
+///
+/// TODO move to vid.rs?
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
@@ -153,9 +146,9 @@ pub struct VidDisperse<TYPES: NodeType> {
     /// Block payload commitment
     pub payload_commitment: VidCommitment,
     /// A storage node's key and its corresponding VID share
-    pub shares: BTreeMap<TYPES::SignatureKey, <VidScheme as VidSchemeTrait>::Share>,
+    pub shares: BTreeMap<TYPES::SignatureKey, VidShare>,
     /// VID common data sent to all storage nodes
-    pub common: <VidScheme as VidSchemeTrait>::Common,
+    pub common: VidCommon,
 }
 
 impl<TYPES: NodeType> VidDisperse<TYPES> {
@@ -164,7 +157,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     /// Allows for more complex stake table functionality
     pub fn from_membership(
         view_number: TYPES::Time,
-        mut vid_disperse: JfVidDisperse<VidScheme>,
+        mut vid_disperse: JfVidDisperse<VidSchemeType>,
         membership: &Arc<TYPES::Membership>,
     ) -> Self {
         let shares = membership
@@ -180,25 +173,6 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
             payload_commitment: vid_disperse.commit,
         }
     }
-}
-
-/// Trusted KZG setup for VID.
-///
-/// TESTING ONLY: don't use this in production
-/// TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-///
-/// # Panics
-/// ...because this is only for tests. This comment exists to pacify clippy.
-#[must_use]
-pub fn test_srs(
-    num_storage_nodes: usize,
-) -> <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::SRS {
-    let mut rng = jf_utils::test_rng();
-    UnivariateKzgPCS::<ark_bls12_381::Bls12_381>::gen_srs_for_testing(
-        &mut rng,
-        checked_fft_size(num_storage_nodes).unwrap(),
-    )
-    .unwrap()
 }
 
 /// Proposal to append a block.

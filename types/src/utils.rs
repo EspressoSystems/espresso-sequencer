@@ -1,9 +1,6 @@
 //! Utility functions, type aliases, helper structs and enum definitions.
 
-use crate::{
-    data::{Leaf, VidCommitment},
-    traits::node_implementation::NodeType,
-};
+use crate::{data::Leaf, traits::node_implementation::NodeType, vid::VidCommitment};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Commitment;
 use digest::OutputSizeUser;

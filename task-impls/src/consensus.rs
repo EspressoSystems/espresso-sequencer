@@ -17,7 +17,7 @@ use async_broadcast::Sender;
 
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal, VidCommitment, VidDisperse},
+    data::{Leaf, QuorumProposal, VidDisperse},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
@@ -33,6 +33,7 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
+    vid::VidCommitment,
     vote::{Certificate, HasViewNumber},
 };
 use tracing::warn;

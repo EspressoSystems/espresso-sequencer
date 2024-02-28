@@ -20,6 +20,7 @@ pub mod simple_vote;
 pub mod stake_table;
 pub mod traits;
 pub mod utils;
+pub mod vid;
 pub mod vote;
 
 /// Pinned future that is Send and Sync

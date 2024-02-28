@@ -1,12 +1,13 @@
 use hotshot::types::SignatureKey;
 use hotshot_example_types::{block_types::TestTransaction, node_types::TestTypes};
 use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
-use hotshot_testing::task_helpers::{build_system_handle, vid_init};
+use hotshot_testing::task_helpers::{build_system_handle, vid_scheme_from_view_number};
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
-    data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, VidDisperse, ViewNumber},
     traits::consensus_api::ConsensusApi,
 };
+use jf_primitives::vid::VidScheme;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -29,7 +30,7 @@ async fn test_vid_task() {
     // quorum membership for VID share distribution
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 
-    let vid = vid_init::<TestTypes>(&quorum_membership, ViewNumber::new(0));
+    let vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(0));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();

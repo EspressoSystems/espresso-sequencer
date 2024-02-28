@@ -17,7 +17,7 @@ use hotshot::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
+    data::{Leaf, QuorumProposal, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     simple_vote::SimpleVote,
@@ -29,6 +29,7 @@ use hotshot_types::{
         states::ValidatedState,
         BlockPayload,
     },
+    vid::{vid_scheme, VidSchemeType},
     vote::HasViewNumber,
 };
 
@@ -356,21 +357,12 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
 
 /// initialize VID
 /// # Panics
-/// if unable to create a [`VidScheme`]
+/// if unable to create a [`VidSchemeType`]
 #[must_use]
-pub fn vid_init<TYPES: NodeType>(
+pub fn vid_scheme_from_view_number<TYPES: NodeType>(
     membership: &TYPES::Membership,
     view_number: TYPES::Time,
-) -> VidScheme {
-    let num_committee = membership.get_committee(view_number).len();
-
-    // calculate the last power of two
-    // TODO change after https://github.com/EspressoSystems/jellyfish/issues/339
-    // issue: https://github.com/EspressoSystems/HotShot/issues/2152
-    let chunk_size = 1 << num_committee.ilog2();
-
-    // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-    let srs = hotshot_types::data::test_srs(num_committee);
-    let multiplicity = 1;
-    VidScheme::new(chunk_size, num_committee, multiplicity, srs).unwrap()
+) -> VidSchemeType {
+    let num_storage_nodes = membership.get_committee(view_number).len();
+    vid_scheme(num_storage_nodes)
 }

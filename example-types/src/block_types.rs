@@ -5,12 +5,13 @@ use std::{
 
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
-    data::{BlockError, VidCommitment},
+    data::BlockError,
     traits::{
         block_contents::{BlockHeader, TestableBlock, Transaction},
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
+    vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};

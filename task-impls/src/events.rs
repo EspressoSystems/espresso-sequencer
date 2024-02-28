@@ -2,7 +2,7 @@ use crate::view_sync::ViewSyncPhase;
 
 use either::Either;
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidCommitment, VidDisperse},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse},
     message::Proposal,
     simple_certificate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -13,6 +13,7 @@ use hotshot_types::{
         ViewSyncPreCommitVote,
     },
     traits::{node_implementation::NodeType, BlockPayload},
+    vid::VidCommitment,
 };
 
 /// Marker that the task completed

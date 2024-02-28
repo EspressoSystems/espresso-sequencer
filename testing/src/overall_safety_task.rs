@@ -2,11 +2,12 @@ use hotshot::{traits::TestableNodeImplementation, HotShotError};
 
 use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{
-    data::{Leaf, VidCommitment, VidDisperse},
+    data::{Leaf, VidDisperse},
     error::RoundTimedoutState,
     event::{Event, EventType, LeafChain},
     simple_certificate::QuorumCertificate,
     traits::node_implementation::{ConsensusTime, NodeType},
+    vid::VidCommitment,
 };
 use snafu::Snafu;
 use std::{
