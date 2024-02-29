@@ -116,8 +116,8 @@ mod test_helpers {
         pub async fn with_state(
             opt: Options,
             persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+            cfg: TestConfig,
         ) -> Self {
-            let cfg = TestConfig::default();
             let mut nodes =
                 join_all(persistence.into_iter().enumerate().map(|(i, persistence)| {
                     let opt = opt.clone();
@@ -148,8 +148,8 @@ mod test_helpers {
             Self { server, peers }
         }
 
-        pub async fn new(opt: Options) -> Self {
-            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES]).await
+        pub async fn new(opt: Options, config: &TestConfig) -> Self {
+            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES], config.clone()).await
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -176,7 +176,8 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        let _network = TestNetwork::new(options).await;
+        let config = TestConfig::default();
+        let _network = TestNetwork::new(options, &config).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -222,7 +223,8 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let network = TestNetwork::new(options).await;
+        let config = TestConfig::default();
+        let network = TestNetwork::new(options, &config).await;
         let mut events = network.server.get_event_stream();
 
         client.connect(None).await;
@@ -251,7 +253,8 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
-        let network = TestNetwork::new(options).await;
+        let config = TestConfig::default();
+        let network = TestNetwork::new(options, &config).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -292,7 +295,9 @@ mod test_helpers {
         let client: Client<ServerError> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).state(Default::default()));
-        let mut network = TestNetwork::new(options).await;
+
+        let config = TestConfig::default();
+        let mut network = TestNetwork::new(options, &config).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -460,8 +465,10 @@ mod api_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
+        let config = TestConfig::default();
         let network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
+            &config,
         )
         .await;
         let mut events = network.server.get_event_stream();
@@ -543,9 +550,11 @@ mod api_tests {
             .try_into()
             .unwrap();
         let port = pick_unused_port().unwrap();
+        let config = TestConfig::default();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
             persistence,
+            config,
         )
         .await;
 
@@ -596,9 +605,11 @@ mod api_tests {
             .await
             .try_into()
             .unwrap();
+        let config = TestConfig::default();
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
             persistence,
+            config,
         )
         .await;
         let client: Client<ServerError> =
@@ -640,8 +651,10 @@ mod api_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
+        let config = TestConfig::default();
         let _network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).status(Default::default()),
+            &config,
         )
         .await;
 
@@ -812,6 +825,8 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
+    use crate::testing::TestConfig;
+
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use portpicker::pick_unused_port;
@@ -831,7 +846,9 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
         let options = Options::from(options::Http { port });
-        let _network = TestNetwork::new(options).await;
+
+        let config = TestConfig::default();
+        let _network = TestNetwork::new(options, &config).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
