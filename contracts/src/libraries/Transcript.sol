@@ -68,7 +68,7 @@ library Transcript {
         self.state[0] = h1;
         self.state[1] = h2;
 
-        return BN254.fromLeBytesModOrder(BytesLib.slice(abi.encodePacked(h1, h2), 0, 48));
+        return BN254.fromLeBytesModOrder48(BytesLib.slice(abi.encodePacked(h1, h2), 0, 48));
     }
 
     /// @dev Append the verifying key and the public inputs to the transcript.
