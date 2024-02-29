@@ -56,11 +56,12 @@ pub struct Options {
 
     /// This will enable the pruner and set the default pruning parameters unless provided.
     /// Default parameters:
-    /// - pruning_threshold: 100GB
+    /// - pruning_threshold: 3 TB
     /// - minimum_retention: 1 day
-    /// - target_retention: 30 days
+    /// - target_retention: 7 days
     /// - batch_size: 1000
     /// - max_usage: 80%
+    /// - interval: 1 hour
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
     pub prune: bool,
 
