@@ -1,13 +1,19 @@
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, ValidatedState, ViewNumber};
+use std::time::Duration;
+
 use anyhow::bail;
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_query_service::data_source::{
-    storage::sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage},
+    storage::{
+        pruning::PrunerCfg,
+        sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage},
+    },
     VersionedDataSource,
 };
 use hotshot_types::traits::node_implementation::ConsensusTime;
+
+use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
+use crate::{options::parse_duration, Leaf, ValidatedState, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
@@ -47,6 +53,20 @@ pub struct Options {
     /// Use TLS for an encrypted connection to the database.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USE_TLS")]
     pub use_tls: bool,
+
+    /// This will enable the pruner and set the default pruning parameters unless provided.
+    /// Default parameters:
+    /// - pruning_threshold: 100GB
+    /// - minimum_retention: 1 day
+    /// - target_retention: 30 days
+    /// - batch_size: 1000
+    /// - max_usage: 80%
+    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
+    pub prune: bool,
+
+    /// Pruning parameters.
+    #[clap(flatten)]
+    pub pruning: PruningOptions,
 }
 
 impl TryFrom<Options> for Config {
@@ -77,7 +97,86 @@ impl TryFrom<Options> for Config {
         if opt.use_tls {
             cfg = cfg.tls();
         }
+
+        if opt.prune {
+            cfg = cfg.pruner_cfg(PrunerCfg::from(opt.pruning))?;
+        }
+
         Ok(cfg)
+    }
+}
+
+/// Pruning parameters.
+#[derive(Parser, Clone, Debug, Default)]
+pub struct PruningOptions {
+    /// Threshold for pruning, specified in bytes.
+    /// If the disk usage surpasses this threshold, pruning is initiated for data older than the specified minimum retention period.
+    /// Pruning continues until the disk usage drops below the MAX USAGE.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD")]
+    pruning_threshold: Option<u64>,
+
+    /// Minimum retention period.
+    /// Data is retained for at least this duration, even if there's no free disk space.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PRUNER_MINIMUM_RETENTION",
+        value_parser = parse_duration,
+    )]
+    minimum_retention: Option<Duration>,
+
+    /// Target retention period.
+    /// Data older than this is pruned to free up space.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PRUNER_TARGET_RETENTION",
+        value_parser = parse_duration,
+    )]
+    target_retention: Option<Duration>,
+
+    /// Batch size for pruning.
+    /// This is the number of blocks data to delete in a single transaction.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_BATCH_SIZE")]
+    batch_size: Option<u64>,
+
+    /// Maximum disk usage (in basis points).
+    ///
+    /// Pruning stops once the disk usage falls below this value, even if
+    /// some data older than the `MINIMUM_RETENTION` remains. Values range
+    /// from 0 (0%) to 10000 (100%).
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_MAX_USAGE")]
+    max_usage: Option<u16>,
+
+    /// Interval for running the pruner.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PRUNER_INTERVAL",
+        value_parser = parse_duration,
+    )]
+    interval: Option<Duration>,
+}
+
+impl From<PruningOptions> for PrunerCfg {
+    fn from(opt: PruningOptions) -> Self {
+        let mut cfg = PrunerCfg::new();
+        if let Some(threshold) = opt.pruning_threshold {
+            cfg = cfg.with_pruning_threshold(threshold);
+        }
+        if let Some(min) = opt.minimum_retention {
+            cfg = cfg.with_minimum_retention(min);
+        }
+        if let Some(target) = opt.target_retention {
+            cfg = cfg.with_target_retention(target);
+        }
+        if let Some(batch) = opt.batch_size {
+            cfg = cfg.with_batch_size(batch);
+        }
+        if let Some(max) = opt.max_usage {
+            cfg = cfg.with_max_usage(max);
+        }
+        if let Some(interval) = opt.interval {
+            cfg = cfg.with_interval(interval);
+        }
+        cfg
     }
 }
 
@@ -195,9 +294,9 @@ fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
 
 #[cfg(test)]
 mod testing {
-    use super::super::testing::TestablePersistence;
-    use super::*;
     use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
+
+    use super::{super::testing::TestablePersistence, *};
 
     #[async_trait]
     impl TestablePersistence for Persistence {
@@ -224,9 +323,7 @@ mod testing {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::persistence_tests;
-    use super::Persistence;
-
+    use super::{super::persistence_tests, Persistence};
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
