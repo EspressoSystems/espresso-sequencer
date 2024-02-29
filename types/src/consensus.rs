@@ -295,12 +295,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// `saved_payloads` and `validated_state_map` fields of `Consensus`.
     /// # Panics
     /// On inconsistent stored entries
-    #[allow(clippy::unused_async)] // async for API compatibility reasons
-    pub async fn collect_garbage(
-        &mut self,
-        old_anchor_view: TYPES::Time,
-        new_anchor_view: TYPES::Time,
-    ) {
+    pub fn collect_garbage(&mut self, old_anchor_view: TYPES::Time, new_anchor_view: TYPES::Time) {
         // state check
         let anchor_entry = self
             .validated_state_map

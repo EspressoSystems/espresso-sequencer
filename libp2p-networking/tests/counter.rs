@@ -5,11 +5,10 @@ use crate::common::print_connections;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use bincode::Options;
-use common::{test_bed, HandleSnafu, TestError};
+use common::{test_bed, HandleSnafu, HandleWithState, TestError};
 use hotshot_utils::bincode::bincode_opts;
-use libp2p_networking::network::{
-    get_random_handle, NetworkEvent, NetworkNodeHandle, NetworkNodeHandleError,
-};
+use libp2p_networking::network::{NetworkEvent, NetworkNodeHandleError};
+use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{fmt::Debug, sync::Arc, time::Duration};
@@ -51,13 +50,24 @@ pub enum CounterMessage {
     Noop,
 }
 
+/// Given a slice of handles assumed to be larger than 0,
+/// chooses one
+/// # Panics
+/// panics if handles is of length 0
+fn get_random_handle<S: Debug + Default + Send + Clone>(
+    handles: &[HandleWithState<S>],
+    rng: &mut dyn rand::RngCore,
+) -> HandleWithState<S> {
+    handles.iter().choose(rng).unwrap().clone()
+}
+
 /// event handler for events from the swarm
 /// - updates state based on events received
 /// - replies to direct messages
 #[instrument]
 pub async fn counter_handle_network_event(
     event: NetworkEvent,
-    handle: Arc<NetworkNodeHandle<CounterState>>,
+    handle: HandleWithState<CounterState>,
 ) -> Result<(), NetworkNodeHandleError> {
     use CounterMessage::*;
     use NetworkEvent::*;
@@ -68,12 +78,13 @@ pub async fn counter_handle_network_event(
                 match msg {
                     // direct message only
                     MyCounterIs(c) => {
-                        handle.modify_state(|s| *s = c).await;
+                        handle.state.modify(|s| *s = c).await;
                     }
                     // gossip message only
                     IncrementCounter { from, to, .. } => {
                         handle
-                            .modify_state(|s| {
+                            .state
+                            .modify(|s| {
                                 if *s == from {
                                     *s = to;
                                 }
@@ -93,24 +104,34 @@ pub async fn counter_handle_network_event(
                     // direct message request
                     IncrementCounter { from, to, .. } => {
                         handle
-                            .modify_state(|s| {
+                            .state
+                            .modify(|s| {
                                 if *s == from {
                                     *s = to;
                                 }
                             })
                             .await;
-                        handle.direct_response(chan, &CounterMessage::Noop).await?;
+                        handle
+                            .handle
+                            .direct_response(chan, &CounterMessage::Noop)
+                            .await?;
                     }
                     // direct message response
                     AskForCounter => {
-                        let response = MyCounterIs(handle.state().await);
-                        handle.direct_response(chan, &response).await?;
+                        let response = MyCounterIs(handle.state.copied().await);
+                        handle.handle.direct_response(chan, &response).await?;
                     }
                     MyCounterIs(_) => {
-                        handle.direct_response(chan, &CounterMessage::Noop).await?;
+                        handle
+                            .handle
+                            .direct_response(chan, &CounterMessage::Noop)
+                            .await?;
                     }
                     Noop => {
-                        handle.direct_response(chan, &CounterMessage::Noop).await?;
+                        handle
+                            .handle
+                            .direct_response(chan, &CounterMessage::Noop)
+                            .await?;
                     }
                 }
             }
@@ -125,33 +146,31 @@ pub async fn counter_handle_network_event(
 /// on error
 #[allow(clippy::similar_names)]
 async fn run_request_response_increment<'a>(
-    requester_handle: Arc<NetworkNodeHandle<CounterState>>,
-    requestee_handle: Arc<NetworkNodeHandle<CounterState>>,
+    requester_handle: HandleWithState<CounterState>,
+    requestee_handle: HandleWithState<CounterState>,
     timeout: Duration,
 ) -> Result<(), TestError<CounterState>> {
     async move {
-        let new_state = requestee_handle.state().await;
+        let new_state = requestee_handle.state.copied().await;
 
         // set up state change listener
         #[cfg(async_executor_impl = "async-std")]
-        let mut stream = requester_handle
-            .state_wait_timeout_until_with_trigger(timeout, move |state| *state == new_state);
+        let mut stream = requester_handle.state.wait_timeout_until_with_trigger(timeout, move |state| *state == new_state);
         #[cfg(async_executor_impl = "tokio")]
         let mut stream = Box::pin(
-            requester_handle
-                .state_wait_timeout_until_with_trigger(timeout, move |state| *state == new_state),
+            requester_handle.state.wait_timeout_until_with_trigger(timeout, move |state| *state == new_state),
         );
         #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
         compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 
-        let requestee_pid = requestee_handle.peer_id();
+        let requestee_pid = requestee_handle.handle.peer_id();
 
         match stream.next().await.unwrap() {
             Ok(()) => {}
             Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
             std::process::exit(-1)},
         }
-        requester_handle
+        requester_handle.handle
             .direct_request(requestee_pid, &CounterMessage::AskForCounter)
             .await
             .context(HandleSnafu)?;
@@ -160,14 +179,14 @@ async fn run_request_response_increment<'a>(
             Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
             std::process::exit(-1)},        }
 
-        let s1 = requester_handle.state().await;
+        let s1 = requester_handle.state.copied().await;
 
         // sanity check
         if s1 == new_state {
             Ok(())
         } else {
             Err(TestError::State {
-                id: requester_handle.id(),
+                id: requester_handle.handle.id(),
                 expected: new_state,
                 actual: s1,
             })
@@ -179,24 +198,24 @@ async fn run_request_response_increment<'a>(
 /// broadcasts `msg` from a randomly chosen handle
 /// then asserts that all nodes match `new_state`
 async fn run_gossip_round(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[HandleWithState<CounterState>],
     msg: CounterMessage,
     new_state: CounterState,
     timeout_duration: Duration,
 ) -> Result<(), TestError<CounterState>> {
     let mut rng = rand::thread_rng();
     let msg_handle = get_random_handle(handles, &mut rng);
-    msg_handle.modify_state(|s| *s = new_state).await;
+    msg_handle.state.modify(|s| *s = new_state).await;
 
     let mut futs = Vec::new();
 
     let len = handles.len();
     for handle in handles {
         // already modified, so skip msg_handle
-        if handle.peer_id() != msg_handle.peer_id() {
-            let stream = handle.state_wait_timeout_until_with_trigger(timeout_duration, |state| {
-                *state == new_state
-            });
+        if handle.handle.peer_id() != msg_handle.handle.peer_id() {
+            let stream = handle
+                .state
+                .wait_timeout_until_with_trigger(timeout_duration, |state| *state == new_state);
             futs.push(Box::pin(stream));
         }
     }
@@ -221,6 +240,7 @@ async fn run_gossip_round(
     }
 
     msg_handle
+        .handle
         .gossip("global".to_string(), &msg)
         .await
         .context(HandleSnafu)?;
@@ -233,14 +253,19 @@ async fn run_gossip_round(
 
     let mut failing = Vec::new();
     for handle in handles {
-        let handle_state = handle.state().await;
+        let handle_state = handle.state.copied().await;
         if handle_state != new_state {
-            failing.push(handle.id());
+            failing.push(handle.handle.id());
             println!("state: {handle_state:?}, expected: {new_state:?}");
         }
     }
     if !failing.is_empty() {
-        print_connections(handles).await;
+        let nodes = handles
+            .iter()
+            .cloned()
+            .map(|h| h.handle)
+            .collect::<Vec<_>>();
+        print_connections(nodes.as_slice()).await;
         return Err(TestError::GossipTimeout { failing });
     }
 
@@ -248,7 +273,7 @@ async fn run_gossip_round(
 }
 
 async fn run_intersperse_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<HandleWithState<CounterState>>,
     timeout: Duration,
 ) {
     for i in 0..u32::try_from(NUM_ROUNDS).unwrap() {
@@ -259,63 +284,54 @@ async fn run_intersperse_many_rounds(
         }
     }
     for h in handles {
-        assert_eq!(h.state().await, u32::try_from(NUM_ROUNDS).unwrap());
+        assert_eq!(h.state.copied().await, u32::try_from(NUM_ROUNDS).unwrap());
     }
 }
 
-async fn run_dht_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
-    timeout: Duration,
-) {
+async fn run_dht_many_rounds(handles: Vec<HandleWithState<CounterState>>, timeout: Duration) {
     run_dht_rounds(&handles, timeout, 0, NUM_ROUNDS).await;
 }
 
-async fn run_dht_one_round(handles: Vec<Arc<NetworkNodeHandle<CounterState>>>, timeout: Duration) {
+async fn run_dht_one_round(handles: Vec<HandleWithState<CounterState>>, timeout: Duration) {
     run_dht_rounds(&handles, timeout, 0, 1).await;
 }
 
 async fn run_request_response_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<HandleWithState<CounterState>>,
     timeout: Duration,
 ) {
     for _i in 0..NUM_ROUNDS {
         run_request_response_increment_all(&handles, timeout).await;
     }
     for h in handles {
-        assert_eq!(h.state().await, u32::try_from(NUM_ROUNDS).unwrap());
+        assert_eq!(h.state.copied().await, u32::try_from(NUM_ROUNDS).unwrap());
     }
 }
 
 /// runs one round of request response
 /// # Panics
 /// on error
-pub async fn run_request_response_one_round(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+async fn run_request_response_one_round(
+    handles: Vec<HandleWithState<CounterState>>,
     timeout: Duration,
 ) {
     run_request_response_increment_all(&handles, timeout).await;
     for h in handles {
-        assert_eq!(h.state().await, 1);
+        assert_eq!(h.state.copied().await, 1);
     }
 }
 
 /// runs multiple rounds of gossip
 /// # Panics
 /// on error
-pub async fn run_gossip_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
-    timeout: Duration,
-) {
+async fn run_gossip_many_rounds(handles: Vec<HandleWithState<CounterState>>, timeout: Duration) {
     run_gossip_rounds(&handles, NUM_ROUNDS, 0, timeout).await;
 }
 
 /// runs one round of gossip
 /// # Panics
 /// on error
-async fn run_gossip_one_round(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
-    timeout: Duration,
-) {
+async fn run_gossip_one_round(handles: Vec<HandleWithState<CounterState>>, timeout: Duration) {
     run_gossip_rounds(&handles, 1, 0, timeout).await;
 }
 
@@ -323,7 +339,7 @@ async fn run_gossip_one_round(
 /// # Panics
 /// on error
 async fn run_dht_rounds(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[HandleWithState<CounterState>],
     timeout: Duration,
     starting_val: usize,
     num_rounds: usize,
@@ -339,12 +355,12 @@ async fn run_dht_rounds(
         value.push(inc_val);
 
         // put the key
-        msg_handle.put_record(&key, &value).await.unwrap();
+        msg_handle.handle.put_record(&key, &value).await.unwrap();
 
         // get the key from the other nodes
         for handle in handles {
             let result: Result<Vec<u8>, NetworkNodeHandleError> =
-                handle.get_record_timeout(&key, timeout).await;
+                handle.handle.get_record_timeout(&key, timeout).await;
             match result {
                 Err(e) => {
                     error!("DHT error {e:?} during GET");
@@ -360,7 +376,7 @@ async fn run_dht_rounds(
 
 /// runs `num_rounds` of message broadcast, incrementing the state of all nodes each broadcast
 async fn run_gossip_rounds(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[HandleWithState<CounterState>],
     num_rounds: usize,
     starting_state: CounterState,
     timeout: Duration,
@@ -386,22 +402,27 @@ async fn run_gossip_rounds(
 /// and update their state to the recv'ed state
 #[allow(clippy::similar_names)]
 async fn run_request_response_increment_all(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[HandleWithState<CounterState>],
     timeout: Duration,
 ) {
     let mut rng = rand::thread_rng();
     let requestee_handle = get_random_handle(handles, &mut rng);
-    requestee_handle.modify_state(|s| *s += 1).await;
-    info!("RR REQUESTEE IS {:?}", requestee_handle.peer_id());
+    requestee_handle.state.modify(|s| *s += 1).await;
+    info!("RR REQUESTEE IS {:?}", requestee_handle.handle.peer_id());
     let mut futs = Vec::new();
     for handle in handles {
-        if handle.lookup_pid(requestee_handle.peer_id()).await.is_err() {
+        if handle
+            .handle
+            .lookup_pid(requestee_handle.handle.peer_id())
+            .await
+            .is_err()
+        {
             error!("ERROR LOOKING UP REQUESTEE ADDRS");
         }
         // NOTE uncomment if debugging
         // let _ = h.print_routing_table().await;
         // skip `requestee_handle`
-        if handle.peer_id() != requestee_handle.peer_id() {
+        if handle.handle.peer_id() != requestee_handle.handle.peer_id() {
             let requester_handle = handle.clone();
             futs.push(run_request_response_increment(
                 requester_handle,
@@ -435,10 +456,15 @@ async fn run_request_response_increment_all(
     }
 
     if results.read().await.iter().any(Result::is_err) {
-        print_connections(handles).await;
+        let nodes = handles
+            .iter()
+            .cloned()
+            .map(|h| h.handle)
+            .collect::<Vec<_>>();
+        print_connections(nodes.as_slice()).await;
         let mut states = vec![];
         for handle in handles {
-            states.push(handle.state().await);
+            states.push(handle.state.copied().await);
         }
         error!("states: {states:?}");
         std::process::exit(-1);

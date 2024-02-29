@@ -11,9 +11,9 @@ pub use self::{
     def::NetworkDef,
     error::NetworkError,
     node::{
-        network_node_handle_error, MeshParams, NetworkNode, NetworkNodeConfig,
+        network_node_handle_error, spawn_network_node, MeshParams, NetworkNode, NetworkNodeConfig,
         NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
-        NetworkNodeHandleError,
+        NetworkNodeHandleError, NetworkNodeReceiver,
     },
 };
 
@@ -32,9 +32,8 @@ use libp2p::{
     Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
-use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, str::FromStr, sync::Arc};
+use std::{collections::HashSet, fmt::Debug, str::FromStr};
 use tracing::instrument;
 
 #[cfg(async_executor_impl = "async-std")]
@@ -227,15 +226,4 @@ pub async fn gen_transport(identity: Keypair) -> Result<BoxedTransport, NetworkE
     Ok(dns_quic
         .map(|(peer_id, connection), _| (peer_id, StreamMuxerBox::new(connection)))
         .boxed())
-}
-
-/// Given a slice of handles assumed to be larger than 0,
-/// chooses one
-/// # Panics
-/// panics if handles is of length 0
-pub fn get_random_handle<S>(
-    handles: &[Arc<NetworkNodeHandle<S>>],
-    rng: &mut dyn rand::RngCore,
-) -> Arc<NetworkNodeHandle<S>> {
-    handles.iter().choose(rng).unwrap().clone()
 }

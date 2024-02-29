@@ -821,9 +821,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         &self.output_event_stream,
                     );
                     let old_anchor_view = consensus.last_decided_view;
-                    consensus
-                        .collect_garbage(old_anchor_view, new_anchor_view)
-                        .await;
+                    consensus.collect_garbage(old_anchor_view, new_anchor_view);
                     self.vid_shares = self.vid_shares.split_off(&new_anchor_view);
                     consensus.last_decided_view = new_anchor_view;
                     consensus

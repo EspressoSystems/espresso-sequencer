@@ -3,16 +3,10 @@ use crate::network::{
     NetworkNodeConfig, NetworkNodeConfigBuilderError,
 };
 use async_compatibility_layer::{
-    art::{async_sleep, async_spawn, async_timeout, future::to, stream},
-    async_primitives::subscribable_mutex::SubscribableMutex,
-    channel::{
-        oneshot, OneShotReceiver, OneShotSender, SendError, UnboundedReceiver, UnboundedRecvError,
-        UnboundedSender,
-    },
+    art::{async_sleep, async_timeout, future::to},
+    channel::{Receiver, SendError, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
-use async_lock::Mutex;
 use bincode::Options;
-use futures::{stream::FuturesOrdered, Future, FutureExt};
 use hotshot_utils::bincode::bincode_opts;
 use libp2p::{request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
@@ -21,10 +15,6 @@ use snafu::{ResultExt, Snafu};
 use std::{
     collections::HashSet,
     fmt::Debug,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
     time::{Duration, Instant},
 };
 use tracing::{debug, info, instrument};
@@ -32,13 +22,10 @@ use tracing::{debug, info, instrument};
 /// A handle containing:
 /// - A reference to the state
 /// - Controls for the swarm
-#[derive(Debug)]
-pub struct NetworkNodeHandle<S> {
+#[derive(Debug, Clone)]
+pub struct NetworkNodeHandle {
     /// network configuration
     network_config: NetworkNodeConfig,
-
-    /// the state of the replica
-    state: Arc<SubscribableMutex<S>>,
 
     /// send an action to the networkbehaviour
     send_network: UnboundedSender<ClientRequest>,
@@ -51,168 +38,87 @@ pub struct NetworkNodeHandle<S> {
 
     /// human readable id
     id: usize,
-
-    /// network node receiver
-    receiver: NetworkNodeReceiver,
 }
 
 /// internal network node receiver
 #[derive(Debug)]
 pub struct NetworkNodeReceiver {
-    /// whether or not the receiver is started
-    receiver_spawned: AtomicBool,
-
-    /// whether or not the handle has been killed
-    killed: AtomicBool,
-
     /// the receiver
-    receiver: Mutex<UnboundedReceiver<NetworkEvent>>,
+    receiver: UnboundedReceiver<NetworkEvent>,
 
     ///kill switch
-    recv_kill: Mutex<Option<OneShotReceiver<()>>>,
-
-    /// kill the event handler for events from the swarm
-    kill_switch: Mutex<Option<OneShotSender<()>>>,
+    recv_kill: Option<Receiver<()>>,
 }
 
 impl NetworkNodeReceiver {
     /// recv a network event
+    /// # Errors
+    /// Errors if the receiver channel is closed
     pub async fn recv(&self) -> Result<NetworkEvent, NetworkNodeHandleError> {
-        if self.killed.load(Ordering::Relaxed) {
-            return Err(NetworkNodeHandleError::Killed);
-        }
-        let lock = self.receiver.lock().await;
-        lock.recv().await.context(ReceiverEndedSnafu)
+        self.receiver.recv().await.context(ReceiverEndedSnafu)
+    }
+    /// Add a kill switch to the receiver
+    pub fn set_kill_switch(&mut self, kill_switch: Receiver<()>) {
+        self.recv_kill = Some(kill_switch);
+    }
+
+    /// Take the kill switch to allow killing the receiver task
+    pub fn take_kill_switch(&mut self) -> Option<Receiver<()>> {
+        self.recv_kill.take()
     }
 }
 
-impl<S: Default + Debug> NetworkNodeHandle<S> {
-    /// constructs a new node listening on `known_addr`
-    #[instrument]
-    pub async fn new(config: NetworkNodeConfig, id: usize) -> Result<Self, NetworkNodeHandleError> {
-        // randomly assigned port
-        let listen_addr = config
-            .bound_addr
-            .clone()
-            .unwrap_or_else(|| gen_multiaddr(0));
-        let mut network = NetworkNode::new(config.clone())
-            .await
-            .context(NetworkSnafu)?;
+/// Spawn a network node task task and return the handle and the receiver for it
+/// # Errors
+/// Errors if spawning the task fails
+pub async fn spawn_network_node(
+    config: NetworkNodeConfig,
+    id: usize,
+) -> Result<(NetworkNodeReceiver, NetworkNodeHandle), NetworkNodeHandleError> {
+    let mut network = NetworkNode::new(config.clone())
+        .await
+        .context(NetworkSnafu)?;
+    // randomly assigned port
+    let listen_addr = config
+        .bound_addr
+        .clone()
+        .unwrap_or_else(|| gen_multiaddr(0));
+    let peer_id = network.peer_id();
+    let listen_addr = network
+        .start_listen(listen_addr)
+        .await
+        .context(NetworkSnafu)?;
+    // pin here to force the future onto the heap since it can be large
+    // in the case of flume
+    let (send_chan, recv_chan) = Box::pin(network.spawn_listeners())
+        .await
+        .context(NetworkSnafu)?;
+    let receiver = NetworkNodeReceiver {
+        receiver: recv_chan,
+        recv_kill: None,
+    };
 
-        let peer_id = network.peer_id();
-        let listen_addr = network
-            .start_listen(listen_addr)
-            .await
-            .context(NetworkSnafu)?;
-        info!("LISTEN ADDRESS IS {:?}", listen_addr);
-        // pin here to force the future onto the heap since it can be large
-        // in the case of flume
-        let (send_chan, recv_chan) = Box::pin(network.spawn_listeners())
-            .await
-            .context(NetworkSnafu)?;
-        let (kill_switch, recv_kill) = oneshot();
+    info!("LISTEN ADDRESS IS {:?}", listen_addr);
 
-        let kill_switch = Mutex::new(Some(kill_switch));
-        let recv_kill = Mutex::new(Some(recv_kill));
-        Ok(NetworkNodeHandle {
-            network_config: config,
-            state: std::sync::Arc::default(),
-            send_network: send_chan,
-            listen_addr,
-            peer_id,
-            id,
-            receiver: NetworkNodeReceiver {
-                kill_switch,
-                killed: AtomicBool::new(false),
-                receiver: Mutex::new(recv_chan),
-                recv_kill,
-                receiver_spawned: AtomicBool::new(false),
-            },
-        })
-    }
+    let handle = NetworkNodeHandle {
+        network_config: config,
+        send_network: send_chan,
+        listen_addr,
+        peer_id,
+        id,
+    };
+    Ok((receiver, handle))
+}
 
-    /// Spawn a handler `F` that will be notified every time a new [`NetworkEvent`] arrives.
-    ///
-    /// # Panics
-    ///
-    /// Will panic if a handler is already spawned
-    #[allow(clippy::unused_async)]
-    pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future
-    where
-        F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,
-        RET: Future<Output = Result<(), NetworkNodeHandleError>> + Send + 'static,
-        S: Send + 'static,
-    {
-        assert!(
-            !self.receiver.receiver_spawned.swap(true, Ordering::Relaxed),
-            "Handler is already spawned, this is a bug"
-        );
-
-        let handle = Arc::clone(self);
-        async_spawn(async move {
-            let receiver = handle.receiver.receiver.lock().await;
-            let Some(kill_switch) = handle.receiver.recv_kill.lock().await.take() else {
-                tracing::error!(
-                    "`spawn_handle` was called on a network handle that was already closed"
-                );
-                return;
-            };
-            let mut next_msg = receiver.recv().boxed();
-            let mut kill_switch = kill_switch.recv().boxed();
-            loop {
-                match futures::future::select(next_msg, kill_switch).await {
-                    futures::future::Either::Left((incoming_message, other_stream)) => {
-                        let incoming_message = match incoming_message {
-                            Ok(msg) => msg,
-                            Err(e) => {
-                                tracing::warn!(?e, "NetworkNodeHandle::spawn_handle was unable to receive more messages");
-                                return;
-                            }
-                        };
-                        if let Err(e) = cb(incoming_message, handle.clone()).await {
-                            tracing::error!(
-                                ?e,
-                                "NetworkNodeHandle::spawn_handle returned an error"
-                            );
-                            return;
-                        }
-
-                        // re-set the `kill_switch` for the next loop
-                        kill_switch = other_stream;
-                        // re-set `receiver.recv()` for the next loop
-                        next_msg = receiver.recv().boxed();
-                    }
-                    futures::future::Either::Right(_) => {
-                        // killed
-                        handle.receiver.killed.store(true, Ordering::Relaxed);
-                        return;
-                    }
-                }
-            }
-        })
-    }
-
-    /// Receives a reference of the internal `NetworkNodeReceiver`, which can be used to query for incoming messages.
-    pub fn receiver(&self) -> &NetworkNodeReceiver {
-        &self.receiver
-    }
-
+impl NetworkNodeHandle {
     /// Cleanly shuts down a swarm node
     /// This is done by sending a message to
-    /// the swarm event handler to stop handling events
-    /// and a message to the swarm itself to spin down
+    /// the swarm itself to spin down
     #[instrument]
     pub async fn shutdown(&self) -> Result<(), NetworkNodeHandleError> {
         self.send_request(ClientRequest::Shutdown).await?;
-        // if this fails, the thread has already been killed.
-        if let Some(kill_switch) = self.receiver.kill_switch.lock().await.take() {
-            kill_switch.send(());
-        } else {
-            tracing::warn!("The network node handle is shutting down, but the kill switch was already consumed");
-        }
         Ok(())
     }
-
     /// Notify the network to begin the bootstrap process
     /// # Errors
     /// If unable to send via `send_network`. This should only happen
@@ -223,12 +129,11 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     }
 
     /// Get a reference to the network node handle's listen addr.
+    #[must_use]
     pub fn listen_addr(&self) -> Multiaddr {
         self.listen_addr.clone()
     }
-}
 
-impl<S> NetworkNodeHandle<S> {
     /// Print out the routing table used by kademlia
     /// NOTE: only for debugging purposes currently
     /// # Errors
@@ -249,10 +154,7 @@ impl<S> NetworkNodeHandle<S> {
         num_peers: usize,
         node_id: usize,
         timeout: Duration,
-    ) -> Result<(), NetworkNodeHandleError>
-    where
-        S: Default + Debug,
-    {
+    ) -> Result<(), NetworkNodeHandleError> {
         let start = Instant::now();
         self.begin_bootstrap().await?;
         let mut connected_ok = false;
@@ -554,78 +456,21 @@ impl<S> NetworkNodeHandle<S> {
     }
 
     /// Get a reference to the network node handle's id.
+    #[must_use]
     pub fn id(&self) -> usize {
         self.id
     }
 
     /// Get a reference to the network node handle's peer id.
+    #[must_use]
     pub fn peer_id(&self) -> PeerId {
         self.peer_id
     }
 
     /// Return a reference to the network config
+    #[must_use]
     pub fn config(&self) -> &NetworkNodeConfig {
         &self.network_config
-    }
-
-    /// Modify the state. This will automatically call `state_changed` and `notify_webui`
-    pub async fn modify_state<F>(&self, cb: F)
-    where
-        F: FnMut(&mut S),
-    {
-        self.state.modify(cb).await;
-    }
-
-    /// Returns `true` if the network state is killed
-    pub fn is_killed(&self) -> bool {
-        self.receiver.killed.load(Ordering::Relaxed)
-    }
-
-    /// Call `wait_timeout_until` on the state's [`SubscribableMutex`]
-    /// # Errors
-    /// Will throw a [`NetworkNodeHandleError::TimeoutError`] error upon timeout
-    pub async fn state_wait_timeout_until<F>(
-        &self,
-        timeout: Duration,
-        f: F,
-    ) -> Result<(), NetworkNodeHandleError>
-    where
-        F: FnMut(&S) -> bool,
-    {
-        self.state
-            .wait_timeout_until(timeout, f)
-            .await
-            .context(TimeoutSnafu)
-    }
-
-    /// Call `wait_timeout_until_with_trigger` on the state's [`SubscribableMutex`]
-    pub fn state_wait_timeout_until_with_trigger<'a, F>(
-        &'a self,
-        timeout: Duration,
-        f: F,
-    ) -> stream::to::Timeout<FuturesOrdered<impl Future<Output = ()> + 'a>>
-    where
-        F: FnMut(&S) -> bool + 'a,
-    {
-        self.state.wait_timeout_until_with_trigger(timeout, f)
-    }
-
-    /// Call `wait_until` on the state's [`SubscribableMutex`]
-    /// # Errors
-    /// Will throw a [`NetworkNodeHandleError::TimeoutError`] error upon timeout
-    pub async fn state_wait_until<F>(&self, f: F) -> Result<(), NetworkNodeHandleError>
-    where
-        F: FnMut(&S) -> bool,
-    {
-        self.state.wait_until(f).await;
-        Ok(())
-    }
-}
-
-impl<S: Clone> NetworkNodeHandle<S> {
-    /// Get a clone of the internal state
-    pub async fn state(&self) -> S {
-        self.state.cloned().await
     }
 }
 
