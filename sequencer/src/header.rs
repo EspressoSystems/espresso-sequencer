@@ -373,7 +373,7 @@ mod test_headers {
     use super::*;
     use crate::{
         state::{validate_proposal, BlockMerkleTree, FeeMerkleTree},
-        NodeState,
+        NodeState, Payload,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::RecoveryMessage;
