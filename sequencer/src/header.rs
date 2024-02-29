@@ -2,7 +2,7 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable},
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     state::{fetch_fee_receipts, BlockMerkleCommitment, FeeInfo, FeeMerkleCommitment},
-    L1BlockInfo, Payload, ValidatedState,
+    L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
@@ -12,9 +12,11 @@ use ethers::{
     signers::{Signer as _, Wallet},
     types,
 };
+use hotshot_query_service::availability::QueryableHeader;
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload},
+        node_implementation::NodeType,
         ValidatedState as HotShotState,
     },
     vid::VidCommitment,
@@ -130,43 +132,44 @@ impl Header {
     pub fn from_info(
         payload_commitment: VidCommitment,
         ns_table: NameSpaceTable<TxTableEntryWord>,
-        parent: &Self,
+        parent_leaf: &Leaf,
         mut l1: L1Snapshot,
         mut timestamp: u64,
         parent_state: &ValidatedState,
         builder_address: Wallet<SigningKey>,
     ) -> Self {
         // Increment height.
-        let height = parent.height + 1;
+        let parent_header = parent_leaf.get_block_header();
+        let height = parent_header.height + 1;
 
         // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
         // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
         // are lying about the current time, or our clock is just lagging.
-        if timestamp < parent.timestamp {
+        if timestamp < parent_header.timestamp {
             tracing::warn!(
                 "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
-                parent.timestamp
+                parent_header.timestamp
             );
-            timestamp = parent.timestamp;
+            timestamp = parent_header.timestamp;
         }
 
         // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
         // accurate.
-        if l1.head < parent.l1_head {
+        if l1.head < parent_header.l1_head {
             tracing::warn!(
                 "L1 head {} behind parent {}, L1 client may be lagging",
                 l1.head,
-                parent.l1_head
+                parent_header.l1_head
             );
-            l1.head = parent.l1_head;
+            l1.head = parent_header.l1_head;
         }
-        if l1.finalized < parent.l1_finalized {
+        if l1.finalized < parent_header.l1_finalized {
             tracing::warn!(
                 "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
                 l1.finalized,
-                parent.l1_finalized
+                parent_header.l1_finalized
             );
-            l1.finalized = parent.l1_finalized;
+            l1.finalized = parent_header.l1_finalized;
         }
 
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
@@ -183,11 +186,11 @@ impl Header {
             mut block_merkle_tree,
             mut fee_merkle_tree,
         } = parent_state.clone();
-        block_merkle_tree.push(parent.commit()).unwrap();
+        block_merkle_tree.push(parent_header.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
 
         // fetch receipts from the l1
-        let receipts = fetch_fee_receipts(parent.l1_finalized, l1.finalized);
+        let receipts = fetch_fee_receipts(parent_header.l1_finalized, l1.finalized);
         for receipt in receipts {
             let account = receipt.account();
             let amount = receipt.amount();
@@ -216,7 +219,7 @@ impl Header {
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            fee_info: parent.fee_info,
+            fee_info: parent_header.fee_info,
             builder_signature: None,
         };
 
@@ -233,16 +236,13 @@ impl Header {
     }
 }
 
-impl BlockHeader for Header {
-    type Payload = Payload<TxTableEntryWord>;
-    type State = ValidatedState;
-
-    fn new(
-        parent_state: &Self::State,
-        instance_state: &<Self::State as HotShotState>::Instance,
-        parent_header: &Self,
+impl BlockHeader<SeqTypes> for Header {
+    async fn new(
+        parent_state: &ValidatedState,
+        instance_state: &NodeState,
+        parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
-        metadata: <Self::Payload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         // The HotShot APIs should be redesigned so that
         // * they are async
@@ -252,7 +252,7 @@ impl BlockHeader for Header {
         // and use `block_on` to query it.
 
         let l1 = if let Some(l1_client) = &*L1_CLIENT {
-            block_on(l1_client.snapshot())
+            l1_client.snapshot().await
         } else {
             // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
             L1Snapshot {
@@ -264,7 +264,7 @@ impl BlockHeader for Header {
         Self::from_info(
             payload_commitment,
             metadata,
-            parent_header,
+            parent_leaf,
             l1,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             parent_state,
@@ -273,9 +273,9 @@ impl BlockHeader for Header {
     }
 
     fn genesis(
-        instance_state: &<Self::State as HotShotState>::Instance,
+        instance_state: &NodeState,
         payload_commitment: VidCommitment,
-        ns_table: <Self::Payload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
@@ -308,8 +308,14 @@ impl BlockHeader for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<Self::Payload as BlockPayload>::Metadata {
+    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
         &self.ns_table
+    }
+}
+
+impl QueryableHeader<SeqTypes> for Header {
+    fn timestamp(&self) -> u64 {
+        self.timestamp
     }
 }
 
@@ -402,23 +408,22 @@ mod test_headers {
             assert!(self.expected_l1_head >= self.parent_l1_head);
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
-            let (genesis_payload, genesis_ns_table) = Payload::genesis();
-            let genesis_commitment = {
-                // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload")
-                    .collect();
-                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
-            };
             let genesis_state = NodeState::default();
-            let genesis_header =
-                Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table.clone());
+            let genesis_leaf = Leaf::genesis(&genesis_state);
+            let genesis_header = genesis_leaf.get_block_header();
+            let genesis_ns_table = genesis_leaf
+                .get_block_payload()
+                .unwrap()
+                .get_ns_table()
+                .clone();
 
             let mut parent = genesis_header.clone();
             parent.timestamp = self.parent_timestamp;
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
+
+            let mut parent_leaf = genesis_leaf.clone();
+            parent_leaf.block_header = parent.clone();
 
             let block_merkle_tree =
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
@@ -437,7 +442,7 @@ mod test_headers {
             let header = Header::from_info(
                 genesis_header.payload_commitment,
                 genesis_ns_table,
-                &parent,
+                &parent_leaf,
                 L1Snapshot {
                     head: self.l1_head,
                     finalized: self.l1_finalized,
@@ -622,21 +627,18 @@ mod test_headers {
         assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
 
-    #[test]
-    fn test_validate_proposal_success() {
+    #[async_std::test]
+    async fn test_validate_proposal_success() {
         // TODO refactor repeated code from other tests
-        let (genesis_payload, genesis_ns_table) = Payload::genesis();
-        let genesis_commitment = {
-            // TODO we should not need to collect payload bytes just to compute vid_commitment
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload")
-                .collect();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
-        };
         let genesis_state = NodeState::default();
-        let mut genesis_header =
-            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table.clone());
+        let genesis_leaf = Leaf::genesis(&genesis_state);
+        let genesis_header = genesis_leaf.get_block_header().clone();
+        let genesis_ns_table = genesis_leaf
+            .get_block_payload()
+            .unwrap()
+            .get_ns_table()
+            .clone();
+
         let mut parent_state = ValidatedState::genesis(&genesis_state);
         let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
         let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
@@ -647,24 +649,33 @@ mod test_headers {
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
         parent_state.block_merkle_tree = block_merkle_tree.clone();
         parent_state.fee_merkle_tree = fee_merkle_tree.clone();
-        genesis_header.block_merkle_tree_root = block_merkle_tree_root;
-        genesis_header.fee_merkle_tree_root = fee_merkle_tree_root;
 
-        let parent = genesis_header.clone();
+        let mut parent_header = genesis_header.clone();
+        parent_header.block_merkle_tree_root = block_merkle_tree_root;
+        parent_header.fee_merkle_tree_root = fee_merkle_tree_root;
+
+        let mut parent_leaf = genesis_leaf.clone();
+        parent_leaf.block_header = parent_header.clone();
 
         // get a proposal from a parent
         let proposal = Header::new(
             &parent_state,
             &genesis_state,
-            &parent,
-            parent.payload_commitment,
+            &parent_leaf,
+            parent_header.payload_commitment,
             genesis_ns_table,
-        );
+        )
+        .await;
 
         let mut proposal_state = parent_state.clone();
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
-        validate_proposal(&mut proposal_state, &parent.clone(), &proposal.clone()).unwrap();
+        validate_proposal(
+            &mut proposal_state,
+            &parent_header.clone(),
+            &proposal.clone(),
+        )
+        .unwrap();
         assert_eq!(
             proposal_state.block_merkle_tree.commitment(),
             proposal.block_merkle_tree_root
