@@ -567,7 +567,10 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let handles = TestConfig::default().init_nodes().await;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
+
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -591,8 +594,10 @@ mod test {
         setup_backtrace();
 
         let success_height = 30;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
 
-        let handles = TestConfig::default().init_nodes().await;
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
