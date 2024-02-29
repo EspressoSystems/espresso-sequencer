@@ -624,7 +624,7 @@ impl<Types> AvailabilityStorage<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader,
+    Header<Types>: QueryableHeader<Types>,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
@@ -811,7 +811,7 @@ impl<Types> UpdateAvailabilityData<Types> for SqlStorage
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader,
+    Header<Types>: QueryableHeader<Types>,
 {
     type Error = QueryError;
 

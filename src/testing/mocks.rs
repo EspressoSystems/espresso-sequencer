@@ -38,7 +38,7 @@ pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
     TestTransaction(payload)
 }
 
-impl QueryableHeader for MockHeader {
+impl<Types: NodeType<BlockPayload = TestBlockPayload>> QueryableHeader<Types> for MockHeader {
     fn timestamp(&self) -> u64 {
         Utc::now().timestamp() as u64
     }
