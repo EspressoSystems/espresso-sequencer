@@ -198,8 +198,7 @@ mod test {
 
         assert_eq!(expected_finalized.unwrap().hash.unwrap(), finalized.hash);
 
-        // If we drop `anvil` the same request will fail and we will
-        // get an error as below.
+        // If we drop `anvil` the same request will fail.
         drop(anvil);
         provider.client_version().await.unwrap_err();
 
