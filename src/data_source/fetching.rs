@@ -222,7 +222,7 @@ impl<Types, S, P> Builder<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader,
+    Header<Types>: QueryableHeader<Types>,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -333,7 +333,7 @@ impl<Types, S, P> FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader,
+    Header<Types>: QueryableHeader<Types>,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {

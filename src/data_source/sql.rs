@@ -41,7 +41,7 @@ impl Config {
     ) -> Result<SqlDataSource<Types, P>, Error>
     where
         Types: NodeType,
-        Header<Types>: QueryableHeader,
+        Header<Types>: QueryableHeader<Types>,
         Payload<Types>: QueryablePayload,
     {
         self.builder(provider).await?.build().await
@@ -55,7 +55,7 @@ impl Config {
     ) -> Result<Builder<Types, P>, Error>
     where
         Types: NodeType,
-        Header<Types>: QueryableHeader,
+        Header<Types>: QueryableHeader<Types>,
         Payload<Types>: QueryablePayload,
     {
         SqlDataSource::connect(self, provider).await
@@ -308,7 +308,7 @@ pub type SqlDataSource<Types, P> = FetchingDataSource<Types, SqlStorage, P>;
 impl<Types, P: AvailabilityProvider<Types>> SqlDataSource<Types, P>
 where
     Types: NodeType,
-    Header<Types>: QueryableHeader,
+    Header<Types>: QueryableHeader<Types>,
     Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
