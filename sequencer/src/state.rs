@@ -1,4 +1,4 @@
-use crate::{Header, L1BlockInfo, NodeState, Payload};
+use crate::{Header, L1BlockInfo, Leaf, NodeState, SeqTypes};
 use anyhow::{ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -178,26 +178,25 @@ fn validate_builder(
     Ok(())
 }
 
-impl HotShotState for ValidatedState {
+impl HotShotState<SeqTypes> for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
-    type BlockHeader = Header;
-    type BlockPayload = Payload;
 
     type Time = ViewNumber;
 
     fn on_commit(&self) {}
     /// Validate parent against known values (from state) and validate
     /// proposal descends from parent. Returns updated `ValidatedState`.
-    fn validate_and_apply_header(
+    async fn validate_and_apply_header(
         &self,
         _instance: &Self::Instance,
-        parent_header: &Self::BlockHeader,
-        proposed_header: &Self::BlockHeader,
+        parent_leaf: &Leaf,
+        proposed_header: &Header,
     ) -> Result<Self, Self::Error> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
+        let parent_header = parent_leaf.get_block_header();
         // validate proposed header against parent
         match validate_proposal(&mut validated_state, parent_header, proposed_header) {
             // Note that currently only block state is updated.
@@ -226,7 +225,7 @@ impl HotShotState for ValidatedState {
     /// Construct the state with the given block header.
     ///
     /// This can also be used to rebuild the state for catchup.
-    fn from_header(block_header: &Self::BlockHeader) -> Self {
+    fn from_header(block_header: &Header) -> Self {
         let fee_merkle_tree = FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
         let block_merkle_tree = BlockMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
         Self {
@@ -250,7 +249,7 @@ impl std::fmt::Display for ValidatedState {
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::states::TestableState for ValidatedState {
+impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
     fn create_random_transaction(
         _state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
