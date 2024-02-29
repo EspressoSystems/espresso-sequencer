@@ -16,7 +16,6 @@ pub use self::{
 };
 
 use super::{
-    behaviours::gossip::GossipBehaviour,
     error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
     gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal,
     NetworkNodeType,
@@ -26,7 +25,6 @@ use crate::network::behaviours::{
     dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
     direct_message::{DMBehaviour, DMEvent},
     exponential_backoff::ExponentialBackoff,
-    gossip::GossipEvent,
 };
 use async_compatibility_layer::{
     art::async_spawn,
@@ -37,7 +35,7 @@ use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use libp2p::{core::transport::ListenerId, StreamProtocol};
 use libp2p::{
     gossipsub::{
-        Behaviour as Gossipsub, ConfigBuilder as GossipsubConfigBuilder,
+        Behaviour as Gossipsub, ConfigBuilder as GossipsubConfigBuilder, Event as GossipEvent,
         Message as GossipsubMessage, MessageAuthenticity, MessageId, Topic, ValidationMode,
     },
     identify::{
@@ -282,7 +280,7 @@ impl NetworkNode {
                 );
 
             let network = NetworkDef::new(
-                GossipBehaviour::new(gossipsub),
+                gossipsub,
                 DHTBehaviour::new(
                     kadem,
                     peer_id,
@@ -397,7 +395,7 @@ impl NetworkNode {
                         return Ok(true);
                     }
                     ClientRequest::GossipMsg(topic, contents) => {
-                        behaviour.publish_gossip(Topic::new(topic), contents);
+                        behaviour.publish_gossip(Topic::new(topic.clone()), contents.clone());
                     }
                     ClientRequest::Subscribe(t, chan) => {
                         behaviour.subscribe_gossip(&t);
@@ -555,9 +553,23 @@ impl NetworkNode {
                         }
                         None
                     }
-                    NetworkEventInternal::GossipEvent(e) => match e {
-                        GossipEvent::GossipMsg(data, topic) => {
-                            Some(NetworkEvent::GossipMsg(data, topic))
+                    NetworkEventInternal::GossipEvent(e) => match *e {
+                        GossipEvent::Message {
+                            propagation_source: _peer_id,
+                            message_id: _id,
+                            message,
+                        } => Some(NetworkEvent::GossipMsg(message.data)),
+                        GossipEvent::Subscribed { peer_id, topic } => {
+                            info!("Peer: {:?}, Subscribed to topic: {:?}", peer_id, topic);
+                            None
+                        }
+                        GossipEvent::Unsubscribed { peer_id, topic } => {
+                            info!("Peer: {:?}, Unsubscribed from topic: {:?}", peer_id, topic);
+                            None
+                        }
+                        GossipEvent::GossipsubNotSupported { peer_id } => {
+                            info!("Peer: {:?}, Does not support Gossip", peer_id);
+                            None
                         }
                     },
                     NetworkEventInternal::DMEvent(e) => Some(match e {

@@ -17,14 +17,14 @@ pub use self::{
     },
 };
 
-use self::behaviours::{dht::DHTEvent, direct_message::DMEvent, gossip::GossipEvent};
+use self::behaviours::{dht::DHTEvent, direct_message::DMEvent};
 use bincode::Options;
 use futures::channel::oneshot::Sender;
 use hotshot_utils::bincode::bincode_opts;
 use libp2p::{
     build_multiaddr,
     core::{muxing::StreamMuxerBox, transport::Boxed},
-    gossipsub::TopicHash,
+    gossipsub::Event as GossipEvent,
     identify::Event as IdentifyEvent,
     identity::Keypair,
     quic,
@@ -163,7 +163,7 @@ pub enum ClientRequest {
 #[derive(Debug)]
 pub enum NetworkEvent {
     /// Recv-ed a broadcast
-    GossipMsg(Vec<u8>, TopicHash),
+    GossipMsg(Vec<u8>),
     /// Recv-ed a direct message from a node
     DirectRequest(Vec<u8>, PeerId, ResponseChannel<Vec<u8>>),
     /// Recv-ed a direct response from a node (that hopefully was initiated by this node)
@@ -182,7 +182,7 @@ pub enum NetworkEventInternal {
     /// to store it on the heap.
     IdentifyEvent(Box<IdentifyEvent>),
     /// a gossip  event
-    GossipEvent(GossipEvent),
+    GossipEvent(Box<GossipEvent>),
     /// a direct message event
     DMEvent(DMEvent),
 }

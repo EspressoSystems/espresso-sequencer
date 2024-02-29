@@ -1,20 +1,19 @@
 use futures::channel::oneshot::Sender;
 use libp2p::{
-    gossipsub::IdentTopic as Topic,
+    gossipsub::{Behaviour as GossipBehaviour, Event as GossipEvent, IdentTopic},
     identify::{Behaviour as IdentifyBehaviour, Event as IdentifyEvent},
     request_response::ResponseChannel,
     Multiaddr,
 };
 use libp2p_identity::PeerId;
 use std::num::NonZeroUsize;
-use tracing::debug;
+use tracing::{debug, error};
 
 use super::{
     behaviours::{
         dht::{DHTBehaviour, DHTEvent, KadPutQuery},
         direct_message::{DMBehaviour, DMEvent, DMRequest},
         exponential_backoff::ExponentialBackoff,
-        gossip::{GossipBehaviour, GossipEvent},
     },
     NetworkEventInternal,
 };
@@ -85,18 +84,23 @@ impl NetworkDef {
 /// Gossip functions
 impl NetworkDef {
     /// Publish a given gossip
-    pub fn publish_gossip(&mut self, topic: Topic, contents: Vec<u8>) {
-        self.gossipsub.publish_gossip(topic, contents);
+    pub fn publish_gossip(&mut self, topic: IdentTopic, contents: Vec<u8>) {
+        if let Err(e) = self.gossipsub.publish(topic, contents) {
+            tracing::warn!("Failed to publish gossip message. Error: {:?}", e);
+        }
     }
-
     /// Subscribe to a given topic
     pub fn subscribe_gossip(&mut self, t: &str) {
-        self.gossipsub.subscribe_gossip(t);
+        if let Err(e) = self.gossipsub.subscribe(&IdentTopic::new(t)) {
+            error!("Failed to subsribe to topic {:?}. Error: {:?}", t, e);
+        }
     }
 
     /// Unsubscribe from a given topic
     pub fn unsubscribe_gossip(&mut self, t: &str) {
-        self.gossipsub.unsubscribe_gossip(t);
+        if let Err(e) = self.gossipsub.unsubscribe(&IdentTopic::new(t)) {
+            error!("Failed to unsubsribe from topic {:?}. Error: {:?}", t, e);
+        }
     }
 }
 
@@ -157,7 +161,7 @@ impl From<DMEvent> for NetworkEventInternal {
 
 impl From<GossipEvent> for NetworkEventInternal {
     fn from(event: GossipEvent) -> Self {
-        Self::GossipEvent(event)
+        Self::GossipEvent(Box::new(event))
     }
 }
 

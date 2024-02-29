@@ -1,6 +1,3 @@
-/// Wrapper around gossipsub
-pub mod gossip;
-
 /// Wrapper around `RequestResponse`
 pub mod direct_message;
 

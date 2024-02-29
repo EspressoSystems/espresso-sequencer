@@ -522,7 +522,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         sender: &UnboundedSender<M>,
     ) -> Result<(), NetworkError> {
         match msg {
-            GossipMsg(msg, _) => {
+            GossipMsg(msg) => {
                 let result: Result<M, _> = bincode_opts().deserialize(&msg);
                 if let Ok(result) = result {
                     sender
@@ -595,9 +595,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                             NetworkEvent::IsBootstrapped => {
                                 is_bootstrapped.store(true, Ordering::Relaxed);
                             }
-                            GossipMsg(raw, _)
-                            | DirectRequest(raw, _, _)
-                            | DirectResponse(raw, _) => {
+                            GossipMsg(raw) | DirectRequest(raw, _, _) | DirectResponse(raw, _) => {
                                 let message_version = read_version(raw);
                                 match message_version {
                                     Some(VERSION_0_1) => {
