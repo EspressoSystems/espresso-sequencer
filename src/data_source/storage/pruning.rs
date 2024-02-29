@@ -139,17 +139,17 @@ impl PrunerCfg {
 impl Default for PrunerCfg {
     fn default() -> Self {
         Self {
-            // 100 GB
-            pruning_threshold: Some(100 * 1024 * 1024 * 1024),
-            // 24 hours
-            minimum_retention: Duration::from_secs(24 * 60 * 60),
-            // 30 days
-            target_retention: Duration::from_secs(30 * 24 * 60 * 60),
+            // 3 TB
+            pruning_threshold: Some(3 * 10_u64.pow(12)),
+            // 1 day
+            minimum_retention: Duration::from_secs(24 * 3600),
+            // 7 days
+            target_retention: Duration::from_secs(7 * 24 * 3600),
             batch_size: 1000,
             // 80%
             max_usage: 8000,
-            // 15 minutes
-            interval: Duration::from_secs(15 * 60),
+            // 1 hour
+            interval: Duration::from_secs(3600),
         }
     }
 }
