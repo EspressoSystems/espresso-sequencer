@@ -5,7 +5,7 @@ use crate::{
     L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
-use async_std::task::block_on;
+
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -250,7 +250,7 @@ impl BlockHeader<SeqTypes> for Header {
         //   contain an already connected L1 client.
         // For now, as a workaround, we will create a new L1 client based on environment variables
         // and use `block_on` to query it.
-        let l1 = block_on(instance_state.l1_client().snapshot());
+        let l1 = instance_state.l1_client().snapshot().await;
 
         Self::from_info(
             payload_commitment,
@@ -304,6 +304,12 @@ impl BlockHeader<SeqTypes> for Header {
     }
 }
 
+impl QueryableHeader<SeqTypes> for Header {
+    fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+}
+
 #[cfg(test)]
 mod test_headers {
     use super::*;
@@ -313,7 +319,7 @@ mod test_headers {
         NodeState, Payload,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::types::RecoveryMessage;
+    use ethers::{types::RecoveryMessage, utils::Anvil};
     use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
 
     #[derive(Debug, Default)]
@@ -566,13 +572,13 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_success() {
-        // TODO refactor repeated code from other tests
         let anvil = Anvil::new().block_time(1u32).spawn();
         let genesis_state = NodeState {
             l1_client: L1Client::new(anvil.endpoint().parse().unwrap()),
             ..Default::default()
         };
 
+        // TODO refactor repeated code from other tests
         let genesis_leaf = Leaf::genesis(&genesis_state);
         let genesis_header = genesis_leaf.get_block_header().clone();
         let genesis_ns_table = genesis_leaf
