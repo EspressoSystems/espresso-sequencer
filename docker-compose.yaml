@@ -8,7 +8,7 @@ services:
   demo-l1-network:
     # TODO: update image: https://github.com/EspressoSystems/espresso-geth/issues/12
     image: ghcr.io/espressosystems/geth-l1:main
-    command: --dev
+    command: --dev --dev.period=1
     ports:
       - $ESPRESSO_SEQUENCER_L1_PORT:8545
       - $ESPRESSO_SEQUENCER_L1_WS_PORT:8546
