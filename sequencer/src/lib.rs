@@ -6,6 +6,7 @@ mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+
 use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 use ethers::{
@@ -13,6 +14,11 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
+
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+
+use l1_client::L1Client;
+
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -70,13 +76,6 @@ pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
-
-/// Initialize the static variables for the sequencer
-///
-/// Calling it early on startup makes it easier to catch errors.
-pub fn init_static() {
-    lazy_static::initialize(&header::L1_CLIENT);
-}
 
 pub mod network {
     use hotshot_types::message::Message;
@@ -177,8 +176,15 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 
 #[derive(Clone, Debug)]
 pub struct NodeState {
+    l1_client: L1Client,
     genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
+}
+
+impl NodeState {
+    fn l1_client(&self) -> &L1Client {
+        &self.l1_client
+    }
 }
 
 impl Default for NodeState {
@@ -188,6 +194,7 @@ impl Default for NodeState {
         Self {
             genesis_state: ValidatedState::default(),
             builder_address: wallet,
+            l1_client: L1Client::new("http://localhost:3331".parse().unwrap()),
         }
     }
 }
@@ -249,11 +256,17 @@ pub struct BuilderParams {
     pub prefunded_accounts: Vec<Address>,
 }
 
+#[derive(Clone, Debug)]
+pub struct L1Params {
+    pub url: Url,
+}
+
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     mut persistence: impl SequencerPersistence,
     builder_params: BuilderParams,
+    l1_params: L1Params,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -328,7 +341,10 @@ pub async fn init_node(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
+    let l1_client = L1Client::new(l1_params.url);
+
     let instance_state = NodeState {
+        l1_client,
         builder_address: wallet,
         genesis_state,
     };
@@ -354,6 +370,7 @@ pub mod testing {
     use super::*;
     use crate::persistence::no_storage::NoStorage;
     use commit::Committable;
+    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -370,12 +387,13 @@ pub mod testing {
     };
     use std::time::Duration;
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey, ElectionConfig>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        anvil: Arc<AnvilInstance>,
     }
 
     impl Default for TestConfig {
@@ -427,6 +445,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
+                anvil: Arc::new(Anvil::new().spawn()),
             }
         }
     }
@@ -474,9 +493,15 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
+
+            let node_state = NodeState {
+                l1_client: L1Client::new(self.anvil.endpoint().parse().unwrap()),
+                ..Default::default()
+            };
+
             SequencerContext::init(
                 config,
-                NodeState::default(),
+                node_state,
                 persistence,
                 networks,
                 None,
@@ -528,6 +553,7 @@ mod test {
 
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
@@ -541,7 +567,10 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let handles = TestConfig::default().init_nodes().await;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
+
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -565,8 +594,10 @@ mod test {
         setup_backtrace();
 
         let success_height = 30;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
 
-        let handles = TestConfig::default().init_nodes().await;
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -602,7 +633,6 @@ mod test {
                     parent = header;
                     continue;
                 }
-                dbg!(header.height, parent.height);
                 assert_eq!(header.height, parent.height + 1);
                 assert!(header.timestamp >= parent.timestamp);
                 assert!(header.l1_head >= parent.l1_head);

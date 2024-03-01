@@ -1,11 +1,11 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable},
-    l1_client::{L1Client, L1ClientOptions, L1Snapshot},
+    l1_client::L1Snapshot,
     state::{fetch_fee_receipts, BlockMerkleCommitment, FeeInfo, FeeMerkleCommitment},
     L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
-use async_std::task::{block_on, sleep};
+
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -22,9 +22,9 @@ use hotshot_types::{
     vid::VidCommitment,
 };
 use jf_primitives::merkle_tree::prelude::*;
-use lazy_static::lazy_static;
+
 use serde::{Deserialize, Serialize};
-use std::{env, fmt::Debug, ops::Add, time::Duration};
+use std::{fmt::Debug, ops::Add};
 use time::OffsetDateTime;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
@@ -223,7 +223,7 @@ impl Header {
             builder_signature: None,
         };
 
-        // Sign our header using its `Committment` as a prehash.
+        // Sign our header using its `Commitment` as a prehash.
         let builder_signature = builder_address
             .sign_hash(types::H256(header.commit().into()))
             .unwrap();
@@ -250,16 +250,7 @@ impl BlockHeader<SeqTypes> for Header {
         //   contain an already connected L1 client.
         // For now, as a workaround, we will create a new L1 client based on environment variables
         // and use `block_on` to query it.
-
-        let l1 = if let Some(l1_client) = &*L1_CLIENT {
-            l1_client.snapshot().await
-        } else {
-            // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
-            L1Snapshot {
-                finalized: None,
-                head: 0,
-            }
-        };
+        let l1 = instance_state.l1_client().snapshot().await;
 
         Self::from_info(
             payload_commitment,
@@ -319,64 +310,16 @@ impl QueryableHeader<SeqTypes> for Header {
     }
 }
 
-lazy_static! {
-    pub(crate) static ref L1_CLIENT: Option<L1Client> = {
-        let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_WS_PROVIDER") else {
-            #[cfg(any(test, feature = "testing"))]
-            {
-                tracing::warn!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
-                return None;
-            }
-            #[cfg(not(any(test, feature = "testing")))]
-            {
-                panic!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER must be set.");
-            }
-        };
-
-        let mut opt = L1ClientOptions::with_url(url.parse().unwrap());
-        // For testing with a pre-merge geth node that does not support the finalized block tag we
-        // allow setting an environment variable to use the latest block instead. This feature is
-        // used in the OP devnet which uses the docker images built in this repo. Therefore it's not
-        // hidden behind the testing flag.
-        if let Ok(val) = env::var("ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG") {
-            match val.as_str() {
-               "y" | "yes" | "t"|  "true" | "on" | "1"  => {
-                    tracing::warn!(
-                        "ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG is set. Using latest block tag\
-                         instead of finalized block tag. This is suitable for testing but not production."
-                    );
-                    opt = opt.with_latest_block_tag();
-                },
-                "n" | "no" | "f" | "false" | "off" | "0" => {}
-                _ => panic!("invalid ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG value: {}", val)
-            }
-        }
-
-        block_on(async move {
-            // Starting the client can fail due to transient errors in the L1 RPC. This could make
-            // it very annoying to start up the sequencer node, so retry until we succeed.
-            loop {
-                match opt.clone().start().await {
-                    Ok(client) => break Some(client),
-                    Err(err) => {
-                        tracing::error!("failed to start L1 client, retrying: {err}");
-                        sleep(Duration::from_secs(1)).await;
-                    }
-                }
-            }
-        })
-    };
-}
-
 #[cfg(test)]
 mod test_headers {
     use super::*;
     use crate::{
+        l1_client::L1Client,
         state::{validate_proposal, BlockMerkleTree, FeeMerkleTree},
         NodeState, Payload,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::types::RecoveryMessage;
+    use ethers::{types::RecoveryMessage, utils::Anvil};
     use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
 
     #[derive(Debug, Default)]
@@ -629,8 +572,13 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_success() {
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let genesis_state = NodeState {
+            l1_client: L1Client::new(anvil.endpoint().parse().unwrap()),
+            ..Default::default()
+        };
+
         // TODO refactor repeated code from other tests
-        let genesis_state = NodeState::default();
         let genesis_leaf = Leaf::genesis(&genesis_state);
         let genesis_header = genesis_leaf.get_block_header().clone();
         let genesis_ns_table = genesis_leaf
