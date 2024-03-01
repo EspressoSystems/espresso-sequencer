@@ -1,61 +1,54 @@
 use clap::Parser;
-use derive_more::From;
 use ethers::abi::AbiEncode;
 use ethers::types::U256;
-use ethers::utils::hex::{self, FromHexError};
+use hotshot::types::{BLSPrivKey, BLSPubKey, SignatureKey};
 use hotshot_contract_adapter::jellyfish::u256_to_field;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
-use hotshot_state_prover::service::init_stake_table;
-use hotshot_types::light_client::GenericPublicInput;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::light_client::{GenericPublicInput, StateSignKey, StateVerKey};
 use hotshot_types::{
     light_client::CircuitField,
     traits::stake_table::{SnapshotVersion, StakeTableScheme as _},
 };
-use snafu::Snafu;
 
 type F = ark_ed_on_bn254::Fq;
 
 #[derive(Parser)]
 struct Args {
-    /// Number of nodes in the stake table.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
+    // Sequencer Private Staking key list
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_ORCHESTRATOR_NUM_NODES",
-        default_value = "5"
+        env = "ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_LIST",
+        value_delimiter = ','
     )]
-    num_nodes: usize,
+    pub private_staking_keys: Vec<BLSPrivKey>,
 
-    /// Seed to use for generating node keys.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
-    keygen_seed: [u8; 32],
-}
-
-#[derive(Debug, Snafu, From)]
-enum ParseSeedError {
-    #[snafu(display("seed must be valid hex: {source}"))]
-    Hex { source: FromHexError },
-
-    #[snafu(display("wrong length for seed {length} (expected 32)"))]
-    WrongLength { length: usize },
-}
-
-fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
-    <[u8; 32]>::try_from(hex::decode(s)?)
-        .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
+    // Sequencer State signing key list
+    #[clap(
+        long,
+        env = "ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_LIST",
+        value_delimiter = ','
+    )]
+    pub private_state_keys: Vec<StateSignKey>,
 }
 
 pub fn stake_table_commitment_for_demo(
-    num_nodes: usize,
-    keygen_seed: [u8; 32],
+    bls_priv_keys: &[BLSPrivKey],
+    state_priv_keys: &[StateSignKey],
 ) -> ((CircuitField, CircuitField, CircuitField), U256) {
-    // We now initialize a static stake table as what hotshot orchestrator does.
+    // We now initialize a static stake table from the environment variables.
     // In the future we should get the stake table from the contract.
-    let mut st = init_stake_table(num_nodes, keygen_seed);
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    bls_priv_keys
+        .iter()
+        .zip(state_priv_keys)
+        .for_each(|(bls_priv_key, state_priv_key)| {
+            let bls_ver_key = BLSPubKey::from_private(bls_priv_key);
+            let state_ver_key = StateVerKey::from(state_priv_key);
+            st.register(bls_ver_key, U256::one(), state_ver_key)
+                .expect("Stake table registration shouldn't fail.");
+        });
     st.advance();
     st.advance();
     (
@@ -69,7 +62,14 @@ fn main() {
     let args = Args::parse();
 
     let ((bls_comm, schnorr_comm, stake_comm), threshold) =
-        stake_table_commitment_for_demo(args.num_nodes, args.keygen_seed);
+        stake_table_commitment_for_demo(&args.private_staking_keys, &args.private_state_keys);
+
+    std::println!(
+        "{:?}\n{:?}",
+        args.private_staking_keys,
+        args.private_state_keys
+    );
+    std::println!("{threshold}");
 
     let pi = vec![
         u256_to_field(threshold),

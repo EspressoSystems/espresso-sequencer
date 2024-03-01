@@ -27,16 +27,15 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use hotshot_types::{
     light_client::{
-        CircuitField, LightClientState, PublicInput, StateKeyPair, StateSignaturesBundle,
-        StateVerKey,
+        CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
     },
-    traits::signature_key::SignatureKey,
+    traits::signature_key::StakeTableEntryType,
 };
 use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::time::Duration;
+use std::{iter, time::Duration};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
@@ -44,6 +43,11 @@ use url::Url;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<
+    BLSPubKey,
+    hotshot::traits::election::static_committee::StaticElectionConfig,
+>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -58,10 +62,8 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Number of nodes
-    pub num_nodes: usize,
-    /// Seed to generate keys
-    pub seed: [u8; 32],
+    /// Address of the hotshot orchestrator, used for stake table initialization.
+    pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -69,29 +71,74 @@ pub struct StateProverConfig {
 }
 
 pub fn init_stake_table(
-    num_node: usize,
-    seed: [u8; 32],
-) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+    bls_keys: &[BLSPubKey],
+    state_keys: &[StateVerKey],
+) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, StakeTableError> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
-    (0..num_node).for_each(|id| {
-        let bls_key = BLSPubKey::generated_from_seed_indexed(seed, id as u64).0;
-        let state_ver_key = StateKeyPair::generate_from_seed_indexed(seed, id as u64).ver_key();
-        st.register(bls_key, U256::from(1u64), state_ver_key)
-            .expect("Key registration shouldn't fail.");
-    });
+    st.batch_register(
+        bls_keys.iter().cloned(),
+        iter::repeat(U256::one()).take(bls_keys.len()),
+        state_keys.iter().cloned(),
+    )?;
     st.advance();
     st.advance();
-    st
+    Ok(st)
 }
 
 pub async fn init_stake_table_from_config(
     config: &StateProverConfig,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    let st = init_stake_table(config.num_nodes, config.seed);
-    std::println!("Stake table initialized.");
-    st
+    tracing::info!("Initializing stake table from HotShot orchestrator.");
+    let client = Client::<ServerError>::new(config.orchestrator_url.clone());
+    let mut num_retries = 10;
+    while num_retries > 0 {
+        match client.get::<bool>("api/peer_pub_ready").send().await {
+            Ok(true) => {
+                match client
+                    .get::<NetworkConfig>("api/config_after_peer_collected")
+                    .send()
+                    .await
+                {
+                    Ok(config) => {
+                        let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+                            STAKE_TABLE_CAPACITY,
+                        );
+                        config
+                            .config
+                            .known_nodes_with_stake
+                            .into_iter()
+                            .for_each(|config| {
+                                st.register(
+                                    *config.stake_table_entry.get_key(),
+                                    config.stake_table_entry.get_stake(),
+                                    config.state_ver_key,
+                                )
+                                .expect("Key registration shouldn't fail.");
+                            });
+                        st.advance();
+                        st.advance();
+                        return st;
+                    }
+                    Err(e) => {
+                        num_retries -= 1;
+                        tracing::warn!("Orchestrator error: {e}, retrying.");
+                    }
+                }
+            }
+            Ok(false) => {
+                num_retries -= 1;
+                tracing::info!("Peers' keys are not ready.");
+            }
+            Err(e) => {
+                num_retries -= 1;
+                tracing::warn!("Orchestrator error {e}, retrying.");
+            }
+        }
+        sleep(Duration::from_secs(2)).await;
+    }
+    panic!("Failed initializing stake table.")
 }
 
 pub fn load_proving_key() -> ProvingKey {
@@ -294,8 +341,6 @@ pub async fn run_prover_service(config: StateProverConfig) {
     let config = Arc::new(config);
     let update_interval = config.update_interval;
 
-    tracing::info!("Seed: {:?}", config.seed);
-    tracing::info!("Number of nodes: {:?}", config.num_nodes);
     tracing::info!("Light client address: {:?}", config.light_client_address);
 
     if let Some(port) = config.port {
@@ -539,8 +584,7 @@ mod test {
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
-                num_nodes: 10,
-                seed: [0u8; 32],
+                orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
             }
         }

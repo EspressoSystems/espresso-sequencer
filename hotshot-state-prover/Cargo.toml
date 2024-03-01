@@ -25,7 +25,9 @@ derive_more = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 ethers = { workspace = true }
 futures = { workspace = true }
+hotshot = { workspace = true }
 hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
+hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }

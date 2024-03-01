@@ -1,11 +1,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
-use derive_more::From;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
-use ethers::utils::hex::{self, FromHexError};
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use snafu::Snafu;
 use std::{str::FromStr as _, time::Duration};
@@ -53,22 +51,14 @@ struct Args {
     )]
     eth_account_index: u32,
 
-    /// Number of nodes in the stake table.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
+    /// URL of the HotShot orchestrator.
     #[clap(
         short,
         long,
-        env = "ESPRESSO_ORCHESTRATOR_NUM_NODES",
-        default_value = "5"
+        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
+        default_value = "http://localhost:8080"
     )]
-    num_nodes: usize,
-
-    /// Seed to use for generating node keys.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
-    keygen_seed: [u8; 32],
+    pub orchestrator_url: Url,
 
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
@@ -88,20 +78,6 @@ fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
         .map_err(|err| ParseDurationError {
             reason: err.to_string(),
         })
-}
-
-#[derive(Debug, Snafu, From)]
-enum ParseSeedError {
-    #[snafu(display("seed must be valid hex: {source}"))]
-    Hex { source: FromHexError },
-
-    #[snafu(display("wrong length for seed {length} (expected 32)"))]
-    WrongLength { length: usize },
-}
-
-fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
-    <[u8; 32]>::try_from(hex::decode(s)?)
-        .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
 }
 
 #[async_std::main]
@@ -128,8 +104,7 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        num_nodes: args.num_nodes,
-        seed: args.keygen_seed,
+        orchestrator_url: args.orchestrator_url,
         port: args.port,
     };
 
