@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::block::payload::{Payload, TableWordTraits};
+use crate::block::payload::Payload;
 use crate::block::tables::{NameSpaceTable, TxTable};
 use serde::{Deserialize, Serialize};
 
@@ -15,19 +15,16 @@ pub struct TxIndex {
 /// TODO Decompose this iterator into
 /// - a tx iterator `T` over only 1 namespace
 /// - a namespace-tx iterator that reuses `T` over all namespaces
-pub struct TxIterator<'a, TableWord: TableWordTraits> {
+pub struct TxIterator<'a> {
     ns_idx: usize, // simpler than using `Peekable`
     ns_iter: Range<usize>,
     tx_iter: Range<usize>,
-    block_payload: &'a Payload<TableWord>,
-    ns_table: &'a NameSpaceTable<TableWord>,
+    block_payload: &'a Payload,
+    ns_table: &'a NameSpaceTable,
 }
 
-impl<'a, TableWord: TableWordTraits> TxIterator<'a, TableWord> {
-    pub(super) fn new(
-        ns_table: &'a NameSpaceTable<TableWord>,
-        block_payload: &'a Payload<TableWord>,
-    ) -> Self {
+impl<'a> TxIterator<'a> {
+    pub(super) fn new(ns_table: &'a NameSpaceTable, block_payload: &'a Payload) -> Self {
         Self {
             ns_idx: 0, // arbitrary value, changed in first call to next()
             ns_iter: 0..ns_table.len(),
@@ -38,7 +35,7 @@ impl<'a, TableWord: TableWordTraits> TxIterator<'a, TableWord> {
     }
 }
 
-impl<'a, TableWord: TableWordTraits> Iterator for TxIterator<'a, TableWord> {
+impl<'a> Iterator for TxIterator<'a> {
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {

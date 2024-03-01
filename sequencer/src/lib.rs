@@ -6,7 +6,6 @@ mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
-use block::entry::TxTableEntryWord;
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -197,7 +196,7 @@ impl InstanceState for NodeState {}
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload<TxTableEntryWord>;
+    type BlockPayload = Payload;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;

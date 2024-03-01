@@ -1,28 +1,26 @@
-use crate::block::entry::TxTableEntryWord;
+use super::table_word::TableWord;
+use super::tx_iterator::{TxIndex, TxIterator};
 use crate::block::payload::Payload;
 use crate::block::tables::TxTable;
+use crate::Transaction;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::vid::{vid_scheme, SmallRangeProofType};
 use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-use crate::Transaction;
-
-use super::{
-    entry::TxTableEntry,
-    tx_iterator::{TxIndex, TxIterator},
-};
+// temporary solution until transaction proofs get refactored.
+// goal: all table interaction should go through `tables.rs`
+type Word = TableWord<u32, 4>;
 
 // TODO don't hard-code TxTableEntryWord generic param
-impl QueryablePayload for Payload<TxTableEntryWord> {
+impl QueryablePayload for Payload {
     type TransactionIndex = TxIndex;
-    type Iter<'a> = TxIterator<'a, TxTableEntryWord>;
+    type Iter<'a> = TxIterator<'a>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, ns_table: &Self::Metadata) -> usize {
-        let entry_len = TxTableEntry::byte_len();
-
+        let entry_len = Word::byte_len();
         // The number of nss in a block is defined as the minimum of:
         // (1) the number of nss indicated in the ns table
         // (2) the number of ns table entries that could fit inside the ns table byte len
@@ -39,7 +37,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
                 .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
                 .unwrap();
 
-            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
+            let ns_offset = Word::from_bytes(ns_offset_bytes)
                 .map(|tx| usize::try_from(tx).unwrap())
                 .unwrap();
             ns_end_offsets.push(ns_offset);
@@ -90,24 +88,21 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
 
         // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
-            (TxTableEntry::byte_len(), None)
+            (Word::byte_len(), None)
         } else {
-            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
+            let range_proof_start = index_usize.checked_mul(Word::byte_len())?;
             (
                 range_proof_start,
-                Some(TxTableEntry::from_bytes(self.raw_payload.get(
-                    range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
+                Some(Word::from_bytes(self.raw_payload.get(
+                    range_proof_start..range_proof_start.checked_add(Word::byte_len())?,
                 )?)?),
             )
         };
 
         // end
-        let tx_table_range_proof_end = index_usize
-            .checked_add(2)?
-            .checked_mul(TxTableEntry::byte_len())?;
-        let tx_table_range_end = TxTableEntry::from_bytes(self.raw_payload.get(
-            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
-                ..tx_table_range_proof_end,
+        let tx_table_range_proof_end = index_usize.checked_add(2)?.checked_mul(Word::byte_len())?;
+        let tx_table_range_end = Word::from_bytes(self.raw_payload.get(
+            tx_table_range_proof_end.checked_sub(Word::byte_len())?..tx_table_range_proof_end,
         )?)?;
 
         // correctness proof for the tx payload range
@@ -121,7 +116,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         let tx_payload_range = tx_payload_range(
             &tx_table_range_start,
             &tx_table_range_end,
-            &self.get_tx_table_len(),
+            TxTable::get_tx_table_len(&self.raw_payload),
             self.raw_payload.len(),
         )?;
         Some((
@@ -132,7 +127,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
                 self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
-                tx_table_len: self.get_tx_table_len(),
+                tx_table_len: TxTable::get_tx_table_len(&self.raw_payload),
                 tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
                 tx_table_range_start,
                 tx_table_range_end,
@@ -152,18 +147,15 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
 /// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
 /// Lots of ugly type conversion and checked arithmetic.
 fn tx_payload_range(
-    tx_table_range_start: &Option<TxTableEntry>,
-    tx_table_range_end: &TxTableEntry,
-    tx_table_len: &TxTableEntry,
+    tx_table_range_start: &Option<Word>,
+    tx_table_range_end: &Word,
+    tx_table_len: usize,
     block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
     // TODO(817) allow arbitrary tx_table_len
     // eg: if overflow then just return a 0-length tx
-    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
-        .ok()?
-        .checked_add(1)?
-        .checked_mul(TxTableEntry::byte_len())?;
-    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+    let tx_bodies_offset = tx_table_len.checked_add(1)?.checked_mul(Word::byte_len())?;
+    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(Word::zero()))
         .ok()?
         .checked_add(tx_bodies_offset)?;
     let end = usize::try_from(tx_table_range_end.clone())
@@ -177,13 +169,11 @@ fn tx_payload_range(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
-    tx_table_len: TxTableEntry,
+    tx_table_len: usize,
     tx_table_len_proof: SmallRangeProofType,
-
-    tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
-    tx_table_range_end: TxTableEntry,
+    tx_table_range_start: Option<Word>, // `None` for the 0th tx
+    tx_table_range_end: Word,
     tx_table_range_proof: SmallRangeProofType,
-
     tx_payload_proof: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
 
@@ -213,7 +203,7 @@ impl TxInclusionProof {
         let tx_payload_range = tx_payload_range(
             &self.tx_table_range_start,
             &self.tx_table_range_end,
-            &self.tx_table_len,
+            self.tx_table_len,
             V::get_payload_byte_len(vid_common),
         )?;
         match &self.tx_payload_proof {
@@ -245,8 +235,8 @@ impl TxInclusionProof {
         if vid
             .payload_verify(
                 Statement {
-                    payload_subslice: &self.tx_table_len.to_bytes(),
-                    range: 0..TxTableEntry::byte_len(),
+                    payload_subslice: &self.tx_table_len.to_le_bytes(),
+                    range: 0..Word::byte_len(),
                     commit: vid_commit,
                     common: vid_common,
                 },
@@ -261,25 +251,21 @@ impl TxInclusionProof {
         // Verify proof for tx table entries.
         // Start index missing for the 0th tx
         let index: usize = tx_index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        let mut tx_table_range_bytes =
-            Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
+        let mut tx_table_range_bytes = Vec::with_capacity(2usize.checked_mul(Word::byte_len())?);
         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
             if index == 0 {
                 return None; // error: first tx should have empty start index
             }
             tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
-            index * TxTableEntry::byte_len()
+            index * Word::byte_len()
         } else {
             if index != 0 {
                 return None; // error: only the first tx should have empty start index
             }
-            TxTableEntry::byte_len()
+            Word::byte_len()
         };
         tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
-        let range = start
-            ..index
-                .checked_add(2)?
-                .checked_mul(TxTableEntry::byte_len())?;
+        let range = start..index.checked_add(2)?.checked_mul(Word::byte_len())?;
 
         if vid
             .payload_verify(
@@ -303,7 +289,7 @@ impl TxInclusionProof {
 
 #[cfg(test)]
 pub(crate) fn gen_tx_proof_for_testing(
-    tx_table_len: TxTableEntry,
+    tx_table_len: usize,
     tx_table_len_proof: SmallRangeProofType,
     payload_proof: SmallRangeProofType,
 ) -> TxInclusionProof {
@@ -311,7 +297,7 @@ pub(crate) fn gen_tx_proof_for_testing(
         tx_table_len,
         tx_table_len_proof,
         tx_table_range_start: None,
-        tx_table_range_end: TxTableEntry::from_usize(1),
+        tx_table_range_end: Word::from_usize(1),
         tx_table_range_proof: payload_proof,
         tx_payload_proof: None,
     }
