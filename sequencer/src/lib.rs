@@ -424,7 +424,7 @@ pub mod testing {
 
             //update the last node stake table entry with 0 stake
             let builder_stake_entry = PeerConfig::<PubKey> {
-                stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(1),
+                stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(0),
                 state_ver_key: state_key_pairs[num_nodes - 1].ver_key(),
             };
 
