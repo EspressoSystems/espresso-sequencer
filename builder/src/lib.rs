@@ -2,7 +2,7 @@
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{NetworkingMetricsValue, WebServerNetwork},
+        implementations::{MemoryStorage, NetworkingMetricsValue, WebServerNetwork},
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
@@ -15,8 +15,9 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
+    traits::election::Membership,
     traits::metrics::Metrics,
-    HotShotConfig,
+    HotShotConfig, PeerConfig, ValidatorConfig,
 };
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -32,7 +33,7 @@ use sequencer::{
     state_signature::static_stake_table_commitment,
     NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes, Storage,
 };
-use std::{alloc::System, any, fmt::Debug, sync::Arc};
+use std::{alloc::System, any, fmt::Debug, mem, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 
@@ -65,55 +66,69 @@ pub async fn init_node(
     // surf disco client
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
 
-    let private_staking_key = network_params.private_staking_key;
+    let private_staking_key = network_params.private_staking_key.clone();
     let public_staking_key = BLSPubKey::from_private(&private_staking_key);
+
+    let my_config = ValidatorConfig {
+        public_key: BLSPubKey::from_private(&network_params.private_staking_key),
+        private_key: network_params.private_staking_key,
+        stake_value: 1,
+        state_key_pair: network_params.private_state_key.key_pair(),
+    };
 
     let wait_for_orchestrator = true;
 
     tracing::info!("loading network config from orchestrator");
     let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
-        orchestrator_client.get_config(public_ip.to_string()).await;
+        NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
+            .await
+            .0;
+    tracing::info!(
+    node_id = config.node_index,
+    stake_table = ?config.config.known_nodes_with_stake,
+    "loaded config",
+    );
 
     // Get updated config from orchestrator containing all peer's public keys
-    config = orchestrator_client
-        .post_and_wait_all_public_keys(config.node_index, public_staking_key)
-        .await;
+    // config = orchestrator_client
+    //     .post_and_wait_all_public_keys(config.node_index, public_staking_key)
+    //     .await;
 
-    config.config.my_own_validator_config.private_key = private_staking_key.clone();
-    config.config.my_own_validator_config.public_key = public_staking_key;
+    // config.config.my_own_validator_config.private_key = private_staking_key.clone();
+    // config.config.my_own_validator_config.public_key = public_staking_key;
+    let node_index = config.node_index;
 
     tracing::info!("loaded config, we are node {}", config.node_index);
 
-    let node_index = config.node_index;
-    let num_nodes = config.config.total_nodes.get();
+    // let num_nodes = config.config.total_nodes.get();
 
-    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
-        config.config.known_nodes_with_stake.clone();
+    // let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
+    //     config.config.known_nodes_with_stake.clone();
 
-    let pub_keys = known_nodes_with_stake
-        .iter()
-        .map(|entry| entry.stake_key)
-        .collect::<Vec<_>>();
+    // let pub_keys = known_nodes_with_stake
+    //     .iter()
+    //     .map(|entry| entry.stake_key)
+    //     .collect::<Vec<_>>();
 
-    // TODO: fetch from orchestrator?
-    let state_ver_keys = (0..num_nodes)
-        .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
-        .collect::<Vec<_>>();
+    // // TODO: fetch from orchestrator?
+    // let state_ver_keys = (0..num_nodes)
+    //     .map(|i| StateKeyPair::generate_from_seed_indexed(config.seed, i as u64).ver_key())
+    //     .collect::<Vec<_>>();
 
-    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
+    // let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let networks = Networks {
         da_network: Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            my_config.public_key,
             true,
         )),
         quorum_network: Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
             network_params.webserver_poll_interval,
-            pub_keys[node_index as usize],
+            my_config.public_key,
             false,
         )),
         _pd: Default::default(),
@@ -126,19 +141,11 @@ pub async fn init_node(
     let _ = NetworkingMetricsValue::new(metrics);
 
     // creating the instance state without any builder mnemonic
-    let instance_state = &NodeState::default();
+    let instance_state = NodeState::default();
 
-    let hotshot_handle = init_hotshot(
-        pub_keys.clone(),
-        known_nodes_with_stake.clone(),
-        node_index as usize,
-        private_staking_key,
-        networks,
-        config.config,
-        metrics,
-        instance_state,
-    )
-    .await;
+    let hotshot_handle =
+        init_hotshot(config.config, instance_state, networks, metrics, node_index).await;
+
     let builder_ctx = BuilderContext {
         hotshot_handle,
         node_index,
@@ -162,16 +169,20 @@ impl<N: network::Type> BuilderContext<N> {
 
 #[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
-    nodes_pub_keys: Vec<PubKey>,
-    known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
-    node_id: usize,
-    priv_key: PrivKey,
-    networks: Networks<SeqTypes, Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
+    instance_state: NodeState,
+    networks: Networks<SeqTypes, Node<N>>,
     metrics: &dyn Metrics,
-    instance_state: &NodeState,
+    node_id: u64,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
+    let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
+        config.total_nodes.get() as u64,
+    );
+    let membership = GeneralStaticCommittee::create_election(
+        config.known_nodes_with_stake.clone(),
+        election_config,
+    );
+
     let memberships = Memberships {
         quorum_membership: membership.clone(),
         da_membership: membership.clone(),
@@ -180,11 +191,11 @@ async fn init_hotshot<N: network::Type>(
     };
 
     SystemContext::init(
-        nodes_pub_keys[node_id],
-        priv_key,
+        config.my_own_validator_config.public_key,
+        config.my_own_validator_config.private_key.clone(),
         node_id as u64,
         config,
-        Storage::empty(),
+        MemoryStorage::empty(),
         memberships,
         networks,
         HotShotInitializer::from_genesis(instance_state).unwrap(),
@@ -207,9 +218,11 @@ pub mod testing {
     use hotshot::types::EventType::Decide;
     use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
     use hotshot_types::{
-        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
+        data::ViewNumber, light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType,
+        ValidatorConfig,
     };
 
+    use hs_builder_core::service::run_standalone_builder_service;
     use sequencer::{transaction::Transaction, Event};
     use std::time::Duration;
 
@@ -230,22 +243,28 @@ pub mod testing {
         tracing::info!("Coming into init hotshot handles");
         let total_nodes = num_nodes + num_builders;
 
-        // Generate the pub and the private keys for everyone
-        let priv_keys = (0..total_nodes)
+        // Generate keys for the nodes.
+        let priv_keys = (0..num_nodes)
             .map(|_| PrivKey::generate(&mut rand::thread_rng()))
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
             .map(PubKey::from_private)
             .collect::<Vec<_>>();
-
+        let state_key_pairs = (0..num_nodes)
+            .map(|_| StateKeyPair::generate())
+            .collect::<Vec<_>>();
         // known nodes with stake only for the hotshot nodes
         // TODO: Currently hotshot doesn't support passive nodes to receiver its events
         // TODO: therefore, we should make builder as staked node to receive events
-        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0
-            ..total_nodes)
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
-            .collect();
+        let known_nodes_with_stake = pub_keys
+            .iter()
+            .zip(&state_key_pairs)
+            .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
+                stake_table_entry: pub_key.get_stake_table_entry(1),
+                state_ver_key: state_key_pair.ver_key(),
+            })
+            .collect::<Vec<_>>();
 
         // TODO check total_nodes and da_committee_size
 
@@ -272,19 +291,22 @@ pub mod testing {
         };
 
         // Create HotShot instances.
-        for node_id in 0..total_nodes {
-            let metrics = if node_id == 0 { metrics } else { &NoMetrics };
+        for i in 0..total_nodes {
+            let metrics = if i == 0 { metrics } else { &NoMetrics };
 
             let mut config = config.clone();
             config.my_own_validator_config = ValidatorConfig {
-                public_key: pub_keys[node_id],
-                private_key: priv_keys[node_id].clone(),
-                stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
-                state_key_pair: StateKeyPair::generate(),
+                public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
+                private_key: priv_keys[i].clone(),
+                stake_value: config.known_nodes_with_stake[i]
+                    .stake_table_entry
+                    .stake_amount
+                    .as_u64(),
+                state_key_pair: state_key_pairs[i].clone(),
             };
 
             let network = Arc::new(MemoryNetwork::new(
-                pub_keys[node_id],
+                config.my_own_validator_config.public_key,
                 NetworkingMetricsValue::new(metrics),
                 master_map.clone(),
                 None,
@@ -294,18 +316,9 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
-            let instance_state = &NodeState::default();
-            let handle = init_hotshot(
-                pub_keys.clone(),
-                known_nodes_with_stake.clone(),
-                node_id,
-                priv_keys[node_id].clone(),
-                networks,
-                config,
-                metrics,
-                instance_state,
-            )
-            .await;
+            let instance_state = NodeState::default();
+
+            let handle = init_hotshot(config, instance_state, networks, &NoMetrics, i as u64).await;
 
             handles.push(handle);
         }
@@ -364,7 +377,7 @@ mod test {
     use futures::{Stream, StreamExt};
     use hotshot::types::EventType::Decide;
     use hotshot::types::SignatureKey;
-    use hotshot_example_types::block_types::genesis_vid_commitment;
+    // use hotshot_example_types::block_types::genesis_vid_commitment;
     use hotshot_types::{
         data::{Leaf, ViewNumber},
         signature_key::BLSPubKey,
@@ -414,12 +427,12 @@ mod test {
         // trying to listen events fron the builder handle
         // Currently its same as other nodes, but later it would be different
         // let mut events = handles[num_nodes + num_builders - 1].get_event_stream();
-        
+
         // start consensus for all the nodes
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
-        
+
         let mut builder_context_handle = handles[num_nodes + num_builders - 1];
         // Generate Builder specific requirements
         let seed = [201_u8; 32];
@@ -437,7 +450,7 @@ mod test {
         let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(15);
         // decide channel
         let (decide_sender, decide_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-        
+
         // api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(15);
         // response channel
@@ -463,7 +476,7 @@ mod test {
         let builder_state = BuilderState::<SeqTypes>::new(
             (
                 ViewNumber::new(0),
-                genesis_vid_commitment(),
+                vid_commitment(&vec![], 8),
                 Commitment::<Leaf<SeqTypes>>::default_commitment_no_preimage(),
             ),
             tx_receiver,
