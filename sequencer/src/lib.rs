@@ -608,6 +608,7 @@ mod test {
         let config = TestConfig::default();
         let handles = config.init_nodes().await;
 
+        // only listen on builder handle as it is the last handle
         let mut events = handles[3].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
