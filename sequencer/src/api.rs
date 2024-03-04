@@ -110,6 +110,7 @@ mod test_helpers {
     pub struct TestNetwork {
         pub server: SequencerContext<network::Memory>,
         pub peers: Vec<SequencerContext<network::Memory>>,
+        pub cfg: TestConfig,
     }
 
     impl TestNetwork {
@@ -145,7 +146,7 @@ mod test_helpers {
             let server = nodes.remove(0);
             let peers = nodes;
 
-            Self { server, peers }
+            Self { server, peers, cfg }
         }
 
         pub async fn new(opt: Options) -> Self {
