@@ -240,7 +240,10 @@ pub mod testing {
             .collect::<Vec<_>>();
 
         // known nodes with stake only for the hotshot nodes
-        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
+        // TODO: Currently hotshot doesn't support passive nodes to receiver its events
+        // TODO: therefore, we should make builder as staked node to receive events
+        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0
+            ..total_nodes)
             .map(|id| pub_keys[id].get_stake_table_entry(1u64))
             .collect();
 
@@ -263,12 +266,13 @@ pub mod testing {
             propose_min_round_time: Duration::from_secs(0),
             propose_max_round_time: Duration::from_secs(1),
             election_config: None,
-            da_committee_size: num_nodes, // TODO keep da commitee size as num_nodes for now
+            // TODO keep da commitee size as total_nodes for now, later would be num_nodes
+            da_committee_size: total_nodes,
             my_own_validator_config: Default::default(),
         };
 
         // Create HotShot instances.
-        for node_id in 0..num_nodes {
+        for node_id in 0..total_nodes {
             let metrics = if node_id == 0 { metrics } else { &NoMetrics };
 
             let mut config = config.clone();
@@ -304,40 +308,6 @@ pub mod testing {
             .await;
 
             handles.push(handle);
-        }
-
-        // create builder instances
-        for builder_id in 0..num_builders {
-            // Now try to join the hotshot network as external node i.e as builder
-            // which won't participate in the consensus but will be able to receive events from
-            // the consensus network
-            let network = Arc::new(MemoryNetwork::new(
-                pub_keys[num_nodes + builder_id],
-                NetworkingMetricsValue::new(metrics),
-                master_map.clone(),
-                None,
-            ));
-
-            let networks: Networks<SeqTypes, Node<network::Memory>> = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
-            let instance_state = &NodeState::default();
-
-            let builder_handle = init_hotshot(
-                pub_keys.clone(),
-                known_nodes_with_stake.clone(),
-                num_nodes + builder_id,
-                priv_keys[num_nodes + builder_id].clone(),
-                networks,
-                config.clone(),
-                metrics,
-                instance_state,
-            )
-            .await;
-            // push the builder handle to hotshot handles and then try to read from the last handle
-            handles.push(builder_handle);
         }
 
         handles
@@ -383,13 +353,51 @@ mod test {
     use core::num;
 
     use crate::testing::{init_hotshot_handles, wait_for_decide_on_handle};
+    use async_broadcast::broadcast;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_compatibility_layer::{
+        art::async_spawn,
+        channel::{unbounded, UnboundedReceiver},
+    };
+    use async_lock::RwLock;
+    use commit::{Commitment, CommitmentBoundsArkless};
     use futures::{Stream, StreamExt};
     use hotshot::types::EventType::Decide;
-    use hotshot_types::traits::block_contents::BlockHeader;
+    use hotshot::types::SignatureKey;
+    use hotshot_example_types::block_types::genesis_vid_commitment;
+    use hotshot_types::{
+        data::{Leaf, ViewNumber},
+        signature_key::BLSPubKey,
+        traits::block_contents::BlockHeader,
+    };
+    use hs_builder_api::builder::Options as BuilderApiOptions;
+    use hs_builder_core::{
+        builder_state::{BuilderProgress, BuilderState, MessageType},
+        service::GlobalState,
+    };
+    use sequencer::{
+        api, network,
+        options::{Modules, Options as SeqOptions},
+        NetworkParams, SeqTypes,
+    };
     use sequencer::{Header, NodeState};
+    use std::sync::{Arc, Mutex};
+
     #[async_std::test]
-    async fn test_functional_builder() {
+    async fn test_active_participating_builder() {
+        // TODO
+        /*
+        // 1. Create a hothsoht memory network and get a handle
+        // 2. Setup builder state
+        // 3. Setup global state
+        4. Get events form the handle and call the run_standalone_builder_service function.
+            possiblly spwan a task for it to run.
+        5. Make a surf disco client for the sumbit_txn api and see if the txn is being submitted or not?
+        6. Create a surf disco client for the hotshot api's and do request submit/response check for it.
+        7. Keep the success height as a parameter for the test to exit
+        8. Check if the global state is being updated or not?
+        9. Check if the builder state is being updated or not?
+        */
         // setup logging and bactrace
         // setup logging and backtrace
         setup_logging();
@@ -402,42 +410,94 @@ mod test {
         let num_builders = 1;
 
         let handles = init_hotshot_handles(num_nodes, num_builders).await;
+
         // trying to listen events fron the builder handle
-        let mut events = handles[num_nodes + num_builders - 1].get_event_stream();
+        // Currently its same as other nodes, but later it would be different
+        // let mut events = handles[num_nodes + num_builders - 1].get_event_stream();
+        
+        // start consensus for all the nodes
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
+        
+        let mut builder_context_handle = handles[num_nodes + num_builders - 1];
+        // Generate Builder specific requirements
+        let seed = [201_u8; 32];
 
-        // Join as a builder in running hotshot network
-        let mut parent = Header::genesis(&NodeState::default()).0;
+        // Builder Public, Private key
+        let (builder_pub_key, builder_private_key) =
+            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        loop {
-            let event = events.next().await.unwrap();
-            println!("Received event from handle: {event:?}");
-            let Decide { leaf_chain, .. } = event.event else {
-                continue;
-            };
-            println!("Got decide {leaf_chain:?}");
+        // Required Channles for the hotshot events for the builder
+        // tx channel
+        let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+        // da channel
+        let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+        // qc channel
+        let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+        // decide channel
+        let (decide_sender, decide_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+        
+        // api request channel
+        let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(15);
+        // response channel
+        let (res_sender, res_receiver) = unbounded();
 
-            // Check that each successive header satisfies invariants relative to its parent: all
-            // the fields which should be monotonic are.
-            for (leaf, _) in leaf_chain.iter().rev() {
-                let header = leaf.block_header.clone();
-                if header.height == 0 {
-                    parent = header;
-                    continue;
-                }
-                dbg!(header.height, parent.height);
-                assert_eq!(header.height, parent.height + 1);
-                assert!(header.timestamp >= parent.timestamp);
-                assert!(header.l1_head >= parent.l1_head);
-                assert!(header.l1_finalized >= parent.l1_finalized);
-                parent = header;
-            }
+        // create the global state
+        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
+            (builder_pub_key, builder_private_key),
+            req_sender,
+            res_receiver,
+            tx_sender.clone(),
+        );
 
-            if parent.height >= success_height {
-                break;
-            }
-        }
+        // create the arc_rwlock for the global state
+        let arc_rwlock_global_state: Arc<RwLock<GlobalState<SeqTypes>>> =
+            Arc::new(RwLock::new(global_state));
+
+        // clone the global state for the builder state
+        let arc_rwlock_global_state_clone: Arc<RwLock<GlobalState<SeqTypes>>> =
+            arc_rwlock_global_state.clone();
+
+        // create the builder state
+        let builder_state = BuilderState::<SeqTypes>::new(
+            (
+                ViewNumber::new(0),
+                genesis_vid_commitment(),
+                Commitment::<Leaf<SeqTypes>>::default_commitment_no_preimage(),
+            ),
+            tx_receiver,
+            decide_receiver,
+            da_receiver,
+            qc_receiver,
+            req_receiver,
+            arc_rwlock_global_state_clone,
+            res_sender,
+            NonZeroUsize::new(1).unwrap(),
+        );
+        async_spawn(async move {
+            run_standalone_builder_service(
+                tx_sender,
+                da_sender,
+                qc_sender,
+                decide_sender,
+                builder_context_handle,
+            )
+            .await
+            .unwrap();
+        })
+        .await;
+
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+        let hotshot_api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+        let submit_txn_api = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        // get handle to the hotshot context
+        let builder_context = init_node(network_params, &NoMetrics).await?;
+
+        // start doing consensus i.e. in this case be passive member of the consensus network
+        builder_context.start_consensus().await;
     }
 }

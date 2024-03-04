@@ -18,6 +18,7 @@ use hotshot::types::SignatureKey;
 use hotshot_example_types::block_types::genesis_vid_commitment;
 use hotshot_types::{
     data::{Leaf, ViewNumber},
+    qc,
     signature_key::BLSPubKey,
     traits::{
         election::Membership,
@@ -28,17 +29,17 @@ use hotshot_types::{
 use hs_builder_api::builder::Options as BuilderApiOptions;
 use hs_builder_core::{
     builder_state::{BuilderProgress, BuilderState, MessageType},
-    service::{run_standalone_builder_service, GlobalState},
+    service::GlobalState,
 };
 use sequencer::{
     api, network,
     options::{Modules, Options as SeqOptions},
     NetworkParams, SeqTypes,
 };
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use tagged_base64::TaggedBase64;
 use tide_disco::{app, method::ReadState, App, Url};
-
 // /// Construct a tide disco app that mocks the builder API.
 // ///
 // /// # Panics
@@ -104,22 +105,15 @@ async fn main() -> anyhow::Result<()> {
 
     let (res_sender, res_receiver) = unbounded();
 
-    let mut commitee_stake_table_entries = vec![];
-    // form the quorum election config, required for the VID computation inside the builder_state
-    let quorum_election_config: StaticElectionConfig =
-        <<SeqTypes as NodeType>::Membership as Membership<SeqTypes>>::default_election_config(
-            8 as u64,
-        );
-
-    let quorum_membership: GeneralStaticCommittee<
-        SeqTypes,
-        hotshot_stake_table::vec_based::config::QCVerKey,
-    > = <<SeqTypes as NodeType>::Membership as Membership<SeqTypes>>::create_election(
-        commitee_stake_table_entries,
-        quorum_election_config,
+    let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
+        (builder_pub_key, builder_private_key),
+        req_sender,
+        res_receiver,
+        tx_sender,
+        da_sender,
+        qc_sender,
+        decide_sender,
     );
-    let global_state: GlobalState<SeqTypes> =
-        GlobalState::<SeqTypes>::new(req_sender, res_receiver);
 
     let arc_rwlock_global_state: Arc<RwLock<GlobalState<SeqTypes>>> =
         Arc::new(RwLock::new(global_state));
@@ -128,7 +122,6 @@ async fn main() -> anyhow::Result<()> {
         Arc::clone(&arc_rwlock_global_state);
 
     let builder_state = BuilderState::<SeqTypes>::new(
-        (builder_pub_key, builder_private_key),
         (
             ViewNumber::new(0),
             genesis_vid_commitment(),
@@ -141,11 +134,14 @@ async fn main() -> anyhow::Result<()> {
         req_receiver,
         arc_rwlock_global_state,
         res_sender,
-        Arc::new(quorum_membership),
+        NonZeroUsize::new(1).unwrap(),
     );
 
     let port = portpicker::pick_unused_port().expect("Could not find an open port");
-    let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+    let hotshot_api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+    let port = portpicker::pick_unused_port().expect("Could not find an open port");
+    let submit_txn_api = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
     // get handle to the hotshot context
     let builder_context = init_node(network_params, &NoMetrics).await?;
@@ -169,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
         app.register_module("builder", builder_api)
             .expect("Failed to register the builder API");
 
+        /*
         async_spawn(async move {
             app.serve(api_url).await.unwrap();
         });
@@ -184,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
             .unwrap();
         })
         .await;
+        */
         builder_state.event_loop();
     })
     .await;

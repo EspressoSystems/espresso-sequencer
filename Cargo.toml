@@ -15,19 +15,13 @@ members = [
   "hotshot-state-prover",
   "sequencer",
   "utils",
-  "contract-bindings",
-  "contracts/rust/adapter",
-  "contracts/rust/diff-test",
-  "contracts/rust/gen-vk-contract",
-  "hotshot-state-prover",
-  "sequencer",
-  "utils",
   "builder",
 ]
 
 [workspace.dependencies]
 anyhow = "^1.0"
 ark-std = "0.4"
+ark-bls12-381 = "0.4"
 ark-bls12-381 = "0.4"
 ark-bn254 = "0.4"
 ark-ec = "0.4"
@@ -46,32 +40,31 @@ cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.14" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.13" }
 hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
 #hs-builder-api = { path = "../hs-builder-api" }
-hs-builder-core = { path = "../hs-builder-core" }
-#hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "builder_executable_changes" }
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-  "test-apis",
-  "test-srs",
-] }
+hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "hg/update_hotshot_versoin" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
   "std",
   "test-srs",
 ] }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0" }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0" }
 snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.6" }
+tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.6" }
 tracing = "0.1"
@@ -84,3 +77,9 @@ serde = { version = "1.0.195", features = ["derive"] }
 toml = "0.8"
 url = "2.3"
 zeroize = "1.7"
+zeroize = "1.7"
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
+  "test-apis",
+  "test-srs",
+] }
+#hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "builder_executable_changes" }
