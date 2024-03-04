@@ -411,7 +411,9 @@ pub mod testing {
             let state_key_pairs = (0..num_nodes)
                 .map(|_| StateKeyPair::generate())
                 .collect::<Vec<_>>();
-            let known_nodes_with_stake = pub_keys
+
+            // initially make every node have 1 stake
+            let mut known_nodes_with_stake = pub_keys
                 .iter()
                 .zip(&state_key_pairs)
                 .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
@@ -419,6 +421,14 @@ pub mod testing {
                     state_ver_key: state_key_pair.ver_key(),
                 })
                 .collect::<Vec<_>>();
+
+            //update the last node stake table entry with 0 stake
+            let builder_stake_entry = PeerConfig::<PubKey> {
+                stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(1),
+                state_ver_key: state_key_pairs[num_nodes - 1].ver_key(),
+            };
+
+            known_nodes_with_stake[num_nodes - 1] = builder_stake_entry;
 
             let master_map = MasterMap::new();
 
@@ -593,12 +603,12 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let success_height = 30;
+        let success_height = 5;
         // Assign `config` so it isn't dropped early.
         let config = TestConfig::default();
         let handles = config.init_nodes().await;
 
-        let mut events = handles[0].get_event_stream();
+        let mut events = handles[3].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
         }
@@ -620,6 +630,7 @@ mod test {
 
         loop {
             let event = events.next().await.unwrap();
+            tracing::debug!("Received event from handle: {event:?}");
             let Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
