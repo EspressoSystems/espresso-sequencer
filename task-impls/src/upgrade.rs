@@ -205,7 +205,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 }
 
-/// task state implementation for DA Task
+/// task state implementation for the upgrade task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
     for UpgradeTaskState<TYPES, I, A>
 {

@@ -498,7 +498,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // We should just make sure we don't *sign* an UpgradeCertificate for an upgrade
                 // that we do not support.
                 if let Some(ref upgrade_cert) = proposal.data.upgrade_certificate {
-                    if !upgrade_cert.is_valid_cert(self.quorum_membership.as_ref()) {
+                    if upgrade_cert.is_valid_cert(self.quorum_membership.as_ref()) {
+                        self.consensus
+                            .write()
+                            .await
+                            .saved_upgrade_certs
+                            .insert(view, upgrade_cert.clone());
+                    } else {
                         error!("Invalid upgrade_cert in proposal for view {}", *view);
                         return;
                     }
@@ -740,7 +746,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                         .last_synced_block_height
                                         .set(usize::try_from(leaf.get_height()).unwrap_or(0));
                                 }
-                                if let Some(ref upgrade_cert) = proposal.data.upgrade_certificate {
+                                if let Some(upgrade_cert) = consensus.saved_upgrade_certs.get(&leaf.get_view_number()) {
                                     info!("Updating consensus state with decided upgrade certificate: {:?}", upgrade_cert);
                                     self.decided_upgrade_cert = Some(upgrade_cert.clone());
                                 }

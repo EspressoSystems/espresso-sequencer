@@ -33,6 +33,15 @@ pub mod spinning_task;
 /// task for checking if view sync got activated
 pub mod view_sync_task;
 
+/// predicates to use in tests
+pub mod predicates;
+
+/// scripting harness for tests
+pub mod script;
+
+/// view generator for tests
+pub mod view_generator;
+
 /// global event at the test level
 #[derive(Clone, Debug)]
 pub enum GlobalTestEvent {

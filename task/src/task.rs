@@ -166,6 +166,11 @@ impl<S: TaskState + Send + 'static> Task<S> {
     pub fn state_mut(&mut self) -> &mut S {
         &mut self.state
     }
+    /// Get an immutable reference to this tasks state
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+
     /// Spawn a new task adn register it.  It will get all events not seend
     /// by the task creating it.
     pub async fn run_sub_task(&self, state: S) {

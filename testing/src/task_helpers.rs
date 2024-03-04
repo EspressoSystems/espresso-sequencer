@@ -2,7 +2,7 @@
 use std::marker::PhantomData;
 
 use hotshot_example_types::{
-    block_types::{TestBlockHeader, TestBlockPayload},
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
     state_types::{TestInstanceState, TestValidatedState},
 };
@@ -17,10 +17,10 @@ use hotshot::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, ViewNumber},
-    message::Proposal,
-    simple_certificate::QuorumCertificate,
-    simple_vote::SimpleVote,
+    data::{Leaf, QuorumProposal, VidDisperse, ViewNumber},
+    message::{GeneralConsensusMessage, Proposal},
+    simple_certificate::{DACertificate, QuorumCertificate},
+    simple_vote::{DAData, DAVote, SimpleVote},
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         consensus_api::ConsensusApi,
@@ -29,7 +29,7 @@ use hotshot_types::{
         states::ValidatedState,
         BlockPayload,
     },
-    vid::{vid_scheme, VidSchemeType},
+    vid::{vid_scheme, VidCommitment, VidSchemeType},
     vote::HasViewNumber,
 };
 
@@ -42,6 +42,8 @@ use hotshot_types::utils::View;
 use hotshot_types::utils::ViewInner;
 use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
+
+use jf_primitives::vid::VidScheme;
 
 use serde::Serialize;
 use std::{fmt::Debug, hash::Hash, sync::Arc};
@@ -367,4 +369,129 @@ pub fn vid_scheme_from_view_number<TYPES: NodeType>(
 ) -> VidSchemeType {
     let num_storage_nodes = membership.get_committee(view_number).len();
     vid_scheme(num_storage_nodes)
+}
+
+pub fn vid_payload_commitment(
+    quorum_membership: &<TestTypes as NodeType>::Membership,
+    view_number: ViewNumber,
+    transactions: Vec<TestTransaction>,
+) -> VidCommitment {
+    let vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(encoded_transactions).unwrap();
+
+    vid_disperse.commit
+}
+
+pub fn da_payload_commitment(
+    quorum_membership: &<TestTypes as NodeType>::Membership,
+    transactions: Vec<TestTransaction>,
+) -> VidCommitment {
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+
+    vid_commitment(&encoded_transactions, quorum_membership.total_nodes())
+}
+
+pub fn build_vid_proposal(
+    quorum_membership: &<TestTypes as NodeType>::Membership,
+    view_number: ViewNumber,
+    transactions: Vec<TestTransaction>,
+    private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
+) -> Proposal<TestTypes, VidDisperse<TestTypes>> {
+    let vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
+
+    let payload_commitment = vid_disperse.commit;
+
+    let vid_signature =
+        <TestTypes as NodeType>::SignatureKey::sign(private_key, payload_commitment.as_ref())
+            .expect("Failed to sign payload commitment");
+    let vid_disperse = VidDisperse::from_membership(
+        view_number,
+        vid.disperse(&encoded_transactions).unwrap(),
+        &quorum_membership.clone().into(),
+    );
+
+    Proposal {
+        data: vid_disperse.clone(),
+        signature: vid_signature,
+        _pd: PhantomData,
+    }
+}
+
+pub fn build_da_certificate(
+    quorum_membership: &<TestTypes as NodeType>::Membership,
+    view_number: ViewNumber,
+    transactions: Vec<TestTransaction>,
+    public_key: &<TestTypes as NodeType>::SignatureKey,
+    private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
+) -> DACertificate<TestTypes> {
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+
+    let da_payload_commitment =
+        vid_commitment(&encoded_transactions, quorum_membership.total_nodes());
+
+    let da_data = DAData {
+        payload_commit: da_payload_commitment,
+    };
+
+    build_cert::<TestTypes, DAData, DAVote<TestTypes>, DACertificate<TestTypes>>(
+        da_data,
+        quorum_membership,
+        view_number,
+        public_key,
+        private_key,
+    )
+}
+
+pub async fn build_vote(
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    proposal: QuorumProposal<TestTypes>,
+) -> GeneralConsensusMessage<TestTypes> {
+    let consensus_lock = handle.get_consensus();
+    let consensus = consensus_lock.read().await;
+    let membership = handle.hotshot.memberships.quorum_membership.clone();
+
+    let justify_qc = proposal.justify_qc.clone();
+    let view = ViewNumber::new(*proposal.view_number);
+    let parent = if justify_qc.is_genesis {
+        let Some(genesis_view) = consensus.validated_state_map.get(&ViewNumber::new(0)) else {
+            panic!("Couldn't find genesis view in state map.");
+        };
+        let Some(leaf) = genesis_view.get_leaf_commitment() else {
+            panic!("Genesis view points to a view without a leaf");
+        };
+        let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
+            panic!("Failed to find genesis leaf.");
+        };
+        leaf.clone()
+    } else {
+        consensus
+            .saved_leaves
+            .get(&justify_qc.get_data().leaf_commit)
+            .cloned()
+            .unwrap()
+    };
+
+    let parent_commitment = parent.commit();
+
+    let leaf: Leaf<_> = Leaf {
+        view_number: view,
+        justify_qc: proposal.justify_qc.clone(),
+        parent_commitment,
+        block_header: proposal.block_header,
+        block_payload: None,
+        proposer_id: membership.get_leader(view),
+    };
+    let vote = QuorumVote::<TestTypes>::create_signed_vote(
+        QuorumData {
+            leaf_commit: leaf.commit(),
+        },
+        view,
+        handle.public_key(),
+        handle.private_key(),
+    )
+    .expect("Failed to create quorum vote");
+    GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }
