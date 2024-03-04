@@ -24,7 +24,7 @@ hotshot-types = { workspace = true }
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.14" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.21" }
 hs-builder-api = { workspace = true }
 hs-builder-core = { workspace = true }
 portpicker = "0.1.1"
