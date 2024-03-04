@@ -1,7 +1,8 @@
-use crate::{api, persistence, SchnorrPrivKey};
+use crate::{api, persistence};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use ethers::types::Address;
+use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
 use std::collections::HashSet;
@@ -87,7 +88,7 @@ pub struct Options {
     pub private_staking_key: BLSPrivKey,
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")]
-    pub private_state_key: SchnorrPrivKey,
+    pub private_state_key: StateSignKey,
 
     /// Add optional modules to the service.
     ///
