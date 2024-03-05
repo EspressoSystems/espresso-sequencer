@@ -18,6 +18,7 @@ use async_std::{
 };
 use futures::future::Future;
 use std::fmt::Display;
+use tracing::{info_span, Instrument};
 
 #[derive(Debug)]
 struct BackgroundTaskInner {
@@ -40,18 +41,28 @@ pub struct BackgroundTask {
 
 impl BackgroundTask {
     /// Spawn a background task, which will be cancelled when every clone is dropped.
+    ///
+    /// The caller should ensure that `future` yields back to the executor fairly frequently, to
+    /// ensure timely cancellation in case the task is dropped. If an operation in `future` may run
+    /// for a long time without blocking or yielding, consider using
+    /// [`yield_now`](async_std::task::yield_now) periodically, or using
+    /// [`spawn`](async_std::task::spawn) or [`spawn_blocking`](async_std::task::spawn_blocking) to
+    /// run long operations in a sub-task.
     pub fn spawn<F>(name: impl Display, future: F) -> Self
     where
         F: Future + Send + 'static,
     {
         let name = name.to_string();
         let handle = {
-            let name = name.clone();
-            spawn(async move {
-                tracing::info!("spawning background task {name}");
-                future.await;
-                tracing::info!("background task {name} completed");
-            })
+            let span = info_span!("task", name);
+            spawn(
+                async move {
+                    tracing::info!("spawning background task");
+                    future.await;
+                    tracing::info!("completed background task");
+                }
+                .instrument(span),
+            )
         };
 
         Self {
@@ -69,8 +80,9 @@ impl Drop for BackgroundTask {
             // Check if this is the last instance of the [`Arc`] and, if so, cancel the underlying
             // task.
             if let Some(inner) = Arc::into_inner(inner) {
-                tracing::info!("cancelling background task {}", inner.name);
+                tracing::info!(name = inner.name, "cancelling background task");
                 async_std::task::block_on(inner.handle.cancel());
+                tracing::info!(name = inner.name, "cancelled background task");
             }
         }
     }

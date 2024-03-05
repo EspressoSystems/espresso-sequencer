@@ -23,17 +23,11 @@ use std::{
 };
 
 pub use anyhow::Error;
-use async_std::{
-    net::ToSocketAddrs,
-    sync::Arc,
-    task::{sleep, spawn},
-};
+use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
 use async_trait::async_trait;
 use chrono::Utc;
 use commit::Committable;
 use futures::{
-    channel::oneshot,
-    future::{select, Either, FutureExt},
     stream::{BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
@@ -74,6 +68,7 @@ use crate::{
         VersionedDataSource,
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    task::BackgroundTask,
     types::HeightIndexed,
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidShare,
 };
@@ -339,8 +334,8 @@ impl Config {
 pub struct SqlStorage {
     client: Arc<Client>,
     tx_in_progress: bool,
-    kill: Option<oneshot::Sender<()>>,
     pruner_cfg: Option<PrunerCfg>,
+    _connection: BackgroundTask,
 }
 
 impl SqlStorage {
@@ -350,7 +345,7 @@ impl SqlStorage {
         let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
 
         // Convert the TCP connection into a postgres connection.
-        let (mut client, kill) = if config.tls {
+        let (mut client, connection) = if config.tls {
             let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
             connect(config.pgcfg, tcp, tls).await?
         } else {
@@ -405,8 +400,8 @@ impl SqlStorage {
         Ok(Self {
             client: Arc::new(client),
             tx_in_progress: false,
-            kill: Some(kill),
             pruner_cfg: config.pruner_cfg,
+            _connection: connection,
         })
     }
 
@@ -608,15 +603,6 @@ impl PruneStorage for SqlStorage {
 impl Query for SqlStorage {
     async fn client(&self) -> Cow<Arc<Client>> {
         Cow::Borrowed(&self.client)
-    }
-}
-
-impl Drop for SqlStorage {
-    fn drop(&mut self) {
-        if let Some(kill) = self.kill.take() {
-            // Ignore errors, they just mean the task has already exited.
-            kill.send(()).ok();
-        }
     }
 }
 
@@ -1766,35 +1752,22 @@ where
 
 /// Connect to a Postgres database with a TLS implementation.
 ///
-/// Spawns a background task to run the connection. Returns a client and a channel to kill the
-/// connection task.
+/// Spawns a background task to run the connection. Returns a client and a handle to the spawned
+/// task.
 async fn connect<T>(
     pgcfg: postgres::Config,
     tcp: TcpStream,
     tls: T,
-) -> anyhow::Result<(Client, oneshot::Sender<()>)>
+) -> anyhow::Result<(Client, BackgroundTask)>
 where
     T: TlsConnect<TcpStream>,
     T::Stream: Send + 'static,
 {
     let (client, connection) = pgcfg.connect_raw(tcp, tls).await?;
-
-    // Spawn a task to drive the connection, with a channel to kill it when this data source is
-    // dropped.
-    let (kill, killed) = oneshot::channel();
-    spawn(select(killed, connection).inspect(|res| {
-        if let Either::Right((res, _)) = res {
-            // If we were killed, do nothing. That is the normal shutdown path. But if the `select`
-            // returned because the `connection` terminated, we should log something, as that is
-            // unusual.
-            match res {
-                Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
-                Err(err) => tracing::error!("postgres connection closed with error: {err}"),
-            }
-        }
-    }));
-
-    Ok((client, kill))
+    Ok((
+        client,
+        BackgroundTask::spawn("postgres connection", connection),
+    ))
 }
 
 fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {

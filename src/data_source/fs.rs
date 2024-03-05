@@ -244,8 +244,8 @@ mod impl_testable_data_source {
     {
         type Storage = TempDir;
 
-        async fn create(_node_id: usize) -> Self::Storage {
-            TempDir::new().unwrap()
+        async fn create(node_id: usize) -> Self::Storage {
+            TempDir::with_prefix(format!("file_system_data_source_{node_id}")).unwrap()
         }
 
         async fn connect(storage: &Self::Storage) -> Self {

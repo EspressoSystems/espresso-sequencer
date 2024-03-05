@@ -118,6 +118,7 @@ mod test {
     use super::*;
     use crate::{
         data_source::ExtensibleDataSource,
+        task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::MockTransaction,
@@ -125,7 +126,7 @@ mod test {
         },
         Error,
     };
-    use async_std::{sync::RwLock, task::spawn};
+    use async_std::sync::RwLock;
     use bincode::Options as _;
     use futures::FutureExt;
     use hotshot_utils::bincode::bincode_opts;
@@ -149,7 +150,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("status", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{}", port)));
+        network.spawn("server", app.serve(format!("0.0.0.0:{}", port)));
 
         // Start a client.
         let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
@@ -240,7 +241,7 @@ mod test {
     async fn test_extensions() {
         setup_test();
 
-        let dir = TempDir::new().unwrap();
+        let dir = TempDir::with_prefix("test_status_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
             MockDataSource::create(dir.path(), Default::default())
                 .await
@@ -281,7 +282,7 @@ mod test {
         app.register_module("status", api).unwrap();
 
         let port = pick_unused_port().unwrap();
-        spawn(app.serve(format!("0.0.0.0:{}", port)));
+        let _server = BackgroundTask::spawn("server", app.serve(format!("0.0.0.0:{}", port)));
 
         let client =
             Client::<Error>::new(format!("http://localhost:{}/status", port).parse().unwrap());

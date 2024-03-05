@@ -181,7 +181,6 @@ mod test {
         types::HeightIndexed,
         VidCommitment,
     };
-    use async_std::task::spawn;
     use commit::Committable;
     use futures::{
         future::{join, FutureExt},
@@ -231,7 +230,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -451,7 +450,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -503,7 +502,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -559,7 +558,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -612,7 +611,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -666,7 +665,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus. We don't give it a
         // fetcher since transactions are always fetched passively anyways.
@@ -734,7 +733,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus.
         let db = TmpDb::init().await;
