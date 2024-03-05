@@ -64,6 +64,7 @@ async fn test_upgrade_task() {
         inputs: vec![QuorumProposalRecv(proposals[0].clone(), leaders[0])],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
+            exact(QuorumProposalValidated(proposals[0].data.clone())),
             exact(QuorumVoteSend(votes[0].clone())),
         ],
         asserts: vec![],
@@ -77,6 +78,7 @@ async fn test_upgrade_task() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
+            exact(QuorumProposalValidated(proposals[1].data.clone())),
             exact(QuorumVoteSend(votes[1].clone())),
         ],
         asserts: vec![no_decided_upgrade_cert()],
@@ -90,6 +92,7 @@ async fn test_upgrade_task() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(3))),
+            exact(QuorumProposalValidated(proposals[2].data.clone())),
             leaf_decided(),
             exact(QuorumVoteSend(votes[2].clone())),
         ],
@@ -104,6 +107,7 @@ async fn test_upgrade_task() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(4))),
+            exact(QuorumProposalValidated(proposals[3].data.clone())),
             leaf_decided(),
             exact(QuorumVoteSend(votes[3].clone())),
         ],
@@ -112,7 +116,11 @@ async fn test_upgrade_task() {
 
     let view_5 = TestScriptStage {
         inputs: vec![QuorumProposalRecv(proposals[4].clone(), leaders[4])],
-        outputs: vec![exact(ViewChange(ViewNumber::new(5))), leaf_decided()],
+        outputs: vec![
+            exact(ViewChange(ViewNumber::new(5))),
+            exact(QuorumProposalValidated(proposals[4].data.clone())),
+            leaf_decided(),
+        ],
         asserts: vec![decided_upgrade_cert()],
     };
 

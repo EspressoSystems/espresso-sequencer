@@ -43,6 +43,8 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
     QuorumVoteSend(QuorumVote<TYPES>),
+    /// A proposal was validated. This means it comes from the correct leader and has a correct QC.
+    QuorumProposalValidated(QuorumProposal<TYPES>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DAProposalSend(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal

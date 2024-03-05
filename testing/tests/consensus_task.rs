@@ -48,6 +48,10 @@ async fn test_consensus_task() {
         HotShotEvent::QuorumProposalSend(proposal.clone(), public_key),
         1,
     );
+    output.insert(
+        HotShotEvent::QuorumProposalValidated(proposal.data.clone()),
+        1,
+    );
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
 
@@ -98,6 +102,7 @@ async fn test_consensus_vote() {
     ));
 
     let proposal = proposal.data;
+    output.insert(HotShotEvent::QuorumProposalValidated(proposal.clone()), 1);
     if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
         input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));

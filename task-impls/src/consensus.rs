@@ -698,6 +698,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         },
                     })
                     .await;
+                // Notify other tasks
+                broadcast_event(
+                    HotShotEvent::QuorumProposalValidated(proposal.data.clone()),
+                    &event_stream,
+                )
+                .await;
 
                 let mut new_anchor_view = consensus.last_decided_view;
                 let mut new_locked_view = consensus.locked_view;
