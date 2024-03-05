@@ -17,6 +17,8 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
+build_info = true
+extra_output = ["storageLayout"]
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 
