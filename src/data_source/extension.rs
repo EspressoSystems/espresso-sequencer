@@ -18,9 +18,9 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, SyncStatus},
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
-    Payload, QueryResult, SignatureKey, VidShare,
+    Header, Payload, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -261,6 +261,13 @@ where
     }
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.data_source.sync_status().await
+    }
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        self.data_source.get_header_window(start, end).await
     }
 }
 

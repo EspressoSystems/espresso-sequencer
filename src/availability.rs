@@ -487,6 +487,7 @@ mod test {
             mocks::{mock_transaction, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
+        types::HeightIndexed,
         Error, Header,
     };
     use async_std::{sync::RwLock, task::spawn};

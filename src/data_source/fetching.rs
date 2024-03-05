@@ -75,18 +75,18 @@
 
 use super::storage::pruning::PruneStorage;
 use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
-use crate::availability::QueryableHeader;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
     metrics::PrometheusMetrics,
-    node::{NodeDataSource, SyncStatus},
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
     task::BackgroundTask,
+    types::HeightIndexed,
     Header, Payload, QueryResult, SignatureKey, VidShare,
 };
 use anyhow::Context;
@@ -612,6 +612,14 @@ where
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.storage().await.sync_status().await
     }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        self.storage().await.get_header_window(start, end).await
+    }
 }
 
 #[async_trait]
@@ -859,7 +867,7 @@ where
         let mut fetches = Vec::with_capacity(chunk.len());
         for t in ts {
             // Fetch missing objects that should come before `t`.
-            while chunk.start + fetches.len() < t.height() {
+            while chunk.start + fetches.len() < t.height() as usize {
                 tracing::debug!(
                     "item {} in chunk not available, will be fetched",
                     fetches.len()
@@ -1155,7 +1163,7 @@ where
 }
 
 #[async_trait]
-trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest>
+trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
@@ -1170,8 +1178,6 @@ where
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static;
-
-    fn height(&self) -> usize;
 }
 
 /// Break a range into fixed-size chunks.

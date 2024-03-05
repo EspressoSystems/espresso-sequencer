@@ -21,7 +21,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus},
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
@@ -186,6 +186,14 @@ where
     }
 
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        Err(QueryError::Missing)
+    }
+
+    async fn get_header_window(
+        &self,
+        _start: impl Into<WindowStart<Types>> + Send + Sync,
+        _end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         Err(QueryError::Missing)
     }
 }
@@ -540,6 +548,17 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.sync_status().await,
                 Self::NoStorage(data_source) => data_source.sync_status().await,
+            }
+        }
+
+        async fn get_header_window(
+            &self,
+            start: impl Into<WindowStart<MockTypes>> + Send + Sync,
+            end: u64,
+        ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
+            match self {
+                Self::Sql(data_source) => data_source.get_header_window(start, end).await,
+                Self::NoStorage(data_source) => data_source.get_header_window(start, end).await,
             }
         }
     }

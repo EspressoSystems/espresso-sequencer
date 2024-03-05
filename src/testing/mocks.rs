@@ -10,8 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::availability::{QueryableHeader, QueryablePayload};
-use chrono::Utc;
+use crate::{
+    availability::{QueryableHeader, QueryablePayload},
+    types::HeightIndexed,
+};
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
     implementations::{MemoryNetwork, MemoryStorage},
@@ -38,9 +40,15 @@ pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
     TestTransaction(payload)
 }
 
-impl<Types: NodeType<BlockPayload = TestBlockPayload>> QueryableHeader<Types> for MockHeader {
+impl QueryableHeader<MockTypes> for MockHeader {
     fn timestamp(&self) -> u64 {
-        Utc::now().timestamp() as u64
+        self.timestamp
+    }
+}
+
+impl HeightIndexed for MockHeader {
+    fn height(&self) -> u64 {
+        self.block_number
     }
 }
 

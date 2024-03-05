@@ -73,7 +73,8 @@ use crate::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
-    node::{NodeDataSource, SyncStatus},
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    types::HeightIndexed,
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
     VidShare,
 };
@@ -459,6 +460,33 @@ impl SqlStorage {
 
         Ok(height)
     }
+
+    /// Load a header from storage.
+    ///
+    /// This function is similar to `AvailabilityStorage::get_header`, but
+    /// * does not require the `QueryablePayload` bound that that trait impl does
+    /// * makes it easier to specify types since the type parameter is on the function and not on a
+    ///   trait impl
+    /// * allows type conversions for the `id` parameter
+    /// This more ergonomic interface is useful as loading headers is important for many SQL storage
+    /// functions, not just the `AvailabilityStorage` interface.
+    async fn load_header<Types: NodeType>(
+        &self,
+        id: impl Into<BlockId<Types>>,
+    ) -> QueryResult<Header<Types>> {
+        let (where_clause, param) = header_where_clause(id.into());
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_header::<Types>(row)
+    }
 }
 
 #[async_trait]
@@ -653,18 +681,7 @@ where
     }
 
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-        let (where_clause, param) = header_where_clause(id);
-        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
-        // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
-            "SELECT {HEADER_COLUMNS}
-               FROM header AS h
-              WHERE {where_clause}
-              ORDER BY h.height ASC
-              LIMIT 1"
-        );
-        let row = self.query_one(&query, [param]).await?;
-        parse_header::<Types>(row)
+        self.load_header(id).await
     }
 
     async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
@@ -1133,6 +1150,140 @@ where
             missing_vid_shares,
             pruned_height,
         })
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        // Find the specific block that starts the requested window.
+        let first_block = match start.into() {
+            WindowStart::Time(t) => {
+                // If the request is not to start from a specific block, but from a timestamp, we
+                // use a different method to find the window, as detecting whether we have
+                // sufficient data to answer the query is not as simple as just trying `load_header`
+                // for a specific block ID.
+                return self.time_window::<Types>(t, end).await;
+            }
+            WindowStart::Height(h) => h,
+            WindowStart::Hash(h) => self.load_header::<Types>(h).await?.block_number(),
+        };
+
+        // Find all blocks starting from `first_block` with timestamps less than `end`. Block
+        // timestamps are monotonically increasing, so this query is guaranteed to return a
+        // contiguous range of blocks ordered by increasing height.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.height >= $1 AND h.timestamp < $2
+              ORDER BY h.height"
+        );
+        let rows = self
+            .query(&query, [&(first_block as i64), &(end as i64)])
+            .await?;
+        let window = rows
+            .map(|row| {
+                parse_header::<Types>(row.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
+
+        // Find the block just before the window.
+        let prev = if first_block > 0 {
+            Some(self.load_header::<Types>(first_block as usize - 1).await?)
+        } else {
+            None
+        };
+
+        // Find the block just after the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1
+              ORDER BY h.height
+              LIMIT 1"
+        );
+        let next = self
+            .query_opt(&query, [&(end as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        Ok(TimeWindowQueryData { window, prev, next })
+    }
+}
+
+impl SqlStorage {
+    async fn time_window<Types: NodeType>(
+        &self,
+        start: u64,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
+        // are monotonically increasing, so this query is guaranteed to return a contiguous range of
+        // blocks ordered by increasing height. Note that we order by height explicitly, rather than
+        // ordering by timestamp (which might be more efficient, since it could reuse the timestamp
+        // index that is used in the WHERE clause) because multiple blocks may have the same
+        // timestamp, due to the 1-second timestamp resolution.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1 AND h.timestamp < $2
+              ORDER BY h.height"
+        );
+        let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
+        let window: Vec<_> = rows
+            .map(|row| {
+                parse_header::<Types>(row.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
+
+        // Find the block just after the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1
+              ORDER BY h.height
+              LIMIT 1"
+        );
+        let next = self
+            .query_opt(&query, [&(end as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        // If the `next` block exists, _or_ if any block in the window exists, we know we have
+        // enough information to definitively say at least where the window starts (we may or may
+        // not have where it ends, depending on how many blocks have thus far been produced).
+        // However, if we have neither a block in the window nor a block after it, we cannot say
+        // whether the next block produced will have a timestamp before or after the window start.
+        // In this case, we don't know what the `prev` field of the response should be, so we return
+        // an error: the caller must try again after more blocks have been produced.
+        if window.is_empty() && next.is_none() {
+            return Err(QueryError::NotFound);
+        }
+
+        // Find the block just before the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp < $1
+              ORDER BY h.height DESC
+              LIMIT 1"
+        );
+        let prev = self
+            .query_opt(&query, [&(start as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        Ok(TimeWindowQueryData { window, prev, next })
     }
 }
 
@@ -1971,6 +2122,7 @@ mod test {
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header.block_number = i;
+            leaf.leaf.block_header.timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }
@@ -2048,6 +2200,7 @@ mod test {
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header.block_number = i;
+            leaf.leaf.block_header.timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }

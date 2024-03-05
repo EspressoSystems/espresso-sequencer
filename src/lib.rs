@@ -258,13 +258,15 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use hotshot_query_service::{QueryResult, SignatureKey, VidShare};
+//! # use hotshot_query_service::{Header, QueryResult, SignatureKey, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
 //! #   PayloadQueryData, TransactionHash, TransactionIndex, VidCommonQueryData,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
-//! # use hotshot_query_service::node::{NodeDataSource, SyncStatus};
+//! # use hotshot_query_service::node::{
+//! #   NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart,
+//! # };
 //! # use hotshot_query_service::status::StatusDataSource;
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
@@ -363,6 +365,14 @@
 //!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
 //!         self.hotshot_qs.sync_status().await
 //!     }
+//!
+//!     async fn get_header_window(
+//!         &self,
+//!         start: impl Into<WindowStart<AppTypes>> + Send + Sync,
+//!         end: u64,
+//!     ) -> QueryResult<TimeWindowQueryData<Header<AppTypes>>> {
+//!         self.hotshot_qs.get_header_window(start, end).await
+//!     }
 //! }
 //!
 //! // Implement data source trait for status API by delegating to the underlying data source.
@@ -413,6 +423,7 @@ mod resolvable;
 pub mod status;
 mod task;
 pub mod testing;
+pub mod types;
 
 pub use error::Error;
 pub use resolvable::Resolvable;
@@ -545,7 +556,7 @@ mod test {
             VidCommonQueryData,
         },
         metrics::PrometheusMetrics,
-        node::{NodeDataSource, SyncStatus},
+        node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::StatusDataSource,
         testing::{
             consensus::MockDataSource,
@@ -687,6 +698,13 @@ mod test {
         }
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             self.hotshot_qs.sync_status().await
+        }
+        async fn get_header_window(
+            &self,
+            start: impl Into<WindowStart<MockTypes>> + Send + Sync,
+            end: u64,
+        ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
+            self.hotshot_qs.get_header_window(start, end).await
         }
     }
 

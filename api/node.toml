@@ -118,3 +118,41 @@ Returns
 }
 ```
 """
+
+[route.get_header_window]
+PATH = [
+    "header/window/:start/:end",
+    "header/window/from/:height/:end",
+    "header/window/from/hash/:hash/:end",
+]
+":start" = "Integer"
+":end" = "Integer"
+":height" = "Integer"
+":hash" = "TaggedBase64"
+DOC = """
+Get block headers in a time window.
+
+Returns all available headers, in order, whose timestamps fall between `:start` (inclusive) and
+`:end` (exclusive), or between the block indicated by `:height` or `:hash` (inclusive) and `:end`
+(exclusive). The response also includes one block before the desired window (unless the window
+includes the genesis block) and one block after the window. This proves to the client that the
+server has not omitted any blocks whose timestamps fall within the desired window.
+
+It is possible that not all blocks in the desired window are available when this endpoint is called.
+In that case, whichever blocks are available are included in the response, and `next` is `null` to
+indicate that the response is not complete. The client can then use one of the `/from/` forms of
+this endpoint to fetch the remaining blocks from where the first response left off, once they become
+available. If no blocks are available, not even `prev`, this endpoint will return an error.
+
+Returns
+
+```json
+{
+    "window": ["Header"],
+    "prev": "Header", // nullable
+    "next": "Header"  // nullable
+}
+```
+
+All timestamps are denominated in an integer number of seconds.
+"""

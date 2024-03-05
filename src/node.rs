@@ -75,6 +75,15 @@ pub enum Error {
         source: QueryError,
         block: String,
     },
+    #[snafu(display(
+        "error fetching window starting from {start} and ending at time {end}: {source}"
+    ))]
+    #[from(ignore)]
+    QueryWindow {
+        source: QueryError,
+        start: String,
+        end: u64,
+    },
     #[snafu(display("malformed signature key"))]
     #[from(ignore)]
     InvalidSignatureKey,
@@ -97,7 +106,8 @@ impl Error {
             Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
             Self::Query { source, .. }
             | Self::QueryProposals { source, .. }
-            | Self::QueryVid { source, .. } => source.status(),
+            | Self::QueryVid { source, .. }
+            | Self::QueryWindow { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
     }
@@ -165,6 +175,26 @@ where
         })?
         .get("sync_status", |_req, state| {
             async move { Ok(state.sync_status().await?) }.boxed()
+        })?
+        .get("get_header_window", |req, state| {
+            async move {
+                let start = if let Some(height) = req.opt_integer_param("height")? {
+                    WindowStart::Height(height)
+                } else if let Some(hash) = req.opt_blob_param("hash")? {
+                    WindowStart::Hash(hash)
+                } else {
+                    WindowStart::Time(req.integer_param("start")?)
+                };
+                let end = req.integer_param("end")?;
+                state
+                    .get_header_window(start, end)
+                    .await
+                    .context(QueryWindowSnafu {
+                        start: format!("{start:?}"),
+                        end,
+                    })
+            }
+            .boxed()
         })?;
     Ok(api)
 }
@@ -187,7 +217,7 @@ mod test {
             mocks::MockTypes,
             setup_test,
         },
-        Error, VidShare,
+        Error, Header, VidShare,
     };
     use async_std::{
         sync::RwLock,
@@ -300,6 +330,8 @@ mod test {
             0
         );
 
+        let mut headers = vec![];
+
         // Get VID share for each block.
         tracing::info!(block_height, "checking VID shares");
         'outer: while let Some(event) = events.next().await {
@@ -307,6 +339,7 @@ mod test {
                 continue;
             };
             for (leaf, vid) in leaf_chain.iter().rev() {
+                headers.push(leaf.block_header.clone());
                 if leaf.block_header.block_number >= block_height as u64 {
                     break 'outer;
                 }
@@ -343,6 +376,51 @@ mod test {
                 );
             }
         }
+
+        // Check time window queries. The various edge cases are thoroughly tested for each
+        // individual data source. In this test, we just smoketest API parameter handling. Sleep 2
+        // seconds to ensure a new header is produced with a timestamp after the latest one in
+        // `headers`
+        sleep(Duration::from_secs(2)).await;
+        let first_header = &headers[0];
+        let last_header = &headers.last().unwrap();
+        let window: TimeWindowQueryData<Header<MockTypes>> = client
+            .get(&format!(
+                "header/window/{}/{}",
+                first_header.timestamp,
+                last_header.timestamp + 1
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert!(window.window.contains(first_header));
+        assert!(window.window.contains(last_header));
+        assert!(window.next.is_some());
+
+        // Query for the same window other ways.
+        assert_eq!(
+            window,
+            client
+                .get(&format!(
+                    "header/window/from/0/{}",
+                    last_header.timestamp + 1
+                ))
+                .send()
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            window,
+            client
+                .get(&format!(
+                    "header/window/from/hash/{}/{}",
+                    first_header.commit(),
+                    last_header.timestamp + 1
+                ))
+                .send()
+                .await
+                .unwrap()
+        );
 
         // In this simple test, the node should be fully synchronized.
         let sync_status = client

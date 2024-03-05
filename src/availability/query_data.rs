@@ -10,7 +10,9 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
+use crate::{
+    types::HeightIndexed, Header, Metadata, Payload, SignatureKey, Transaction, VidCommon,
+};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
@@ -240,10 +242,6 @@ impl<Types: NodeType> LeafQueryData<Types> {
         &self.leaf.block_header
     }
 
-    pub fn height(&self) -> u64 {
-        self.header().block_number()
-    }
-
     pub fn hash(&self) -> LeafHash<Types> {
         self.leaf.commit()
     }
@@ -258,6 +256,12 @@ impl<Types: NodeType> LeafQueryData<Types> {
 
     pub fn proposer(&self) -> SignatureKey<Types> {
         self.leaf.get_proposer_id()
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for LeafQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header().block_number()
     }
 }
 
@@ -315,10 +319,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
         self.hash
     }
 
-    pub fn height(&self) -> u64 {
-        self.header.block_number()
-    }
-
     pub fn size(&self) -> u64 {
         self.size
     }
@@ -369,6 +369,12 @@ where
     }
 }
 
+impl<Types: NodeType> HeightIndexed for BlockQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header.block_number()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct PayloadQueryData<Types: NodeType> {
@@ -399,10 +405,6 @@ impl<Types: NodeType> PayloadQueryData<Types> {
         BlockQueryData::genesis(instance_state).into()
     }
 
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
     pub fn hash(&self) -> VidCommitment {
         self.hash
     }
@@ -417,6 +419,12 @@ impl<Types: NodeType> PayloadQueryData<Types> {
 
     pub fn data(&self) -> &Payload<Types> {
         &self.data
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for PayloadQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.height
     }
 }
 
@@ -450,10 +458,6 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
         Self::new(leaf.block_header, disperse.common)
     }
 
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }
@@ -464,6 +468,12 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
 
     pub fn common(&self) -> &VidCommon {
         &self.common
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for VidCommonQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.height
     }
 }
 
@@ -528,10 +538,6 @@ impl<Types: NodeType> BlockSummaryQueryData<Types> {
         self.hash
     }
 
-    pub fn height(&self) -> u64 {
-        self.header.block_number()
-    }
-
     pub fn size(&self) -> u64 {
         self.size
     }
@@ -542,6 +548,12 @@ impl<Types: NodeType> BlockSummaryQueryData<Types> {
 
     pub fn proposer(&self) -> SignatureKey<Types> {
         self.proposer_id.clone()
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for BlockSummaryQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header.block_number()
     }
 }
 

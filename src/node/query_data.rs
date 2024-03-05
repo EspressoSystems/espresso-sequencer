@@ -10,9 +10,11 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::types::HeightIndexed;
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
-pub use crate::availability::{BlockId, LeafQueryData};
+pub use crate::availability::{BlockHash, BlockId, LeafQueryData};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct SyncStatus {
@@ -36,5 +38,26 @@ impl SyncStatus {
 
     pub fn is_fully_synced(&self) -> bool {
         *self == Self::fully_synced()
+    }
+}
+
+/// Response to a `/:resource/window` query.
+#[derive(Clone, Debug, Derivative, PartialEq, Eq, Serialize, Deserialize)]
+#[derivative(Default(bound = ""))]
+pub struct TimeWindowQueryData<T> {
+    pub window: Vec<T>,
+    pub prev: Option<T>,
+    pub next: Option<T>,
+}
+
+impl<T: HeightIndexed> TimeWindowQueryData<T> {
+    /// The block height of the block that starts the window.
+    ///
+    /// If the window is empty, this is the height of the block that ends the window.
+    pub fn from(&self) -> Option<u64> {
+        self.window
+            .first()
+            .or(self.next.as_ref())
+            .map(|t| t.height())
     }
 }
