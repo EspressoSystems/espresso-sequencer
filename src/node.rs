@@ -16,11 +16,11 @@
 //! one particular node. It provides access to information that the
 //! [availability](crate::availability) API does not, because this information depends on the
 //! perspective of the node observing it, and may be subject to eventual consistency. For example,
-//! `/node/block-height` and `/node/proposals/:proposer_id/count` may both return smaller counts
-//! than expected, if the node being queried is not fully synced with the entire history of the
-//! chain. However, the node will _eventually_ sync and return the expected counts.
+//! `/node/block-height` may return smaller counts than expected, if the node being queried is not
+//! fully synced with the entire history of the chain. However, the node will _eventually_ sync and
+//! return the expected counts.
 
-use crate::{api::load_api, QueryError, SignatureKey};
+use crate::{api::load_api, QueryError};
 use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::fmt::Display;
 use std::path::PathBuf;
-use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, RequestParams, StatusCode};
+use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -63,12 +63,6 @@ pub enum Error {
     Query {
         source: QueryError,
     },
-    #[snafu(display("error fetching proposals by {proposer}: {source}"))]
-    #[from(ignore)]
-    QueryProposals {
-        source: QueryError,
-        proposer: String,
-    },
     #[snafu(display("error fetching VID share for block {block}: {source}"))]
     #[from(ignore)]
     QueryVid {
@@ -84,9 +78,6 @@ pub enum Error {
         start: String,
         end: u64,
     },
-    #[snafu(display("malformed signature key"))]
-    #[from(ignore)]
-    InvalidSignatureKey,
     Custom {
         message: String,
         status: StatusCode,
@@ -103,9 +94,8 @@ impl Error {
 
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } | Self::InvalidSignatureKey => StatusCode::BadRequest,
+            Self::Request { .. } => StatusCode::BadRequest,
             Self::Query { source, .. }
-            | Self::QueryProposals { source, .. }
             | Self::QueryVid { source, .. }
             | Self::QueryWindow { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
@@ -126,31 +116,6 @@ where
     api.with_version("0.0.1".parse().unwrap())
         .get("block_height", |_req, state| {
             async move { state.block_height().await.context(QuerySnafu) }.boxed()
-        })?
-        .get("count_proposals", |req, state| {
-            async move {
-                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
-                state
-                    .count_proposals(&proposer)
-                    .await
-                    .context(QueryProposalsSnafu {
-                        proposer: proposer.to_string(),
-                    })
-            }
-            .boxed()
-        })?
-        .get("get_proposals", |req, state| {
-            async move {
-                let proposer = proposer_param::<Types>(&req, "proposer_id")?;
-                let limit = req.opt_integer_param("count")?;
-                state
-                    .get_proposals(&proposer, limit)
-                    .await
-                    .context(QueryProposalsSnafu {
-                        proposer: proposer.to_string(),
-                    })
-            }
-            .boxed()
         })?
         .get("count_transactions", |_req, state| {
             async move { Ok(state.count_transactions().await?) }.boxed()
@@ -199,14 +164,6 @@ where
     Ok(api)
 }
 
-fn proposer_param<Types: NodeType>(
-    req: &RequestParams,
-    param: &str,
-) -> Result<SignatureKey<Types>, Error> {
-    let encoded = req.tagged_base64_param(param)?;
-    encoded.try_into().map_err(|_| Error::InvalidSignatureKey)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -225,8 +182,7 @@ mod test {
     };
     use commit::Committable;
     use futures::{FutureExt, StreamExt};
-    use hotshot::types::SignatureKey;
-    use hotshot_types::{event::EventType, signature_key::BLSPubKey};
+    use hotshot_types::event::EventType;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -255,7 +211,7 @@ mod test {
             Client::<Error>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
-        // Wait until the block height is high enough that each node has proposed a block.
+        // Wait until a few blocks have been sequenced.
         let block_height = loop {
             let block_height = client.get::<usize>("block-height").send().await.unwrap();
             if block_height > network.num_nodes() {
@@ -263,53 +219,6 @@ mod test {
             }
             sleep(Duration::from_secs(1)).await;
         };
-
-        // Check proposals for node 0.
-        let proposals: Vec<LeafQueryData<MockTypes>> = client
-            .get(&format!("proposals/{}", network.proposer(0)))
-            .send()
-            .await
-            .unwrap();
-        assert!(!proposals.is_empty());
-        for proposal in &proposals {
-            assert_eq!(proposal.proposer(), network.proposer(0));
-        }
-        // Check the `proposals/limit` and `proposals/count` features.
-        assert!(
-            client
-                .get::<u64>(&format!("proposals/{}/count", network.proposer(0)))
-                .send()
-                .await
-                .unwrap()
-                >= proposals.len() as u64
-        );
-        // For the limit queries, we just check the count. We don't know exactly which blocks to
-        // expect in the response, since it returns the most recent `count` blocks which may
-        // include new empty blocks committed since we started checking.
-        assert_eq!(
-            client
-                .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
-                    "proposals/{}/limit/1",
-                    network.proposer(0)
-                ))
-                .send()
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-        assert_eq!(
-            client
-                .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
-                    "proposals/{}/limit/0",
-                    network.proposer(0)
-                ))
-                .send()
-                .await
-                .unwrap()
-                .len(),
-            0
-        );
 
         // We test these counters with non-trivial values in `data_source.rs`, here we just want to
         // make sure the API handlers are working, so a response of 0 is fine.
@@ -492,14 +401,7 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
-        assert_eq!(
-            client
-                .get::<u64>(&format!("proposals/{key}/count"))
-                .send()
-                .await
-                .unwrap(),
-            0
-        );
+        let sync_status: SyncStatus = client.get("sync-status").send().await.unwrap();
+        assert!(sync_status.is_fully_synced(), "{sync_status:?}");
     }
 }

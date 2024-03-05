@@ -87,7 +87,7 @@ use crate::{
     status::StatusDataSource,
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Payload, QueryResult, SignatureKey, VidShare,
+    Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
 use async_std::{
@@ -580,18 +580,6 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.fetcher.storage.read().await.height as usize)
-    }
-
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        self.storage().await.get_proposals(proposer, limit).await
-    }
-
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
-        self.storage().await.count_proposals(proposer).await
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {

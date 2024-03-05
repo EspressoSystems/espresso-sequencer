@@ -28,13 +28,11 @@ use crate::{
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey, VidCommitment,
-    VidShare,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
-use futures::stream::{self, StreamExt, TryStreamExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
@@ -61,7 +59,6 @@ where
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_payload_hash: HashMap<VidCommitment, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
-    index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
     index_by_time: BTreeMap<u64, Vec<u64>>,
     num_transactions: usize,
     payload_size: usize,
@@ -132,7 +129,6 @@ where
             index_by_block_hash: Default::default(),
             index_by_payload_hash: Default::default(),
             index_by_txn_hash: Default::default(),
-            index_by_proposer_id: Default::default(),
             index_by_time: Default::default(),
             num_transactions: 0,
             payload_size: 0,
@@ -162,7 +158,6 @@ where
             CACHED_VID_COMMON_COUNT,
         )?;
 
-        let mut index_by_proposer_id = HashMap::new();
         let mut index_by_block_hash = HashMap::new();
         let mut index_by_payload_hash = HashMap::new();
         let mut index_by_time = BTreeMap::<u64, Vec<u64>>::new();
@@ -170,10 +165,6 @@ where
             .iter()
             .flatten()
             .map(|leaf| {
-                index_by_proposer_id
-                    .entry(leaf.proposer())
-                    .or_insert_with(Vec::new)
-                    .push(leaf.height());
                 update_index_by_hash(&mut index_by_block_hash, leaf.block_hash(), leaf.height());
                 update_index_by_hash(
                     &mut index_by_payload_hash,
@@ -206,7 +197,6 @@ where
             index_by_block_hash,
             index_by_payload_hash,
             index_by_txn_hash,
-            index_by_proposer_id,
             index_by_time,
             num_transactions,
             payload_size,
@@ -416,10 +406,6 @@ where
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
-        self.index_by_proposer_id
-            .entry(leaf.proposer())
-            .or_default()
-            .push(leaf.height());
         update_index_by_hash(
             &mut self.index_by_block_hash,
             leaf.block_hash(),
@@ -494,34 +480,6 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.leaf_storage.iter().len())
-    }
-
-    async fn get_proposals(
-        &self,
-        id: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let all_ids = self
-            .index_by_proposer_id
-            .get(id)
-            .cloned()
-            .unwrap_or_default();
-        let start_from = match limit {
-            Some(count) => all_ids.len().saturating_sub(count),
-            None => 0,
-        };
-        stream::iter(all_ids)
-            .skip(start_from)
-            .then(|height| self.get_leaf((height as usize).into()))
-            .try_collect()
-            .await
-    }
-
-    async fn count_proposals(&self, id: &SignatureKey<Types>) -> QueryResult<usize> {
-        Ok(match self.index_by_proposer_id.get(id) {
-            Some(ids) => ids.len(),
-            None => 0,
-        })
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {

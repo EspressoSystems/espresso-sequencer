@@ -19,10 +19,10 @@ A node's view of a HotShot chain
 The node API provides a subjective view of the HotShot blockchain, from the perspective of one
 particular node. It provides access to information that the availability API does not, because this
 information depends on the perspective of the node observing it, and may be subject to eventual
-consistency. For example, `/node/block-height` and `/node/proposals/:proposer_id/count` may both
-return smaller counts than expected, if the node being queried is not fully synced with the entire
-history of the chain. However, the node will _eventually_ sync and return the expected counts. See
-`/node/sync-status` for information on how in or out of sync the node currently is.
+consistency. For example, `/node/block-height` may return smaller counts than expected, if the node
+being queried is not fully synced with the entire history of the chain. However, the node will
+_eventually_ sync and return the expected counts. See `/node/sync-status` for information on how in
+or out of sync the node currently is.
 """
 
 [route.block_height]
@@ -31,44 +31,6 @@ DOC = """
 The current height of the chain, as observed by this node.
 
 Returns an integer.
-"""
-
-[route.count_proposals]
-PATH = ["proposals/:proposer_id/count"]
-":proposer_id" = "TaggedBase64"
-DOC = """
-Get the number of committed blocks proposed by `proposer_id`, known to this node.
-
-Warning: count may be low if data is currently being indexed (see `sync-status`).
-
-Returns an integer.
-"""
-
-[route.get_proposals]
-PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
-":proposer_id" = "TaggedBase64"
-":count" = "Integer"
-DOC = """
-Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
-the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
-return all the leaves from the proposer.
-
-Warning: response may be incomplete if data is currently being indexed (see `sync-status`).
-
-Returns a list of
-
-```
-{
-    "leaf": {
-        "view_number": integer,
-        "justify_qc": QC,
-        "parent_commitment": TaggedBase64,
-        "block_header": app-specific header type,
-        "proposer_id": TaggedBase64,
-    },
-    "qc": QC,
-}
-```
 """
 
 [route.count_transactions]

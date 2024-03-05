@@ -34,7 +34,6 @@ CREATE TABLE leaf
 (
     height     BIGINT  PRIMARY KEY REFERENCES header (height) ON DELETE CASCADE,
     hash       VARCHAR NOT NULL UNIQUE,
-    proposer   VARCHAR NOT NULL,
     block_hash VARCHAR NOT NULL REFERENCES header (hash) ON DELETE CASCADE,
 
     -- For convenience, we store the entire leaf and justifying QC as JSON blobs. There is a bit of
@@ -47,7 +46,6 @@ CREATE TABLE leaf
     leaf JSONB NOT NULL,
     qc   JSONB NOT NULL
 );
-CREATE INDEX leaf_proposer ON leaf (proposer);
 
 CREATE TABLE transaction
 (

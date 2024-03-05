@@ -24,8 +24,8 @@
 //! updated implicitly via the [availability API update
 //! trait](crate::availability::UpdateAvailabilityData).
 
-use super::query_data::{BlockHash, BlockId, LeafQueryData, SyncStatus, TimeWindowQueryData};
-use crate::{Header, QueryResult, SignatureKey, VidShare};
+use super::query_data::{BlockHash, BlockId, SyncStatus, TimeWindowQueryData};
+use crate::{Header, QueryResult, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
@@ -50,12 +50,6 @@ impl<Types: NodeType> Clone for WindowStart<Types> {
 #[async_trait]
 pub trait NodeDataSource<Types: NodeType> {
     async fn block_height(&self) -> QueryResult<usize>;
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>>;
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
     async fn count_transactions(&self) -> QueryResult<usize>;
     async fn payload_size(&self) -> QueryResult<usize>;
     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>

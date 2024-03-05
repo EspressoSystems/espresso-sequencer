@@ -22,7 +22,7 @@ use crate::{
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
+    Header, Payload, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -156,18 +156,6 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(0)
-    }
-
-    async fn get_proposals(
-        &self,
-        _id: &SignatureKey<Types>,
-        _limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        Err(QueryError::Missing)
-    }
-
-    async fn count_proposals(&self, _id: &SignatureKey<Types>) -> QueryResult<usize> {
-        Err(QueryError::Missing)
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {
@@ -499,24 +487,6 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => NodeDataSource::block_height(data_source).await,
                 Self::NoStorage(data_source) => NodeDataSource::block_height(data_source).await,
-            }
-        }
-
-        async fn get_proposals(
-            &self,
-            proposer: &SignatureKey<MockTypes>,
-            limit: Option<usize>,
-        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
-            match self {
-                Self::Sql(data_source) => data_source.get_proposals(proposer, limit).await,
-                Self::NoStorage(data_source) => data_source.get_proposals(proposer, limit).await,
-            }
-        }
-
-        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
-            match self {
-                Self::Sql(data_source) => data_source.count_proposals(proposer).await,
-                Self::NoStorage(data_source) => data_source.count_proposals(proposer).await,
             }
         }
 

@@ -552,7 +552,6 @@ pub mod persistence_tests {
 #[cfg(any(test, feature = "testing"))]
 #[espresso_macros::generic_tests]
 pub mod node_tests {
-    use super::test_helpers::*;
     use crate::{
         availability::{BlockQueryData, LeafQueryData, QueryableHeader, VidCommonQueryData},
         node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
@@ -575,88 +574,6 @@ pub mod node_tests {
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_primitives::vid::VidScheme;
-    use std::collections::HashSet;
-
-    async fn validate(ds: &impl TestableDataSource) {
-        let mut leaves = leaf_range(ds, ..).await;
-
-        // Check the consistency of our indexes by proposer for every leaf.
-        while let Some(leaf) = leaves.next().await {
-            assert!(ds
-                .get_proposals(&leaf.proposer(), None)
-                .await
-                .unwrap()
-                .contains(&leaf));
-        }
-
-        // Validate the list of proposals for every distinct proposer ID in the chain.
-        for proposer in leaf_range(ds, ..)
-            .await
-            .map(|leaf| leaf.proposer())
-            .collect::<HashSet<_>>()
-            .await
-        {
-            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
-            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
-            // one proposal from this proposer.
-            assert!(!proposals.is_empty());
-            // If we select with a limit, we should get the most recent `limit` proposals in
-            // chronological order.
-            let suffix = ds
-                .get_proposals(&proposer, Some(proposals.len() / 2))
-                .await
-                .unwrap();
-            assert_eq!(suffix.len(), proposals.len() / 2);
-            assert!(proposals.ends_with(&suffix));
-
-            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
-            // that the list of proposals is in chronological order.
-            let mut prev_height = None;
-            for leaf in proposals {
-                assert_eq!(proposer, leaf.proposer());
-                if let Some(prev_height) = prev_height {
-                    assert!(prev_height < leaf.height());
-                }
-                prev_height = Some(leaf.height());
-            }
-        }
-    }
-
-    #[async_std::test]
-    pub async fn test_proposer_queries<D: TestableDataSource>() {
-        setup_test();
-
-        let mut network = MockNetwork::<D>::init().await;
-        let ds = network.data_source();
-
-        network.start().await;
-
-        // Wait for a few blocks to be produced, then validate the chain. We will wait for more
-        // blocks than there are nodes in the network, so we have some blocks with the same proposer.
-        let mut leaves = {
-            ds.read()
-                .await
-                .subscribe_leaves(0)
-                .await
-                .take(2 * network.num_nodes())
-        };
-        while let Some(leaf) = leaves.next().await {
-            tracing::info!("got leaf {}", leaf.height());
-        }
-        {
-            validate(&*ds.read().await).await;
-        }
-
-        // Check that all the updates have been committed to storage, not simply held in memory: a
-        // new data source created from the same underlying storage should have valid proposer
-        // indexes.
-        tracing::info!("checking persisted storage");
-
-        // Lock the original data source to prevent concurrent updates.
-        let _ = ds.read().await;
-        let storage = D::connect(network.storage()).await;
-        validate(&storage).await;
-    }
 
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>() {

@@ -20,7 +20,7 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
-    Header, Payload, QueryResult, SignatureKey, VidShare,
+    Header, Payload, QueryResult, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -236,16 +236,6 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         self.data_source.block_height().await
-    }
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        self.data_source.get_proposals(proposer, limit).await
-    }
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
-        self.data_source.count_proposals(proposer).await
     }
     async fn count_transactions(&self) -> QueryResult<usize> {
         self.data_source.count_transactions().await

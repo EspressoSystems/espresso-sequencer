@@ -65,9 +65,9 @@ use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
 pub use crate::include_migrations;
 use crate::{
     availability::{
-        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
-        QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
-        UpdateAvailabilityData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
@@ -75,8 +75,7 @@ use crate::{
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
-    VidShare,
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidShare,
 };
 
 /// Embed migrations from the given directory into the current binary.
@@ -871,12 +870,11 @@ where
         })?;
         tx.upsert(
             "leaf",
-            ["height", "hash", "proposer", "block_hash", "leaf", "qc"],
+            ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.hash().to_string()),
-                sql_param(&leaf.proposer().to_string()),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf_json),
                 sql_param(&qc_json),
@@ -1010,36 +1008,6 @@ where
                 Ok(0)
             }
         }
-    }
-
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
-        if let Some(limit) = limit {
-            // If there is a limit on the number of leaves to return, we want to return the most
-            // recent leaves, so order by descending height.
-            query = format!("{query} ORDER BY height DESC limit {limit}");
-        }
-        let rows = self.query(&query, &[&proposer.to_string()]).await?;
-        let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
-
-        if limit.is_some() {
-            // If there was a limit, we selected the leaves in descending order to get the most
-            // recent leaves. Now reverse them to put them back in chronological order.
-            leaves.reverse();
-        }
-
-        Ok(leaves)
-    }
-
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
-        let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self.query_one(query, &[&proposer.to_string()]).await?;
-        let count: i64 = row.get(0);
-        Ok(count as usize)
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {
@@ -1680,7 +1648,6 @@ where
 
     Ok(BlockQueryData {
         num_transactions: payload.len(header.metadata()) as u64,
-        proposer_id: get_proposer::<Types>(header.clone()),
         header,
         payload,
         size,

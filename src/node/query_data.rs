@@ -14,7 +14,7 @@ use crate::types::HeightIndexed;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
-pub use crate::availability::{BlockHash, BlockId, LeafQueryData};
+pub use crate::availability::{BlockHash, BlockId};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct SyncStatus {
