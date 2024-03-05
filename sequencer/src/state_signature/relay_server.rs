@@ -20,6 +20,7 @@ use tide_disco::{
     Api, App, Error as _, StatusCode,
 };
 use url::Url;
+use versioned_binary_serialization::version::StaticVersion;
 
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]
@@ -180,13 +181,16 @@ pub struct Options {
 }
 
 /// Set up APIs for relay server
-fn define_api<State>(options: &Options) -> Result<Api<State, Error>, ApiError>
+fn define_api<State, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    options: &Options,
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> Result<Api<State, Error, MAJOR_VERSION, MINOR_VERSION>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + StateRelayServerDataSource,
 {
     let mut api = match &options.api_path {
-        Some(path) => Api::<State, Error>::from_file(path)?,
+        Some(path) => Api::<State, Error, MAJOR_VERSION, MINOR_VERSION>::from_file(path)?,
         None => {
             let toml: toml::Value = toml::from_str(include_str!(
                 "../../api/state_relay_server.toml"
@@ -194,7 +198,7 @@ where
             .map_err(|err| ApiError::CannotReadToml {
                 reason: err.to_string(),
             })?;
-            Api::<State, Error>::new(toml)?
+            Api::<State, Error, MAJOR_VERSION, MINOR_VERSION>::new(toml)?
         }
     };
 
@@ -218,21 +222,22 @@ where
     Ok(api)
 }
 
-pub async fn run_relay_server(
+pub async fn run_relay_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     shutdown_listener: Option<OneShotReceiver<()>>,
     threshold: u64,
     url: Url,
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> std::io::Result<()> {
     let options = Options::default();
 
-    let api = define_api(&options).unwrap();
+    let api = define_api(&options, bind_version).unwrap();
 
     // We don't have a stake table yet, putting some temporary value here.
     // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
     let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
-    let mut app = App::<State, Error>::with_state(state);
+    let mut app = App::<State, Error, MAJOR_VERSION, MINOR_VERSION>::with_state(state);
 
     app.register_module("api", api).unwrap();
 

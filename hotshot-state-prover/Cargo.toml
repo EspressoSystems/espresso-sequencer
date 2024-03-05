@@ -23,6 +23,7 @@ contract-bindings = { path = "../contract-bindings" }
 crs = { git = "https://github.com/alxiong/crs" }
 derive_more = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
+es-version = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
@@ -44,6 +45,7 @@ time = "0.3"
 toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
+versioned-binary-serialization = { workspace = true }
 
 [features]
 default = ["parallel"]

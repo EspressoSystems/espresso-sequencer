@@ -19,13 +19,16 @@ mod update;
 
 pub use options::Options;
 
-struct State<N: network::Type> {
-    state_signer: Arc<StateSigner>,
+struct State<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> {
+    state_signer: Arc<StateSigner<MAJOR_VERSION, MINOR_VERSION>>,
     handle: SystemContextHandle<SeqTypes, Node<N>>,
 }
 
-impl<N: network::Type> From<&SequencerContext<N>> for State<N> {
-    fn from(ctx: &SequencerContext<N>) -> Self {
+impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
+    From<&SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
+    for State<N, MAJOR_VERSION, MINOR_VERSION>
+{
+    fn from(ctx: &SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
             handle: ctx.consensus().clone(),
@@ -33,21 +36,28 @@ impl<N: network::Type> From<&SequencerContext<N>> for State<N> {
     }
 }
 
-type StorageState<N, D> = ExtensibleDataSource<D, State<N>>;
+type StorageState<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
+    ExtensibleDataSource<D, State<N, MAJOR_VERSION, MINOR_VERSION>>;
 
-impl<N: network::Type, D> SubmitDataSource<N> for StorageState<N, D> {
+impl<N: network::Type, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> SubmitDataSource<N>
+    for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
+{
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for State<N> {
+impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> SubmitDataSource<N>
+    for State<N, MAJOR_VERSION, MINOR_VERSION>
+{
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         &self.handle
     }
 }
 
-impl<N: network::Type, D: Send + Sync> StateDataSource for StorageState<N, D> {
+impl<N: network::Type, D: Send + Sync, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
+    StateDataSource for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
+{
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.as_ref().get_decided_state().await
     }
@@ -57,7 +67,9 @@ impl<N: network::Type, D: Send + Sync> StateDataSource for StorageState<N, D> {
     }
 }
 
-impl<N: network::Type> StateDataSource for State<N> {
+impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> StateDataSource
+    for State<N, MAJOR_VERSION, MINOR_VERSION>
+{
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.handle.get_decided_state().await
     }
@@ -68,14 +80,18 @@ impl<N: network::Type> StateDataSource for State<N> {
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync> StateSignatureDataSource<N> for StorageState<N, D> {
+impl<N: network::Type, D: Sync, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
+    StateSignatureDataSource<N> for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
+{
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
     }
 }
 
 #[async_trait]
-impl<N: network::Type> StateSignatureDataSource<N> for State<N> {
+impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
+    StateSignatureDataSource<N> for State<N, MAJOR_VERSION, MINOR_VERSION>
+{
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer.get_state_signature(height).await
     }
@@ -94,6 +110,7 @@ mod test_helpers {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
+    use es_version::SEQUENCER_VERSION;
     use ethers::prelude::Address;
     use futures::{
         future::{join_all, FutureExt},
@@ -108,8 +125,11 @@ mod test_helpers {
     use tide_disco::error::ServerError;
 
     pub struct TestNetwork {
-        pub server: SequencerContext<network::Memory>,
-        pub peers: Vec<SequencerContext<network::Memory>>,
+        pub server:
+            SequencerContext<network::Memory, SEQUENCER_VERSION::MAJOR, SEQUENCER_VERSION::MINOR>,
+        pub peers: Vec<
+            SequencerContext<network::Memory, SEQUENCER_VERSION::MAJOR, SEQUENCER_VERSION::MINOR>,
+        >,
     }
 
     impl TestNetwork {
@@ -124,15 +144,22 @@ mod test_helpers {
                     let cfg = &cfg;
                     async move {
                         if i == 0 {
-                            opt.serve(|metrics| {
-                                let cfg = cfg.clone();
-                                async move { cfg.init_node(0, persistence, &*metrics).await }
+                            opt.serve(
+                                |metrics| {
+                                    let cfg = cfg.clone();
+                                    async move {
+                                        cfg.init_node(0, persistence, &*metrics, &SEQUENCER_VERSION)
+                                            .await
+                                    }
                                     .boxed()
-                            })
+                                },
+                                &SEQUENCER_VERSION,
+                            )
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics).await
+                            cfg.init_node(i, persistence, &NoMetrics, &SEQUENCER_VERSION)
+                                .await
                         }
                     }
                 }))
@@ -173,7 +200,7 @@ mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let client: Client<ServerError, 0, 1> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
         let _network = TestNetwork::new(options).await;
@@ -219,7 +246,7 @@ mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let client: Client<ServerError, 0, 1> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let network = TestNetwork::new(options).await;
@@ -248,7 +275,7 @@ mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let client: Client<ServerError, 0, 1> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
         let network = TestNetwork::new(options).await;
@@ -289,7 +316,7 @@ mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let client: Client<ServerError, 0, 1> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).state(Default::default()));
         let mut network = TestNetwork::new(options).await;
@@ -467,7 +494,7 @@ mod api_tests {
         let mut events = network.server.get_event_stream();
 
         // Connect client.
-        let client: Client<ServerError> =
+        let client: Client<ServerError, 0, 1> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -550,7 +577,7 @@ mod api_tests {
         .await;
 
         // Connect client.
-        let client: Client<ServerError> =
+        let client: Client<ServerError, 0, 1> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -601,7 +628,7 @@ mod api_tests {
             persistence,
         )
         .await;
-        let client: Client<ServerError> =
+        let client: Client<ServerError, 0, 1> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -646,7 +673,7 @@ mod api_tests {
         .await;
 
         // Connect client.
-        let client: Client<ServerError> =
+        let client: Client<ServerError, 0, 1> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -829,7 +856,7 @@ mod test {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let client: Client<ServerError, 0, 1> = Client::new(url);
         let options = Options::from(options::Http { port });
         let _network = TestNetwork::new(options).await;
 

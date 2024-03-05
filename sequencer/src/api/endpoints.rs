@@ -28,6 +28,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
 };
+use versioned_binary_serialization::version::StaticVersion;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -63,9 +64,19 @@ pub struct AccountQueryData {
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
-pub(super) type AvailState<N, D> = Arc<RwLock<StorageState<N, D>>>;
+pub(super) type AvailState<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
+    Arc<RwLock<StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>>>;
 
-pub(super) fn availability<N, D>() -> anyhow::Result<Api<AvailState<N, D>, availability::Error>>
+pub(super) fn availability<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<
+    Api<
+        AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+        availability::Error,
+        MAJOR_VERSION,
+        MINOR_VERSION,
+    >,
+>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
@@ -75,7 +86,11 @@ where
     options.extensions.push(extension);
     let timeout = options.fetch_timeout;
 
-    let mut api = availability::define_api::<AvailState<N, D>, SeqTypes>(&options)?;
+    let mut api =
+        availability::define_api::<AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>, SeqTypes, _, _>(
+            &options,
+            bind_version,
+        )?;
 
     api.get("getnamespaceproof", move |req, state| {
         async move {
@@ -159,23 +174,33 @@ where
     Ok(api)
 }
 
-pub(super) fn node<N, D>() -> anyhow::Result<Api<AvailState<N, D>, node::Error>>
+pub(super) fn node<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<
+    Api<AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>, node::Error, MAJOR_VERSION, MINOR_VERSION>,
+>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
 {
-    let api = node::define_api::<AvailState<N, D>, SeqTypes>(&Default::default())?;
+    let api = node::define_api::<
+        AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+        SeqTypes,
+        MAJOR_VERSION,
+        MINOR_VERSION,
+    >(&Default::default(), bind_version)?;
     Ok(api)
 }
 
-pub(super) fn submit<N, S>() -> anyhow::Result<Api<S, Error>>
+pub(super) fn submit<N, S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+) -> anyhow::Result<Api<S, Error, MAJOR_VERSION, MINOR_VERSION>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
     S::State: Send + Sync + SubmitDataSource<N>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
-    let mut api = Api::<S, Error>::new(toml)?;
+    let mut api = Api::<S, Error, MAJOR_VERSION, MINOR_VERSION>::new(toml)?;
 
     api.post("submit", |req, state| {
         async move {
@@ -196,14 +221,16 @@ where
     Ok(api)
 }
 
-pub(super) fn state_signature<N, S>() -> anyhow::Result<Api<S, Error>>
+pub(super) fn state_signature<N, S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<Api<S, Error, MAJOR_VERSION, MINOR_VERSION>>
 where
     N: network::Type,
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateSignatureDataSource<N>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
-    let mut api = Api::<S, Error>::new(toml)?;
+    let mut api = Api::<S, Error, MAJOR_VERSION, MINOR_VERSION>::new(toml)?;
 
     api.get("get_state_signature", |req, state| {
         async move {
@@ -224,13 +251,15 @@ where
     Ok(api)
 }
 
-pub(super) fn state<S>() -> anyhow::Result<Api<S, Error>>
+pub(super) fn state<S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<Api<S, Error, MAJOR_VERSION, MINOR_VERSION>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state.toml"))?;
-    let mut api = Api::<S, Error>::new(toml)?;
+    let mut api = Api::<S, Error, MAJOR_VERSION, MINOR_VERSION>::new(toml)?;
 
     async fn get_state<S: StateDataSource>(
         req: &tide_disco::RequestParams,

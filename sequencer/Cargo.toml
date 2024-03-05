@@ -35,6 +35,7 @@ commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = { workspace = true }
+es-version = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
@@ -42,6 +43,7 @@ tagged-base64 = { workspace = true }
 zeroize = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-constants = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
@@ -81,3 +83,4 @@ typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
 url = { workspace = true }
+versioned-binary-serialization = { workspace = true }

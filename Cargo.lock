@@ -926,19 +926,6 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07b30ef0ea5c20caaa54baea49514a206308989c68be7ecd86c7f956e4da6378"
 dependencies = [
- "futures-io",
- "futures-util",
- "log",
- "pin-project-lite 0.2.13",
- "tungstenite 0.13.0",
-]
-
-[[package]]
-name = "async-tungstenite"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "742cc7dcb20b2f84a42f4691aa999070ec7e78f8e7e7438bf14be7017b44907e"
-dependencies = [
  "async-native-tls",
  "async-std",
  "async-tls",
@@ -946,7 +933,7 @@ dependencies = [
  "futures-util",
  "log",
  "pin-project-lite 0.2.13",
- "tungstenite 0.15.0",
+ "tungstenite 0.13.0",
 ]
 
 [[package]]
@@ -2548,6 +2535,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "es-version"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/es-version.git?branch=main#d0c784da1c84105b8050e8486fb60145e49bbddd"
+dependencies = [
+ "versioned-binary-serialization",
+]
+
+[[package]]
 name = "espresso-macros"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/espresso-macros.git?tag=0.1.0#9e0b0258c99757c567676c4dd92f1501db0cf580"
@@ -3602,7 +3597,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3636,14 +3631,16 @@ dependencies = [
  "time 0.3.34",
  "tokio",
  "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "serde",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -3674,7 +3671,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3705,7 +3702,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -3729,7 +3726,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.9"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.0.10#0e92012fb80e0a7335d66f6a3b528e1f92662d35"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=adding_vbs_support#5777c72cff21cc1283cb7f922b9daed1666eef83"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3748,6 +3745,7 @@ dependencies = [
  "espresso-macros",
  "futures",
  "hotshot",
+ "hotshot-constants",
  "hotshot-example-types",
  "hotshot-types",
  "hotshot-utils",
@@ -3773,12 +3771,13 @@ dependencies = [
  "toml 0.8.10",
  "tracing",
  "trait-variant",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-stake-table"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -3815,6 +3814,7 @@ dependencies = [
  "crs",
  "derive_more",
  "displaydoc",
+ "es-version",
  "ethers",
  "futures",
  "hotshot-contract-adapter",
@@ -3836,12 +3836,13 @@ dependencies = [
  "toml 0.8.10",
  "tracing",
  "url",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3854,7 +3855,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3877,12 +3878,13 @@ dependencies = [
  "time 0.3.34",
  "tokio",
  "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3910,13 +3912,15 @@ dependencies = [
  "snafu",
  "tokio",
  "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
+ "anyhow",
  "ark-bls12-381",
  "ark-ec",
  "ark-ed-on-bn254",
@@ -3957,12 +3961,13 @@ dependencies = [
  "tokio",
  "tracing",
  "typenum",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "bincode",
  "hotshot-constants",
@@ -3971,7 +3976,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -5000,8 +5005,9 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.19#1e976042e93d9a352ed8ce4f67c806adceb6c6a3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=adding_vbs_support#719a409c3b43628a0ee6c3d5c3666548fe8ff02c"
 dependencies = [
+ "anyhow",
  "async-compatibility-layer",
  "async-lock 2.8.0",
  "async-std",
@@ -5026,6 +5032,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "versioned-binary-serialization",
  "void",
 ]
 
@@ -7511,11 +7518,13 @@ dependencies = [
  "contract-bindings",
  "derivative",
  "derive_more",
+ "es-version",
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
  "futures",
  "hotshot",
+ "hotshot-constants",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
@@ -7551,6 +7560,7 @@ dependencies = [
  "trait-variant",
  "typenum",
  "url",
+ "versioned-binary-serialization",
  "zeroize",
 ]
 
@@ -8198,11 +8208,10 @@ dependencies = [
 [[package]]
 name = "surf-disco"
 version = "0.4.6"
-source = "git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.6#95181bced2719214fc88e8adcac739d86cb1387e"
+source = "git+https://github.com/EspressoSystems/surf-disco?branch=adding_vbs_support#e5cfa4b81b7d2dececb7ed20933067d73c80105e"
 dependencies = [
  "async-std",
- "async-tungstenite 0.15.0",
- "bincode",
+ "async-tungstenite",
  "derivative",
  "futures",
  "hex",
@@ -8210,6 +8219,7 @@ dependencies = [
  "serde_json",
  "surf",
  "tide-disco",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -8508,11 +8518,11 @@ dependencies = [
 [[package]]
 name = "tide-disco"
 version = "0.4.6"
-source = "git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.6#4ced31cef8aae769994098d245e026c127801b74"
+source = "git+https://github.com/EspressoSystems/tide-disco?branch=adding_vbs_support#7173ae0db08f37e5b9ca84c8004f4f15195cbbf8"
 dependencies = [
+ "anyhow",
  "async-std",
  "async-trait",
- "bincode",
  "clap",
  "config",
  "derivative",
@@ -8553,6 +8563,7 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber 0.3.18",
  "url",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -8563,7 +8574,7 @@ checksum = "3592c5cb5cb1b7a2ff3a0e5353170c1bb5b104b2f66dd06f73304169b52cc725"
 dependencies = [
  "async-dup",
  "async-std",
- "async-tungstenite 0.13.1",
+ "async-tungstenite",
  "base64 0.13.1",
  "futures-util",
  "pin-project",
@@ -9086,25 +9097,6 @@ dependencies = [
  "httparse",
  "input_buffer",
  "log",
- "rand 0.8.5",
- "sha-1",
- "thiserror",
- "url",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "983d40747bce878d2fb67d910dcb8bd3eca2b2358540c3cc1b98c027407a3ae3"
-dependencies = [
- "base64 0.13.1",
- "byteorder",
- "bytes 1.5.0",
- "http 0.2.11",
- "httparse",
- "log",
  "native-tls",
  "rand 0.8.5",
  "sha-1",
@@ -9334,6 +9326,18 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "versioned-binary-serialization"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/versioned-binary-serialization.git?branch=main#4e4695bf0b77ab43700bf625fd4489151f189527"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "displaydoc",
+ "serde",
+ "serde_with",
+]
 
 [[package]]
 name = "void"

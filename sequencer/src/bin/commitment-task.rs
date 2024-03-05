@@ -135,12 +135,16 @@ async fn main() {
     run_hotshot_commitment_task(&hotshot_contract_options).await;
 }
 
-fn start_http_server(port: u16, hotshot_address: Address) -> io::Result<()> {
+fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    port: u16,
+    hotshot_address: Address,
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> io::Result<()> {
     let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError>::new(toml)
+    let mut api = Api::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("gethotshotcontract", move |_, _| {

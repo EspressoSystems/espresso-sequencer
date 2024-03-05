@@ -22,6 +22,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     App, Url,
 };
+use versioned_binary_serialization::version::StaticVersion;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -91,20 +92,36 @@ impl Options {
     /// The function `init_context` is used to create a sequencer context from a metrics object and
     /// optional saved consensus state. The metrics object is created from the API data source, so
     /// that consensus will populuate metrics that can then be read and served by the API.
-    pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerContext<N>>
+    pub async fn serve<N, F, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+        mut self,
+        init_context: F,
+        bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    ) -> anyhow::Result<SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
+        F: FnOnce(
+            Box<dyn Metrics>,
+        ) -> BoxFuture<'static, SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module::<N, sql::DataSource>(query_opt, opt, init_context)
-                    .await
+                self.init_with_query_module::<N, sql::DataSource>(
+                    query_opt,
+                    opt,
+                    init_context,
+                    bind_version,
+                )
+                .await
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module::<N, fs::DataSource>(query_opt, opt, init_context)
-                    .await
+                self.init_with_query_module::<N, fs::DataSource>(
+                    query_opt,
+                    opt,
+                    init_context,
+                    bind_version,
+                )
+                .await
             } else {
                 bail!("query module requested but not storage provided");
             }
@@ -118,7 +135,7 @@ impl Options {
             )));
 
             // Initialize status API.
-            let status_api = status::define_api(&Default::default())?;
+            let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
             self.init_hotshot_modules(&mut app)?;
@@ -146,12 +163,18 @@ impl Options {
         }
     }
 
-    async fn init_with_query_module<N, D>(
+    async fn init_with_query_module<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
         self,
         query_opt: Query,
         mod_opt: D::Options,
-        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
-    ) -> anyhow::Result<SequencerContext<N>>
+        init_context: impl FnOnce(
+            Box<dyn Metrics>,
+        ) -> BoxFuture<
+            'static,
+            SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>,
+        >,
+        bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    ) -> anyhow::Result<SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
     where
         N: network::Type,
         D: SequencerDataSource + Send + Sync + 'static,
@@ -169,23 +192,23 @@ impl Options {
         // the first events emitted by consensus.
         let events = context.get_event_stream();
 
-        let state: endpoints::AvailState<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(
-            ds,
-            (&context).into(),
-        )));
-        let mut app = App::<_, Error>::with_state(state.clone());
+        let state: endpoints::AvailState<N, D, MAJOR_VERSION, MINOR_VERSION> = Arc::new(
+            RwLock::new(ExtensibleDataSource::new(ds, (&context).into())),
+        );
+        let mut app = App::<_, Error, MAJOR_VERSION, MINOR_VERSION>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
-            let status_api =
-                status::define_api::<endpoints::AvailState<N, D>>(&Default::default())?;
+            let status_api = status::define_api::<
+                endpoints::AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+            >(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
         }
 
         // Initialize availability and node APIs (these both use the same data source).
-        let availability_api = endpoints::availability::<N, D>()?;
+        let availability_api = endpoints::availability::<N, D>(bind_version)?;
         app.register_module("availability", availability_api)?;
-        app.register_module("node", endpoints::node::<N, D>()?)?;
+        app.register_module("node", endpoints::node::<N, D>(bind_version)?)?;
 
         self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
@@ -202,7 +225,10 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
+    fn init_hotshot_modules<N, S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+        &self,
+        app: &mut App<S, Error, MAJOR_VERSION, MINOR_VERSION>,
+    ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         S::State: Send + Sync + SubmitDataSource<N> + StateSignatureDataSource<N> + StateDataSource,
@@ -217,11 +243,12 @@ impl Options {
         // Initialize state API.
         if self.state.is_some() {
             tracing::info!("initializing state API");
-            let state_api = endpoints::state()?;
+            let state_api = endpoints::state(&StaticVersion::<MAJOR_VERSION, MINOR_VERSION> {})?;
             app.register_module("state", state_api)?;
         }
 
-        let state_signature_api = endpoints::state_signature()?;
+        let state_signature_api =
+            endpoints::state_signature(&StaticVersion::<MAJOR_VERSION, MINOR_VERSION> {})?;
         app.register_module("state-signature", state_signature_api)?;
 
         Ok(())

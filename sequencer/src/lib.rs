@@ -37,7 +37,10 @@ use hotshot::{
 use hotshot_types::{traits::network::ConnectedNetwork, ValidatorConfig};
 use jf_primitives::signatures::schnorr;
 use tagged_base64::tagged;
+use versioned_binary_serialization::version::StaticVersion;
 use zeroize::Zeroize;
+
+use hotshot_constants::{WEB_SERVER_MAJOR_VERSION, WEB_SERVER_MINOR_VERSION};
 
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -92,8 +95,10 @@ pub mod network {
     pub struct Web;
 
     impl Type for Web {
-        type DAChannel = WebServerNetwork<SeqTypes>;
-        type QuorumChannel = WebServerNetwork<SeqTypes>;
+        type DAChannel =
+            WebServerNetwork<SeqTypes, WEB_SERVER_MAJOR_VERSION, WEB_SERVER_MINOR_VERSION>;
+        type QuorumChannel =
+            WebServerNetwork<SeqTypes, WEB_SERVER_MAJOR_VERSION, WEB_SERVER_MINOR_VERSION>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -249,12 +254,13 @@ pub struct BuilderParams {
     pub prefunded_accounts: Vec<Address>,
 }
 
-pub async fn init_node(
+pub async fn init_node<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     mut persistence: impl SequencerPersistence,
     builder_params: BuilderParams,
-) -> anyhow::Result<SequencerContext<network::Web>> {
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<SequencerContext<network::Web, MAJOR_VERSION, MINOR_VERSION>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -341,6 +347,7 @@ pub async fn init_node(
         Some(network_params.state_relay_server_url),
         metrics,
         node_index,
+        bind_version,
     )
     .await?;
     if wait_for_orchestrator {
@@ -354,6 +361,7 @@ pub mod testing {
     use super::*;
     use crate::persistence::no_storage::NoStorage;
     use commit::Committable;
+    use es_version::SEQUENCER_VERSION;
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -438,20 +446,25 @@ pub mod testing {
             self.priv_keys.len()
         }
 
-        pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
-            join_all(
-                (0..self.num_nodes())
-                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
-            )
+        pub async fn init_nodes(
+            &self,
+        ) -> Vec<
+            SequencerContext<network::Memory, SEQUENCER_VERSION::MAJOR, SEQUENCER_VERSION::MINOR>,
+        > {
+            join_all((0..self.num_nodes()).map(|i| async move {
+                self.init_node(i, NoStorage, &NoMetrics, &SEQUENCER_VERSION)
+                    .await
+            }))
             .await
         }
 
-        pub async fn init_node(
+        pub async fn init_node<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
             &self,
             i: usize,
             persistence: impl SequencerPersistence,
             metrics: &dyn Metrics,
-        ) -> SequencerContext<network::Memory> {
+            bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+        ) -> SequencerContext<network::Memory, MAJOR_VERSION, MINOR_VERSION> {
             let mut config = self.config.clone();
             config.my_own_validator_config = ValidatorConfig {
                 public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
@@ -482,6 +495,7 @@ pub mod testing {
                 None,
                 metrics,
                 i as u64,
+                bind_version,
             )
             .await
             .unwrap()
@@ -535,6 +549,7 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
+    use versioned_binary_serialization::{BinarySerializer, Serializer};
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
@@ -549,7 +564,8 @@ mod test {
 
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
+        let submitted_txn =
+            Transaction::new(TestVm {}.id(), Serializer::<0, 1>::serialize(&txn).unwrap());
         handles[0]
             .submit_transaction(submitted_txn.clone())
             .await

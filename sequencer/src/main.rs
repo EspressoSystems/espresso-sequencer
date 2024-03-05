@@ -37,11 +37,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn init_with_storage<S>(
+async fn init_with_storage<S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-) -> anyhow::Result<SequencerContext<network::Web>>
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> anyhow::Result<SequencerContext<network::Web, MAJOR_VERSION, MINOR_VERSION>>
 where
     S: DataSourceOptions,
 {
@@ -79,9 +80,15 @@ where
             let storage = storage_opt.create().await?;
             opt.serve(move |metrics| {
                 async move {
-                    init_node(network_params, &*metrics, storage, builder_params)
-                        .await
-                        .unwrap()
+                    init_node(
+                        network_params,
+                        &*metrics,
+                        storage,
+                        builder_params,
+                        bind_version,
+                    )
+                    .await
+                    .unwrap()
                 }
                 .boxed()
             })
@@ -93,6 +100,7 @@ where
                 &NoMetrics,
                 storage_opt.create().await?,
                 builder_params,
+                bind_version,
             )
             .await
         }

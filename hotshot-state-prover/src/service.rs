@@ -41,6 +41,7 @@ use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
+use versioned_binary_serialization::version::StaticVersion;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -130,8 +131,8 @@ pub fn load_proving_key() -> ProvingKey {
     pk
 }
 
-pub async fn fetch_latest_state(
-    client: &Client<ServerError>,
+pub async fn fetch_latest_state<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    client: &Client<ServerError, MAJOR_VERSION, MINOR_VERSION>,
 ) -> Result<StateSignaturesBundle, ServerError> {
     tracing::info!("Fetching the latest state signatures bundle from relay server.");
     client
@@ -197,10 +198,10 @@ pub async fn submit_state_and_proof(
     Ok(())
 }
 
-pub async fn sync_state(
+pub async fn sync_state<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     proving_key: &ProvingKey,
-    relay_server_client: &Client<ServerError>,
+    relay_server_client: &Client<ServerError, MAJOR_VERSION, MINOR_VERSION>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
@@ -266,12 +267,16 @@ pub async fn sync_state(
     Ok(())
 }
 
-fn start_http_server(port: u16, lightclient_address: Address) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    port: u16,
+    lightclient_address: Address,
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> io::Result<()> {
+    let mut app = tide_disco::App::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError>::new(toml)
+    let mut api = Api::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("getlightclientcontract", move |_, _| {
@@ -286,11 +291,16 @@ fn start_http_server(port: u16, lightclient_address: Address) -> io::Result<()> 
     Ok(())
 }
 
-pub async fn run_prover_service(config: StateProverConfig) {
+pub async fn run_prover_service<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    config: StateProverConfig,
+    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) {
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(init_stake_table_from_config(&config).await);
     let proving_key = Arc::new(load_proving_key());
-    let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
+    let relay_server_client = Arc::new(Client::<ServerError, MAJOR_VERSION, MINOR_VERSION>::new(
+        config.relay_server.clone(),
+    ));
     let config = Arc::new(config);
     let update_interval = config.update_interval;
 
@@ -299,7 +309,7 @@ pub async fn run_prover_service(config: StateProverConfig) {
     tracing::info!("Light client address: {:?}", config.light_client_address);
 
     if let Some(port) = config.port {
-        if let Err(err) = start_http_server(port, config.light_client_address) {
+        if let Err(err) = start_http_server(port, config.light_client_address, bind_version) {
             tracing::error!("Error starting http server: {}", err);
         }
     }
@@ -319,10 +329,14 @@ pub async fn run_prover_service(config: StateProverConfig) {
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once(config: StateProverConfig) {
+pub async fn run_prover_once<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    config: StateProverConfig,
+    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) {
     let st = init_stake_table_from_config(&config).await;
     let proving_key = load_proving_key();
-    let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
+    let relay_server_client =
+        Client::<ServerError, MAJOR_VERSION, MINOR_VERSION>::new(config.relay_server.clone());
 
     sync_state(&st, &proving_key, &relay_server_client, &config)
         .await

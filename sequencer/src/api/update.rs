@@ -10,8 +10,8 @@ use hotshot_query_service::{
     status::StatusDataSource,
 };
 
-pub(super) async fn update_loop<N, D>(
-    state: Arc<RwLock<StorageState<N, D>>>,
+pub(super) async fn update_loop<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    state: Arc<RwLock<StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: network::Type,
@@ -36,8 +36,8 @@ pub(super) async fn update_loop<N, D>(
     tracing::warn!("end of HotShot event stream, updater task will exit");
 }
 
-async fn update_state<N, D>(
-    state: &mut StorageState<N, D>,
+async fn update_state<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    state: &mut StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where

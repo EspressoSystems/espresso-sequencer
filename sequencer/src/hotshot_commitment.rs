@@ -18,7 +18,8 @@ use crate::{options::parse_duration, Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
+type HotShotClient<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
+    surf_disco::Client<hotshot_query_service::Error, MAJOR_VERSION, MINOR_VERSION>;
 
 // TODO: (alex) remove clap related info on tihs struct, as the CLI is in ./bin/hotshot-commitment.rs
 #[derive(Parser, Clone, Debug)]
@@ -67,9 +68,11 @@ pub struct CommitmentTaskOptions {
 }
 
 /// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
+pub async fn run_hotshot_commitment_task<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    opt: &CommitmentTaskOptions,
+) {
     // init a client connecting to HotShot query service
-    let hotshot = HotShotClient::new(
+    let hotshot = HotShotClient::<MAJOR_VERSION, MINOR_VERSION>::new(
         opt.query_service_url
             .clone()
             .expect("query service URL must be specified"),
@@ -90,7 +93,11 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     sequence(hotshot, contract, opt.delay).await;
 }
 
-async fn sequence(hotshot: HotShotClient, contract: HotShot<Signer>, delay: Option<Duration>) {
+async fn sequence<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    hotshot: HotShotClient<MAJOR_VERSION, MINOR_VERSION>,
+    contract: HotShot<Signer>,
+    delay: Option<Duration>,
+) {
     // Get the maximum number of blocks the contract will allow at a time.
     let hard_block_limit = match contract.max_blocks().call().await {
         Ok(max) => max.as_usize(),
@@ -146,7 +153,9 @@ trait HotShotDataSource {
 }
 
 #[async_trait]
-impl HotShotDataSource for HotShotClient {
+impl<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> HotShotDataSource
+    for HotShotClient<MAJOR_VERSION, MINOR_VERSION>
+{
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {
