@@ -115,6 +115,12 @@ impl std::ops::Deref for StateKeyPair {
 }
 
 impl StateKeyPair {
+    /// Generate key pairs from private signing keys
+    #[must_use]
+    pub fn from_sign_key(sk: StateSignKey) -> Self {
+        Self(schnorr::KeyPair::<Config>::from(sk))
+    }
+
     /// Generate key pairs from `thread_rng()`
     #[must_use]
     pub fn generate() -> StateKeyPair {
