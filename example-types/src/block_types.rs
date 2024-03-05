@@ -17,6 +17,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
+use time::OffsetDateTime;
 
 /// The transaction in a [`TestBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -178,9 +179,13 @@ pub struct TestBlockHeader {
     pub block_number: u64,
     /// VID commitment to the payload.
     pub payload_commitment: VidCommitment,
+    /// Timestamp when this header was created.
+    pub timestamp: u64,
 }
 
-impl<TYPES: NodeType<BlockPayload = TestBlockPayload>> BlockHeader<TYPES> for TestBlockHeader {
+impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> BlockHeader<TYPES>
+    for TestBlockHeader
+{
     async fn new(
         _parent_state: &TYPES::ValidatedState,
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
@@ -188,9 +193,18 @@ impl<TYPES: NodeType<BlockPayload = TestBlockPayload>> BlockHeader<TYPES> for Te
         payload_commitment: VidCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
+        let parent = &parent_leaf.block_header;
+
+        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        if timestamp < parent.timestamp {
+            // Prevent decreasing timestamps.
+            timestamp = parent.timestamp;
+        }
+
         Self {
-            block_number: parent_leaf.block_header.block_number() + 1,
+            block_number: parent.block_number + 1,
             payload_commitment,
+            timestamp,
         }
     }
 
@@ -202,6 +216,7 @@ impl<TYPES: NodeType<BlockPayload = TestBlockPayload>> BlockHeader<TYPES> for Te
         Self {
             block_number: 0,
             payload_commitment,
+            timestamp: 0,
         }
     }
 

@@ -29,6 +29,7 @@ snafu = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+time = { workspace = true }
 async-lock = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }

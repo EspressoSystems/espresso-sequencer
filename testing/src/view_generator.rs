@@ -72,6 +72,7 @@ impl TestView {
 
         let block_header = TestBlockHeader {
             block_number: 1,
+            timestamp: 1,
             payload_commitment,
         };
 
@@ -188,6 +189,7 @@ impl TestView {
 
         let block_header = TestBlockHeader {
             block_number: *next_view,
+            timestamp: *next_view,
             payload_commitment,
         };
 
