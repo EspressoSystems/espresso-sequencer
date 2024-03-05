@@ -16,12 +16,13 @@
 //!   snapshot, which will cause the block builder to propose with a slightly old snapshot, but they
 //!   will still be able to propose on time.
 
+use crate::state::FeeInfo;
 use async_std::task::sleep;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
 use futures::join;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, time::Duration};
+use std::{cmp::Ordering, sync::Arc, time::Duration};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -129,6 +130,32 @@ impl L1Client {
             }
         }
     }
+    /// Get fee info for each `Deposit` event. Returns `Vec<FeeInfo>`
+    pub async fn get_pending_deposits(
+        &self,
+        prev_finalized: Option<u64>,
+        new_finalized: u64,
+        address: Address,
+    ) -> Vec<FeeInfo> {
+        let prev = prev_finalized.unwrap_or(0);
+        if prev == new_finalized {
+            return vec![];
+        }
+        dbg!(prev, new_finalized);
+
+        let events =
+            contract_bindings::fee_contract::FeeContract::new(address, Arc::new(&self.provider))
+                .deposit_filter()
+                .from_block(prev)
+                .to_block(new_finalized)
+                .query()
+                .await;
+
+        dbg!(&events);
+        let r: Vec<FeeInfo> = events.unwrap().into_iter().map(Into::into).collect();
+        dbg!(&r);
+        r
+    }
 }
 
 async fn get_finalized_block<P: JsonRpcClient>(
@@ -201,6 +228,48 @@ mod test {
         // If we drop `anvil` the same request will fail.
         drop(anvil);
         provider.client_version().await.unwrap_err();
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_get_pending_deposits() -> anyhow::Result<()> {
+        // how many deposits will we make
+        let deposits = 5;
+
+        let anvil = Anvil::new().spawn();
+        let address = anvil.addresses().first().cloned().unwrap();
+        dbg!(&address);
+
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let provider =
+            Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
+        let client = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        let client = Arc::new(client);
+
+        // Initialize a contract with some deposits
+        let contract = contract_bindings::fee_contract::FeeContract::new(address, Arc::new(client));
+
+        for _ in 0..deposits {
+            contract.deposit(address).value(1).send().await?;
+        }
+
+        let head = l1_client.get_block_number().await;
+        // Anvil will produce a block for every transaction.
+        assert_eq!(deposits, head);
+
+        // non-signing `L1Client` should be ok for retrieving data.
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let pending = l1_client
+            .get_pending_deposits(Some(0), deposits, address)
+            .await;
+
+        dbg!(&pending);
+        assert_eq!(deposits as usize, pending.len());
 
         Ok(())
     }
