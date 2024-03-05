@@ -840,25 +840,18 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         }
     }
 
-    /// Moves out the entire queue of received messages
+    /// Receive one or many messages from the underlying network.
     ///
-    /// Will unwrap the underlying `NetworkMessage`
-    /// blocking
-    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            let mut queue = self.inner.poll_queue_0_1.write().await;
-            Ok(queue
-                .drain(..)
-                .collect::<Vec<_>>()
-                .iter()
-                .map(|x| x.get_message().unwrap())
-                .collect())
-        };
-        boxed_sync(closure)
+    /// # Errors
+    /// Does not error
+    async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
+        let mut queue = self.inner.poll_queue_0_1.write().await;
+        Ok(queue
+            .drain(..)
+            .collect::<Vec<_>>()
+            .iter()
+            .map(|x| x.get_message().expect("failed to clone message"))
+            .collect())
     }
 
     #[allow(clippy::too_many_lines)]

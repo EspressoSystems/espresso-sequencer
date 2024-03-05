@@ -327,40 +327,36 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         self.secondary().direct_message(message, recipient).await
     }
 
-    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
+    /// Receive one or many messages from the underlying network.
+    ///
+    /// # Errors
+    /// Does not error
+    async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
         // recv on both networks because nodes may be accessible only on either. discard duplicates
         // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
-        let closure = async move {
-            let mut primary_msgs = self.primary().recv_msgs().await?;
-            let mut secondary_msgs = self.secondary().recv_msgs().await?;
+        let mut primary_msgs = self.primary().recv_msgs().await?;
+        let mut secondary_msgs = self.secondary().recv_msgs().await?;
 
-            primary_msgs.append(secondary_msgs.as_mut());
+        primary_msgs.append(secondary_msgs.as_mut());
 
-            let mut filtered_msgs = Vec::with_capacity(primary_msgs.len());
-            for msg in primary_msgs {
-                // see if we've already seen this message
-                if !self
-                    .message_cache
-                    .read()
+        let mut filtered_msgs = Vec::with_capacity(primary_msgs.len());
+        for msg in primary_msgs {
+            // see if we've already seen this message
+            if !self
+                .message_cache
+                .read()
+                .await
+                .contains(calculate_hash_of(&msg))
+            {
+                filtered_msgs.push(msg.clone());
+                self.message_cache
+                    .write()
                     .await
-                    .contains(calculate_hash_of(&msg))
-                {
-                    filtered_msgs.push(msg.clone());
-                    self.message_cache
-                        .write()
-                        .await
-                        .insert(calculate_hash_of(&msg));
-                }
+                    .insert(calculate_hash_of(&msg));
             }
+        }
 
-            Ok(filtered_msgs)
-        };
-
-        boxed_sync(closure)
+        Ok(filtered_msgs)
     }
 
     async fn queue_node_lookup(

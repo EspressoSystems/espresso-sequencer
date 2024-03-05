@@ -844,23 +844,21 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         }
     }
 
+    /// Receive one or many messages from the underlying network.
+    ///
+    /// # Errors
+    /// If there is a network-related failure.
     #[instrument(name = "Libp2pNetwork::recv_msgs", skip_all)]
-    fn recv_msgs<'a, 'b>(&'a self) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
-    where
-        'a: 'b,
-        Self: 'b,
-    {
-        let closure = async move {
-            let result = self
-                .inner
-                .receiver
-                .drain_at_least_one()
-                .await
-                .map_err(|_x| NetworkError::ShutDown)?;
-            self.inner.metrics.incoming_message_count.add(result.len());
-            Ok(result)
-        };
-        boxed_sync(closure)
+    async fn recv_msgs(&self) -> Result<Vec<M>, NetworkError> {
+        let result = self
+            .inner
+            .receiver
+            .drain_at_least_one()
+            .await
+            .map_err(|_x| NetworkError::ShutDown)?;
+        self.inner.metrics.incoming_message_count.add(result.len());
+
+        Ok(result)
     }
 
     #[instrument(name = "Libp2pNetwork::queue_node_lookup", skip_all)]
