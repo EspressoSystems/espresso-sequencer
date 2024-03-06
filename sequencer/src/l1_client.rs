@@ -146,7 +146,7 @@ impl L1Client {
             return vec![];
         }
 
-        // query for deposit events, errors are handled as "no deposits".
+        // query for deposit events, loop until successfull.
         let events =
             contract_bindings::fee_contract::FeeContract::new(address, Arc::new(&self.provider))
                 .deposit_filter()
@@ -262,13 +262,13 @@ mod test {
         for n in 1..=deposits {
             // Varied amounts are less boring.
             let amount = n as f32 / 10.0;
-            dbg!(n, amount);
             let receipt = contract
                 .deposit(wallet_address)
                 .value(parse_ether(amount).unwrap())
                 .send()
                 .await?
                 .await?;
+            // Successfull transactions have `status` of `1`.
             assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
         }
 
