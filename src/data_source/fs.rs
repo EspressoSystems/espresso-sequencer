@@ -236,7 +236,7 @@ mod impl_testable_data_source {
     };
     use async_trait::async_trait;
     use hotshot::types::Event;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     #[async_trait]
     impl<P: AvailabilityProvider<MockTypes> + Default> DataSourceLifeCycle
@@ -244,8 +244,8 @@ mod impl_testable_data_source {
     {
         type Storage = TempDir;
 
-        async fn create(node_id: usize) -> Self::Storage {
-            TempDir::new(&format!("file_system_data_source_{node_id}")).unwrap()
+        async fn create(_node_id: usize) -> Self::Storage {
+            TempDir::new().unwrap()
         }
 
         async fn connect(storage: &Self::Storage) -> Self {

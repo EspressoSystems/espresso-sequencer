@@ -564,7 +564,7 @@ mod test {
     use std::ops::RangeBounds;
     use std::time::Duration;
     use surf_disco::Client;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
     use tide_disco::App;
     use toml::toml;
 
@@ -703,7 +703,7 @@ mod test {
 
     #[async_std::test]
     async fn test_composition() {
-        let dir = TempDir::new("test_composition").unwrap();
+        let dir = TempDir::new().unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
         let mut hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
             .await
