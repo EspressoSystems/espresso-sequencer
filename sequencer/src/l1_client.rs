@@ -132,7 +132,7 @@ impl L1Client {
     }
     /// Get fee info for each `Deposit` ocurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
-    pub async fn get_finalized_deposits(
+    pub async fn _get_finalized_deposits(
         &self,
         prev_finalized: Option<u64>,
         new_finalized: u64,
@@ -296,7 +296,7 @@ mod test {
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
         let pending = l1_client
-            .get_finalized_deposits(None, deposits + 1, contract.address())
+            ._get_finalized_deposits(None, deposits + 1, contract.address())
             .await;
 
         assert_eq!(deposits as usize, pending.len());
