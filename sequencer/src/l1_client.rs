@@ -130,7 +130,8 @@ impl L1Client {
             }
         }
     }
-    /// Get fee info for each `Deposit` event. Returns `Vec<FeeInfo>`
+    /// Get fee info for each `Deposit` ocurring between `prev`
+    /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_pending_deposits(
         &self,
         prev_finalized: Option<u64>,
@@ -138,23 +139,24 @@ impl L1Client {
         address: Address,
     ) -> Vec<FeeInfo> {
         let prev = prev_finalized.unwrap_or(0);
+        // When called from `Header::new` during testing both will be
+        // `0`. BUG: https://github.com/foundry-rs/foundry/issues/7245
+        // We treat this as if there were no deposits.
         if prev == new_finalized {
             return vec![];
         }
-        dbg!(prev, new_finalized);
 
+        // query for deposit events, errors are handled as "no deposits".
         let events =
             contract_bindings::fee_contract::FeeContract::new(address, Arc::new(&self.provider))
                 .deposit_filter()
                 .from_block(prev)
                 .to_block(new_finalized)
                 .query()
-                .await;
+                .await
+                .unwrap_or_else(|_| vec![]);
 
-        dbg!(&events);
-        let r: Vec<FeeInfo> = events.unwrap().into_iter().map(Into::into).collect();
-        dbg!(&r);
-        r
+        events.into_iter().map(Into::into).collect()
     }
 }
 
@@ -190,9 +192,11 @@ async fn get_finalized_block<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
 
+    use std::ops::Add;
+
     use super::*;
     use crate::NodeState;
-    use ethers::utils::Anvil;
+    use ethers::utils::{parse_ether, Anvil};
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {
@@ -238,11 +242,8 @@ mod test {
         let deposits = 5;
 
         let anvil = Anvil::new().spawn();
-        let address = anvil.addresses().first().cloned().unwrap();
-        dbg!(&address);
-
+        let wallet_address = anvil.addresses().first().cloned().unwrap();
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
-
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -252,25 +253,42 @@ mod test {
         let client = Arc::new(client);
 
         // Initialize a contract with some deposits
-        let contract = contract_bindings::fee_contract::FeeContract::new(address, Arc::new(client));
+        let contract = contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client), ())
+            .unwrap()
+            .send()
+            .await?;
 
-        for _ in 0..deposits {
-            contract.deposit(address).value(1).send().await?;
+        // make some deposits.
+        for n in 1..=deposits {
+            // Varied amounts are less boring.
+            let amount = n as f32 / 10.0;
+            dbg!(n, amount);
+            let receipt = contract
+                .deposit(wallet_address)
+                .value(parse_ether(amount).unwrap())
+                .send()
+                .await?
+                .await?;
+            assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
         }
 
         let head = l1_client.get_block_number().await;
         // Anvil will produce a block for every transaction.
-        assert_eq!(deposits, head);
+        assert_eq!(deposits + 1, head);
 
-        // non-signing `L1Client` should be ok for retrieving data.
+        // Use non-signing `L1Client` to retrieve data.
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
         let pending = l1_client
-            .get_pending_deposits(Some(0), deposits, address)
+            .get_pending_deposits(Some(0), deposits, contract.address())
             .await;
 
-        dbg!(&pending);
-        assert_eq!(deposits as usize, pending.len());
-
+        assert_eq!((deposits - 1) as usize, pending.len());
+        assert_eq!(&wallet_address, &pending[0].account().into());
+        assert_eq!(
+            U256::from(1000000000000000000u64),
+            pending.iter().fold(U256::from(0), |total, info| total
+                .add(U256::from(info.amount())))
+        );
         Ok(())
     }
 }
