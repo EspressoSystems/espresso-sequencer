@@ -50,11 +50,12 @@ struct Options {
     url: Url,
 }
 
-type SequencerClient = surf_disco::Client<hotshot_query_service::Error>;
+type SequencerClient<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
+    surf_disco::Client<hotshot_query_service::Error, MAJOR_VERSION, MINOR_VERSION>;
 
-async fn verify_header(
+async fn verify_header<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     opt: &Options,
-    seq: &SequencerClient,
+    seq: &SequencerClient<MAJOR_VERSION, MINOR_VERSION>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -113,7 +114,10 @@ async fn verify_header(
     (header, ok)
 }
 
-async fn get_header(seq: &SequencerClient, height: usize) -> Header {
+async fn get_header<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    seq: &SequencerClient<MAJOR_VERSION, MINOR_VERSION>,
+    height: usize,
+) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))
@@ -167,7 +171,10 @@ async fn main() {
     setup_backtrace();
 
     let opt = Arc::new(Options::parse());
-    let seq = Arc::new(SequencerClient::new(opt.url.clone()));
+    let seq = Arc::new(SequencerClient::<
+        { es_version::MAJOR },
+        { es_version::MINOR },
+    >::new(opt.url.clone()));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

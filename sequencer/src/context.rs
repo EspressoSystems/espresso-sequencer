@@ -60,6 +60,7 @@ pub struct SequencerContext<N: network::Type, const MAJOR_VERSION: u16, const MI
 impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
     SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>
 {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,

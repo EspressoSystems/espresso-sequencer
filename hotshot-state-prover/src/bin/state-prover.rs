@@ -136,9 +136,9 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        run_prover_service(config, &SEQUENCER_VERSION).await;
+        run_prover_service(config, SEQUENCER_VERSION).await;
     } else {
         // Run light client state update once
-        run_prover_once(config, &SEQUENCER_VERSION).await;
+        run_prover_once(config, SEQUENCER_VERSION).await;
     }
 }

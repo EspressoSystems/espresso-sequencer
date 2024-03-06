@@ -125,11 +125,10 @@ mod test_helpers {
     use tide_disco::error::ServerError;
 
     pub struct TestNetwork {
-        pub server:
-            SequencerContext<network::Memory, SEQUENCER_VERSION::MAJOR, SEQUENCER_VERSION::MINOR>,
-        pub peers: Vec<
-            SequencerContext<network::Memory, SEQUENCER_VERSION::MAJOR, SEQUENCER_VERSION::MINOR>,
-        >,
+        pub server: SequencerContext<network::Memory, { es_version::MAJOR }, { es_version::MINOR }>,
+        pub peers:
+            Vec<SequencerContext<network::Memory, { es_version::MAJOR }, { es_version::MINOR }>>,
+        pub cfg: TestConfig,
     }
 
     impl TestNetwork {
@@ -148,17 +147,17 @@ mod test_helpers {
                                 |metrics| {
                                     let cfg = cfg.clone();
                                     async move {
-                                        cfg.init_node(0, persistence, &*metrics, &SEQUENCER_VERSION)
+                                        cfg.init_node(0, persistence, &*metrics, SEQUENCER_VERSION)
                                             .await
                                     }
                                     .boxed()
                                 },
-                                &SEQUENCER_VERSION,
+                                SEQUENCER_VERSION,
                             )
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics, &SEQUENCER_VERSION)
+                            cfg.init_node(i, persistence, &NoMetrics, SEQUENCER_VERSION)
                                 .await
                         }
                     }
@@ -172,7 +171,7 @@ mod test_helpers {
             let server = nodes.remove(0);
             let peers = nodes;
 
-            Self { server, peers }
+            Self { server, peers, cfg }
         }
 
         pub async fn new(opt: Options) -> Self {

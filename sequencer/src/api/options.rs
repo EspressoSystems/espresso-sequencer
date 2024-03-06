@@ -95,7 +95,7 @@ impl Options {
     pub async fn serve<N, F, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
         mut self,
         init_context: F,
-        bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+        bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
     ) -> anyhow::Result<SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
     where
         N: network::Type,
@@ -107,7 +107,7 @@ impl Options {
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module::<N, sql::DataSource>(
+                self.init_with_query_module::<N, sql::DataSource, MAJOR_VERSION, MINOR_VERSION>(
                     query_opt,
                     opt,
                     init_context,
@@ -115,7 +115,7 @@ impl Options {
                 )
                 .await
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module::<N, fs::DataSource>(
+                self.init_with_query_module::<N, fs::DataSource, MAJOR_VERSION, MINOR_VERSION>(
                     query_opt,
                     opt,
                     init_context,
@@ -130,9 +130,9 @@ impl Options {
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
             let mut context = init_context(ds.populate_metrics()).await;
-            let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
-                ExtensibleDataSource::new(ds, super::State::from(&context)),
-            )));
+            let mut app = App::<_, Error, MAJOR_VERSION, MINOR_VERSION>::with_state(Arc::new(
+                RwLock::new(ExtensibleDataSource::new(ds, super::State::from(&context))),
+            ));
 
             // Initialize status API.
             let status_api = status::define_api(&Default::default(), bind_version)?;
@@ -152,7 +152,9 @@ impl Options {
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
             let mut context = init_context(Box::new(NoMetrics)).await;
-            let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
+            let mut app = App::<_, Error, MAJOR_VERSION, MINOR_VERSION>::with_state(RwLock::new(
+                super::State::from(&context),
+            ));
 
             self.init_hotshot_modules(&mut app)?;
             context.spawn(
@@ -173,13 +175,13 @@ impl Options {
             'static,
             SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>,
         >,
-        bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+        bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
     ) -> anyhow::Result<SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
     where
         N: network::Type,
         D: SequencerDataSource + Send + Sync + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers), false).await?;
+        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
         let metrics = ds.populate_metrics();
 
         // Start up handle
@@ -201,14 +203,15 @@ impl Options {
         if self.status.is_some() {
             let status_api = status::define_api::<
                 endpoints::AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+                MAJOR_VERSION,
+                MINOR_VERSION,
             >(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
         }
 
         // Initialize availability and node APIs (these both use the same data source).
-        let availability_api = endpoints::availability::<N, D>(bind_version)?;
-        app.register_module("availability", availability_api)?;
-        app.register_module("node", endpoints::node::<N, D>(bind_version)?)?;
+        app.register_module("availability", endpoints::availability(bind_version)?)?;
+        app.register_module("node", endpoints::node(bind_version)?)?;
 
         self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
@@ -234,6 +237,7 @@ impl Options {
         S::State: Send + Sync + SubmitDataSource<N> + StateSignatureDataSource<N> + StateDataSource,
         N: network::Type,
     {
+        let bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION> = StaticVersion {};
         // Initialize submit API
         if self.submit.is_some() {
             let submit_api = endpoints::submit()?;
@@ -243,12 +247,11 @@ impl Options {
         // Initialize state API.
         if self.state.is_some() {
             tracing::info!("initializing state API");
-            let state_api = endpoints::state(&StaticVersion::<MAJOR_VERSION, MINOR_VERSION> {})?;
+            let state_api = endpoints::state(bind_version)?;
             app.register_module("state", state_api)?;
         }
 
-        let state_signature_api =
-            endpoints::state_signature(&StaticVersion::<MAJOR_VERSION, MINOR_VERSION> {})?;
+        let state_signature_api = endpoints::state_signature(bind_version)?;
         app.register_module("state-signature", state_signature_api)?;
 
         Ok(())

@@ -108,6 +108,7 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -134,6 +135,7 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -159,6 +161,7 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -184,6 +187,7 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -209,6 +213,7 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy

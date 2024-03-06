@@ -68,7 +68,7 @@ pub(super) type AvailState<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: 
     Arc<RwLock<StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>>>;
 
 pub(super) fn availability<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> anyhow::Result<
     Api<
         AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
@@ -86,11 +86,12 @@ where
     options.extensions.push(extension);
     let timeout = options.fetch_timeout;
 
-    let mut api =
-        availability::define_api::<AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>, SeqTypes, _, _>(
-            &options,
-            bind_version,
-        )?;
+    let mut api = availability::define_api::<
+        AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+        SeqTypes,
+        MAJOR_VERSION,
+        MINOR_VERSION,
+    >(&options, bind_version)?;
 
     api.get("getnamespaceproof", move |req, state| {
         async move {
@@ -175,7 +176,7 @@ where
 }
 
 pub(super) fn node<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> anyhow::Result<
     Api<AvailState<N, D, MAJOR_VERSION, MINOR_VERSION>, node::Error, MAJOR_VERSION, MINOR_VERSION>,
 >
@@ -205,7 +206,7 @@ where
     api.post("submit", |req, state| {
         async move {
             let tx = req
-                .body_auto::<Transaction>()
+                .body_auto::<Transaction, MAJOR_VERSION, MINOR_VERSION>()
                 .map_err(Error::from_request_error)?;
             let hash = tx.commit();
             state
@@ -222,7 +223,7 @@ where
 }
 
 pub(super) fn state_signature<N, S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> anyhow::Result<Api<S, Error, MAJOR_VERSION, MINOR_VERSION>>
 where
     N: network::Type,
@@ -252,7 +253,7 @@ where
 }
 
 pub(super) fn state<S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> anyhow::Result<Api<S, Error, MAJOR_VERSION, MINOR_VERSION>>
 where
     S: 'static + Send + Sync + ReadState,

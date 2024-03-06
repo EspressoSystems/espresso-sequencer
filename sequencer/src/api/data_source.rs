@@ -18,6 +18,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 use tide_disco::Url;
+use versioned_binary_serialization::version::StaticVersion;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -79,11 +80,14 @@ pub trait SequencerDataSource:
 pub type Provider = AnyProvider<SeqTypes>;
 
 /// Create a provider for fetching missing data from a list of peer query services.
-pub fn provider(peers: impl IntoIterator<Item = Url>) -> Provider {
+pub fn provider<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+    peers: impl IntoIterator<Item = Url>,
+    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+) -> Provider {
     let mut provider = Provider::default();
     for peer in peers {
         tracing::info!("will fetch missing data from {peer}");
-        provider = provider.with_provider(QueryServiceProvider::new(peer));
+        provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
     }
     provider
 }

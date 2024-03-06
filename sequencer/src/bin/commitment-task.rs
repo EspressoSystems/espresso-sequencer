@@ -2,6 +2,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::hot_shot::HotShot;
+use es_version::SEQUENCER_VERSION;
 use ethers::{prelude::*, providers::Provider, signers::coins_bip39::English};
 use futures::FutureExt;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
@@ -12,6 +13,7 @@ use std::time::Duration;
 use tide_disco::error::ServerError;
 use tide_disco::Api;
 use url::Url;
+use versioned_binary_serialization::version::StaticVersion;
 
 /// Commitment Task Command
 ///
@@ -119,7 +121,7 @@ async fn main() {
     }
 
     if let Some(port) = opt.port {
-        start_http_server(port, hotshot_address).unwrap();
+        start_http_server(port, hotshot_address, SEQUENCER_VERSION).unwrap();
     }
 
     let hotshot_contract_options = CommitmentTaskOptions {
@@ -132,15 +134,18 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<{ es_version::MAJOR }, { es_version::MINOR }>(
+        &hotshot_contract_options,
+    )
+    .await;
 }
 
 fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     port: u16,
     hotshot_address: Address,
-    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -162,6 +167,7 @@ fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
 #[cfg(test)]
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use es_version::SEQUENCER_VERSION;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
 
@@ -178,9 +184,10 @@ mod test {
         let expected_addr = "0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             .parse::<Address>()
             .unwrap();
-        start_http_server(port, expected_addr).expect("Failed to start the server");
+        start_http_server(port, expected_addr, SEQUENCER_VERSION)
+            .expect("Failed to start the server");
 
-        let client: Client<ServerError> =
+        let client: Client<ServerError, { es_version::MAJOR }, { es_version::MINOR }> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

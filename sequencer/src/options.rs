@@ -129,6 +129,10 @@ pub struct Options {
         value_delimiter = ','
     )]
     pub prefunded_builder_accounts: Vec<Address>,
+
+    /// Url we will use for RPC communication with L1.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
+    pub l1_provider_url: Url,
 }
 
 impl Options {

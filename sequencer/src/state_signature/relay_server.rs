@@ -183,7 +183,7 @@ pub struct Options {
 /// Set up APIs for relay server
 fn define_api<State, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     options: &Options,
-    _: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> Result<Api<State, Error, MAJOR_VERSION, MINOR_VERSION>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
@@ -212,7 +212,7 @@ where
                 state: lcstate,
                 signature,
             } = req
-                .body_auto::<StateSignatureRequestBody>()
+                .body_auto::<StateSignatureRequestBody, MAJOR_VERSION, MINOR_VERSION>()
                 .map_err(Error::from_request_error)?;
             state.post_signature(key, lcstate, signature)
         }
@@ -226,7 +226,7 @@ pub async fn run_relay_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16
     shutdown_listener: Option<OneShotReceiver<()>>,
     threshold: u64,
     url: Url,
-    bind_version: &StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
 ) -> std::io::Result<()> {
     let options = Options::default();
 
