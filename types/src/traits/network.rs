@@ -296,6 +296,9 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     /// blocking
     /// Ideally we would pass in the `Time` type, but that requires making the entire trait generic over NodeType
     async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<K>) {}
+
+    /// handles view update
+    async fn update_view(&self, _view: &u64) {}
 }
 
 /// Describes additional functionality needed by the test network implementation
