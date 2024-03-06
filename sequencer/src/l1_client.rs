@@ -143,7 +143,7 @@ impl L1Client {
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
         // No new blocks have been finalized, therefore there are no
         // new deposits.
-        if prev == new_finalized {
+        if prev >= new_finalized {
             return vec![];
         }
 
