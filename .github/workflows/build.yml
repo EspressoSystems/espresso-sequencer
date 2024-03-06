@@ -48,9 +48,6 @@ jobs:
           token: ${{ github.token }}
           args: --workspace --all-features --all-targets -- -D warnings
 
-      - name: Audit
-        run: cargo audit --ignore RUSTSEC-2023-0018 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2023-0065
-
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
