@@ -138,24 +138,33 @@ impl L1Client {
         new_finalized: u64,
         address: Address,
     ) -> Vec<FeeInfo> {
-        let prev = prev_finalized.unwrap_or(0);
-        // When called from `Header::new` during testing both will be
-        // `0`. BUG: https://github.com/foundry-rs/foundry/issues/7245
-        // We treat this as if there were no deposits.
+        // `prev` should have allready been processed unless we
+        // haven't processed *any* blocks yet.
+        let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
+        // No new blocks have been finalized, therefore there are no
+        // new deposits.
         if prev == new_finalized {
             return vec![];
         }
 
         // query for deposit events, loop until successfull.
-        let events =
-            contract_bindings::fee_contract::FeeContract::new(address, Arc::new(&self.provider))
-                .deposit_filter()
-                .from_block(prev)
-                .to_block(new_finalized)
-                .query()
-                .await
-                .unwrap_or_else(|_| vec![]);
-
+        let events = loop {
+            match contract_bindings::fee_contract::FeeContract::new(
+                address,
+                Arc::new(&self.provider),
+            )
+            .deposit_filter()
+            .from_block(prev)
+            .to_block(new_finalized)
+            .query()
+            .await
+            {
+                Ok(events) => break events,
+                Err(e) => {
+                    tracing::warn!("Fee Event Error: {}", e);
+                }
+            }
+        };
         events.into_iter().map(Into::into).collect()
     }
 }
@@ -258,6 +267,10 @@ mod test {
             .send()
             .await?;
 
+        // Anvil will produce a block for every transaction.
+        let head = l1_client.get_block_number().await;
+        assert_eq!(1, head);
+
         // make some deposits.
         for n in 1..=deposits {
             // Varied amounts are less boring.
@@ -268,6 +281,7 @@ mod test {
                 .send()
                 .await?
                 .await?;
+
             // Successfull transactions have `status` of `1`.
             assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
         }
@@ -278,14 +292,17 @@ mod test {
 
         // Use non-signing `L1Client` to retrieve data.
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        // Set prev deposits to `None` so `Filter` will start at block
+        // 0. The test would also succeed if we pass `0` (b/c first
+        // block did not deposit).
         let pending = l1_client
-            .get_pending_deposits(Some(0), deposits, contract.address())
+            .get_pending_deposits(None, deposits + 1, contract.address())
             .await;
 
-        assert_eq!((deposits - 1) as usize, pending.len());
+        assert_eq!(deposits as usize, pending.len());
         assert_eq!(&wallet_address, &pending[0].account().into());
         assert_eq!(
-            U256::from(1000000000000000000u64),
+            U256::from(1500000000000000000u64),
             pending.iter().fold(U256::from(0), |total, info| total
                 .add(U256::from(info.amount())))
         );
