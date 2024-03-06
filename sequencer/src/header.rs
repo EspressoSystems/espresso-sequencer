@@ -252,23 +252,6 @@ impl BlockHeader<SeqTypes> for Header {
         // and use `block_on` to query it.
         let l1 = instance_state.l1_client().snapshot().await;
 
-        // TODO remove this work around (aviods manipulating `from_info` signature).
-        let parent_header = parent_leaf.get_block_header();
-        // TODO cleanup and organization
-        if let Some(finalized) = l1.finalized {
-            dbg!(finalized);
-            let d = instance_state
-                .l1_client()
-                .get_finalized_deposits(
-                    parent_header.l1_finalized.map(|f| f.number),
-                    finalized.number,
-                    parent_header.fee_info.account().into(),
-                )
-                .await;
-
-            dbg!(d);
-        }
-
         Self::from_info(
             payload_commitment,
             metadata,
