@@ -64,6 +64,51 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         TxIterator::new(ns_table, self)
     }
 
+    fn transaction(
+        &self,
+        meta: &Self::Metadata,
+        index: &Self::TransactionIndex,
+    ) -> Option<Self::Transaction> {
+        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
+        if index_usize >= self.len(meta) {
+            return None; // error: index out of bounds
+        }
+
+        // start
+        let tx_table_range_start = if index_usize == 0 {
+            None
+        } else {
+            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
+            Some(TxTableEntry::from_bytes(self.raw_payload.get(
+                range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
+            )?)?)
+        };
+
+        // end
+        let tx_table_range_proof_end = index_usize
+            .checked_add(2)?
+            .checked_mul(TxTableEntry::byte_len())?;
+        let tx_table_range_end = TxTableEntry::from_bytes(self.raw_payload.get(
+            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
+                ..tx_table_range_proof_end,
+        )?)?;
+
+        let tx_payload_range = tx_payload_range(
+            &tx_table_range_start,
+            &tx_table_range_end,
+            &self.get_tx_table_len(),
+            self.raw_payload.len(),
+        )?;
+        Some(
+            // TODO don't copy the tx bytes into the return value
+            // https://github.com/EspressoSystems/hotshot-query-service/issues/267
+            Transaction::new(
+                crate::VmId(0),
+                self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
+            ),
+        )
+    }
+
     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     fn transaction_with_proof(
         &self,
