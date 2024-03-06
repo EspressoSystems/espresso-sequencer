@@ -392,6 +392,7 @@ pub mod testing {
         config: HotShotConfig<PubKey, ElectionConfig>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
+        non_staked_nodes: Vec<PubKey>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
         anvil: Arc<AnvilInstance>,
     }
@@ -422,13 +423,38 @@ pub mod testing {
                 })
                 .collect::<Vec<_>>();
 
-            //update the last node stake table entry with 0 stake
-            let builder_stake_entry = PeerConfig::<PubKey> {
-                stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(0),
-                state_ver_key: state_key_pairs[num_nodes - 1].ver_key(),
-            };
+            // Similary generate the key for builder nodes
+            let builder_nodes = Self::BUILDER_NODES;
+            // generate the key for builder nodes
+            let builder_priv_keys = (0..builder_nodes)
+                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
+                .collect::<Vec<_>>();
+            let builder_pub_keys = builder_priv_keys
+                .iter()
+                .map(PubKey::from_private)
+                .collect::<Vec<_>>();
 
-            known_nodes_with_stake[num_nodes - 1] = builder_stake_entry;
+            let state_key_pairs = (0..num_nodes)
+                .map(|_| StateKeyPair::generate())
+                .collect::<Vec<_>>();
+
+            // initially make every node have 1 stake
+            let mut known_nodes_with_stake = pub_keys
+                .iter()
+                .zip(&state_key_pairs)
+                .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
+                    stake_table_entry: pub_key.get_stake_table_entry(1),
+                    state_ver_key: state_key_pair.ver_key(),
+                })
+                .collect::<Vec<_>>();
+
+            // //update the last node stake table entry with 0 stake
+            // let builder_stake_entry = PeerConfig::<PubKey> {
+            //     stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(0),
+            //     state_ver_key: state_key_pairs[num_nodes - 1].ver_key(),
+            // };
+
+            // known_nodes_with_stake[num_nodes - 1] = builder_stake_entry;
 
             let master_map = MasterMap::new();
 
@@ -462,6 +488,7 @@ pub mod testing {
 
     impl TestConfig {
         pub const NUM_NODES: usize = 4;
+        pub const BUILDER_NODES: usize = 1;
 
         pub fn num_nodes(&self) -> usize {
             self.priv_keys.len()
