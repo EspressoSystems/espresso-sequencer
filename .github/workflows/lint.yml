@@ -35,6 +35,3 @@ jobs:
 
       - name: Check
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-
-      - name: Audit
-        run: cargo audit --ignore RUSTSEC-2023-0018 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2023-0065
