@@ -246,7 +246,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_get_pending_deposits() -> anyhow::Result<()> {
+    async fn test_get_finalized_deposits() -> anyhow::Result<()> {
         // how many deposits will we make
         let deposits = 5;
 
