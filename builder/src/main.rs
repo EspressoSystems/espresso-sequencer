@@ -15,12 +15,13 @@ pub use hotshot::traits::election::static_committee::{
     GeneralStaticCommittee, StaticElectionConfig,
 };
 use hotshot::types::SignatureKey;
-use hotshot_example_types::block_types::genesis_vid_commitment;
+//use hotshot_example_types::block_types::genesis_vid_commitment;
 use hotshot_types::{
     data::{Leaf, ViewNumber},
     qc,
     signature_key::BLSPubKey,
     traits::{
+        block_contents::vid_commitment,
         election::Membership,
         metrics::NoMetrics,
         node_implementation::{ConsensusTime, NodeType},
@@ -89,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
         state_relay_server_url: opt.state_relay_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: opt.private_staking_key,
+        private_state_key: opt.private_state_key,
     };
 
     let seed = [201_u8; 32];
@@ -110,9 +112,6 @@ async fn main() -> anyhow::Result<()> {
         req_sender,
         res_receiver,
         tx_sender,
-        da_sender,
-        qc_sender,
-        decide_sender,
     );
 
     let arc_rwlock_global_state: Arc<RwLock<GlobalState<SeqTypes>>> =
@@ -124,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
     let builder_state = BuilderState::<SeqTypes>::new(
         (
             ViewNumber::new(0),
-            genesis_vid_commitment(),
+            vid_commitment(&vec![], 8),
             Commitment::<Leaf<SeqTypes>>::default_commitment_no_preimage(),
         ),
         tx_receiver,
