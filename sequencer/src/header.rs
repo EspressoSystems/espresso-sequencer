@@ -259,7 +259,7 @@ impl BlockHeader<SeqTypes> for Header {
             dbg!(finalized);
             let d = instance_state
                 .l1_client()
-                .get_pending_deposits(
+                .get_finalized_deposits(
                     parent_header.l1_finalized.map(|f| f.number),
                     finalized.number,
                     parent_header.fee_info.account().into(),
