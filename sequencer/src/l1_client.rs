@@ -162,6 +162,7 @@ impl L1Client {
                 Ok(events) => break events,
                 Err(e) => {
                     tracing::warn!("Fee Event Error: {}", e);
+                    sleep(self.retry_delay).await;
                 }
             }
         };
