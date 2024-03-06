@@ -91,14 +91,17 @@ pub struct L1Client {
     retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
     provider: Provider<Http>,
+    /// `Address` of fee contract.
+    _address: Address,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url) -> Self {
+    pub fn new(url: Url, contract_address: Address) -> Self {
         Self {
             retry_delay: Duration::from_secs(1),
             provider: Provider::new(Http::new(url)),
+            _address: contract_address,
         }
     }
     /// Get a snapshot from the l1.
@@ -136,7 +139,6 @@ impl L1Client {
         &self,
         prev_finalized: Option<u64>,
         new_finalized: u64,
-        address: Address,
     ) -> Vec<FeeInfo> {
         // `prev` should have allready been processed unless we
         // haven't processed *any* blocks yet.
@@ -150,7 +152,7 @@ impl L1Client {
         // query for deposit events, loop until successfull.
         let events = loop {
             match contract_bindings::fee_contract::FeeContract::new(
-                address,
+                self._address,
                 Arc::new(&self.provider),
             )
             .deposit_filter()
@@ -213,7 +215,7 @@ mod test {
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
         let provider = &l1_client.provider;
 
         let version = provider.client_version().await.unwrap();
@@ -222,7 +224,7 @@ mod test {
         // Test that nothing funky is happening to the provider when
         // passed along in state.
         let state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap()),
+            l1_client: L1Client::new(anvil.endpoint().parse().unwrap(), Address::default()),
             ..Default::default()
         };
         let version = state.l1_client().provider.client_version().await.unwrap();
@@ -253,7 +255,7 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -292,13 +294,11 @@ mod test {
         assert_eq!(deposits + 1, head);
 
         // Use non-signing `L1Client` to retrieve data.
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), contract.address());
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
-        let pending = l1_client
-            ._get_finalized_deposits(None, deposits + 1, contract.address())
-            .await;
+        let pending = l1_client._get_finalized_deposits(None, deposits + 1).await;
 
         assert_eq!(deposits as usize, pending.len());
         assert_eq!(&wallet_address, &pending[0].account().into());
