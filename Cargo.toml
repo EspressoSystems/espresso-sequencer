@@ -35,7 +35,7 @@ async-trait = "0.1.77"
 clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
-ethers = { version = "2.0", features = ["ws"] }
+ethers = { version = "2.0" }
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.20" }
