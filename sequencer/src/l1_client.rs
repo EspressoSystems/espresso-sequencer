@@ -140,15 +140,16 @@ impl L1Client {
         prev_finalized: Option<u64>,
         new_finalized: u64,
     ) -> Vec<FeeInfo> {
-        // `prev` should have allready been processed unless we
-        // haven't processed *any* blocks yet.
-        let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
         // No new blocks have been finalized, therefore there are no
         // new deposits.
-        if prev >= new_finalized {
+        if prev_finalized == Some(new_finalized) {
             return vec![];
         }
 
+        // `prev` should have allready been processed unless we
+        // haven't processed *any* blocks yet.
+        let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
+        dbg!(prev, new_finalized);
         // query for deposit events, loop until successfull.
         let events = loop {
             match contract_bindings::fee_contract::FeeContract::new(
@@ -307,6 +308,25 @@ mod test {
             pending.iter().fold(U256::from(0), |total, info| total
                 .add(U256::from(info.amount())))
         );
+
+        // check a few more cases
+        let pending = l1_client
+            ._get_finalized_deposits(Some(0), deposits + 1)
+            .await;
+        assert_eq!(deposits as usize, pending.len());
+
+        let pending = l1_client._get_finalized_deposits(Some(0), 0).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client._get_finalized_deposits(Some(0), 1).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client._get_finalized_deposits(Some(1), 1).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client._get_finalized_deposits(Some(1), 2).await;
+        assert_eq!(1, pending.len());
+
         Ok(())
     }
 }
