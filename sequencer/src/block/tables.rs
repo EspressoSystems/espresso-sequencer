@@ -1,6 +1,6 @@
 use crate::block::entry::TxTableEntry;
 use crate::block::payload::TableWordTraits;
-use crate::{BlockBuildingSnafu, Error, VmId};
+use crate::{BlockBuildingSnafu, Error, NamespaceId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -57,7 +57,9 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         }
     }
 
-    pub fn from_namespace_offsets(namespace_offsets: Vec<(VmId, usize)>) -> Result<Self, Error> {
+    pub fn from_namespace_offsets(
+        namespace_offsets: Vec<(NamespaceId, usize)>,
+    ) -> Result<Self, Error> {
         let mut ns_table = NameSpaceTable::from_vec(Vec::from(
             TxTableEntry::try_from(namespace_offsets.len())
                 .ok()
@@ -65,7 +67,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
                 .to_bytes(),
         ));
         for (id, offset) in namespace_offsets {
-            ns_table.add_new_entry_vmid(id)?;
+            ns_table.add_new_entry_ns_id(id)?;
             ns_table.add_new_entry_payload_len(offset)?;
         }
         Ok(ns_table)
@@ -86,14 +88,14 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     /// Find `ns_id` and return its index into this namespace table.
     ///
     /// TODO return Result or Option? Want to avoid catch-all Error type :(
-    pub fn lookup(&self, ns_id: VmId) -> Option<usize> {
+    pub fn lookup(&self, ns_id: NamespaceId) -> Option<usize> {
         // TODO don't use TxTable, need a new method
         let ns_table_len = TxTable::get_tx_table_len(&self.bytes);
 
         (0..ns_table_len).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
     }
 
-    fn add_new_entry_vmid(&mut self, id: VmId) -> Result<(), Error> {
+    fn add_new_entry_ns_id(&mut self, id: NamespaceId) -> Result<(), Error> {
         self.bytes.extend(
             TxTableEntry::try_from(id)
                 .ok()
@@ -127,7 +129,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
     // returns (ns_id, ns_offset)
     // ns_offset is not checked, could be anything
-    pub fn get_table_entry(&self, ns_index: usize) -> (VmId, usize) {
+    pub fn get_table_entry(&self, ns_index: usize) -> (NamespaceId, usize) {
         // get the range for ns_id bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         let start = std::cmp::min(
@@ -144,12 +146,13 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         let ns_id_range = start..end;
 
         // parse ns_id bytes from ns table
-        // any failure -> VmId(0)
+        // any failure -> NamespaceId::default()
         let mut ns_id_bytes = [0u8; TxTableEntry::byte_len()];
         ns_id_bytes[..ns_id_range.len()].copy_from_slice(&self.bytes[ns_id_range]);
-        let ns_id =
-            VmId::try_from(TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()))
-                .unwrap_or(VmId(0));
+        let ns_id = NamespaceId::try_from(
+            TxTableEntry::from_bytes(&ns_id_bytes).unwrap_or(TxTableEntry::zero()),
+        )
+        .unwrap_or_default();
 
         // get the range for ns_offset bytes in ns table
         // ensure `range` is within range for ns_table_bytes
