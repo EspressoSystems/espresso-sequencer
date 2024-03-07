@@ -69,44 +69,66 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<Self::Transaction> {
-        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        if index_usize >= self.len(meta) {
+        let (ns_idx, tx_idx) = (index.ns_idx, index.tx_idx);
+        if ns_idx >= meta.len() {
+            return None; // error: index out of bounds
+        }
+        let (ns_id, _offset) = meta.get_table_entry(ns_idx);
+        let ns_range = meta.get_payload_range(ns_idx, self.raw_payload.len());
+        let ns_start_offset = ns_range.start;
+
+        let tx_table_len = TxTable::get_tx_table_len(&self.raw_payload[ns_range.clone()]);
+        if tx_idx >= tx_table_len {
             return None; // error: index out of bounds
         }
 
+        let tx_payloads_offset = tx_table_len
+            .checked_add(1)?
+            .checked_mul(TxTableEntry::byte_len())?
+            .checked_add(ns_start_offset)?;
+
         // start
-        let tx_table_range_start = if index_usize == 0 {
+        let tx_table_range_start = if tx_idx == 0 {
             None
         } else {
-            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
+            let offset = tx_idx
+                .checked_mul(TxTableEntry::byte_len())?
+                .checked_add(ns_start_offset)?;
             Some(TxTableEntry::from_bytes(self.raw_payload.get(
-                range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
+                offset..offset.checked_add(TxTableEntry::byte_len())?,
             )?)?)
         };
 
         // end
-        let tx_table_range_proof_end = index_usize
-            .checked_add(2)?
-            .checked_mul(TxTableEntry::byte_len())?;
-        let tx_table_range_end = TxTableEntry::from_bytes(self.raw_payload.get(
-            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
-                ..tx_table_range_proof_end,
-        )?)?;
+        let tx_table_range_end = {
+            let tx_table_end_offset = tx_idx
+                .checked_add(1)?
+                .checked_mul(TxTableEntry::byte_len())?
+                .checked_add(ns_start_offset)?;
 
-        let tx_payload_range = tx_payload_range(
-            &tx_table_range_start,
-            &tx_table_range_end,
-            &self.get_tx_table_len(),
-            self.raw_payload.len(),
-        )?;
-        Some(
-            // TODO don't copy the tx bytes into the return value
-            // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-            Transaction::new(
-                crate::VmId(0),
-                self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
-            ),
-        )
+            TxTableEntry::from_bytes(self.raw_payload.get(
+                tx_table_end_offset..tx_table_end_offset.checked_add(TxTableEntry::byte_len())?,
+            )?)?
+        };
+
+        let (tx_payload_start, tx_payload_end) = {
+            let start =
+                usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+                    .ok()?
+                    .checked_add(tx_payloads_offset)?;
+            let end = usize::try_from(tx_table_range_end.clone())
+                .ok()?
+                .checked_add(tx_payloads_offset)?;
+            let end = std::cmp::min(end, ns_range.end);
+            let start = std::cmp::min(start, end);
+            (start, end)
+        };
+
+        let tx_payload = self
+            .raw_payload
+            .get(tx_payload_start..tx_payload_end)?
+            .to_vec();
+        Some(Transaction::new(ns_id, tx_payload))
     }
 
     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
