@@ -194,7 +194,7 @@ impl Default for NodeState {
         Self {
             genesis_state: ValidatedState::default(),
             builder_address: wallet,
-            l1_client: L1Client::new("http://localhost:3331".parse().unwrap()),
+            l1_client: L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
         }
     }
 }
@@ -341,7 +341,7 @@ pub async fn init_node(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url);
+    let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState {
         l1_client,
@@ -495,7 +495,10 @@ pub mod testing {
             };
 
             let node_state = NodeState {
-                l1_client: L1Client::new(self.anvil.endpoint().parse().unwrap()),
+                l1_client: L1Client::new(
+                    self.anvil.endpoint().parse().unwrap(),
+                    Address::default(),
+                ),
                 ..Default::default()
             };
 
