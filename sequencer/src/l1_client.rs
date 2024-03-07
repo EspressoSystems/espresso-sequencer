@@ -149,7 +149,7 @@ impl L1Client {
         // `prev` should have allready been processed unless we
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
-        dbg!(prev, new_finalized);
+
         // query for deposit events, loop until successfull.
         let events = loop {
             match contract_bindings::fee_contract::FeeContract::new(
