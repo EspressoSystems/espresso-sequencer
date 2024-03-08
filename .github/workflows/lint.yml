@@ -38,6 +38,6 @@ jobs:
 
       - name: Spell Good
         run: |
-          cargo install typos
+          cargo install typos-cli
           typos
 
