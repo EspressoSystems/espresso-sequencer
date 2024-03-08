@@ -35,3 +35,9 @@ jobs:
 
       - name: Check
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+      - name: Spell Good
+        run: |
+          cargo install typos
+          typos
+
