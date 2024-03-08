@@ -18,7 +18,7 @@ use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     traits::{election::Membership, metrics::Metrics},
-    HotShotConfig,
+    HotShotConfig, PeerConfig,
 };
 use std::fmt::Display;
 use url::Url;
@@ -57,10 +57,12 @@ pub struct SequencerContext<N: network::Type> {
 }
 
 impl<N: network::Type> SequencerContext<N> {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,
         persistence: impl SequencerPersistence,
+        stake_table_entries_non_without_stake: Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
         networks: Networks<SeqTypes, Node<N>>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
@@ -70,12 +72,20 @@ impl<N: network::Type> SequencerContext<N> {
         let initializer = persistence.load_consensus_state(instance_state).await?;
 
         let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            config.total_nodes.get() as u64,
+            config.num_nodes_with_stake.get() as u64,
+            config.num_nodes_without_stake as u64,
         );
-        let membership = GeneralStaticCommittee::create_election(
-            config.known_nodes_with_stake.clone(),
-            election_config,
-        );
+
+        // entries should be combination of both config.known_nodes_with_stake and stake_table_entries_non_without_stake
+        let combined_entries = config
+            .known_nodes_with_stake
+            .iter()
+            .cloned()
+            .chain(stake_table_entries_non_without_stake.into_iter())
+            .collect();
+
+        let membership = GeneralStaticCommittee::create_election(combined_entries, election_config);
+
         let memberships = Memberships {
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
@@ -85,6 +95,7 @@ impl<N: network::Type> SequencerContext<N> {
 
         let stake_table_commit =
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
+
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
         let handle = SystemContext::init(

@@ -353,6 +353,7 @@ pub async fn init_node(
         config.config,
         instance_state,
         persistence,
+        vec![],
         networks,
         Some(network_params.state_relay_server_url),
         metrics,
@@ -370,6 +371,7 @@ pub mod testing {
     use super::*;
     use crate::persistence::no_storage::NoStorage;
     use commit::Committable;
+    use core::num;
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
@@ -385,85 +387,82 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
-    use std::time::Duration;
+    use std::{simd::num, time::Duration};
 
     #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey, ElectionConfig>,
-        priv_keys: Vec<BLSPrivKey>,
-        state_key_pairs: Vec<StateKeyPair>,
-        non_staked_nodes: Vec<PubKey>,
+        priv_keys_staking_nodes: Vec<BLSPrivKey>,
+        priv_keys_non_staking_nodes: Vec<BLSPrivKey>,
+        staking_nodes_state_key_pairs: Vec<StateKeyPair>,
+        non_staking_nodes_state_key_pairs: Vec<StateKeyPair>,
+        non_staking_nodes_stake_entries: Vec<PeerConfig<VerKey>>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
         anvil: Arc<AnvilInstance>,
     }
 
+    pub fn genereate_stake_table_entries(
+        num_nodes: u64,
+        stake_value: u64,
+    ) -> (Vec<BLSPrivKey>, Vec<StateKeyPair>, Vec<PeerConfig<PubKey>>) {
+        let num_nodes_without_stake = Self::NUM_NODES;
+
+        // Generate keys for the nodes.
+        let priv_keys = (0..num_nodes)
+            .map(|_| PrivKey::generate(&mut rand::thread_rng()))
+            .collect::<Vec<_>>();
+        let pub_keys = priv_keys
+            .iter()
+            .map(PubKey::from_private)
+            .collect::<Vec<_>>();
+        let state_key_pairs = (0..num_nodes)
+            .map(|_| StateKeyPair::generate())
+            .collect::<Vec<_>>();
+
+        let mut nodes_with_stake = pub_keys
+            .iter()
+            .zip(&state_key_pairs)
+            .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
+                stake_table_entry: pub_key.get_stake_table_entry(stake_value),
+                state_ver_key: state_key_pair.ver_key(),
+            })
+            .collect::<Vec<_>>();
+
+        (priv_keys, state_key_pairs, nodes_with_stake)
+    }
+
     impl Default for TestConfig {
         fn default() -> Self {
-            let num_nodes = Self::NUM_NODES;
+            let num_nodes_with_stake = Self::NUM_NODES;
+            let num_nodes_without_stake = Self::BUILDER_NODES;
 
-            // Generate keys for the nodes.
-            let priv_keys = (0..num_nodes)
-                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
-                .collect::<Vec<_>>();
-            let pub_keys = priv_keys
+            // first generate stake table entries for the staking nodes
+            let (priv_keys_staking_nodes, staking_nodes_state_key_pairs, known_nodes_with_stake) =
+                genereate_stake_table_entries(Self::NUM_NODES as u64, 1);
+            // Now generate the stake table entries for the non-staking nodes
+            let (
+                priv_keys_non_staking_nodes,
+                non_staking_nodes_state_key_pairs,
+                known_nodes_without_stake,
+            ) = genereate_stake_table_entries(Self::BUILDER_NODES as u64, 0);
+
+            // get the pub key out of the stake table entry for the non-staking nodes
+            // Only pass the pub keys to the hotshot config
+            let known_nodes_without_stake_pub_keys = known_nodes_without_stake
                 .iter()
-                .map(PubKey::from_private)
+                .map(|x| PUBKEY::get_public_key(x.stake_table_entry))
                 .collect::<Vec<_>>();
-            let state_key_pairs = (0..num_nodes)
-                .map(|_| StateKeyPair::generate())
-                .collect::<Vec<_>>();
-
-            // initially make every node have 1 stake
-            let mut known_nodes_with_stake = pub_keys
-                .iter()
-                .zip(&state_key_pairs)
-                .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                    stake_table_entry: pub_key.get_stake_table_entry(1),
-                    state_ver_key: state_key_pair.ver_key(),
-                })
-                .collect::<Vec<_>>();
-
-            // Similary generate the key for builder nodes
-            let builder_nodes = Self::BUILDER_NODES;
-            // generate the key for builder nodes
-            let builder_priv_keys = (0..builder_nodes)
-                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
-                .collect::<Vec<_>>();
-            let builder_pub_keys = builder_priv_keys
-                .iter()
-                .map(PubKey::from_private)
-                .collect::<Vec<_>>();
-
-            let state_key_pairs = (0..num_nodes)
-                .map(|_| StateKeyPair::generate())
-                .collect::<Vec<_>>();
-
-            // initially make every node have 1 stake
-            let mut known_nodes_with_stake = pub_keys
-                .iter()
-                .zip(&state_key_pairs)
-                .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                    stake_table_entry: pub_key.get_stake_table_entry(1),
-                    state_ver_key: state_key_pair.ver_key(),
-                })
-                .collect::<Vec<_>>();
-
-            // //update the last node stake table entry with 0 stake
-            // let builder_stake_entry = PeerConfig::<PubKey> {
-            //     stake_table_entry: pub_keys[num_nodes - 1].get_stake_table_entry(0),
-            //     state_ver_key: state_key_pairs[num_nodes - 1].ver_key(),
-            // };
-
-            // known_nodes_with_stake[num_nodes - 1] = builder_stake_entry;
 
             let master_map = MasterMap::new();
 
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
-                total_nodes: num_nodes.try_into().unwrap(),
+                num_nodes_with_stake: num_nodes_with_stake.try_into().unwrap(),
+                num_nodes_without_stake: num_nodes_without_stake,
                 min_transactions: 1,
                 max_transactions: 10000.try_into().unwrap(),
                 known_nodes_with_stake,
+                known_nodes_without_stake: known_nodes_without_stake_pub_keys,
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
@@ -472,14 +471,18 @@ pub mod testing {
                 propose_min_round_time: Duration::from_secs(0),
                 propose_max_round_time: Duration::from_secs(1),
                 election_config: None,
-                da_committee_size: num_nodes,
+                da_staked_committee_size: num_nodes_with_stake,
+                da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
             };
 
             Self {
                 config,
-                priv_keys,
-                state_key_pairs,
+                priv_keys_staking_nodes,
+                priv_keys_non_staking_nodes,
+                staking_nodes_state_key_pairs,
+                non_staking_nodes_state_key_pairs,
+                non_staking_nodes_stake_entries: known_nodes_without_stake,
                 master_map,
                 anvil: Arc::new(Anvil::new().spawn()),
             }
@@ -490,34 +493,75 @@ pub mod testing {
         pub const NUM_NODES: usize = 4;
         pub const BUILDER_NODES: usize = 1;
 
-        pub fn num_nodes(&self) -> usize {
-            self.priv_keys.len()
+        pub fn num_staked_nodes(&self) -> usize {
+            self.priv_keys_staking_nodes.len()
+        }
+        pub fn num_non_staked_nodes(&self) -> usize {
+            self.priv_keys_non_staking_nodes.len()
+        }
+        pub fn total_staking_not_staking_nodes(&self) -> usize {
+            self.num_staked_nodes() + self.num_non_staked_nodes()
         }
 
         pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
-            join_all(
-                (0..self.num_nodes())
-                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
-            )
+            let num_staked_nodes = self.num_staked_nodes();
+            join_all((0..self.total_staking_not_staking_nodes()).map(|i| {
+                if i < num_staked_nodes {
+                    async move { self.init_node(i, true, NoStorage, &NoMetrics).await }
+                } else {
+                    async move { self.init_node(i, false, NoStorage, &NoMetrics).await }
+                }
+            }))
             .await
         }
 
+        pub fn get_validator_config(&self, i: usize, is_staked: bool) {
+            if is_staked {
+                ValidatorConfig {
+                    public_key: self.config.known_nodes_with_stake[i]
+                        .stake_table_entry
+                        .stake_key,
+                    private_key: self.priv_keys[i].clone(),
+                    stake_value: self.config.known_nodes_with_stake[i]
+                        .stake_table_entry
+                        .stake_amount
+                        .as_u64(),
+                    state_key_pair: self.staking_nodes_state_key_pairs[i].clone(),
+                }
+            } else {
+                ValidatorConfig {
+                    public_key: self.config.known_nodes_without_stake[i],
+                    private_key: self.priv_keys[i].clone(),
+                    stake_value: 0,
+                    state_key_pair: self.non_staking_nodes_state_key_pairs[i].clone(),
+                }
+            }
+        }
         pub async fn init_node(
             &self,
             i: usize,
+            is_staked: bool,
             persistence: impl SequencerPersistence,
             metrics: &dyn Metrics,
         ) -> SequencerContext<network::Memory> {
             let mut config = self.config.clone();
-            config.my_own_validator_config = ValidatorConfig {
-                public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
-                private_key: self.priv_keys[i].clone(),
-                stake_value: config.known_nodes_with_stake[i]
-                    .stake_table_entry
-                    .stake_amount
-                    .as_u64(),
-                state_key_pair: self.state_key_pairs[i].clone(),
-            };
+
+            // config.my_own_validator_config = ValidatorConfig {
+            //     public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
+            //     private_key: self.priv_keys[i].clone(),
+            //     stake_value: config.known_nodes_with_stake[i]
+            //         .stake_table_entry
+            //         .stake_amount
+            //         .as_u64(),
+            //     state_key_pair: self.state_key_pairs[i].clone(),
+            // };
+            let num_staked_nodes = self.num_staked_nodes();
+            if is_staked {
+                config.my_own_validator_config = self.get_validator_config(i, is_staked);
+            } else {
+                config.my_own_validator_config =
+                    self.get_validator_config(i - num_staked_nodes, is_staked);
+            }
 
             let network = Arc::new(MemoryNetwork::new(
                 config.my_own_validator_config.public_key,
@@ -540,6 +584,7 @@ pub mod testing {
                 config,
                 node_state,
                 persistence,
+                self.non_staking_nodes_stake_entries.clone(),
                 networks,
                 None,
                 metrics,
