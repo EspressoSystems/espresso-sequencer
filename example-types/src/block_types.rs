@@ -170,6 +170,10 @@ impl BlockPayload for TestBlockPayload {
         }
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
+
+    fn get_transactions(&self) -> &Vec<Self::Transaction> {
+        &self.transactions
+    }
 }
 
 /// A [`BlockHeader`] that commits to [`TestBlockPayload`].

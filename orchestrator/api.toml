@@ -4,7 +4,7 @@ DESCRIPTION = "Orchestrator for HotShot"
 FORMAT_VERSION = "0.1.0"
 
 # POST node's identity
-[route.postidentity]
+[route.post_identity]
 PATH = ["identity/:identity"]
 METHOD = "POST"
 ":identity" = "Literal"
@@ -24,15 +24,15 @@ received from the 'identity' endpoint
 """
 
 # GET the latest temporary node index only for generating validator's key pair
-[route.tmp_node_index]
-PATH = ["tmp_node_index"]
+[route.get_tmp_node_index]
+PATH = ["get_tmp_node_index"]
 METHOD = "POST"
 DOC = """
 Get the latest temporary node index only for generating validator's key pair for testing in hotshot, later the generated key pairs might be bound with other node_index.
 """
 
 # POST the node's node index to generate public key for pubkey collection
-[route.postpubkey]
+[route.post_pubkey]
 PATH = ["pubkey/:node_index"]
 METHOD = "POST"
 ":node_index" = "Integer"
@@ -48,15 +48,15 @@ Get whether the node can collect the final config which includs all peer's publi
 """
 
 # GET the updated config with all peers' public keys / configs
-[route.config_after_peer_collected]
-PATH = ["config_after_peer_collected"]
+[route.get_config_after_peer_collected]
+PATH = ["get_config_after_peer_collected"]
 DOC = """
 Get the updated config with all peers' public keys / configs, returns a NetworkConfig.
 """
 
 # POST whether the node is ready to begin the run
 # TODO ED Use the node index parameter
-[route.postready]
+[route.post_ready]
 PATH = ["ready"]
 METHOD = "POST"
 ":node_index" = "Integer"
@@ -65,16 +65,15 @@ Post whether the node with node_index is ready to start the run
 """
 
 # GET whether or not to start the run
-[route.getstart]
+[route.get_start]
 PATH = ["start"]
 DOC = """
 Get whether the node should start the run, returns a boolean
 """
 
 # POST the run results
-[route.postresults]
+[route.post_results]
 PATH = ["results"]
-":run_results" = "TaggedBase64"
 METHOD = "POST"
 DOC = """
 Post run results.

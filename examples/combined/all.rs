@@ -2,26 +2,22 @@
 /// types used for this example
 pub mod types;
 
-use crate::infra::load_config_from_file;
+use crate::infra::read_orchestrator_init_config;
+use crate::infra::OrchestratorArgs;
 use crate::types::ThisRun;
+use crate::{
+    infra::run_orchestrator,
+    types::{DANetwork, NodeImpl, QuorumNetwork},
+};
 use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::channel::oneshot;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
-use hotshot_orchestrator::config::NetworkConfig;
-use hotshot_types::traits::node_implementation::NodeType;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use surf_disco::Url;
 use tracing::{error, instrument};
-
-use crate::{
-    infra::run_orchestrator,
-    infra::{ConfigArgs, OrchestratorArgs},
-    types::{DANetwork, NodeImpl, QuorumNetwork},
-};
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]
@@ -34,16 +30,13 @@ async fn main() {
     setup_logging();
     setup_backtrace();
 
-    // use configfile args
-    let args = ConfigArgs::parse();
+    let (config, orchestrator_url) = read_orchestrator_init_config::<TestTypes>();
 
     // spawn web servers
     let (server_shutdown_sender_cdn, server_shutdown_cdn) = oneshot();
     let (server_shutdown_sender_da, server_shutdown_da) = oneshot();
     let _sender = Arc::new(server_shutdown_sender_cdn);
     let _sender = Arc::new(server_shutdown_sender_da);
-
-    let orchestrator_url = Url::parse("http://localhost:4444").unwrap();
 
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
@@ -78,15 +71,10 @@ async fn main() {
         NodeImpl,
     >(OrchestratorArgs {
         url: orchestrator_url.clone(),
-
-        config_file: args.config_file.clone(),
+        config: config.clone(),
     }));
 
     // nodes
-    let config: NetworkConfig<
-        <TestTypes as NodeType>::SignatureKey,
-        <TestTypes as NodeType>::ElectionConfigType,
-    > = load_config_from_file::<TestTypes>(&args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..config.config.total_nodes.into() {
         let orchestrator_url = orchestrator_url.clone();

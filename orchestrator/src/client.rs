@@ -19,6 +19,91 @@ pub struct OrchestratorClient {
     pub identity: String,
 }
 
+/// Struct describing a benchmark result
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct BenchResults {
+    /// The average latency of the transactions
+    pub avg_latency_in_sec: i64,
+    /// The number of transactions that were latency measured
+    pub num_latency: i64,
+    /// The minimum latency of the transactions
+    pub minimum_latency_in_sec: i64,
+    /// The maximum latency of the transactions
+    pub maximum_latency_in_sec: i64,
+    /// The throughput of the consensus protocol = number of transactions committed per second * transaction size in bytes
+    pub throughput_bytes_per_sec: u64,
+    /// The number of transactions committed during benchmarking
+    pub total_transactions_committed: u64,
+    /// The size of each transaction in bytes
+    pub transaction_size_in_bytes: u64,
+    /// The total time elapsed for benchmarking
+    pub total_time_elapsed_in_sec: u64,
+    /// The total number of views during benchmarking
+    pub total_num_views: usize,
+    /// The number of failed views during benchmarking
+    pub failed_num_views: usize,
+}
+
+impl BenchResults {
+    /// printout the results of one example run
+    pub fn printout(&self) {
+        println!("=====================");
+        println!("Benchmark results:");
+        println!(
+            "Average latency: {} seconds, Minimum latency: {} seconds, Maximum latency: {} seconds",
+            self.avg_latency_in_sec, self.minimum_latency_in_sec, self.maximum_latency_in_sec
+        );
+        println!("Throughput: {} bytes/sec", self.throughput_bytes_per_sec);
+        println!(
+            "Total transactions committed: {}",
+            self.total_transactions_committed
+        );
+        println!(
+            "Total number of views: {}, Failed number of views: {}",
+            self.total_num_views, self.failed_num_views
+        );
+        println!("=====================");
+    }
+}
+
+/// Struct describing a benchmark result needed for download, also include the config
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct BenchResultsDownloadConfig {
+    // Config starting here
+    /// The commit this benchmark was run on
+    pub commit_sha: String,
+    /// Total number of nodes
+    pub total_nodes: usize,
+    /// The size of the da committee
+    pub da_committee_size: usize,
+    /// Number of transactions submitted per round
+    pub transactions_per_round: usize,
+    /// The size of each transaction in bytes
+    pub transaction_size: u64,
+    /// The number of rounds
+    pub rounds: usize,
+    /// The type of leader election used
+    pub leader_election_type: String,
+
+    // Results starting here
+    /// The average latency of the transactions
+    pub avg_latency_in_sec: i64,
+    /// The minimum latency of the transactions
+    pub minimum_latency_in_sec: i64,
+    /// The maximum latency of the transactions
+    pub maximum_latency_in_sec: i64,
+    /// The throughput of the consensus protocol = number of transactions committed per second * transaction size in bytes
+    pub throughput_bytes_per_sec: u64,
+    /// The number of transactions committed during benchmarking
+    pub total_transactions_committed: u64,
+    /// The total time elapsed for benchmarking
+    pub total_time_elapsed_in_sec: u64,
+    /// The total number of views during benchmarking
+    pub total_num_views: usize,
+    /// The number of failed views during benchmarking
+    pub failed_num_views: usize,
+}
+
 // VALIDATOR
 
 #[derive(Parser, Debug, Clone)]
@@ -151,7 +236,7 @@ impl OrchestratorClient {
         let cur_node_index = |client: Client<ClientError>| {
             async move {
                 let cur_node_index: Result<u16, ClientError> =
-                    client.post("api/tmp_node_index").send().await;
+                    client.post("api/get_tmp_node_index").send().await;
                 cur_node_index
             }
             .boxed()
@@ -173,7 +258,7 @@ impl OrchestratorClient {
         let _send_pubkey_ready_f: Result<(), ClientError> = self
             .client
             .post(&format!("api/pubkey/{node_index}"))
-            .body_binary(&PeerConfig::<K>::to_bytes(&my_pub_key)) //&my_pub_key.stake_table_entry.get_public_key().to_bytes()
+            .body_binary(&PeerConfig::<K>::to_bytes(&my_pub_key))
             .unwrap()
             .send()
             .await;
@@ -187,7 +272,7 @@ impl OrchestratorClient {
 
         // get the newest updated config
         self.client
-            .get("api/config_after_peer_collected")
+            .get("api/get_config_after_peer_collected")
             .send()
             .await
             .expect("Unable to get the updated config")
@@ -218,6 +303,19 @@ impl OrchestratorClient {
         };
         self.wait_for_fn_from_orchestrator(wait_for_all_nodes_ready_f)
             .await
+    }
+
+    /// Sends the benchmark metrics to the orchestrator
+    /// # Panics
+    /// Panics if unable to post
+    pub async fn post_bench_results(&self, bench_results: BenchResults) {
+        let _send_metrics_f: Result<(), ClientError> = self
+            .client
+            .post("api/results")
+            .body_json(&bench_results)
+            .unwrap()
+            .send()
+            .await;
     }
 
     /// Generic function that waits for the orchestrator to return a non-error

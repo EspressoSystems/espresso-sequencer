@@ -111,6 +111,7 @@ lru = "0.12.3"
 hotshot-task = { path = "../task" }
 hotshot = { path = "../hotshot" }
 hotshot-example-types = { path = "../example-types" }
+chrono = "0.4"
 
 tracing = { workspace = true }
 

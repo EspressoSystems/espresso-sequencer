@@ -2,8 +2,8 @@
 /// types used for this example
 pub mod types;
 
-use crate::infra::load_config_from_file;
-use crate::infra::{ConfigArgs, OrchestratorArgs};
+use crate::infra::read_orchestrator_init_config;
+use crate::infra::OrchestratorArgs;
 use crate::types::ThisRun;
 use crate::{
     infra::run_orchestrator,
@@ -17,11 +17,8 @@ use std::sync::Arc;
 pub mod infra;
 
 use async_compatibility_layer::{art::async_spawn, channel::oneshot};
-use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
-use hotshot_orchestrator::config::NetworkConfig;
-use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::Url;
 use tracing::error;
 
@@ -32,8 +29,8 @@ async fn main() {
     setup_logging();
     setup_backtrace();
 
-    // use configfile args
-    let args = ConfigArgs::parse();
+    let (config, orchestrator_url) = read_orchestrator_init_config::<TestTypes>();
+
     // spawn web servers
     let (server_shutdown_sender_cdn, server_shutdown_cdn) = oneshot();
     let (server_shutdown_sender_da, server_shutdown_da) = oneshot();
@@ -65,24 +62,18 @@ async fn main() {
         }
     });
 
-    let orchestrator_url = Url::parse("http://localhost:4444").unwrap();
-
     // web server orchestrator
     async_spawn(run_orchestrator::<
         TestTypes,
         DANetwork,
         QuorumNetwork,
         NodeImpl,
-    >(OrchestratorArgs {
+    >(OrchestratorArgs::<TestTypes> {
         url: orchestrator_url.clone(),
-        config_file: args.config_file.clone(),
+        config: config.clone(),
     }));
 
     // multi validator run
-    let config: NetworkConfig<
-        <TestTypes as NodeType>::SignatureKey,
-        <TestTypes as NodeType>::ElectionConfigType,
-    > = load_config_from_file::<TestTypes>(&args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..(config.config.total_nodes.get()) {
         let orchestrator_url = orchestrator_url.clone();

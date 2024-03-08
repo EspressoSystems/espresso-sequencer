@@ -68,6 +68,11 @@ pub enum EventType<TYPES: NodeType> {
         /// The view number that has just finished
         view_number: TYPES::Time,
     },
+    /// The view timed out
+    ViewTimeout {
+        /// The view that timed out
+        view_number: TYPES::Time,
+    },
     /// New transactions were received from the network
     /// or submitted to the network by us
     Transactions {
