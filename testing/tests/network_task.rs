@@ -11,10 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 #[allow(clippy::too_many_lines)]

@@ -11,10 +11,7 @@ use jf_primitives::vid::VidScheme;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_vid_task() {
     use hotshot_task_impls::harness::run_harness;

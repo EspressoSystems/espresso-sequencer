@@ -1,8 +1,5 @@
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_catchup() {
     use std::time::Duration;
@@ -60,10 +57,7 @@ async fn test_catchup() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_catchup_web() {
     use std::time::Duration;
@@ -117,10 +111,7 @@ async fn test_catchup_web() {
 
 /// Test that one node catches up and has sucessful views after coming back
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_catchup_one_node() {
     use std::time::Duration;
@@ -175,10 +166,7 @@ async fn test_catchup_one_node() {
 
 /// Same as `test_catchup` except we start the nodes after their leadership so they join during view sync
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_catchup_in_view_sync() {
     use std::time::Duration;
@@ -240,10 +228,7 @@ async fn test_catchup_in_view_sync() {
 // Almost the same as `test_catchup`, but with catchup nodes reloaded from anchor leaf rather than
 // initialized from genesis.
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_catchup_reload() {
     use std::time::Duration;

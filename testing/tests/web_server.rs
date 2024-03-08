@@ -10,10 +10,7 @@ use hotshot_testing::{
 use tracing::instrument;
 
 /// Web server network test
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn web_server_network() {

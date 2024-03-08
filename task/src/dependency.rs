@@ -167,10 +167,7 @@ mod tests {
         }
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn it_works() {
         let (tx, rx) = broadcast(10);
@@ -186,10 +183,7 @@ mod tests {
         let result = and.completed().await;
         assert_eq!(result, Some(vec![5; 5]));
     }
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn or_dep() {
         let (tx, rx) = broadcast(10);
@@ -204,10 +198,7 @@ mod tests {
         assert_eq!(result, Some(5));
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn and_or_dep() {
         let (tx, rx) = broadcast(10);
@@ -225,10 +216,7 @@ mod tests {
         assert_eq!(result, Some(vec![6, 5]));
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn or_and_dep() {
         let (tx, rx) = broadcast(10);
@@ -246,10 +234,7 @@ mod tests {
         assert_eq!(result, Some(vec![4, 5]));
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn many_and_dep() {
         let (tx, rx) = broadcast(10);

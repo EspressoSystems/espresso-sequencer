@@ -14,10 +14,7 @@ use hotshot::traits::implementations::{calculate_hash_of, Cache};
 use hotshot_example_types::block_types::TestTransaction;
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_hash_calculation() {
@@ -29,10 +26,7 @@ async fn test_hash_calculation() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_cache_integrity() {
@@ -57,10 +51,7 @@ async fn test_cache_integrity() {
 
 /// A run with both the webserver and libp2p functioning properly
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_combined_network() {
@@ -95,10 +86,7 @@ async fn test_combined_network() {
 }
 
 // A run where the webserver crashes part-way through
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_combined_network_webserver_crash() {
@@ -147,10 +135,7 @@ async fn test_combined_network_webserver_crash() {
 
 // A run where the webserver crashes partway through
 // and then comes back up
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_combined_network_reup() {
@@ -203,10 +188,7 @@ async fn test_combined_network_reup() {
 }
 
 // A run where half of the nodes disconnect from the webserver
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_combined_network_half_dc() {
@@ -281,10 +263,7 @@ fn generate_random_node_changes(
 }
 
 // A fuzz test, where random network events take place on all nodes
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 #[ignore]

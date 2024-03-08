@@ -11,7 +11,7 @@
 // // tests base level of working synchronous network
 // #[cfg_attr(
 //     feature = "tokio-executor",
-//     tokio::test(flavor = "multi_thread", worker_threads = 2)
+//     tokio::test(flavor = "multi_thread")
 // )]
 // #[cfg_attr(feature = "async-std-executor", async_std::test)]
 // #[instrument]
@@ -36,7 +36,7 @@
 // // // tests network with forced packet delay
 // #[cfg_attr(
 //     feature = "tokio-executor",
-//     tokio::test(flavor = "multi_thread", worker_threads = 2)
+//     tokio::test(flavor = "multi_thread")
 // )]
 // #[cfg_attr(feature = "async-std-executor", async_std::test)]
 // #[instrument]
@@ -61,7 +61,7 @@
 // // tests network with small packet delay and dropped packets
 // #[cfg_attr(
 //     feature = "tokio-executor",
-//     tokio::test(flavor = "multi_thread", worker_threads = 2)
+//     tokio::test(flavor = "multi_thread")
 // )]
 // #[cfg_attr(feature = "async-std-executor", async_std::test)]
 // #[instrument]
@@ -89,7 +89,7 @@
 // /// tests network with asynchronous patch that eventually becomes synchronous
 // #[cfg_attr(
 //     feature = "tokio-executor",
-//     tokio::test(flavor = "multi_thread", worker_threads = 2)
+//     tokio::test(flavor = "multi_thread")
 // )]
 // #[cfg_attr(feature = "async-std-executor", async_std::test)]
 // #[instrument]

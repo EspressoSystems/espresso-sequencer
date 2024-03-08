@@ -88,10 +88,7 @@ mod test {
         }
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     // allow unused for tokio because it's a test
     #[allow(unused_must_use)]
@@ -107,10 +104,7 @@ mod test {
         join_handle.await;
     }
 
-    #[cfg_attr(
-        async_executor_impl = "tokio",
-        tokio::test(flavor = "multi_thread", worker_threads = 2)
-    )]
+    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     async fn many_works() {
         let (tx, rx) = broadcast(20);

@@ -14,10 +14,7 @@ use hotshot_testing::{
 };
 use tracing::instrument;
 
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn libp2p_network_sync() {
@@ -48,10 +45,7 @@ async fn libp2p_network_sync() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_sync() {
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
@@ -83,10 +77,7 @@ async fn test_memory_network_sync() {
         .await;
 }
 
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 #[instrument]
@@ -126,10 +117,7 @@ async fn libp2p_network_async() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_async() {
@@ -176,10 +164,7 @@ async fn test_memory_network_async() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_partially_sync() {
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
@@ -230,10 +215,7 @@ async fn test_memory_network_partially_sync() {
         .await;
 }
 
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn libp2p_network_partially_sync() {
@@ -274,10 +256,7 @@ async fn libp2p_network_partially_sync() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_chaos() {
@@ -314,10 +293,7 @@ async fn test_memory_network_chaos() {
         .await;
 }
 
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 #[instrument]

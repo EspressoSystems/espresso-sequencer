@@ -11,10 +11,7 @@ use jf_primitives::vid::VidScheme;
 use std::collections::HashMap;
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
     use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
@@ -73,10 +70,7 @@ async fn test_consensus_task() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_vote() {
     use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
@@ -125,10 +119,7 @@ async fn test_consensus_vote() {
 }
 
 #[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 // TODO: re-enable this when HotShot/the sequencer needs the shares for something
 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
