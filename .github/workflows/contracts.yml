@@ -21,6 +21,7 @@ env:
 
 jobs:
   contracts:
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - name: Install Nix
