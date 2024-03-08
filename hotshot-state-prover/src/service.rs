@@ -498,15 +498,19 @@ mod test {
         let signer = Wallet::from(anvil.keys()[0].clone());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        let status = Command::new("just")
+        let output = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
             .arg(TEST_MNEMONIC)
             .arg(BLOCKS_PER_EPOCH.to_string())
             .arg(NUM_INIT_VALIDATORS.to_string())
-            .status()
+            .output()
             .expect("fail to deploy");
-        assert!(status.success());
+
+        if !output.status.success() {
+            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
+            return Err(anyhow!("failed to deploy contract"));
+        }
 
         let last_blk_num = provider.get_block_number().await?;
         // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol

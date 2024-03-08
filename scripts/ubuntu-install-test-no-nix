@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# This script is to test the installation instructions in doc/ubuntu.md without
+# using Nix on ubuntu. It's not recommended to run it outside of a container or
+# otherwise ephemeral environment like the CI.
+set -e
+# Execute all lines that start with four spaces, and remove leading 'sudo '
+# because we're in a container and already root.
+#
+# Also skip cloning the repo and changing directories, because we want to test
+# with the current code and not what's in the main branch.
+grep '^    ' doc/ubuntu.md \
+    | sed 's/^    //' \
+    | sed 's/^sudo //' \
+    | sed 's/| sudo /| /' \
+    | sed 's/^cd .*//' \
+    | sed 's/^git clone .*//' \
+    | bash -exo pipefail
