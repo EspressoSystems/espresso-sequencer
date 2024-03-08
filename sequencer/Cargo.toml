@@ -45,7 +45,6 @@ hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { path = "../hotshot-state-prover" }
 hotshot-task = { workspace = true }
 
 # Dependencies for feature `testing`
