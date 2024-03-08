@@ -3660,7 +3660,6 @@ dependencies = [
  "contract-bindings",
  "diff-test-bn254",
  "ethers",
- "hotshot-stake-table",
  "hotshot-types",
  "jf-plonk",
  "jf-primitives",
