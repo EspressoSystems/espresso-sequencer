@@ -17,4 +17,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install and test
-        run: scripts/ubuntu-install-without-nix
+        run: scripts/ubuntu-install-test-no-nix
