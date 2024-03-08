@@ -50,6 +50,19 @@ where
     }
 }
 
+pub fn quorum_proposal_send<TYPES>() -> Predicate<HotShotEvent<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "QuorumProposalSend".to_string();
+    let function = |e: &_| matches!(e, QuorumProposalSend(_, _));
+
+    Predicate {
+        function: Box::new(function),
+        info,
+    }
+}
+
 type ConsensusTaskTestState =
     ConsensusTaskState<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>;
 
@@ -74,5 +87,12 @@ pub fn decided_upgrade_cert() -> Predicate<ConsensusTaskTestState> {
     consensus_predicate(
         Box::new(|state| state.decided_upgrade_cert.is_some()),
         "expected decided_upgrade_cert to be Some(_)",
+    )
+}
+
+pub fn is_at_view_number(n: u64) -> Predicate<ConsensusTaskTestState> {
+    consensus_predicate(
+        Box::new(move |state| *state.cur_view == n),
+        format!("expected cur view to be {}", n).as_str(),
     )
 }
