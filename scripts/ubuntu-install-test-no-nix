@@ -15,6 +15,9 @@ if [ "$(whoami)" == root ]; then
     SCRIPT="$(echo "$SCRIPT" | sed 's/^sudo //' | sed 's/| sudo /| /')"
 fi
 
+# Workaround: foundryup installs into XDG_CONFIG_HOME if that's set HOME otherwise.
+export XDG_CONFIG_HOME=$HOME
+
 echo "Will execute:"
 echo "$SCRIPT"
 echo
