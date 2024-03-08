@@ -13,10 +13,7 @@ use ethers::{
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
-use hotshot_types::{
-    data::{BlockError, ViewNumber},
-    traits::node_implementation::ConsensusTime as _,
-};
+use hotshot_types::data::{BlockError, ViewNumber};
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use jf_primitives::{
@@ -85,11 +82,16 @@ impl ValidatedState {
     }
 
     /// Check if the merkle tree is available
-    pub fn need_to_fetch_blocks_mt_frontier(&self, view: ViewNumber) -> bool {
-        self.block_merkle_tree
-            .lookup(view.get_u64())
-            .expect_ok()
-            .is_err()
+    pub fn need_to_fetch_blocks_mt_frontier(&self) -> bool {
+        let num_leaves = self.block_merkle_tree.num_leaves();
+        if num_leaves == 0 {
+            false
+        } else {
+            self.block_merkle_tree
+                .lookup(num_leaves - 1)
+                .expect_ok()
+                .is_err()
+        }
     }
 
     /// Insert a fee deposit receipt
@@ -268,6 +270,10 @@ impl HotShotState<SeqTypes> for ValidatedState {
     fn on_commit(&self) {}
     /// Validate parent against known values (from state) and validate
     /// proposal descends from parent. Returns updated `ValidatedState`.
+    #[tracing::instrument(
+        skip_all,
+        fields(view = ?parent_leaf.view_number, height = parent_leaf.block_header.height),
+    )]
     async fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
@@ -293,35 +299,33 @@ impl HotShotState<SeqTypes> for ValidatedState {
         let view = parent_leaf.get_view_number();
 
         // Ensure merkle tree has frontier
-        if self.need_to_fetch_blocks_mt_frontier(view) {
+        if self.need_to_fetch_blocks_mt_frontier() {
             instance
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(
-                    view,
-                    &mut validated_state.block_merkle_tree,
-                    &parent_leaf.get_block_header().commit(),
-                )
+                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
                 .await;
         }
 
         // Fetch missing fee state entries
-        let missing_account_proofs = instance
-            .peers
-            .as_ref()
-            .fetch_accounts(
-                view,
-                validated_state.fee_merkle_tree.commitment(),
-                missing_accounts,
-            )
-            .await;
+        if !missing_accounts.is_empty() {
+            let missing_account_proofs = instance
+                .peers
+                .as_ref()
+                .fetch_accounts(
+                    view,
+                    validated_state.fee_merkle_tree.commitment(),
+                    missing_accounts,
+                )
+                .await;
 
-        // Remember the fee state entries
-        for account in missing_account_proofs.iter() {
-            account
-                .proof
-                .remember(&mut validated_state.fee_merkle_tree)
-                .expect("proof previously verified");
+            // Remember the fee state entries
+            for account in missing_account_proofs.iter() {
+                account
+                    .proof
+                    .remember(&mut validated_state.fee_merkle_tree)
+                    .expect("proof previously verified");
+            }
         }
 
         // Lastly validate and apply the header

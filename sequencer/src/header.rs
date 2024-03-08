@@ -229,6 +229,10 @@ impl Header {
 }
 
 impl BlockHeader<SeqTypes> for Header {
+    #[tracing::instrument(
+        skip_all,
+        fields(view = ?parent_leaf.view_number, height = parent_leaf.block_header.height),
+    )]
     async fn new(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
@@ -236,6 +240,8 @@ impl BlockHeader<SeqTypes> for Header {
         payload_commitment: VidCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
+        let mut validated_state = parent_state.clone();
+
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
@@ -249,37 +255,35 @@ impl BlockHeader<SeqTypes> for Header {
             std::iter::once(FeeAccount::from(instance_state.builder_address.address()))
                 .chain(l1_deposits.iter().map(|info| info.account())),
         );
+        if !missing_accounts.is_empty() {
+            // Fetch missing fee state entries
+            let missing_account_proofs = instance_state
+                .peers
+                .as_ref()
+                .fetch_accounts(
+                    parent_leaf.get_view_number(),
+                    parent_state.fee_merkle_tree.commitment(),
+                    missing_accounts,
+                )
+                .await;
 
-        // Fetch missing fee state entries
-        let missing_account_proofs = instance_state
-            .peers
-            .as_ref()
-            .fetch_accounts(
-                parent_leaf.get_view_number(),
-                parent_state.fee_merkle_tree.commitment(),
-                missing_accounts,
-            )
-            .await;
-
-        // Insert missing fee state entries
-        let mut validated_state = parent_state.clone();
-        for account in missing_account_proofs.iter() {
-            account
-                .proof
-                .remember(&mut validated_state.fee_merkle_tree)
-                .expect("proof previously verified");
+            // Insert missing fee state entries
+            for account in missing_account_proofs.iter() {
+                account
+                    .proof
+                    .remember(&mut validated_state.fee_merkle_tree)
+                    .expect("proof previously verified");
+            }
         }
 
         // Ensure merkle tree has frontier
-        let view = parent_leaf.get_view_number();
-        if validated_state.need_to_fetch_blocks_mt_frontier(view) {
+        if validated_state.need_to_fetch_blocks_mt_frontier() {
             instance_state
                 .peers
                 .as_ref()
                 .remember_blocks_merkle_tree(
-                    view,
+                    parent_leaf.get_view_number(),
                     &mut validated_state.block_merkle_tree,
-                    &parent_leaf.get_block_header().commit(),
                 )
                 .await;
         }
@@ -349,7 +353,7 @@ mod test_headers {
 
     use super::*;
     use crate::{
-        catchup::MockStateCatchup,
+        catchup::mock::MockStateCatchup,
         l1_client::L1Client,
         state::{validate_and_apply_proposal, BlockMerkleTree, FeeMerkleTree},
         NodeState,
@@ -389,7 +393,7 @@ mod test_headers {
 
     impl Default for GenesisForTest {
         fn default() -> Self {
-            let instance_state = NodeState::default();
+            let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state);
             let leaf = Leaf::genesis(&instance_state);
             let header = leaf.get_block_header().clone();
@@ -624,10 +628,10 @@ mod test_headers {
         setup_backtrace();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap(), Address::default()),
-            ..Default::default()
-        };
+        let mut genesis_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.endpoint().parse().unwrap(),
+            Address::default(),
+        ));
 
         let genesis = GenesisForTest::default();
 
@@ -652,7 +656,10 @@ mod test_headers {
 
         // Forget the state to trigger lookups in Header::new
         let forgotten_state = parent_state.forget();
-        genesis_state.peers = Arc::new(MockStateCatchup::from(parent_state.clone()));
+        genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
+            parent_leaf.view_number,
+            parent_state.clone(),
+        )]));
         // Get a proposal from a parent
 
         // TODO this currently fails because after fetching the blocks frontier
@@ -692,7 +699,7 @@ mod test_headers {
         use ethers::signers::Wallet;
 
         // easy way to get a wallet:
-        let state = NodeState::default();
+        let state = NodeState::mock();
         let message = ";)";
         // let address = state.builder_address.address();
         let address: Wallet<SigningKey> = state.builder_address;
@@ -714,7 +721,7 @@ mod test_headers {
         use ethers::types;
 
         // easy way to get a wallet:
-        let state = NodeState::default();
+        let state = NodeState::mock();
 
         // simulate a fixed size hash by padding our message
         let message = ";)";

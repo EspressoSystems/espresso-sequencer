@@ -9,7 +9,7 @@ pub mod options;
 pub mod state_signature;
 
 use block::entry::TxTableEntryWord;
-use catchup::{MockStateCatchup, StateCatchup, StatePeers};
+use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -184,6 +184,33 @@ pub struct NodeState {
 }
 
 impl NodeState {
+    pub fn new(
+        l1_client: L1Client,
+        builder_address: Wallet<SigningKey>,
+        catchup: impl StateCatchup + 'static,
+    ) -> Self {
+        Self {
+            l1_client,
+            peers: Arc::new(catchup),
+            genesis_state: Default::default(),
+            builder_address,
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock() -> Self {
+        Self::new(
+            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            FeeAccount::test_wallet(),
+            catchup::mock::MockStateCatchup::default(),
+        )
+    }
+
+    pub fn with_l1(mut self, l1_client: L1Client) -> Self {
+        self.l1_client = l1_client;
+        self
+    }
+
     fn l1_client(&self) -> &L1Client {
         &self.l1_client
     }
@@ -486,13 +513,10 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let node_state = NodeState {
-                l1_client: L1Client::new(
-                    self.anvil.endpoint().parse().unwrap(),
-                    Address::default(),
-                ),
-                ..Default::default()
-            };
+            let node_state = NodeState::mock().with_l1(L1Client::new(
+                self.anvil.endpoint().parse().unwrap(),
+                Address::default(),
+            ));
 
             SequencerContext::init(
                 config,
@@ -608,7 +632,7 @@ mod test {
                     .collect();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = NodeState::default();
+            let genesis_state = NodeState::mock();
             Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
         };
 

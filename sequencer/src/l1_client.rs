@@ -224,10 +224,10 @@ mod test {
 
         // Test that nothing funky is happening to the provider when
         // passed along in state.
-        let state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap(), Address::default()),
-            ..Default::default()
-        };
+        let state = NodeState::mock().with_l1(L1Client::new(
+            anvil.endpoint().parse().unwrap(),
+            Address::default(),
+        ));
         let version = state.l1_client().provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 

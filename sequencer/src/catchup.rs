@@ -1,10 +1,9 @@
 use crate::{
     api::endpoints::{AccountQueryData, BlocksFrontier},
     state::{BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment},
-    Header, ValidatedState,
+    ValidatedState,
 };
 use async_trait::async_trait;
-use commit::Commitment;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme as _};
 use serde::de::DeserializeOwned;
@@ -43,61 +42,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         accounts: Vec<FeeAccount>,
     ) -> Vec<AccountQueryData>;
 
-    async fn remember_blocks_merkle_tree(
-        &self,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-        elem: &Commitment<Header>,
-    );
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct MockStateCatchup {
-    state: ValidatedState,
-}
-
-impl From<ValidatedState> for MockStateCatchup {
-    fn from(state: ValidatedState) -> Self {
-        Self { state }
-    }
-}
-
-#[async_trait]
-impl StateCatchup for MockStateCatchup {
-    async fn fetch_accounts(
-        &self,
-        view: ViewNumber,
-        _fee_merkle_tree_root: FeeMerkleCommitment,
-        accounts: Vec<FeeAccount>,
-    ) -> Vec<AccountQueryData> {
-        accounts
-            .into_iter()
-            .map(|account| {
-                tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-                FeeAccountProof::prove(&self.state.fee_merkle_tree, account.into())
-                    .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                    .into()
-            })
-            .collect()
-    }
-
-    async fn remember_blocks_merkle_tree(
-        &self,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-        elem: &Commitment<Header>,
-    ) {
-        tracing::info!("catchup: fetching frontier for view {view:?}");
-        let view = view.get_u64();
-        let (_, proof) = self
-            .state
-            .block_merkle_tree
-            .lookup(view)
-            .expect_ok()
-            .unwrap();
-        mt.remember(view, elem, proof.clone())
-            .expect("Proof verifies");
-    }
+    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree);
 }
 
 #[derive(Debug, Clone, Default)]
@@ -176,12 +121,7 @@ impl StateCatchup for StatePeers {
         ret
     }
 
-    async fn remember_blocks_merkle_tree(
-        &self,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-        elem: &Commitment<Header>,
-    ) {
+    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
         if self.clients.is_empty() {
             panic!("No peers to fetch frontier from");
         }
@@ -193,11 +133,16 @@ impl StateCatchup for StatePeers {
                     .send()
                     .await
                 {
-                    // TODO: is this the right way to remember the frontier?
-                    Ok(frontier) => match mt.remember(view.get_u64(), elem, &frontier) {
-                        Ok(_) => return,
-                        Err(err) => tracing::warn!("Error verifying block proof: {}", err),
-                    },
+                    Ok(frontier) => {
+                        let Some(elem) = frontier.elem() else {
+                            tracing::warn!("Provided frontier is missing leaf element");
+                            continue;
+                        };
+                        match mt.remember(view.get_u64(), *elem, &frontier) {
+                            Ok(_) => return,
+                            Err(err) => tracing::warn!("Error verifying block proof: {}", err),
+                        }
+                    }
                     Err(err) => {
                         tracing::warn!("Error fetching blocks from peer: {}", err);
                     }
@@ -205,6 +150,65 @@ impl StateCatchup for StatePeers {
             }
             tracing::warn!("Could not fetch frontier from any peer, retrying");
             async_std::task::sleep(self.interval).await;
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod mock {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[derive(Debug, Clone, Default)]
+    pub struct MockStateCatchup {
+        state: HashMap<ViewNumber, ValidatedState>,
+    }
+
+    impl FromIterator<(ViewNumber, ValidatedState)> for MockStateCatchup {
+        fn from_iter<I: IntoIterator<Item = (ViewNumber, ValidatedState)>>(iter: I) -> Self {
+            Self {
+                state: iter.into_iter().collect(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl StateCatchup for MockStateCatchup {
+        async fn fetch_accounts(
+            &self,
+            view: ViewNumber,
+            fee_merkle_tree_root: FeeMerkleCommitment,
+            accounts: Vec<FeeAccount>,
+        ) -> Vec<AccountQueryData> {
+            tracing::info!("catchup: fetching account data for view {view:?}");
+            let src = &self.state[&view].fee_merkle_tree;
+            assert_eq!(src.commitment(), fee_merkle_tree_root);
+
+            accounts
+                .into_iter()
+                .map(|account| {
+                    tracing::info!("catchup: fetching account {account:?} for view {view:?}");
+                    FeeAccountProof::prove(src, account.into())
+                        .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
+                        .into()
+                })
+                .collect()
+        }
+
+        async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+            tracing::info!("catchup: fetching frontier for view {view:?}");
+            let src = &self.state[&view].block_merkle_tree;
+
+            assert_eq!(src.commitment(), mt.commitment());
+            assert!(
+                src.num_leaves() > 0,
+                "catchup should not be triggered when blocks tree is empty"
+            );
+
+            let index = src.num_leaves() - 1;
+            let (elem, proof) = src.lookup(index).expect_ok().unwrap();
+            mt.remember(index, elem, proof.clone())
+                .expect("Proof verifies");
         }
     }
 }
