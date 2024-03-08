@@ -3656,7 +3656,6 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-serialize 0.4.2",
- "ark-srs",
  "ark-std 0.4.0",
  "contract-bindings",
  "diff-test-bn254",
