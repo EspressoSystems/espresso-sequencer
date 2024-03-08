@@ -495,6 +495,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-srs"
+version = "0.1.0"
+source = "git+https://github.com/alxiong/ark-srs?tag=v0.1.0#610ee9948116fcb4426944141b8f03086dc1b758"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly-commit",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+]
+
+[[package]]
 name = "ark-std"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1807,20 +1821,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
 
 [[package]]
-name = "crs"
-version = "0.1.0"
-source = "git+https://github.com/alxiong/crs#4f320d819514a50138dd114440b3b3e30e83a081"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff",
- "ark-poly-commit",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2250,9 +2250,9 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
+ "ark-srs",
  "ark-std 0.4.0",
  "clap",
- "crs",
  "diff-test-bn254",
  "digest 0.10.7",
  "ethers",
@@ -3282,7 +3282,7 @@ dependencies = [
 name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
- "crs",
+ "ark-srs",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -3656,9 +3656,9 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-serialize 0.4.2",
+ "ark-srs",
  "ark-std 0.4.0",
  "contract-bindings",
- "crs",
  "diff-test-bn254",
  "ethers",
  "hotshot-stake-table",
@@ -3803,6 +3803,7 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-serialize 0.4.2",
+ "ark-srs",
  "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-std",
@@ -3811,7 +3812,6 @@ dependencies = [
  "clap",
  "cld",
  "contract-bindings",
- "crs",
  "derive_more",
  "displaydoc",
  "ethers",
