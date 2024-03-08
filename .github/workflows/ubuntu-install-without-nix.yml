@@ -16,5 +16,8 @@ jobs:
       image: ubuntu:latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install and test
         run: scripts/ubuntu-install-test-no-nix
