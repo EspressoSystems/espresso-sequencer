@@ -36,7 +36,7 @@ clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
-ethers = { version = "2.0", features = ["ws"] }
+ethers = { version = "2.0" }
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "adding_vbs_support" }
 hotshot-constants = { git = "https://github.com/EspressoSystems/hotshot", branch = "adding_vbs_support" }
@@ -48,18 +48,18 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branc
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "adding_vbs_support" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "adding_vbs_support" }
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1", features = [
   "test-apis",
   "test-srs",
 ] }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1", features = [
   "std",
   "test-srs",
 ] }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1", features = [
   "std",
 ] }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0" }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1" }
 snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.7" }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }

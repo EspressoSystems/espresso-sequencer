@@ -388,7 +388,7 @@ mod test {
         let mut data = MockDataSource::default();
 
         let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone()),
+            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
             ..Default::default()
         };
 
@@ -460,7 +460,7 @@ mod test {
         let mut data = MockDataSource::default();
 
         let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone()),
+            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
             ..Default::default()
         };
         data.leaves.push(Some(mock_leaf(0, &node_state)));
@@ -524,7 +524,7 @@ mod test {
         );
 
         let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone()),
+            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
             ..Default::default()
         };
 

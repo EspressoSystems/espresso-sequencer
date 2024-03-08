@@ -319,7 +319,10 @@ mod test_headers {
         NodeState, Payload,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::{types::RecoveryMessage, utils::Anvil};
+    use ethers::{
+        types::{Address, RecoveryMessage},
+        utils::Anvil,
+    };
     use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
 
     #[derive(Debug, Default)]
@@ -574,7 +577,7 @@ mod test_headers {
     async fn test_validate_proposal_success() {
         let anvil = Anvil::new().block_time(1u32).spawn();
         let genesis_state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap()),
+            l1_client: L1Client::new(anvil.endpoint().parse().unwrap(), Address::default()),
             ..Default::default()
         };
 
