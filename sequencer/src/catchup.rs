@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_primitives::merkle_tree::ForgetableMerkleTreeScheme;
 use serde::de::DeserializeOwned;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
@@ -152,6 +152,42 @@ impl StateCatchup for StatePeers {
     }
 }
 
+#[async_trait]
+impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
+    async fn fetch_accounts(
+        &self,
+        view: ViewNumber,
+        fee_merkle_tree_root: FeeMerkleCommitment,
+        accounts: Vec<FeeAccount>,
+    ) -> Vec<AccountQueryData> {
+        (**self)
+            .fetch_accounts(view, fee_merkle_tree_root, accounts)
+            .await
+    }
+
+    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+        (**self).remember_blocks_merkle_tree(view, mt).await
+    }
+}
+
+#[async_trait]
+impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
+    async fn fetch_accounts(
+        &self,
+        view: ViewNumber,
+        fee_merkle_tree_root: FeeMerkleCommitment,
+        accounts: Vec<FeeAccount>,
+    ) -> Vec<AccountQueryData> {
+        (**self)
+            .fetch_accounts(view, fee_merkle_tree_root, accounts)
+            .await
+    }
+
+    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+        (**self).remember_blocks_merkle_tree(view, mt).await
+    }
+}
+
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
     use super::*;
@@ -161,11 +197,11 @@ pub mod mock {
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
-        state: HashMap<ViewNumber, ValidatedState>,
+        state: HashMap<ViewNumber, Arc<ValidatedState>>,
     }
 
-    impl FromIterator<(ViewNumber, ValidatedState)> for MockStateCatchup {
-        fn from_iter<I: IntoIterator<Item = (ViewNumber, ValidatedState)>>(iter: I) -> Self {
+    impl FromIterator<(ViewNumber, Arc<ValidatedState>)> for MockStateCatchup {
+        fn from_iter<I: IntoIterator<Item = (ViewNumber, Arc<ValidatedState>)>>(iter: I) -> Self {
             Self {
                 state: iter.into_iter().collect(),
             }

@@ -664,7 +664,7 @@ mod test_headers {
         let forgotten_state = parent_state.forget();
         genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
             parent_leaf.view_number,
-            parent_state.clone(),
+            Arc::new(parent_state.clone()),
         )]));
         // Get a proposal from a parent
 

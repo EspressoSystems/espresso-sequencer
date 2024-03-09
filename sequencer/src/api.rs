@@ -102,6 +102,7 @@ mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
     use hotshot_types::traits::{metrics::NoMetrics, node_implementation::ConsensusTime};
+    use itertools::izip;
     use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -119,14 +120,13 @@ mod test_helpers {
             opt: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
-            catchup: impl StateCatchup + Clone + 'static,
+            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
             let cfg = TestConfig::default();
-            let mut nodes = join_all(state.into_iter().zip(persistence).enumerate().map(
-                |(i, (state, persistence))| {
+            let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
+                |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
                     let cfg = &cfg;
-                    let catchup = catchup.clone();
                     async move {
                         if i == 0 {
                             opt.serve(|metrics| {
@@ -163,7 +163,7 @@ mod test_helpers {
                 opt,
                 Default::default(),
                 [NoStorage; TestConfig::NUM_NODES],
-                MockStateCatchup::default(),
+                std::array::from_fn(|_| MockStateCatchup::default()),
             )
             .await
         }
@@ -424,7 +424,7 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
-        catchup::mock::MockStateCatchup,
+        catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
@@ -565,7 +565,7 @@ mod api_tests {
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
             Default::default(),
             persistence,
-            MockStateCatchup::default(),
+            std::array::from_fn(|_| MockStateCatchup::default()),
         )
         .await;
 
@@ -606,6 +606,10 @@ mod api_tests {
             .try_collect()
             .await
             .unwrap();
+        let decided_view = chain.last().unwrap().leaf().view_number;
+
+        // Get the most recent state, for catchup.
+        let state = network.server.consensus().get_decided_state().await;
 
         // Fully shut down the API servers.
         drop(network);
@@ -620,7 +624,22 @@ mod api_tests {
             D::options(&storage[0], options::Http { port }.into()),
             Default::default(),
             persistence,
-            MockStateCatchup::default(),
+            std::array::from_fn(|i| {
+                let catchup: Box<dyn StateCatchup> = if i == 0 {
+                    // Give the server node a copy of the full state to use for catchup. This
+                    // simulates a node with archival state storage, which is then able to seed the
+                    // rest of the network after a restart.
+                    Box::new(MockStateCatchup::from_iter([(decided_view, state.clone())]))
+                } else {
+                    // The remaining nodes should use this archival node as a peer for catchup.
+                    Box::new(StatePeers::from_urls(vec![format!(
+                        "http://localhost:{port}"
+                    )
+                    .parse()
+                    .unwrap()]))
+                };
+                catchup
+            }),
         )
         .await;
         let client: Client<ServerError> =
@@ -922,7 +941,9 @@ mod test {
             Options::from(options::Http { port }).state(Default::default()),
             states,
             [NoStorage; TestConfig::NUM_NODES],
-            StatePeers::from_urls(vec![format!("http://localhost:{port}").parse().unwrap()]),
+            std::array::from_fn(|_| {
+                StatePeers::from_urls(vec![format!("http://localhost:{port}").parse().unwrap()])
+            }),
         )
         .await;
         let mut events = network.server.get_event_stream();
