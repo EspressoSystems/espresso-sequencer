@@ -5,11 +5,11 @@ use ark_serialize::{
 };
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
-use derive_more::{Add, From, Into, Sub};
+use derive_more::{Add, Display, From, Into, Sub};
 use ethers::{
     abi::Address,
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer, Wallet},
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
@@ -186,19 +186,32 @@ fn charge_fee(
     fee_info: FeeInfo,
 ) -> Result<(), ChargeFeeError> {
     let FeeInfo { account, amount } = fee_info;
-    let lookup = fee_merkle_tree.universal_lookup(account);
-    match lookup {
-        LookupResult::Ok(balance, _) => {
-            let updated = balance
-                .checked_sub(&amount)
-                .ok_or(ChargeFeeError::InsufficientFunds)?;
-            fee_merkle_tree
-                .update(account, updated)
-                .expect("update succeeds");
-            Ok(())
-        }
-        LookupResult::NotInMemory => Err(ChargeFeeError::NotInMemory),
-        LookupResult::NotFound(..) => Err(ChargeFeeError::InsufficientFunds),
+    let mut err = None;
+    let res = fee_merkle_tree
+        .update_with(account, |balance| {
+            let balance = balance.copied();
+            let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
+                // Return an error without updating the account.
+                err = Some(ChargeFeeError::InsufficientFunds);
+                return balance;
+            };
+            if updated == FeeAmount::default() {
+                // Delete the account from the tree if its balance ended up at 0; this saves some
+                // space since the account is no longer carrying any information.
+                None
+            } else {
+                // Otherwise store the updated balance.
+                Some(updated)
+            }
+        })
+        .expect("updated succeeds");
+    if res.expect_not_in_memory().is_ok() {
+        return Err(ChargeFeeError::NotInMemory);
+    }
+    if let Some(err) = err {
+        Err(err)
+    } else {
+        Ok(())
     }
 }
 
@@ -300,6 +313,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
+            tracing::warn!("fetching block frontier from peers");
             instance
                 .peers
                 .as_ref()
@@ -309,6 +323,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Fetch missing fee state entries
         if !missing_accounts.is_empty() {
+            tracing::warn!(
+                "fetching {} missing accounts from peers",
+                missing_accounts.len()
+            );
+
             let missing_account_proofs = instance
                 .peers
                 .as_ref()
@@ -396,13 +415,27 @@ pub struct FeeInfo {
     amount: FeeAmount,
 }
 impl FeeInfo {
-    pub fn new(account: FeeAccount) -> Self {
-        let amount = FeeAmount::default(); // TODO grab from config (instance_state?)
-        Self { account, amount }
+    /// The minimum fee paid by the given builder account for a proposed block.
+    // TODO this function should take the block size as an input, we need to get this information
+    // from HotShot.
+    pub fn base_fee(account: FeeAccount) -> Self {
+        Self {
+            account,
+            amount: FeeAmount::default(),
+        }
     }
+
+    pub fn genesis() -> Self {
+        Self {
+            account: Default::default(),
+            amount: Default::default(),
+        }
+    }
+
     pub fn account(&self) -> FeeAccount {
         self.account
     }
+
     pub fn amount(&self) -> FeeAmount {
         self.amount
     }
@@ -413,15 +446,6 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
-        }
-    }
-}
-
-impl Default for FeeInfo {
-    fn default() -> Self {
-        Self {
-            amount: FeeAmount::default(),
-            account: FeeAccount::test_wallet().address().into(),
         }
     }
 }
@@ -453,6 +477,12 @@ impl FeeAmount {
     }
 }
 
+impl From<u64> for FeeAmount {
+    fn from(amt: u64) -> Self {
+        Self(amt.into())
+    }
+}
+
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
         self.0.checked_sub(v.0).map(FeeAmount)
@@ -467,6 +497,7 @@ impl CheckedSub for FeeAmount {
     Copy,
     Clone,
     Debug,
+    Display,
     Deserialize,
     Serialize,
     PartialEq,
@@ -476,6 +507,7 @@ impl CheckedSub for FeeAmount {
     From,
     Into,
 )]
+#[display(fmt = "{_0:x}")]
 pub struct FeeAccount(Address);
 impl FeeAccount {
     /// Return inner `Address`
@@ -580,7 +612,7 @@ pub fn fetch_fee_receipts(
     _prev_l1_finalized: Option<L1BlockInfo>,
     _new_l1_finalized: Option<L1BlockInfo>,
 ) -> Vec<FeeInfo> {
-    Vec::from([FeeInfo::default()])
+    vec![]
 }
 
 pub type FeeMerkleTree =

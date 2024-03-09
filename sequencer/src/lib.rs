@@ -21,7 +21,6 @@ use ethers::{
 
 use l1_client::L1Client;
 
-use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod bytes;
@@ -201,13 +200,23 @@ impl NodeState {
     pub fn mock() -> Self {
         Self::new(
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-            FeeAccount::test_wallet(),
+            state::FeeAccount::test_wallet(),
             catchup::mock::MockStateCatchup::default(),
         )
     }
 
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
         self.l1_client = l1_client;
+        self
+    }
+
+    pub fn with_builder(mut self, wallet: Wallet<SigningKey>) -> Self {
+        self.builder_address = wallet;
+        self
+    }
+
+    pub fn with_genesis(mut self, state: ValidatedState) -> Self {
+        self.genesis_state = state;
         self
     }
 
@@ -387,7 +396,7 @@ pub async fn init_node(
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::persistence::no_storage::NoStorage;
+    use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
     use commit::Committable;
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
@@ -477,17 +486,25 @@ pub mod testing {
         }
 
         pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
-            join_all(
-                (0..self.num_nodes())
-                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
-            )
+            join_all((0..self.num_nodes()).map(|i| async move {
+                self.init_node(
+                    i,
+                    ValidatedState::default(),
+                    NoStorage,
+                    MockStateCatchup::default(),
+                    &NoMetrics,
+                )
+                .await
+            }))
             .await
         }
 
         pub async fn init_node(
             &self,
             i: usize,
+            state: ValidatedState,
             persistence: impl SequencerPersistence,
+            catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
         ) -> SequencerContext<network::Memory> {
             let mut config = self.config.clone();
@@ -513,10 +530,14 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let node_state = NodeState::mock().with_l1(L1Client::new(
-                self.anvil.endpoint().parse().unwrap(),
-                Address::default(),
-            ));
+            let wallet = Self::builder_wallet(i);
+            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let node_state = NodeState::new(
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                wallet,
+                catchup,
+            )
+            .with_genesis(state);
 
             SequencerContext::init(
                 config,
@@ -529,6 +550,15 @@ pub mod testing {
             )
             .await
             .unwrap()
+        }
+
+        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
+            MnemonicBuilder::<English>::default()
+                .phrase("test test test test test test test test test test test junk")
+                .index(i as u32)
+                .unwrap()
+                .build()
+                .unwrap()
         }
     }
 

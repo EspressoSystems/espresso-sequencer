@@ -211,7 +211,7 @@ impl Header {
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            fee_info: parent_header.fee_info,
+            fee_info: FeeInfo::base_fee(builder_address.address().into()),
             builder_signature: None,
         };
 
@@ -256,6 +256,11 @@ impl BlockHeader<SeqTypes> for Header {
                 .chain(l1_deposits.iter().map(|info| info.account())),
         );
         if !missing_accounts.is_empty() {
+            tracing::warn!(
+                "fetching {} missing accounts from peers",
+                missing_accounts.len()
+            );
+
             // Fetch missing fee state entries
             let missing_account_proofs = instance_state
                 .peers
@@ -278,6 +283,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         // Ensure merkle tree has frontier
         if validated_state.need_to_fetch_blocks_mt_frontier() {
+            tracing::warn!("fetching block frontier from peers");
             instance_state
                 .peers
                 .as_ref()
@@ -323,7 +329,7 @@ impl BlockHeader<SeqTypes> for Header {
             ns_table,
             block_merkle_tree_root,
             fee_merkle_tree_root,
-            fee_info: FeeInfo::new(instance_state.builder_address.address().into()),
+            fee_info: FeeInfo::genesis(),
             builder_signature: None,
         }
     }
@@ -430,7 +436,7 @@ mod test_headers {
             let block_merkle_tree =
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
 
-            let fee_info = FeeInfo::default();
+            let fee_info = FeeInfo::genesis();
             let fee_merkle_tree = FeeMerkleTree::from_kv_set(
                 20,
                 Vec::from([(fee_info.account(), fee_info.amount())]),

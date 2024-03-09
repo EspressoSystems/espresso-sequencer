@@ -1,11 +1,10 @@
 use crate::{
     api::endpoints::{AccountQueryData, BlocksFrontier},
-    state::{BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment},
-    ValidatedState,
+    state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
 };
 use async_trait::async_trait;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme as _};
+use jf_primitives::merkle_tree::ForgetableMerkleTreeScheme;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use surf_disco::Request;
@@ -80,9 +79,8 @@ impl StatePeers {
                 );
                 match client
                     .get::<AccountQueryData>(&format!(
-                        "state/catchup/{}/account/{}",
+                        "state/catchup/{}/account/{account}",
                         view.get_u64(),
-                        account.address()
                     ))
                     .send()
                     .await
@@ -157,6 +155,8 @@ impl StateCatchup for StatePeers {
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
     use super::*;
+    use crate::state::{FeeAccountProof, ValidatedState};
+    use jf_primitives::merkle_tree::MerkleTreeScheme;
     use std::collections::HashMap;
 
     #[derive(Debug, Clone, Default)]

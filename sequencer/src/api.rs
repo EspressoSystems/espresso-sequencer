@@ -86,6 +86,7 @@ mod test_helpers {
     use super::*;
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
+        catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{wait_for_decide_on_handle, TestConfig},
@@ -116,28 +117,36 @@ mod test_helpers {
     impl TestNetwork {
         pub async fn with_state(
             opt: Options,
+            state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+            catchup: impl StateCatchup + Clone + 'static,
         ) -> Self {
             let cfg = TestConfig::default();
-            let mut nodes =
-                join_all(persistence.into_iter().enumerate().map(|(i, persistence)| {
+            let mut nodes = join_all(state.into_iter().zip(persistence).enumerate().map(
+                |(i, (state, persistence))| {
                     let opt = opt.clone();
                     let cfg = &cfg;
+                    let catchup = catchup.clone();
                     async move {
                         if i == 0 {
                             opt.serve(|metrics| {
                                 let cfg = cfg.clone();
-                                async move { cfg.init_node(0, persistence, &*metrics).await }
-                                    .boxed()
+                                async move {
+                                    cfg.init_node(0, state, persistence, catchup, &*metrics)
+                                        .await
+                                }
+                                .boxed()
                             })
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics).await
+                            cfg.init_node(i, state, persistence, catchup, &NoMetrics)
+                                .await
                         }
                     }
-                }))
-                .await;
+                },
+            ))
+            .await;
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -150,7 +159,13 @@ mod test_helpers {
         }
 
         pub async fn new(opt: Options) -> Self {
-            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES]).await
+            Self::with_state(
+                opt,
+                Default::default(),
+                [NoStorage; TestConfig::NUM_NODES],
+                MockStateCatchup::default(),
+            )
+            .await
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -409,6 +424,7 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
+        catchup::mock::MockStateCatchup,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
@@ -547,7 +563,9 @@ mod api_tests {
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
+            Default::default(),
             persistence,
+            MockStateCatchup::default(),
         )
         .await;
 
@@ -600,7 +618,9 @@ mod api_tests {
             .unwrap();
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
+            Default::default(),
             persistence,
+            MockStateCatchup::default(),
         )
         .await;
         let client: Client<ServerError> =
@@ -815,7 +835,17 @@ mod api_tests {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{
+        catchup::StatePeers, persistence::no_storage::NoStorage, testing::TestConfig, Header,
+        NodeState,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use commit::Committable;
+    use ethers::prelude::Signer;
+    use futures::stream::StreamExt;
+    use hotshot::types::EventType;
+    use hotshot_types::traits::block_contents::BlockHeader;
+    use jf_primitives::merkle_tree::AppendableMerkleTreeScheme;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
@@ -858,5 +888,65 @@ mod test {
     #[async_std::test]
     async fn state_test_without_query_module() {
         state_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn test_catchup() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create some non-trivial initial state. We will give all the nodes in the network this
+        // state, except for one, which will have a forgotten state and need to catch up.
+        let mut state = ValidatedState::default();
+        // Prefund an arbitrary account so the fee state has some data to forget.
+        state.prefund_account(Default::default(), 1000.into());
+        // Push an arbitrary header commitment so the block state has some data to forget.
+        state
+            .block_merkle_tree
+            .push(
+                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
+                    .commit(),
+            )
+            .unwrap();
+        let states = std::array::from_fn(|i| {
+            if i == TestConfig::NUM_NODES - 1 {
+                state.forget()
+            } else {
+                state.clone()
+            }
+        });
+
+        // Start a sequencer network, using the query service for catchup.
+        let port = pick_unused_port().expect("No ports free");
+        let network = TestNetwork::with_state(
+            Options::from(options::Http { port }).state(Default::default()),
+            states,
+            [NoStorage; TestConfig::NUM_NODES],
+            StatePeers::from_urls(vec![format!("http://localhost:{port}").parse().unwrap()]),
+        )
+        .await;
+        let mut events = network.server.get_event_stream();
+
+        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
+        // up.
+        let builder = TestConfig::builder_wallet(TestConfig::NUM_NODES - 1)
+            .address()
+            .into();
+        'outer: loop {
+            let event = events.next().await.unwrap();
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for (leaf, _) in leaf_chain.iter().rev() {
+                let height = leaf.block_header.height;
+                let leaf_builder = leaf.block_header.fee_info.account();
+                tracing::info!(
+                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
+                );
+                if height > 1 && leaf_builder == builder {
+                    break 'outer;
+                }
+            }
+        }
     }
 }
