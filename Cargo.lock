@@ -3596,7 +3596,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3636,7 +3636,7 @@ dependencies = [
 [[package]]
 name = "hotshot-constants"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "serde",
 ]
@@ -3669,7 +3669,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3700,7 +3700,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -3724,7 +3724,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.9"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=hg/testing_non_staking#bf6f8d9fa3111284013584cb11d0d590f0d67e68"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=hg/testing_non_staking#a06bc8efca5aa07205bc636abde71cc7b9ff79f7"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3773,7 +3773,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -3836,7 +3836,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3849,7 +3849,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3877,7 +3877,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3910,7 +3910,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3957,7 +3957,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "bincode",
  "hotshot-constants",
@@ -3966,7 +3966,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4986,7 +4986,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#4abf9c2f16dc2ba7427a425c82eebeeb139095af"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=hg/support_non_staking_nodes#a173d4173a417677654afd1280189f65072ad45d"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",

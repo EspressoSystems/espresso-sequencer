@@ -127,13 +127,13 @@ mod test_helpers {
                         if i == 0 {
                             opt.serve(|metrics| {
                                 let cfg = cfg.clone();
-                                async move { cfg.init_node(0, persistence, &*metrics).await }
+                                async move { cfg.init_node(0, true, persistence, &*metrics).await }
                                     .boxed()
                             })
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics).await
+                            cfg.init_node(i, true, persistence, &NoMetrics).await
                         }
                     }
                 }))
