@@ -19,7 +19,7 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::{collections::HashMap, fmt::Display, ops::Range};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
@@ -121,7 +121,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             return Some(NamespaceProof::NonExistence { ns_id });
         };
 
-        let ns_payload_range = ns_table.get_payload_range(ns_index, self.raw_payload.len());
+        let ns_payload_range = ns_table
+            .get_payload_range(ns_index, self.raw_payload.len())
+            .1;
 
         // TODO log output for each `?`
         // fix this when we settle on an error handling pattern
@@ -255,11 +257,8 @@ impl NamespaceProof {
             } => {
                 let ns_index = ns_table.lookup(*ns_id)?;
 
-                // TODO rework NameSpaceTable struct
-                // TODO merge get_ns_payload_range with get_ns_table_entry ?
-                let ns_payload_range = ns_table
+                let (ns_id, ns_payload_range) = ns_table
                     .get_payload_range(ns_index, VidSchemeType::get_payload_byte_len(vid_common));
-                let ns_id = ns_table.get_table_entry(ns_index).0;
 
                 // verify self against args
                 vid.payload_verify(
@@ -288,31 +287,12 @@ impl NamespaceProof {
     }
 }
 
-// TODO find a home for this function
-pub fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
-    let num_txs = TxTable::get_tx_table_len(ns_payload_flat);
-    let tx_bodies_offset = num_txs
-        .saturating_add(1)
-        .saturating_mul(TxTableEntry::byte_len());
-    let mut txs = Vec::with_capacity(num_txs);
-    let mut start = tx_bodies_offset;
-    for tx_index in 0..num_txs {
-        let end = std::cmp::min(
-            TxTable::get_table_entry(ns_payload_flat, tx_index).saturating_add(tx_bodies_offset),
-            ns_payload_flat.len(),
-        );
-        let tx_payload_range = Range {
-            start: std::cmp::min(start, end),
-            end,
-        };
-        txs.push(Transaction::new(
-            ns_id,
-            ns_payload_flat[tx_payload_range].to_vec(),
-        ));
-        start = end;
-    }
-
-    txs
+pub fn parse_ns_payload(ns_bytes: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
+    let num_txs = TxTable::get_tx_table_len(ns_bytes);
+    (0..TxTable::get_tx_table_len(ns_bytes))
+        .map(|tx_idx| TxTable::get_payload_range(ns_bytes, tx_idx, num_txs))
+        .map(|tx_range| Transaction::new(ns_id, ns_bytes[tx_range].to_vec()))
+        .collect()
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -340,6 +320,7 @@ mod test {
             tables::{test::TxTableTest, NameSpaceTable, Table, TxTable},
             tx_iterator::TxIndex,
         },
+        transaction::NamespaceId,
         Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};

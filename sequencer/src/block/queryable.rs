@@ -40,61 +40,21 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         if ns_idx >= meta.len() {
             return None; // error: index out of bounds
         }
-        let (ns_id, _offset) = meta.get_table_entry(ns_idx);
-        let ns_range = meta.get_payload_range(ns_idx, self.raw_payload.len());
-        let ns_start_offset = ns_range.start;
+        let (ns_id, ns_range) = meta.get_payload_range(ns_idx, self.raw_payload.len());
 
         let tx_table_len = TxTable::get_tx_table_len(&self.raw_payload[ns_range.clone()]);
         if tx_idx >= tx_table_len {
             return None; // error: index out of bounds
         }
+        let ns_payload = &self.raw_payload[ns_range.clone()];
 
-        let tx_payloads_offset = tx_table_len
-            .checked_add(1)?
-            .checked_mul(TxTableEntry::byte_len())?
-            .checked_add(ns_start_offset)?;
+        let tx_within_ns = TxTable::get_payload_range(ns_payload, tx_idx, tx_table_len);
+        let (start, end) = (tx_within_ns.start, tx_within_ns.end);
+        let ns_start = ns_range.start;
+        let tx_payload_range = start.saturating_add(ns_start)..end.saturating_add(ns_start);
 
-        // start
-        let tx_table_range_start = if tx_idx == 0 {
-            None
-        } else {
-            let offset = tx_idx
-                .checked_mul(TxTableEntry::byte_len())?
-                .checked_add(ns_start_offset)?;
-            Some(TxTableEntry::from_bytes(self.raw_payload.get(
-                offset..offset.checked_add(TxTableEntry::byte_len())?,
-            )?)?)
-        };
+        let tx_payload = self.raw_payload.get(tx_payload_range)?.to_vec();
 
-        // end
-        let tx_table_range_end = {
-            let tx_table_end_offset = tx_idx
-                .checked_add(1)?
-                .checked_mul(TxTableEntry::byte_len())?
-                .checked_add(ns_start_offset)?;
-
-            TxTableEntry::from_bytes(self.raw_payload.get(
-                tx_table_end_offset..tx_table_end_offset.checked_add(TxTableEntry::byte_len())?,
-            )?)?
-        };
-
-        let (tx_payload_start, tx_payload_end) = {
-            let start =
-                usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
-                    .ok()?
-                    .checked_add(tx_payloads_offset)?;
-            let end = usize::try_from(tx_table_range_end.clone())
-                .ok()?
-                .checked_add(tx_payloads_offset)?;
-            let end = std::cmp::min(end, ns_range.end);
-            let start = std::cmp::min(start, end);
-            (start, end)
-        };
-
-        let tx_payload = self
-            .raw_payload
-            .get(tx_payload_start..tx_payload_end)?
-            .to_vec();
         Some(Transaction::new(ns_id, tx_payload))
     }
 
@@ -107,8 +67,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         if ns_idx >= meta.len() {
             return None; // error: index out of bounds
         }
-        let (ns_id, _offset) = meta.get_table_entry(ns_idx);
-        let ns_range = meta.get_payload_range(ns_idx, self.raw_payload.len());
+        let (ns_id, ns_range) = meta.get_payload_range(ns_idx, self.raw_payload.len());
         let ns_start_offset = ns_range.start;
 
         let tx_table_len = TxTable::get_tx_table_len(&self.raw_payload[ns_range.clone()]);
