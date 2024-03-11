@@ -729,6 +729,7 @@ pub mod node_tests {
                 block_number: i,
                 timestamp: i,
                 payload_commitment,
+                timestamp: chrono::Utc::now().timestamp() as u64,
             };
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});

@@ -14,17 +14,22 @@ use super::VersionedDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
+    merklized_state::UpdateStateStorage,
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
     Header, Payload, QueryResult, VidShare,
 };
 use async_trait::async_trait;
-use hotshot_types::traits::node_implementation::NodeType;
-use std::ops::RangeBounds;
+use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
+use jf_primitives::{
+    circuit::merkle_tree::MembershipProof,
+    merkle_tree::{Element, Index, NodeValue},
+};
+use std::{fmt::Display, ops::RangeBounds};
 
 /// Wrapper to add extensibility to an existing data source.
 ///
@@ -273,6 +278,33 @@ where
 
     fn metrics(&self) -> &PrometheusMetrics {
         self.data_source.metrics()
+    }
+}
+
+#[async_trait]
+impl<D, U, Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T>
+    for ExtensibleDataSource<D, U>
+where
+    D: UpdateStateStorage<Types, Proof, E, I, T> + Send + Sync,
+    U: Send + Sync,
+    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
+    E: Element + Send + Sync + Display + 'static,
+    T: NodeValue + Send + Sync + Display + 'static,
+    I: Index + Send + Sync + Display + 'static,
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+{
+    async fn insert_nodes(
+        &mut self,
+        name: String,
+        proof: Proof,
+        path: Vec<I>,
+        elem: E,
+        leaf: Leaf<Types>,
+    ) -> QueryResult<()> {
+        self.data_source
+            .insert_nodes(name, proof, path, elem, leaf)
+            .await
     }
 }
 

@@ -1770,7 +1770,7 @@ where
     ))
 }
 
-fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+pub fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 

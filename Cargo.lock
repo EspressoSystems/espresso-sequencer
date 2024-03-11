@@ -1130,6 +1130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3040,12 +3049,14 @@ name = "hotshot-query-service"
 version = "0.0.16"
 dependencies = [
  "anyhow",
+ "ark-serialize 0.4.2",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-std",
  "async-trait",
  "atomic_store",
  "backtrace-on-stack-overflow",
  "bincode",
+ "bit-vec",
  "chrono",
  "clap",
  "cld",
@@ -3084,6 +3095,7 @@ dependencies = [
  "toml 0.8.10",
  "tracing",
  "trait-variant",
+ "typenum",
 ]
 
 [[package]]
@@ -5394,6 +5406,7 @@ version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d2234cdee9408b523530a9b6d2d6b373d1db34f6a8e51dc03ded1828d7fb67c"
 dependencies = [
+ "bit-vec",
  "bytes 1.5.0",
  "fallible-iterator",
  "postgres-protocol",
