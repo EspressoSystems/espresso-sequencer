@@ -118,9 +118,9 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a824f2aa7e75a0c98c5a504fceb80649e9c35265d44525b5f94de4771a395cd"
+checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
  "getrandom 0.2.12",
  "once_cell",
@@ -490,6 +490,20 @@ checksum = "84d3cc6833a335bb8a600241889ead68ee89a3cf8448081fb7694c0fe503da63"
 dependencies = [
  "ark-ff",
  "ark-relations",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+]
+
+[[package]]
+name = "ark-srs"
+version = "0.1.0"
+source = "git+https://github.com/alxiong/ark-srs?tag=v0.1.0#610ee9948116fcb4426944141b8f03086dc1b758"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly-commit",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
 ]
@@ -1807,20 +1821,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
 
 [[package]]
-name = "crs"
-version = "0.1.0"
-source = "git+https://github.com/alxiong/crs#4f320d819514a50138dd114440b3b3e30e83a081"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff",
- "ark-poly-commit",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2250,9 +2250,9 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
+ "ark-srs",
  "ark-std 0.4.0",
  "clap",
- "crs",
  "diff-test-bn254",
  "digest 0.10.7",
  "ethers",
@@ -2810,7 +2810,6 @@ dependencies = [
  "const-hex",
  "enr",
  "ethers-core",
- "futures-channel",
  "futures-core",
  "futures-timer",
  "futures-util",
@@ -3283,7 +3282,7 @@ dependencies = [
 name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
- "crs",
+ "ark-srs",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -3406,7 +3405,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash 0.7.7",
+ "ahash 0.7.8",
 ]
 
 [[package]]
@@ -3659,10 +3658,8 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "contract-bindings",
- "crs",
  "diff-test-bn254",
  "ethers",
- "hotshot-stake-table",
  "hotshot-types",
  "jf-plonk",
  "jf-primitives",
@@ -3804,6 +3801,7 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-serialize 0.4.2",
+ "ark-srs",
  "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-std",
@@ -3812,7 +3810,6 @@ dependencies = [
  "clap",
  "cld",
  "contract-bindings",
- "crs",
  "derive_more",
  "displaydoc",
  "ethers",
@@ -7519,7 +7516,6 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
- "hotshot-state-prover",
  "hotshot-task",
  "hotshot-testing",
  "hotshot-types",

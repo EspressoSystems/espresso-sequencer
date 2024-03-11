@@ -589,6 +589,7 @@ mod test {
                     ns_proof_txs,
                     derived_ns
                         .tx_payloads
+                        .clone()
                         .into_iter()
                         .map(|p| Transaction::new(ns_id, p))
                         .collect::<Vec<Transaction>>()
@@ -621,40 +622,30 @@ mod test {
                 );
 
                 // testing tx iterator
-                // TODO(746) incorporate this test into the following commented code when it's fixed
                 for tx_idx in 0..derived_ns.tx_table.len() {
                     let next_tx = block_iter.next().unwrap();
                     assert_eq!(ns_idx, next_tx.ns_idx);
                     assert_eq!(tx_idx, next_tx.tx_idx);
+
+                    let idx = TxIndex { ns_idx, tx_idx };
+                    let tx = block.transaction(&actual_ns_table, &idx).unwrap();
+                    let tx_payload = derived_ns.tx_payloads[tx_idx].to_vec();
+                    // test `transaction()`
+                    assert_eq!(ns_id, tx.namespace());
+                    assert_eq!(tx_payload, tx.payload());
+
+                    // TODO(1010) transaction_with_proof for multiple namespaces
+                    // test `transaction_with_proof()`
+                    // let (tx, proof) = block
+                    //     .transaction_with_proof(&actual_ns_table, &idx)
+                    //     .unwrap();
+                    // assert_eq!(tx_payload, tx.payload());
+                    // proof
+                    //     .verify(&tx, idx, &vid, &disperse_data.commit, &disperse_data.common)
+                    //     .unwrap()
+                    //     .unwrap();
                 }
 
-                // tests for individual txs in this namespace
-                // TODO(746) rework this part
-                //
-                // let mut block_iter = block.iter(); // test iterator correctness
-                // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
-                //     assert!(block_iter.next().is_some());
-                //     let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
-                //     tracing::info!("tx index {}", tx_index,);
-                //
-                //     // test `transaction_with_proof()`
-                //     let (tx, proof) = block.transaction_with_proof(&tx_index).unwrap();
-                //     assert_eq!(tx_payload, tx.payload());
-                //     proof
-                //         .verify(
-                //             &tx,
-                //             tx_index,
-                //             &vid,
-                //             &disperse_data.commit,
-                //             &disperse_data.common,
-                //         )
-                //         .unwrap()
-                //         .unwrap();
-                // }
-                // assert!(block_iter.next().is_none());
-
-                // prepare for the next loop iteration
-                // tx_index_offset += actual_tx_table.len();
                 prev_entry = entry;
                 derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
