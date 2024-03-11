@@ -105,7 +105,7 @@ mod test_helpers {
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Transaction, VmId,
+        Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -240,7 +240,7 @@ mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -435,7 +435,7 @@ mod api_tests {
     use super::*;
     use crate::{
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header, Transaction, VmId,
+        Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -481,7 +481,7 @@ mod api_tests {
         setup_backtrace();
 
         let vid = vid_scheme(5);
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
@@ -523,6 +523,11 @@ mod api_tests {
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
+            let header: Header = client
+                .get(&format!("availability/header/{block_num}"))
+                .send()
+                .await
+                .unwrap();
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()
@@ -530,11 +535,7 @@ mod api_tests {
                 .unwrap();
             ns_query_res
                 .proof
-                .verify(
-                    &vid,
-                    &ns_query_res.header.payload_commitment,
-                    &ns_query_res.header.ns_table,
-                )
+                .verify(&vid, &header.payload_commitment, &header.ns_table)
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();

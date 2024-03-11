@@ -119,6 +119,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
     /// @dev Test happy path for (BLOCK_PER_EPOCH + 1) consecutive new finalized blocks
     /// forge-config: default.fuzz.runs = 1
+    /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
     function testFuzz_ConsecutiveUpdate(
         uint64 numInitValidators,
@@ -191,6 +192,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
     /// @dev Test happy path for updating after skipping a few blocks (but not an epoch)
     /// forge-config: default.fuzz.runs = 4
+    /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
     function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped, uint32 numBlockPerEpoch)
         external

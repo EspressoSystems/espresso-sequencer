@@ -26,7 +26,6 @@ mod l1_client;
 pub mod persistence;
 mod state;
 pub mod transaction;
-mod vm;
 
 use ark_ec::models::CurveConfig;
 use ark_ed_on_bn254::EdwardsConfig;
@@ -77,8 +76,7 @@ pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
-pub use transaction::Transaction;
-pub use vm::{Vm, VmId, VmTransaction};
+pub use transaction::{NamespaceId, Transaction};
 
 pub mod network {
     use hotshot_types::message::Message;
@@ -566,7 +564,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use super::{transaction::ApplicationTransaction, vm::TestVm, *};
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use futures::StreamExt;
@@ -576,7 +574,6 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
-    use versioned_binary_serialization::{BinarySerializer, Serializer};
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
@@ -593,16 +590,14 @@ mod test {
         }
 
         // Submit target transaction to handle
-        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn =
-            Transaction::new(TestVm {}.id(), Serializer::<0, 1>::serialize(&txn).unwrap());
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
         handles[0]
-            .submit_transaction(submitted_txn.clone())
+            .submit_transaction(txn.clone())
             .await
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
+        wait_for_decide_on_handle(&mut events, &txn).await;
     }
 
     #[async_std::test]

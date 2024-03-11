@@ -242,7 +242,7 @@ async fn submit_transactions<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
         let hash = tx.commit();
         tracing::info!(
             "submitting transaction {hash} for namespace {} of size {}",
-            tx.vm(),
+            tx.namespace(),
             tx.payload().len()
         );
         if let Err(err) = client
@@ -279,13 +279,13 @@ async fn server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
 }
 
 fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
-    let vm = rng.gen_range(opt.min_namespace..=opt.max_namespace);
+    let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
     let mut payload = vec![0; len];
     rng.fill_bytes(&mut payload);
 
-    Transaction::new(vm.into(), payload)
+    Transaction::new(namespace.into(), payload)
 }
 
 fn random_seed() -> u64 {
