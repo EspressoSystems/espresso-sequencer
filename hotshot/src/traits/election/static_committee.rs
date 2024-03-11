@@ -1,18 +1,18 @@
 // use ark_bls12_381::Parameters as Param381;
+use ethereum_types::U256;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::{
     election::{ElectionConfig, Membership},
     node_implementation::NodeType,
-    signature_key::SignatureKey,
+    signature_key::{SignatureKey, StakeTableEntryType},
 };
 use hotshot_types::PeerConfig;
+#[cfg(feature = "randomized-leader-election")]
+use rand::{rngs::StdRng, Rng};
 #[allow(deprecated)]
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, num::NonZeroU64};
 use tracing::debug;
-
-#[cfg(feature = "randomized-leader-election")]
-use rand::{rngs::StdRng, Rng};
 
 /// Dummy implementation of [`Membership`]
 
@@ -22,6 +22,8 @@ pub struct GeneralStaticCommittee<T, PUBKEY: SignatureKey> {
     nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
     /// The nodes on the static committee and their stake
     committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
+    /// builder nodes
+    committee_nodes_without_stake: Vec<PUBKEY>,
     /// Node type phantom
     _type_phantom: PhantomData<T>,
 }
@@ -32,10 +34,15 @@ pub type StaticCommittee<T> = GeneralStaticCommittee<T, BLSPubKey>;
 impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
     /// Creates a new dummy elector
     #[must_use]
-    pub fn new(_nodes: &[PUBKEY], nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
+    pub fn new(
+        _nodes: &[PUBKEY],
+        nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
+        nodes_without_stake: Vec<PUBKEY>,
+    ) -> Self {
         Self {
             nodes_with_stake: nodes_with_stake.clone(),
             committee_nodes_with_stake: nodes_with_stake,
+            committee_nodes_without_stake: nodes_without_stake,
             _type_phantom: PhantomData,
         }
     }
@@ -45,7 +52,9 @@ impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
 #[derive(Default, Clone, Serialize, Deserialize, core::fmt::Debug)]
 pub struct StaticElectionConfig {
     /// Number of nodes on the committee
-    num_nodes: u64,
+    num_nodes_with_stake: u64,
+    /// Number of non staking nodes
+    num_nodes_without_stake: u64,
 }
 
 impl ElectionConfig for StaticElectionConfig {}
@@ -95,8 +104,14 @@ where
         }
     }
 
-    fn default_election_config(num_nodes: u64) -> TYPES::ElectionConfigType {
-        StaticElectionConfig { num_nodes }
+    fn default_election_config(
+        num_nodes_with_stake: u64,
+        num_nodes_without_stake: u64,
+    ) -> TYPES::ElectionConfigType {
+        StaticElectionConfig {
+            num_nodes_with_stake,
+            num_nodes_without_stake,
+        }
     }
 
     fn create_election(
@@ -107,12 +122,27 @@ where
             .iter()
             .map(|x| x.stake_table_entry.clone())
             .collect();
-        let mut committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry> = nodes_with_stake.clone();
-        debug!("Election Membership Size: {}", config.num_nodes);
-        committee_nodes_with_stake.truncate(config.num_nodes.try_into().unwrap());
+
+        let mut committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry> = Vec::new();
+
+        let mut committee_nodes_without_stake: Vec<PUBKEY> = Vec::new();
+        // filter out the committee nodes with non-zero state and zero stake
+        for node in &nodes_with_stake {
+            if node.get_stake() == U256::from(0) {
+                committee_nodes_without_stake.push(PUBKEY::get_public_key(node));
+            } else {
+                committee_nodes_with_stake.push(node.clone());
+            }
+        }
+        debug!("Election Membership Size: {}", config.num_nodes_with_stake);
+        // truncate committee_nodes_with_stake to only `num_nodes`
+        // since the `num_nodes_without_stake` are not part of the committee,
+        committee_nodes_with_stake.truncate(config.num_nodes_with_stake.try_into().unwrap());
+        committee_nodes_without_stake.truncate(config.num_nodes_without_stake.try_into().unwrap());
         Self {
             nodes_with_stake,
             committee_nodes_with_stake,
+            committee_nodes_without_stake,
             _type_phantom: PhantomData,
         }
     }
@@ -133,7 +163,7 @@ where
         NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64 * 9) / 10) + 1).unwrap()
     }
 
-    fn get_committee(
+    fn get_staked_committee(
         &self,
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
@@ -145,5 +175,37 @@ where
                 )
             })
             .collect()
+    }
+
+    fn get_non_staked_committee(
+        &self,
+        _view_number: <TYPES as NodeType>::Time,
+    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        self.committee_nodes_without_stake.iter().cloned().collect()
+    }
+
+    fn get_whole_committee(
+        &self,
+        view_number: <TYPES as NodeType>::Time,
+    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        let mut committee = self.get_staked_committee(view_number);
+        committee.extend(self.get_non_staked_committee(view_number));
+        committee
+    }
+}
+
+impl<TYPES, PUBKEY: SignatureKey + 'static> GeneralStaticCommittee<TYPES, PUBKEY>
+where
+    TYPES: NodeType<SignatureKey = PUBKEY, ElectionConfigType = StaticElectionConfig>,
+{
+    #[allow(clippy::must_use_candidate)]
+    /// get the non-staked builder nodes
+    pub fn non_staked_nodes_count(&self) -> usize {
+        self.committee_nodes_without_stake.len()
+    }
+    #[allow(clippy::must_use_candidate)]
+    /// get all the non-staked nodes
+    pub fn get_non_staked_nodes(&self) -> Vec<PUBKEY> {
+        self.committee_nodes_without_stake.clone()
     }
 }

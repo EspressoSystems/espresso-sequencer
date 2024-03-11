@@ -38,7 +38,10 @@ pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
 {
     /// generate a default election configuration
-    fn default_election_config(num_nodes: u64) -> TYPES::ElectionConfigType;
+    fn default_election_config(
+        num_nodes_with_stake: u64,
+        num_nodes_without_stake: u64,
+    ) -> TYPES::ElectionConfigType;
 
     /// create an election
     /// TODO may want to move this to a testableelection trait
@@ -55,8 +58,14 @@ pub trait Membership<TYPES: NodeType>:
     /// The leader of the committee for view `view_number`.
     fn get_leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey;
 
-    /// The members of the committee for view `view_number`.
-    fn get_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    /// The staked members of the committee for view `view_number`.
+    fn get_staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+
+    /// The non-staked members of the committee for view `view_number`.
+    fn get_non_staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+
+    /// Get whole (staked + non-staked) committee for view `view_number`.
+    fn get_whole_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Check if a key has stake
     fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;

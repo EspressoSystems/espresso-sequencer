@@ -76,7 +76,7 @@ async fn test_combined_network_webserver_crash() {
     };
 
     let mut all_nodes = vec![];
-    for node in 0..metadata.total_nodes {
+    for node in 0..metadata.num_nodes_with_stake {
         all_nodes.push(ChangeNode {
             idx: node,
             updown: UpDown::NetworkDown,
@@ -126,7 +126,7 @@ async fn test_combined_network_reup() {
 
     let mut all_down = vec![];
     let mut all_up = vec![];
-    for node in 0..metadata.total_nodes {
+    for node in 0..metadata.num_nodes_with_stake {
         all_down.push(ChangeNode {
             idx: node,
             updown: UpDown::NetworkDown,
@@ -178,7 +178,7 @@ async fn test_combined_network_half_dc() {
     };
 
     let mut half = vec![];
-    for node in 0..metadata.total_nodes / 2 {
+    for node in 0..metadata.num_nodes_with_stake / 2 {
         half.push(ChangeNode {
             idx: node,
             updown: UpDown::NetworkDown,
@@ -233,7 +233,7 @@ async fn test_stress_combined_network_fuzzy() {
     async_compatibility_layer::logging::setup_backtrace();
     let mut metadata = TestMetadata {
         num_bootstrap_nodes: 10,
-        total_nodes: 20,
+        num_nodes_with_stake: 20,
         start_nodes: 20,
 
         timing_data: TimingData {
@@ -254,7 +254,7 @@ async fn test_stress_combined_network_fuzzy() {
 
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: generate_random_node_changes(
-            metadata.total_nodes,
+            metadata.num_nodes_with_stake,
             metadata.overall_safety_properties.num_successful_views * 2,
         ),
     };

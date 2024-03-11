@@ -74,8 +74,8 @@ async fn libp2p_network_failures_2() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(3, dead_nodes)],
     };
-    metadata.total_nodes = 12;
-    metadata.da_committee_size = 12;
+    metadata.num_nodes_with_stake = 12;
+    metadata.da_staked_committee_size = 12;
     metadata.start_nodes = 12;
     // 2 nodes fail triggering view sync, expect no other timeouts
     metadata.overall_safety_properties.num_failed_views = 1;

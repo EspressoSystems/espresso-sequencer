@@ -233,7 +233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Inject view info into network
                 let is_da = self
                     .da_membership
-                    .get_committee(self.cur_view + 1)
+                    .get_whole_committee(self.cur_view + 1)
                     .contains(&self.public_key);
 
                 if is_da {

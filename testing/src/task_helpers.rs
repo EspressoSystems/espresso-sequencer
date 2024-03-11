@@ -71,19 +71,22 @@ pub async fn build_system_handle(
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
     let public_key = config.my_own_validator_config.public_key;
-    let quorum_election_config =
-        config.election_config.clone().unwrap_or_else(|| {
-            <TestTypes as NodeType>::Membership::default_election_config(
-                config.total_nodes.get() as u64
-            )
-        });
 
-    let committee_election_config =
-        config.election_config.clone().unwrap_or_else(|| {
-            <TestTypes as NodeType>::Membership::default_election_config(
-                config.total_nodes.get() as u64
-            )
-        });
+    let _known_nodes_without_stake = config.known_nodes_without_stake.clone();
+
+    let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
+        <TestTypes as NodeType>::Membership::default_election_config(
+            config.num_nodes_with_stake.get() as u64,
+            config.num_nodes_without_stake as u64,
+        )
+    });
+
+    let committee_election_config = config.election_config.clone().unwrap_or_else(|| {
+        <TestTypes as NodeType>::Membership::default_election_config(
+            config.num_nodes_with_stake.get() as u64,
+            config.num_nodes_without_stake as u64,
+        )
+    });
     let networks_bundle = Networks {
         quorum_network: networks.0.clone(),
         da_network: networks.1.clone(),
@@ -367,7 +370,7 @@ pub fn vid_scheme_from_view_number<TYPES: NodeType>(
     membership: &TYPES::Membership,
     view_number: TYPES::Time,
 ) -> VidSchemeType {
-    let num_storage_nodes = membership.get_committee(view_number).len();
+    let num_storage_nodes = membership.get_staked_committee(view_number).len();
     vid_scheme(num_storage_nodes)
 }
 

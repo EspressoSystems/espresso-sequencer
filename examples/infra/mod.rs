@@ -181,13 +181,16 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
         load_config_from_file::<TYPES>(&args.config_file);
 
     if let Some(total_nodes_string) = matches.get_one::<String>("total_nodes") {
-        config.config.total_nodes = total_nodes_string.parse::<NonZeroUsize>().unwrap();
+        config.config.num_nodes_with_stake = total_nodes_string.parse::<NonZeroUsize>().unwrap();
         config.config.known_nodes_with_stake =
-            vec![PeerConfig::default(); config.config.total_nodes.get() as usize];
-        error!("config.config.total_nodes: {:?}", config.config.total_nodes);
+            vec![PeerConfig::default(); config.config.num_nodes_with_stake.get() as usize];
+        error!(
+            "config.config.total_nodes: {:?}",
+            config.config.num_nodes_with_stake
+        );
     }
     if let Some(da_committee_size_string) = matches.get_one::<String>("da_committee_size") {
-        config.config.da_committee_size = da_committee_size_string.parse::<usize>().unwrap();
+        config.config.da_staked_committee_size = da_committee_size_string.parse::<usize>().unwrap();
     }
     if let Some(transactions_per_round_string) = matches.get_one::<String>("transactions_per_round")
     {
@@ -238,7 +241,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
         ValidatorConfig::generated_from_seed_indexed(config.seed, config.node_index, 1);
     // initialize it with size for better assignment of peers' config
     config.config.known_nodes_with_stake =
-        vec![PeerConfig::default(); config.config.total_nodes.get() as usize];
+        vec![PeerConfig::default(); config.config.num_nodes_with_stake.get() as usize];
 
     config
 }
@@ -345,8 +348,8 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
 
     // generate network
     let mut config_builder = NetworkNodeConfigBuilder::default();
-    assert!(config.config.total_nodes.get() > 2);
-    let replicated_nodes = NonZeroUsize::new(config.config.total_nodes.get() - 2).unwrap();
+    assert!(config.config.num_nodes_with_stake.get() > 2);
+    let replicated_nodes = NonZeroUsize::new(config.config.num_nodes_with_stake.get() - 2).unwrap();
     config_builder.replication_factor(replicated_nodes);
     config_builder.identity(identity.clone());
 
@@ -380,10 +383,10 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
 
     let mut all_keys = BTreeSet::new();
     let mut da_keys = BTreeSet::new();
-    for i in 0..config.config.total_nodes.get() as u64 {
+    for i in 0..config.config.num_nodes_with_stake.get() as u64 {
         let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
         let pub_key = TYPES::SignatureKey::from_private(&privkey);
-        if i < config.config.da_committee_size as u64 {
+        if i < config.config.da_staked_committee_size as u64 {
             da_keys.insert(pub_key.clone());
         }
         all_keys.insert(pub_key);
@@ -458,11 +461,15 @@ pub trait RunDA<
 
         // Since we do not currently pass the election config type in the NetworkConfig, this will always be the default election config
         let quorum_election_config = config.config.election_config.clone().unwrap_or_else(|| {
-            TYPES::Membership::default_election_config(config.config.total_nodes.get() as u64)
+            TYPES::Membership::default_election_config(
+                config.config.num_nodes_with_stake.get() as u64,
+                config.config.num_nodes_without_stake as u64,
+            )
         });
 
         let committee_election_config = TYPES::Membership::default_election_config(
-            config.config.da_committee_size.try_into().unwrap(),
+            config.config.da_staked_committee_size.try_into().unwrap(),
+            config.config.num_nodes_without_stake as u64,
         );
         let networks_bundle = Networks {
             quorum_network: quorum_network.clone().into(),
@@ -973,13 +980,19 @@ pub async fn main_entry_point<
         rounds,
         transactions_per_round,
         node_index,
-        config: HotShotConfig { total_nodes, .. },
+        config: HotShotConfig {
+            num_nodes_with_stake,
+            ..
+        },
         ..
     } = run_config;
 
     let mut txn_rng = StdRng::seed_from_u64(node_index);
-    let transactions_to_send_per_round =
-        calculate_num_tx_per_round(node_index, total_nodes.get(), transactions_per_round);
+    let transactions_to_send_per_round = calculate_num_tx_per_round(
+        node_index,
+        num_nodes_with_stake.get(),
+        transactions_per_round,
+    );
     let mut transactions = Vec::new();
 
     for round in 0..rounds {

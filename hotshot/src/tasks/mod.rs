@@ -125,7 +125,7 @@ pub async fn inject_consensus_polls<
     // With the Push CDN, we are _always_ polling for latest anyway.
     let is_da = consensus_state
         .committee_membership
-        .get_committee(<TYPES as NodeType>::Time::new(0))
+        .get_whole_committee(<TYPES as NodeType>::Time::new(0))
         .contains(&consensus_state.public_key);
 
     // If we are, poll for latest DA proposal.

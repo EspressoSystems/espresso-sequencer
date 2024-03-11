@@ -155,7 +155,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         membership: &Arc<TYPES::Membership>,
     ) -> Self {
         let shares = membership
-            .get_committee(view_number)
+            .get_staked_committee(view_number)
             .iter()
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
             .collect();

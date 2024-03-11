@@ -158,8 +158,8 @@ cross_tests!(
     Metadata: {
         let mut metadata = TestMetadata::default_more_nodes();
         metadata.num_bootstrap_nodes = 10;
-        metadata.total_nodes = 12;
-        metadata.da_committee_size = 12;
+        metadata.num_nodes_with_stake = 12;
+        metadata.da_staked_committee_size = 12;
         metadata.start_nodes = 12;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the

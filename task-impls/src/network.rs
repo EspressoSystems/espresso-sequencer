@@ -376,7 +376,7 @@ impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::Signa
             kind: message_kind,
         };
         let view = message.kind.get_view_number();
-        let committee = membership.get_committee(view);
+        let committee = membership.get_whole_committee(view);
         let net = self.channel.clone();
         async_spawn(async move {
             let transmit_result = match transmit_type {

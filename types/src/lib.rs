@@ -148,17 +148,24 @@ pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     /// Whether to run one view or continuous views
     pub execution_type: ExecutionType,
     /// Total number of nodes in the network
-    pub total_nodes: NonZeroUsize,
+    // Earlier it was total_nodes
+    pub num_nodes_with_stake: NonZeroUsize,
+    /// Number of nodes without stake
+    pub num_nodes_without_stake: usize,
     /// Minimum transactions per block
     pub min_transactions: usize,
     /// Maximum transactions per block
     pub max_transactions: NonZeroUsize,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
+    /// List of known non-staking nodes' public keys
+    pub known_nodes_without_stake: Vec<KEY>,
     /// My own validator config, including my public key, private key, stake value, serving as private parameter
     pub my_own_validator_config: ValidatorConfig<KEY>,
-    /// List of DA committee nodes for static DA committe
-    pub da_committee_size: usize,
+    /// List of DA committee (staking)nodes for static DA committe
+    pub da_staked_committee_size: usize,
+    /// List of DA committee nodes (non-staking)nodes for static DA committe
+    pub da_non_staked_committee_size: usize,
     /// Base duration for next-view timeout, in milliseconds
     pub next_view_timeout: u64,
     /// The exponential backoff ration for the next-view timeout

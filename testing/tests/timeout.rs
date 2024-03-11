@@ -23,7 +23,7 @@ async fn test_timeout_web() {
     };
 
     let mut metadata = TestMetadata {
-        total_nodes: 10,
+        num_nodes_with_stake: 10,
         start_nodes: 10,
         ..Default::default()
     };
@@ -88,7 +88,7 @@ async fn test_timeout_libp2p() {
     };
 
     let mut metadata = TestMetadata {
-        total_nodes: 10,
+        num_nodes_with_stake: 10,
         start_nodes: 10,
         num_bootstrap_nodes: 10,
         ..Default::default()
