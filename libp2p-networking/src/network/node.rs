@@ -25,6 +25,7 @@ use crate::network::behaviours::{
     dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
     direct_message::{DMBehaviour, DMEvent},
     exponential_backoff::ExponentialBackoff,
+    request_response::{Request, RequestResponseState, Response},
 };
 use async_compatibility_layer::{
     art::async_spawn,
@@ -84,6 +85,8 @@ pub struct NetworkNode {
     config: NetworkNodeConfig,
     /// the listener id we are listening on, if it exists
     listener_id: Option<ListenerId>,
+    /// Handler for requests and response behavior events.
+    request_response_state: RequestResponseState,
 }
 
 impl NetworkNode {
@@ -269,14 +272,23 @@ impl NetworkNode {
 
             let rrconfig = RequestResponseConfig::default();
 
-            let request_response: libp2p::request_response::cbor::Behaviour<Vec<u8>, Vec<u8>> =
+            let direct_message: libp2p::request_response::cbor::Behaviour<Vec<u8>, Vec<u8>> =
+                RequestResponse::new(
+                    [(
+                        StreamProtocol::new("/HotShot/direct_message/1.0"),
+                        ProtocolSupport::Full,
+                    )]
+                    .into_iter(),
+                    rrconfig.clone(),
+                );
+            let request_response: libp2p::request_response::cbor::Behaviour<Request, Response> =
                 RequestResponse::new(
                     [(
                         StreamProtocol::new("/HotShot/request_response/1.0"),
                         ProtocolSupport::Full,
                     )]
                     .into_iter(),
-                    rrconfig,
+                    rrconfig.clone(),
                 );
 
             let network = NetworkDef::new(
@@ -289,7 +301,8 @@ impl NetworkNode {
                         .unwrap_or_else(|| NonZeroUsize::new(4).unwrap()),
                 ),
                 identify,
-                DMBehaviour::new(request_response),
+                DMBehaviour::new(direct_message),
+                request_response,
             );
 
             // build swarm
@@ -320,6 +333,7 @@ impl NetworkNode {
             swarm,
             config,
             listener_id: None,
+            request_response_state: RequestResponseState::default(),
         })
     }
 
@@ -423,6 +437,23 @@ impl NetworkNode {
                     }
                     ClientRequest::DirectResponse(chan, msg) => {
                         behaviour.add_direct_response(chan, msg);
+                    }
+                    ClientRequest::DataRequest {
+                        request,
+                        peer,
+                        chan,
+                    } => {
+                        let id = behaviour.request_response.send_request(&peer, request);
+                        self.request_response_state.add_request(id, chan);
+                    }
+                    ClientRequest::DataResponse { response, chan } => {
+                        if behaviour
+                            .request_response
+                            .send_response(chan, response)
+                            .is_err()
+                        {
+                            info!("Data Response dropped because response peer disconnected");
+                        }
                     }
                     ClientRequest::AddKnownPeers(peers) => {
                         self.add_known_peers(&peers);
@@ -580,6 +611,9 @@ impl NetworkNode {
                             NetworkEvent::DirectResponse(data, pid)
                         }
                     }),
+                    NetworkEventInternal::RequestResponseEvent(e) => {
+                        self.request_response_state.handle_request_response(e)
+                    }
                 };
 
                 if let Some(event) = maybe_event {

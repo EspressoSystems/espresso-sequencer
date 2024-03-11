@@ -28,6 +28,7 @@ digest = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
 either = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
 espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 generic-array = { workspace = true }

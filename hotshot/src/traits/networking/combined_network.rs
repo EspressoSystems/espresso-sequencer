@@ -16,7 +16,7 @@ use tracing::warn;
 
 use async_trait::async_trait;
 
-use futures::join;
+use futures::{channel::mpsc, join};
 
 use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
@@ -26,7 +26,7 @@ use hotshot_types::{
     data::ViewNumber,
     message::Message,
     traits::{
-        network::{ConnectedNetwork, ConsensusIntentEvent},
+        network::{ConnectedNetwork, ConsensusIntentEvent, ResponseChannel, ResponseMessage},
         node_implementation::NodeType,
     },
     BoxSyncFuture,
@@ -304,6 +304,20 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
 impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     for CombinedNetworks<TYPES>
 {
+    async fn request_data<T: NodeType>(
+        &self,
+        request: Message<TYPES>,
+        recipient: TYPES::SignatureKey,
+    ) -> Result<ResponseMessage<T>, NetworkError> {
+        self.secondary().request_data(request, recipient).await
+    }
+
+    async fn spawn_request_receiver_task(
+        &self,
+    ) -> Option<mpsc::Receiver<(Message<TYPES>, ResponseChannel<Message<TYPES>>)>> {
+        self.secondary().spawn_request_receiver_task().await
+    }
+
     fn pause(&self) {
         self.networks.0.pause();
     }

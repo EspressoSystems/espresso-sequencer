@@ -5,14 +5,21 @@
 use async_compatibility_layer::art::async_sleep;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::future::TimeoutError;
+use derivative::Derivative;
 use dyn_clone::DynClone;
+use futures::channel::{mpsc, oneshot};
 use libp2p_networking::network::NetworkNodeHandleError;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{data::ViewNumber, message::MessagePurpose, BoxSyncFuture};
+use crate::{
+    data::ViewNumber,
+    message::{MessagePurpose, SequencingMessage},
+    vid::VidCommitment,
+    BoxSyncFuture,
+};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use rand::{
@@ -21,7 +28,7 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{collections::BTreeSet, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, fmt::Debug, hash::Hash, sync::Arc, time::Duration};
 
 impl From<NetworkNodeHandleError> for NetworkError {
     fn from(error: NetworkNodeHandleError) -> Self {
@@ -138,6 +145,8 @@ pub enum NetworkError {
     ShutDown,
     /// unable to cancel a request, the request has already been cancelled
     UnableToCancel,
+    /// The requested data was not found
+    NotFound,
 }
 
 #[derive(Clone, Debug)]
@@ -218,6 +227,8 @@ pub trait NetworkMsg:
 {
 }
 
+/// Trait that bundles what we need from a request ID
+pub trait Id: Eq + PartialEq + Hash {}
 impl NetworkMsg for Vec<u8> {}
 
 /// a message
@@ -227,6 +238,41 @@ pub trait ViewMessage<TYPES: NodeType> {
     // TODO move out of this trait.
     /// get the purpose of the message
     fn purpose(&self) -> MessagePurpose;
+}
+
+/// Wraps a oneshot channel for responding to requests
+pub struct ResponseChannel<M: NetworkMsg>(pub oneshot::Sender<M>);
+
+/// A request for some data that the consensus layer is asking for.
+#[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
+#[serde(bound(deserialize = ""))]
+pub struct DataRequest<TYPES: NodeType> {
+    /// Hotshot key of who to send the request to
+    pub recipient: TYPES::SignatureKey,
+    /// Request
+    pub request: RequestKind<TYPES>,
+    /// View this message is for
+    pub view: TYPES::Time,
+}
+
+/// Underlying data request
+#[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum RequestKind<TYPES: NodeType> {
+    /// Request VID data by our key and the VID commitment
+    VID(VidCommitment, TYPES::SignatureKey),
+    /// Request a DA proposal for a certain view
+    DAProposal(TYPES::Time),
+}
+
+/// A resopnse for a request.  `SequencingMessage` is the same as other network messages
+/// The kind of message `M` is is determined by what we requested
+#[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
+#[serde(bound(deserialize = ""))]
+pub enum ResponseMessage<TYPES: NodeType> {
+    /// Peer returned us some data
+    Found(SequencingMessage<TYPES>),
+    /// Peer failed to get us data
+    NotFound,
 }
 
 /// represents a networking implmentration
@@ -282,6 +328,26 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     /// # Errors
     /// If there is a network-related failure.
     async fn recv_msgs(&self) -> Result<Vec<M>, NetworkError>;
+
+    /// Ask request the network for some data.  Returns the request ID for that data,
+    /// The ID returned can be used for cancelling the request
+    async fn request_data<TYPES: NodeType>(
+        &self,
+        _request: M,
+        _recipient: K,
+    ) -> Result<ResponseMessage<TYPES>, NetworkError> {
+        Err(NetworkError::UnimplementedFeature)
+    }
+
+    /// Spawn a request task in the given network layer.  If it supports
+    /// Request and responses it will return the receiving end of a channel.
+    /// Requests the network receives will be sent over this channel along
+    /// with a return channel to send the response back to.  
+    ///
+    /// Returns `None`` if network does not support handling requests
+    async fn spawn_request_receiver_task(&self) -> Option<mpsc::Receiver<(M, ResponseChannel<M>)>> {
+        None
+    }
 
     /// queues lookup of a node
     async fn queue_node_lookup(

@@ -12,14 +12,15 @@ use crate::simple_vote::{
     DAVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
     ViewSyncPreCommitVote,
 };
+use crate::traits::network::ResponseMessage;
 use crate::traits::signature_key::SignatureKey;
 use crate::vote::HasViewNumber;
 use crate::{
     data::{DAProposal, VidDisperse},
     simple_vote::QuorumVote,
     traits::{
-        network::{NetworkMsg, ViewMessage},
-        node_implementation::NodeType,
+        network::{DataRequest, NetworkMsg, ViewMessage},
+        node_implementation::{ConsensusTime, NodeType},
     },
 };
 
@@ -119,15 +120,18 @@ impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
         match &self {
             MessageKind::Consensus(message) => message.view_number(),
             MessageKind::Data(DataMessage::SubmitTransaction(_, v)) => *v,
+            MessageKind::Data(DataMessage::RequestData(msg)) => msg.view,
+            MessageKind::Data(DataMessage::DataResponse(msg)) => match msg {
+                ResponseMessage::Found(m) => m.view_number(),
+                ResponseMessage::NotFound => TYPES::Time::new(1),
+            },
         }
     }
 
     fn purpose(&self) -> MessagePurpose {
         match &self {
             MessageKind::Consensus(message) => message.purpose(),
-            MessageKind::Data(message) => match message {
-                DataMessage::SubmitTransaction(_, _) => MessagePurpose::Data,
-            },
+            MessageKind::Data(_) => MessagePurpose::Data,
         }
     }
 }
@@ -296,6 +300,10 @@ pub enum DataMessage<TYPES: NodeType> {
     /// TODO rethink this when we start to send these messages
     /// we only need the view number for broadcast
     SubmitTransaction(TYPES::Transaction, TYPES::Time),
+    /// A request for data
+    RequestData(DataRequest<TYPES>),
+    /// A response to a data request
+    DataResponse(ResponseMessage<TYPES>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
