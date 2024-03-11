@@ -7,16 +7,18 @@ use hotshot_constants::{
     COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
     COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
 };
+use lru::LruCache;
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::BTreeSet,
     hash::Hasher,
+    num::NonZeroUsize,
     sync::atomic::{AtomicU64, Ordering},
 };
 use tracing::warn;
 
 use async_trait::async_trait;
 
-use futures::{channel::mpsc, join};
+use futures::{channel::mpsc, join, select, FutureExt};
 
 use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
@@ -49,67 +51,6 @@ use std::time::Duration;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 
-/// A cache to keep track of the last n messages we've seen, avoids reprocessing duplicates
-/// from multiple networks
-#[derive(Clone, Debug)]
-pub struct Cache {
-    /// The maximum number of items to store in the cache
-    capacity: usize,
-    /// The cache itself
-    inner: HashSet<u64>,
-    /// The hashes of the messages in the cache, in order of insertion
-    hashes: Vec<u64>,
-}
-
-impl Cache {
-    /// Create a new cache with the given capacity
-    #[must_use]
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            capacity,
-            inner: HashSet::with_capacity(capacity),
-            hashes: Vec::with_capacity(capacity),
-        }
-    }
-
-    /// Insert a hash into the cache
-    pub fn insert(&mut self, hash: u64) {
-        if self.inner.contains(&hash) {
-            return;
-        }
-
-        // calculate how much we are over and remove that many elements from the cache. deal with overflow
-        let over = (self.hashes.len() + 1).saturating_sub(self.capacity);
-        if over > 0 {
-            for _ in 0..over {
-                let hash = self.hashes.remove(0);
-                self.inner.remove(&hash);
-            }
-        }
-
-        self.inner.insert(hash);
-        self.hashes.push(hash);
-    }
-
-    /// Check if the cache contains a hash
-    #[must_use]
-    pub fn contains(&self, hash: u64) -> bool {
-        self.inner.contains(&hash)
-    }
-
-    /// Get the number of items in the cache
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    /// True if the cache is empty false otherwise
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-}
-
 /// Helper function to calculate a hash of a type that implements Hash
 pub fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();
@@ -128,7 +69,7 @@ pub struct CombinedNetworks<TYPES: NodeType> {
     networks: Arc<UnderlyingCombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
-    message_cache: Arc<RwLock<Cache>>,
+    message_cache: Arc<RwLock<LruCache<u64, ()>>>,
 
     /// If the primary network is down (0) or not, and for how many messages
     primary_down: Arc<AtomicU64>,
@@ -142,11 +83,17 @@ pub struct CombinedNetworks<TYPES: NodeType> {
 
 impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     /// Constructor
+    ///
+    /// # Panics
+    ///
+    /// Panics if `COMBINED_NETWORK_CACHE_SIZE` is 0
     #[must_use]
     pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>) -> Self {
         Self {
             networks,
-            message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
+            message_cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+            ))),
             primary_down: Arc::new(AtomicU64::new(0)),
             delayed_tasks: Arc::default(),
             delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
@@ -276,14 +223,18 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
             );
             let quorum_net = Self {
                 networks: Arc::new(quorum_networks),
-                message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
+                message_cache: Arc::new(RwLock::new(LruCache::new(
+                    NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+                ))),
                 primary_down: Arc::new(AtomicU64::new(0)),
                 delayed_tasks: Arc::default(),
                 delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
             };
             let da_net = Self {
                 networks: Arc::new(da_networks),
-                message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
+                message_cache: Arc::new(RwLock::new(LruCache::new(
+                    NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+                ))),
                 primary_down: Arc::new(AtomicU64::new(0)),
                 delayed_tasks: Arc::default(),
                 delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
@@ -429,25 +380,28 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
         // recv on both networks because nodes may be accessible only on either. discard duplicates
         // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
-        let mut primary_msgs = self.primary().recv_msgs().await?;
-        let mut secondary_msgs = self.secondary().recv_msgs().await?;
+        let mut primary_fut = self.primary().recv_msgs().fuse();
+        let mut secondary_fut = self.secondary().recv_msgs().fuse();
 
-        primary_msgs.append(secondary_msgs.as_mut());
+        let msgs = select! {
+            p = primary_fut => p?,
+            s = secondary_fut => s?,
+        };
 
-        let mut filtered_msgs = Vec::with_capacity(primary_msgs.len());
-        for msg in primary_msgs {
+        let mut filtered_msgs = Vec::with_capacity(msgs.len());
+        for msg in msgs {
             // see if we've already seen this message
             if !self
                 .message_cache
                 .read()
                 .await
-                .contains(calculate_hash_of(&msg))
+                .contains(&calculate_hash_of(&msg))
             {
                 filtered_msgs.push(msg.clone());
                 self.message_cache
                     .write()
                     .await
-                    .insert(calculate_hash_of(&msg));
+                    .put(calculate_hash_of(&msg), ());
             }
         }
 
@@ -473,51 +427,26 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             inject_consensus_info(self.secondary(), event).await;
     }
 
-    async fn update_view(&self, view: &u64) {
-        let mut cancel_tasks = Vec::new();
-        {
-            let mut map_lock = self.delayed_tasks.write().await;
-            while let Some((first_view, _tasks)) = map_lock.first_key_value() {
-                if first_view < view {
-                    if let Some((_view, tasks)) = map_lock.pop_first() {
-                        let mut ctasks = tasks.into_iter().map(cancel_task).collect();
-                        cancel_tasks.append(&mut ctasks);
+    fn update_view(&self, view: u64) {
+        let delayed_map = self.delayed_tasks.clone();
+        async_spawn(async move {
+            let mut cancel_tasks = Vec::new();
+            {
+                let mut map_lock = delayed_map.write().await;
+                while let Some((first_view, _tasks)) = map_lock.first_key_value() {
+                    if *first_view < view {
+                        if let Some((_view, tasks)) = map_lock.pop_first() {
+                            let mut ctasks = tasks.into_iter().map(cancel_task).collect();
+                            cancel_tasks.append(&mut ctasks);
+                        } else {
+                            break;
+                        }
                     } else {
                         break;
                     }
-                } else {
-                    break;
                 }
             }
-        }
-        join_all(cancel_tasks).await;
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use tracing::instrument;
-
-    /// cache eviction test
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-    #[instrument]
-    async fn test_cache_eviction() {
-        let mut cache = Cache::new(3);
-        cache.insert(1);
-        cache.insert(2);
-        cache.insert(3);
-        cache.insert(4);
-        assert_eq!(cache.inner.len(), 3);
-        assert_eq!(cache.hashes.len(), 3);
-        assert!(!cache.inner.contains(&1));
-        assert!(cache.inner.contains(&2));
-        assert!(cache.inner.contains(&3));
-        assert!(cache.inner.contains(&4));
-        assert!(!cache.hashes.contains(&1));
-        assert!(cache.hashes.contains(&2));
-        assert!(cache.hashes.contains(&3));
-        assert!(cache.hashes.contains(&4));
+            join_all(cancel_tasks).await;
+        });
     }
 }

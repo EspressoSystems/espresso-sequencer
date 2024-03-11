@@ -358,7 +358,7 @@ impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::Signa
             ),
             HotShotEvent::ViewChange(view) => {
                 self.view = view;
-                self.channel.update_view(&self.view.get_u64()).await;
+                self.channel.update_view(self.view.get_u64());
                 return None;
             }
             HotShotEvent::Shutdown => {

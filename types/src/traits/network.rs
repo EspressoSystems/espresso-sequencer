@@ -364,7 +364,7 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<K>) {}
 
     /// handles view update
-    async fn update_view(&self, _view: &u64) {}
+    fn update_view(&self, _view: u64) {}
 }
 
 /// Describes additional functionality needed by the test network implementation
