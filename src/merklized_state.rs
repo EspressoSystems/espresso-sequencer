@@ -80,6 +80,7 @@ pub trait MerklizedState: MerkleTreeScheme {
     type Arity: Unsigned;
 
     fn state_type(&self) -> &'static str;
+    fn header_state_commitment_field(&self) -> &'static str;
 }
 
 pub fn define_api<State, Types: NodeType, M: MerklizedState>(
@@ -108,6 +109,7 @@ where
 
     let state_type = state.state_type();
     let tree_height = state.height();
+    let header_state_commitment_field = state.header_state_commitment_field();
 
     api.with_version("0.0.1".parse().unwrap())
         .get("get_path", move |req, state| {
@@ -128,6 +130,7 @@ where
                     .get_path::<M::Element, M::Index, M::Arity, M::NodeValue>(
                         state_type,
                         tree_height,
+                        header_state_commitment_field,
                         snapshot,
                         key,
                     )

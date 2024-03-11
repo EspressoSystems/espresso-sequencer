@@ -294,6 +294,7 @@ where
     Types: NodeType,
     Header<Types>: QueryableHeader<Types>,
 {
+    type Error = D::Error;
     async fn insert_nodes(
         &mut self,
         name: String,
@@ -301,7 +302,7 @@ where
         path: Vec<usize>,
         elem: E,
         leaf: Leaf<Types>,
-    ) -> QueryResult<()> {
+    ) -> Result<(), Self::Error> {
         self.data_source
             .insert_nodes(name, proof, path, elem, leaf)
             .await

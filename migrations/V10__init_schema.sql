@@ -4,6 +4,8 @@ CREATE TABLE header
     hash      VARCHAR NOT NULL UNIQUE,
     payload_hash VARCHAR NOT NULL,
     timestamp BIGINT NOT NULL,
+    block_merkle_tree_root VARCHAR NOT NULL,
+    fee_merkle_tree_root VARCHAR NOT NULL,
 
     -- For convenience, we store the entire application-specific header type as JSON. Just like
     -- `leaf.leaf` and `leaf.qc`, this allows us to easily reconstruct the entire header using
@@ -13,7 +15,10 @@ CREATE TABLE header
     -- possibly adding an index for performance reasons).
     data JSONB NOT NULL
 );
- 
+
+
+CREATE INDEX ON header USING hash ((data->>'fee_merkle_tree_root'));
+CREATE INDEX ON header USING hash ((data->>'blocks_merkle_tree_root'));
 CREATE INDEX header_timestamp_idx ON header (timestamp);
 
 CREATE TABLE payload
