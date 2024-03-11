@@ -298,7 +298,7 @@ where
         &mut self,
         name: String,
         proof: Proof,
-        path: Vec<I>,
+        path: Vec<usize>,
         elem: E,
         leaf: Leaf<Types>,
     ) -> QueryResult<()> {

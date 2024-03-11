@@ -39,6 +39,8 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
+use tokio_postgres::types::private::BytesMut;
+use tokio_postgres::types::to_sql_checked;
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
 // crate which doesn't have `include_dir` as a dependency.
@@ -363,6 +365,11 @@ impl SqlStorage {
             .await?;
         client
             .batch_execute(&format!("SET search_path TO {}", config.schema))
+            .await?;
+
+        // Enable ltree extension
+        client
+            .batch_execute("CREATE EXTENSION IF NOT EXISTS ltree")
             .await?;
 
         // Get migrations and interleave with custom migrations, sorting by version number.
@@ -1770,8 +1777,50 @@ where
     ))
 }
 
-pub fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
+}
+
+#[derive(Debug, Clone)]
+pub struct LTree(String);
+
+impl<I, Iter: Iterator<Item = I> + DoubleEndedIterator> From<Iter> for LTree
+where
+    I: Display,
+{
+    fn from(iter: Iter) -> Self {
+        Self(
+            itertools::intersperse(
+                iter.map(|x| x.to_string())
+                    .chain(std::iter::once("R".to_string()))
+                    .rev(),
+                ".".to_string(),
+            )
+            .collect(),
+        )
+    }
+}
+
+impl ToSql for LTree {
+    fn to_sql(
+        &self,
+        ty: &postgres::types::Type,
+        out: &mut BytesMut,
+    ) -> Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        <String as ToSql>::to_sql(&self.0, ty, out)
+    }
+
+    fn accepts(ty: &postgres::types::Type) -> bool
+    where
+        Self: Sized,
+    {
+        <String as ToSql>::accepts(ty)
+    }
+
+    to_sql_checked!();
 }
 
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these

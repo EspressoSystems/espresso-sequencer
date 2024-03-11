@@ -15,7 +15,7 @@ use crate::{
     data_source::storage::{sql::*, SqlStorage},
     Header, QueryError, QueryResult,
 };
-use ark_serialize::CanonicalDeserialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_std::stream::StreamExt;
 use bit_vec::BitVec;
 use derive_more::Display;
@@ -33,11 +33,8 @@ use jf_primitives::{
     },
 };
 
-use postgres::{
-    types::{to_sql_checked, ToSql},
-    Row,
-};
-use serde::de::DeserializeOwned;
+use postgres::Row;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use typenum::Unsigned;
 
@@ -47,133 +44,6 @@ use std::{
     fmt::Display,
     sync::Arc,
 };
-
-#[async_trait]
-pub trait UpdateStateStorage<
-    Types: NodeType,
-    Proof: MembershipProof<E, I, T> + Send + Sync,
-    E: Element + Send + Sync,
-    I: Index + Send + Sync,
-    T: NodeValue + Send + Sync,
-> where
-    Header<Types>: QueryableHeader<Types>,
-{
-    async fn insert_nodes(
-        &mut self,
-        name: String,
-        proof: Proof,
-        path: Vec<I>,
-        elem: E,
-        leaf: Leaf<Types>,
-    ) -> QueryResult<()>;
-}
-#[async_trait]
-impl<Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T> for SqlStorage
-where
-    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-    E: Element + Send + Sync + Display + 'static,
-    I: Index + Send + Sync + Display + serde::Serialize + 'static,
-    T: NodeValue + Send + Sync + Display + ark_serialize::CanonicalSerialize + 'static,
-    Types: NodeType,
-    Header<Types>: QueryableHeader<Types>,
-{
-    async fn insert_nodes(
-        &mut self,
-        name: String,
-        proof: Proof,
-        traversal_path: Vec<I>,
-        elem: E,
-        leaf: Leaf<Types>,
-    ) -> QueryResult<()> {
-        let created = leaf.get_height() as i64;
-        let pos = proof.index().clone();
-        let commit = leaf.commit();
-        let commit: &[u8; 32] = commit.as_ref();
-        let ltree_path = LTree::from(traversal_path.iter());
-        let insert_hash = self
-            .query_one(
-                "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO NOTHING RETURNING id",
-                &[&commit.to_vec()],
-            )
-            .await?;
-        let value: i64 = insert_hash.get(0);
-
-        let mut txn = self.transaction().await?;
-        txn.upsert(
-            &name,
-            ["pos", "created", "value", "index", "entry"],
-            ["pos", "created"],
-            [[
-                sql_param(&ltree_path),
-                sql_param(&(created)),
-                sql_param(&value),
-                sql_param(&serde_json::to_value(&pos).unwrap()),
-                sql_param(&elem.to_string()),
-            ]],
-        )
-        .await?;
-
-        for (index, node) in proof.merkle_path().clone().into_iter().enumerate() {
-            match node {
-                MerkleNode::Branch { value, children } => {
-                    // Get hash
-                    let insert_hash = self
-                        .query_one(
-                            "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO NOTHING RETURNING id",
-                            &[&value.to_string()],
-                        )
-                        .await?;
-                    let value: i64 = insert_hash.get(0);
-
-                    // Get children
-                    let mut children_values = Vec::new();
-                    let mut children_bitmap = BitVec::new();
-                    for child in children {
-                        let child = child.as_ref();
-                        match child {
-                            MerkleNode::Empty => {
-                                children_bitmap.push(false);
-                            }
-                            MerkleNode::Branch { .. } => (),
-                            MerkleNode::Leaf { .. } => (),
-                            MerkleNode::ForgettenSubtree { value } => {
-                                let insert_hash = self
-                                .query_one(
-                                    "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO NOTHING RETURNING id",
-                                    &[&value.to_string()],
-                                )
-                                .await?;
-                                let value: i64 = insert_hash.get(0);
-                                children_values.push(value);
-                                children_bitmap.push(true);
-                            }
-                        }
-                    }
-
-                    // insert internal node
-                    let mut txn = self.transaction().await?;
-                    txn.upsert(
-                        "node",
-                        ["pos", "created", "value", "children", "children_bitmap"],
-                        ["pos", "created"],
-                        [[
-                            sql_param(&LTree::from(traversal_path.iter().skip(index + 1))), // path
-                            sql_param(&(created)),
-                            sql_param(&value),
-                            sql_param(&children_values),
-                            sql_param(&children_bitmap),
-                        ]],
-                    )
-                    .await?;
-                }
-
-                _ => continue,
-            }
-        }
-
-        Ok(())
-    }
-}
 
 #[async_trait]
 pub trait MerklizedStateDataSource<Types>
@@ -192,6 +62,145 @@ where
         snapshot: Snapshot<Types>,
         key: Value,
     ) -> QueryResult<MerklePath<E, I, T>>;
+}
+
+#[async_trait]
+pub trait UpdateStateStorage<
+    Types: NodeType,
+    Proof: MembershipProof<E, I, T> + Send + Sync,
+    E: Element + Send + Sync,
+    I: Index + Send + Sync,
+    T: NodeValue + Send + Sync,
+>
+{
+    async fn insert_nodes(
+        &mut self,
+        name: String,
+        proof: Proof,
+        path: Vec<usize>,
+        elem: E,
+        leaf: Leaf<Types>,
+    ) -> QueryResult<()>;
+}
+#[async_trait]
+impl<Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T> for SqlStorage
+where
+    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
+    E: Element + Send + Sync + Display + Serialize + 'static,
+    I: Index + Send + Sync + Display + Serialize + 'static,
+    T: NodeValue + Send + Sync + CanonicalSerialize + 'static,
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+{
+    async fn insert_nodes(
+        &mut self,
+        name: String,
+        proof: Proof,
+        traversal_path: Vec<usize>,
+        elem: E,
+        leaf: Leaf<Types>,
+    ) -> QueryResult<()> {
+        let created = leaf.get_height() as i64;
+        let pos = proof.index().clone();
+        let commit = leaf.commit();
+        let commit: &[u8; 32] = commit.as_ref();
+        let ltree_path = LTree::from(traversal_path.iter());
+
+        // TODO: clean these upsert queries 
+        let insert_hash = self
+            .query_one(
+                "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO UPDATE SET value = excluded.value RETURNING id",
+                &[&commit.to_vec()],
+            )
+            .await?;
+        let hash_id: i32 = insert_hash.get(0);
+
+        let mut txn = self.transaction().await?;
+        txn.upsert(
+            &name,
+            ["pos", "created", "hash_id", "index", "entry"],
+            ["pos", "created"],
+            [[
+                sql_param(&ltree_path),
+                sql_param(&(created)),
+                sql_param(&hash_id),
+                sql_param(&serde_json::to_value(&pos).unwrap()),
+                sql_param(&serde_json::to_value(&elem).unwrap()),
+            ]],
+        )
+        .await?;
+
+        for (index, node) in proof.merkle_path().clone().into_iter().enumerate() {
+            match node {
+                MerkleNode::Branch { value, children } => {
+                    // Get hash
+                    let mut bytes = [0_u8; 32];
+                    value.serialize_compressed(&mut bytes[..]).unwrap();
+
+                    let row = self
+                        .query_one(
+                            "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO UPDATE SET value = excluded.value RETURNING id",
+                            &[&bytes.to_vec()],
+                        )
+                        .await?;
+                    let hash_id: i32 = row.get(0);
+
+                    // Get children
+                    let mut children_values = Vec::new();
+                    let mut children_bitmap = BitVec::new();
+                    for child in children {
+                        let child = child.as_ref();
+                        match child {
+                            MerkleNode::Empty => {
+                                children_bitmap.push(false);
+                            }
+                            MerkleNode::Branch { .. } => (),
+                            MerkleNode::Leaf { .. } => (),
+                            MerkleNode::ForgettenSubtree { value } => {
+                                let mut bytes = [0_u8; 32];
+                                value.serialize_compressed(&mut bytes[..]).map_err(|e| {
+                                    QueryError::Error {
+                                        message: format!("failed to serialize hash value {e:?}"),
+                                    }
+                                })?;
+
+                                let r = self
+                                .query_one(
+                                    "INSERT INTO hash(value) VALUES ($1) ON CONFLICT (value) DO UPDATE SET value = excluded.value RETURNING id",
+                                    &[&bytes.to_vec()],
+                                )
+                                .await?;
+                                let hash_id: i32 = r.get("id");
+
+                                children_values.push(hash_id);
+                                children_bitmap.push(true);
+                            }
+                        }
+                    }
+
+                    // insert internal node
+                    let mut txn = self.transaction().await?;
+                    txn.upsert(
+                        "node",
+                        ["pos", "created", "hash_id", "children", "children_bitmap"],
+                        ["pos", "created"],
+                        [[
+                            sql_param(&LTree::from(traversal_path.iter().skip(index + 1))), // path
+                            sql_param(&(created)),
+                            sql_param(&hash_id),
+                            sql_param(&children_values),
+                            sql_param(&children_bitmap),
+                        ]],
+                    )
+                    .await?;
+                }
+
+                _ => continue,
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[macro_export]
@@ -216,7 +225,7 @@ macro_rules! parse_field {
 pub struct Node {
     pub pos: String,
     pub created: i64,
-    pub value: i32,
+    pub hash_id: i32,
     pub children: Option<Vec<i32>>,
     pub children_bitmap: Option<BitVec>,
     pub index: Value,
@@ -229,7 +238,7 @@ impl TryFrom<Row> for Node {
         Ok(Self {
             pos: parse_field!(row, "pos"),
             created: parse_field!(row, "created"),
-            value: parse_field!(row, "value"),
+            hash_id: parse_field!(row, "hash_id"),
             children: parse_field!(row, "children"),
             children_bitmap: parse_field!(row, "children_bitmap"),
             index: parse_field!(row, "index"),
@@ -251,50 +260,6 @@ impl TryFrom<Row> for Hash {
             value: parse_field!(row, "value"),
         })
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct LTree(String);
-
-impl<I, Iter: Iterator<Item = I> + DoubleEndedIterator> From<Iter> for LTree
-where
-    I: Display,
-{
-    fn from(iter: Iter) -> Self {
-        Self(
-            itertools::intersperse(
-                iter.map(|x| x.to_string())
-                    .chain(std::iter::once("R".to_string()))
-                    .rev(),
-                ".".to_string(),
-            )
-            .collect(),
-        )
-    }
-}
-
-use tokio_postgres::types::private::BytesMut;
-
-impl ToSql for LTree {
-    fn to_sql(
-        &self,
-        ty: &postgres::types::Type,
-        out: &mut BytesMut,
-    ) -> Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::to_sql(&self.0, ty, out)
-    }
-
-    fn accepts(ty: &postgres::types::Type) -> bool
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::accepts(ty)
-    }
-
-    to_sql_checked!();
 }
 
 #[async_trait]
@@ -321,25 +286,18 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             Snapshot::<Types>::Commit(commit) => {
                 let commit: &[u8; 32] = commit.as_ref();
 
-                let hash_id = self
-                    .query_one("SELECT id FROM hash where value = $1", &[&commit.to_vec()])
-                    .await?;
-
-                let id: i32 = hash_id.get(0);
-
-                // Get value of leaf node
                 let query = self
-                    .query_one("SELECT * from node where value = $1", [sql_param(&id)])
+                    .query_one("SELECT n.created FROM hash h INNER JOIN node n where n.hash_id = h.id where h.value = $1", &[&commit.to_vec()])
                     .await?;
-                let leaf_node = Node::try_from(query).unwrap();
-                leaf_node.created
+
+                query.get(0)
             }
 
             Snapshot::<Types>::Index(created) => created as i64,
         };
 
         self.query_one(
-            "SELECT * from HEADER where height = $1",
+            "SELECT 1 from HEADER where height = $1",
             [sql_param(&created)],
         )
         .await
@@ -369,7 +327,7 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
         let mut hash_ids = HashSet::new();
 
         for node in &nodes {
-            hash_ids.insert(node.value);
+            hash_ids.insert(node.hash_id);
             if let Some(children) = &node.children {
                 hash_ids.extend(children);
             }
@@ -392,14 +350,14 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             .iter()
             .map(
                 |Node {
-                     value,
+                     hash_id,
                      children,
                      children_bitmap,
                      index,
                      entry,
                      ..
                  }| {
-                    let value = hashes.get(value).unwrap();
+                    let value = hashes.get(hash_id).unwrap();
                     if let (Some(children), Some(children_bitmap)) = (children, children_bitmap) {
                         let child_nodes = children
                             .iter()
@@ -464,3 +422,87 @@ impl<Types: NodeType> PartialOrd for Snapshot<Types> {
 }
 
 type MerkleCommitment<Types> = Commitment<Leaf<Types>>;
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+
+    use hotshot_example_types::state_types::TestInstanceState;
+    use jf_primitives::merkle_tree::{
+        prelude::LightWeightSHA3MerkleTree, AppendableMerkleTreeScheme, MerkleTreeScheme,
+    };
+    use typenum::U3;
+
+    use super::{testing::TmpDb, *};
+    use crate::{
+        data_source::VersionedDataSource,
+        node::LeafQueryData,
+        testing::{mocks::MockTypes, setup_test},
+    };
+    #[async_std::test]
+    async fn test_insert_nodes() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let port = db.port();
+        let host = &db.host();
+
+        let migration = vec![Migration::unapplied(
+            "V11__create_node_table.sql",
+            "CREATE TABLE hash
+                    (
+                        id SERIAL PRIMARY KEY,
+                        value BYTEA  NOT NULL UNIQUE
+                    );
+
+                    CREATE TABLE node
+                    (
+                        pos LTREE NOT NULL, 
+                        created BIGINT NOT NULL,
+                        hash_id INT NOT NULL REFERENCES hash (id),
+                        children INT[],
+                        children_bitmap BIT(3),
+                        index JSONB,
+                        entry JSONB 
+                    );
+                    ALTER TABLE node ADD CONSTRAINT node_pk PRIMARY KEY (pos, created);
+                    CREATE INDEX node_path ON node USING GIST (pos);",
+        )
+        .unwrap()];
+        let cfg = Config::default()
+            .user("postgres")
+            .password("password")
+            .host(host)
+            .port(port)
+            .migrations(migration);
+
+        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        let leaf = leaf.leaf();
+
+        let mut block_merkle_tree = LightWeightSHA3MerkleTree::<usize>::new(3);
+
+        for i in 0..8 {
+            block_merkle_tree.push(i).unwrap();
+        }
+
+        let index = 7;
+        let (elem, proof) = block_merkle_tree.lookup(index).expect_ok().unwrap();
+        let traversal_path = <u64 as ToTraversalPath<U3>>::to_traversal_path(&index, 3);
+
+        tracing::info!("Proof {:?}", &proof);
+
+        storage
+            .insert_nodes(
+                "node".to_owned(),
+                proof,
+                traversal_path,
+                elem.clone(),
+                leaf.clone(),
+            )
+            .await
+            .expect("failed to insert nodes");
+
+        storage.commit().await.expect("failed to commit");
+    }
+}
