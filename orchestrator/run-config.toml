@@ -39,8 +39,10 @@ seed = [
 start_delay_seconds = 0
 
 [config]
-total_nodes = 10
-committee_nodes = 5
+num_nodes_with_stake = 10
+num_nodes_without_stake = 0
+staked_committee_nodes = 5
+non_staked_committee_nodes = 0
 max_transactions = 100
 min_transactions = 0
 next_view_timeout = 30000
