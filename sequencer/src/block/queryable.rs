@@ -195,7 +195,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(
-                crate::VmId(0),
+                Default::default(),
                 self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {

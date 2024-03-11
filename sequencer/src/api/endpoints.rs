@@ -10,7 +10,7 @@ use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
     network,
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
-    Header, SeqTypes, Transaction, VmId,
+    Header, NamespaceId, SeqTypes, Transaction,
 };
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
@@ -32,7 +32,6 @@ use tide_disco::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
     pub proof: NamespaceProof,
-    pub header: Header,
     pub transactions: Vec<Transaction>,
 }
 
@@ -80,7 +79,8 @@ where
     api.get("getnamespaceproof", move |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let ns_id = VmId(req.integer_param("namespace")?);
+            let ns_id: u64 = req.integer_param("namespace")?;
+            let ns_id = NamespaceId::from(ns_id);
             let (block, common) = try_join!(
                 async move {
                     state
@@ -129,7 +129,6 @@ where
             Ok(NamespaceProofQueryData {
                 transactions,
                 proof,
-                header: block.header().clone(),
             })
         }
         .boxed()
