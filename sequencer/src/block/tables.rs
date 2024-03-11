@@ -164,7 +164,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     }
 
     /// Like `tx_payload_range` except for namespaces.
-    /// Returns the byte range for a ns in the block payload bytes.
+    /// Returns the ns id and the ns byte range in the block payload bytes.
     ///
     /// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
     pub fn get_payload_range(

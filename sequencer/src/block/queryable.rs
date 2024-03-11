@@ -21,43 +21,10 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self, ns_table: &Self::Metadata) -> usize {
-        let entry_len = TxTableEntry::byte_len();
-
-        // The number of nss in a block is defined as the minimum of:
-        // (1) the number of nss indicated in the ns table
-        // (2) the number of ns table entries that could fit inside the ns table byte len
-        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length nss.
-        // The quantity (2) must exclude the prefix of the ns table because this prefix indicates only the length of the ns table, not an actual ns.
-        let ns_table_len = ns_table.len();
-
-        // First, collect the offsets of all the nss
-        // (Range starts at 1 to conveniently skip the ns table prefix.)
-        let mut ns_end_offsets = vec![0usize];
-        for i in 1..=ns_table_len {
-            let ns_offset_bytes = ns_table
-                .get_bytes()
-                .get(((2 * i) * entry_len)..((2 * i + 1) * entry_len))
-                .unwrap();
-
-            let ns_offset = TxTableEntry::from_bytes(ns_offset_bytes)
-                .map(|tx| usize::try_from(tx).unwrap())
-                .unwrap();
-            ns_end_offsets.push(ns_offset);
-        }
-
-        // for each entry in the ns table:
-        // read the tx table len for that ns
-        // that tx table len is the number of txs in that namespace
-        // sum over these tx table lens
-        let mut result = 0;
-        for &offset in ns_end_offsets.iter().take(ns_end_offsets.len() - 1) {
-            let tx_table_len = TxTable::get_len(&self.raw_payload, offset)
-                .try_into()
-                .unwrap_or(0);
-            // TODO handle large tx_table_len! (https://github.com/EspressoSystems/espresso-sequencer/issues/785)
-            result += tx_table_len;
-        }
-        result
+        (0..ns_table.len())
+            .map(|ns_idx| ns_table.get_payload_range(ns_idx, self.raw_payload.len()).1)
+            .map(|ns_range| TxTable::get_tx_table_len(&self.raw_payload[ns_range]))
+            .sum()
     }
 
     fn iter<'a>(&'a self, ns_table: &'a Self::Metadata) -> Self::Iter<'a> {

@@ -24,7 +24,7 @@ use std::{collections::HashMap, fmt::Display, ops::Range};
 use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
 
-use super::tables::TxTable;
+use crate::block::tables::TxTable;
 
 trait_set! {
 
