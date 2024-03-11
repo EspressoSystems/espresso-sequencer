@@ -133,7 +133,7 @@ impl L1Client {
             }
         }
     }
-    /// Get fee info for each `Deposit` ocurring between `prev`
+    /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn _get_finalized_deposits(
         &self,
@@ -146,11 +146,11 @@ impl L1Client {
             return vec![];
         }
 
-        // `prev` should have allready been processed unless we
+        // `prev` should have already been processed unless we
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
 
-        // query for deposit events, loop until successfull.
+        // query for deposit events, loop until successful.
         let events = loop {
             match contract_bindings::fee_contract::FeeContract::new(
                 self._address,
@@ -286,7 +286,7 @@ mod test {
                 .await?
                 .await?;
 
-            // Successfull transactions have `status` of `1`.
+            // Successful transactions have `status` of `1`.
             assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
         }
 

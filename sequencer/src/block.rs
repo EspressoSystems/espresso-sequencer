@@ -30,7 +30,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// Returns (Self, metadata).
     ///
     /// `metadata` is a bytes representation of the namespace table.
-    /// Why bytes? To make it easy to move metdata into payload in the future.
+    /// Why bytes? To make it easy to move metadata into payload in the future.
     ///
     /// Namespace table defined as follows for j>0:
     /// word[0]:    [number of entries in namespace table]

@@ -115,7 +115,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
             }
         };
 
-        // We start from the maximum view betwen `highest_voted_view` and `leaf.view_number`. This
+        // We start from the maximum view between `highest_voted_view` and `leaf.view_number`. This
         // prevents double votes from starting in a view in which we had already voted before the
         // restart, and prevents unnecessary catchup from starting in a view earlier than the anchor
         // leaf.

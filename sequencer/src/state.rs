@@ -214,9 +214,8 @@ fn charge_fee(
         Ok(())
     }
 }
-
-/// Validate builder account by verifiying signature and charging the account.
-fn validate_and_charge_builder(
+/// Validate builder account by verifying signature and charging the account.
+fn validate_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
     proposed_header: &Header,
 ) -> anyhow::Result<()> {

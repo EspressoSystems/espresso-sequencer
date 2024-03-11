@@ -23,7 +23,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-// TODO: (alex) remove clap related info on tihs struct, as the CLI is in ./bin/hotshot-commitment.rs
+// TODO: (alex) remove clap related info on this struct, as the CLI is in ./bin/hotshot-commitment.rs
 #[derive(Parser, Clone, Debug)]
 pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.

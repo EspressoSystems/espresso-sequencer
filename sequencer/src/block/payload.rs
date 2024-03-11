@@ -840,7 +840,7 @@ mod test {
 
         /// Like `from_entries` except the tx bodies byte length is `body_len`.
         ///
-        /// Panics if `body_len` would not actually decrese the block size.
+        /// Panics if `body_len` would not actually decrease the block size.
         fn with_trimmed_body<R: RngCore>(entries: &[usize], body_len: usize, rng: &mut R) -> Self {
             assert!(
                 body_len < tx_bodies_byte_len(entries),

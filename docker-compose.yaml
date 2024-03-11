@@ -284,7 +284,7 @@ services:
       - POSTGRES_PASSWORD=password
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
-      # See https://github.com/docker-library/postgres/issues/146 for discusson.
+      # See https://github.com/docker-library/postgres/issues/146 for discussion.
       test: "pg_isready && sleep 1 && pg_isready"
       interval: 5s
       timeout: 4s
