@@ -118,9 +118,9 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a824f2aa7e75a0c98c5a504fceb80649e9c35265d44525b5f94de4771a395cd"
+checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
  "getrandom 0.2.12",
  "once_cell",
@@ -490,6 +490,20 @@ checksum = "84d3cc6833a335bb8a600241889ead68ee89a3cf8448081fb7694c0fe503da63"
 dependencies = [
  "ark-ff",
  "ark-relations",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+]
+
+[[package]]
+name = "ark-srs"
+version = "0.1.0"
+source = "git+https://github.com/alxiong/ark-srs?tag=v0.1.0#610ee9948116fcb4426944141b8f03086dc1b758"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly-commit",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
 ]
@@ -1807,20 +1821,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
 
 [[package]]
-name = "crs"
-version = "0.1.0"
-source = "git+https://github.com/alxiong/crs#4f320d819514a50138dd114440b3b3e30e83a081"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff",
- "ark-poly-commit",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2250,9 +2250,9 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
+ "ark-srs",
  "ark-std 0.4.0",
  "clap",
- "crs",
  "diff-test-bn254",
  "digest 0.10.7",
  "ethers",
@@ -2810,7 +2810,6 @@ dependencies = [
  "const-hex",
  "enr",
  "ethers-core",
- "futures-channel",
  "futures-core",
  "futures-timer",
  "futures-util",
@@ -3283,7 +3282,7 @@ dependencies = [
 name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
- "crs",
+ "ark-srs",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -3406,7 +3405,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash 0.7.7",
+ "ahash 0.7.8",
 ]
 
 [[package]]
@@ -3659,10 +3658,8 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "contract-bindings",
- "crs",
  "diff-test-bn254",
  "ethers",
- "hotshot-stake-table",
  "hotshot-types",
  "jf-plonk",
  "jf-primitives",
@@ -3804,6 +3801,7 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-serialize 0.4.2",
+ "ark-srs",
  "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-std",
@@ -3812,7 +3810,6 @@ dependencies = [
  "clap",
  "cld",
  "contract-bindings",
- "crs",
  "derive_more",
  "displaydoc",
  "ethers",
@@ -5576,9 +5573,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
@@ -7519,7 +7516,6 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
- "hotshot-state-prover",
  "hotshot-task",
  "hotshot-testing",
  "hotshot-types",
@@ -9379,6 +9375,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
+name = "wasite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8dad83b4f25e74f184f64c43b150b91efe7647395b42289f38e50566d82855b"
+
+[[package]]
 name = "wasm-bindgen"
 version = "0.2.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9483,11 +9485,12 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "whoami"
-version = "1.4.1"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22fc3756b8a9133049b26c7f61ab35416c130e8c09b660f5b3958b446f52cc50"
+checksum = "0fec781d48b41f8163426ed18e8fc2864c12937df9ce54c88ede7bd47270893e"
 dependencies = [
- "wasm-bindgen",
+ "redox_syscall",
+ "wasite",
  "web-sys",
 ]
 

@@ -2,7 +2,7 @@
 PATH = ["block/:height/namespace/:namespace"]
 ":height" = "Integer"
 ":namespace" = "Integer"
-DOC = "Get the namespace proof for a set of VM transactions and the NMT root"
+DOC = "Get the transactions in a namespace of the given block, along with a proof."
 
 [route.gettimestampwindow]
 PATH = [

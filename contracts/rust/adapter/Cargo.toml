@@ -15,7 +15,6 @@ ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 contract-bindings = { path = "../../../contract-bindings" }
-crs = { git = "https://github.com/alxiong/crs" }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 ethers = { version = "2.0.4" }
 hotshot-types = { workspace = true }
@@ -24,9 +23,6 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true }
 num-bigint = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
-
-[dev-dependencies]
-hotshot-stake-table = { workspace = true }
 
 [[bin]]
 name = "eval-domain"

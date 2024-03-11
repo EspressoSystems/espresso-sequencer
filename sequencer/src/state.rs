@@ -4,6 +4,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use commit::{Commitment, Committable, RawCommitmentBuilder};
+use contract_bindings::fee_contract::DepositFilter;
 use derive_more::{Add, From, Into, Sub};
 use ethers::{
     abi::Address,
@@ -289,6 +290,15 @@ impl FeeInfo {
     }
     pub fn amount(&self) -> FeeAmount {
         self.amount
+    }
+}
+
+impl From<DepositFilter> for FeeInfo {
+    fn from(item: DepositFilter) -> Self {
+        Self {
+            amount: item.amount.into(),
+            account: item.user.into(),
+        }
     }
 }
 

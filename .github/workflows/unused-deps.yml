@@ -1,0 +1,26 @@
+on: [push]
+
+name: udeps
+
+env:
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+
+jobs:
+  check:
+    name: Rust project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: Run cargo-udeps
+        uses: aig787/cargo-udeps-action@v1
+        with:
+          version: 'latest'
+          args: '--all-targets'

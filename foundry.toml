@@ -55,4 +55,10 @@ wrap_comments=true
 
 [profile.ci]
 fuzz = { runs = 1000 }
+invariant = { runs = 1000 }
+verbosity = 1
+
+[profile.quick]
+fuzz = { runs = 10 }
+invariant = { runs = 10 }
 verbosity = 1
