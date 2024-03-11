@@ -1006,7 +1006,7 @@ mod test {
         pub fn ns_table_iter<TableWord: TableWordTraits>(
             ns_table_bytes: &[u8],
         ) -> impl Iterator<Item = (NamespaceId, TxTableEntry)> + '_ {
-            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table lengh, skip that
+            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table length, skip that
                 .chunks(2 * TxTableEntry::byte_len())
                 .map(|bytes| {
                     // read (namespace id, entry) from the namespace table
