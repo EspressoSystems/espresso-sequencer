@@ -171,7 +171,7 @@ impl BlockPayload for TestBlockPayload {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self) -> &Vec<Self::Transaction> {
+    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
         &self.transactions
     }
 }
