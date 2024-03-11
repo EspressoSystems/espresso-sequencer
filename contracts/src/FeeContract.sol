@@ -41,9 +41,10 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice since the constuctor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
-    // constructor() {
-    //     _disableInitializers();
-    // }
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /// @notice This contract is called by the proxy when you deploy this contract
     function initialize(address multisig) public initializer {
