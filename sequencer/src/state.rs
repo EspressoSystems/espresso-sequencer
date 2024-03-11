@@ -1,4 +1,4 @@
-use crate::{Header, L1BlockInfo, Leaf, NodeState, SeqTypes};
+use crate::{Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -298,10 +298,20 @@ impl HotShotState<SeqTypes> for ValidatedState {
         let mut validated_state = self.clone();
 
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = fetch_fee_receipts(
-            parent_leaf.get_block_header().l1_finalized,
-            proposed_header.l1_finalized,
-        );
+
+        let l1_deposits = instance
+            .l1_client
+            .get_finalized_deposits(
+                parent_leaf
+                    .get_block_header()
+                    .l1_finalized
+                    .map(|block_info| block_info.number),
+                proposed_header
+                    .l1_finalized
+                    .map(|block_info| block_info.number)
+                    .unwrap_or(0),
+            )
+            .await;
 
         // Find missing state entries
         let missing_accounts = self.forgotten_accounts(
@@ -603,16 +613,6 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
             .map(|i| i as usize)
             .collect()
     }
-}
-
-/// Fetch all deposit receitps between `prev_l1_finalized` and
-/// `new_l1_finalized`. This is currently a mock function to be
-/// implemented in the future.
-pub fn fetch_fee_receipts(
-    _prev_l1_finalized: Option<L1BlockInfo>,
-    _new_l1_finalized: Option<L1BlockInfo>,
-) -> Vec<FeeInfo> {
-    vec![]
 }
 
 pub type FeeMerkleTree =

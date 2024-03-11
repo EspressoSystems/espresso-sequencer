@@ -1,7 +1,7 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     l1_client::L1Snapshot,
-    state::{fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
     L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
@@ -245,10 +245,22 @@ impl BlockHeader<SeqTypes> for Header {
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = fetch_fee_receipts(
-            parent_leaf.get_block_header().l1_finalized,
-            l1_snapshot.finalized,
-        );
+        let l1_deposits = instance_state
+            .l1_client
+            .get_finalized_deposits(
+                parent_leaf
+                    .get_block_header()
+                    .l1_finalized
+                    .map(|block_info| block_info.number),
+                l1_snapshot
+                    .finalized
+                    .map(|block_info| block_info.number)
+                    .unwrap_or(0), // I'm not sure its possible for
+                                   // this to be `None`, but supplying
+                                   // 0 will give us back an empty
+                                   // `Vec`.,
+            )
+            .await;
 
         // Find missing fee state entries
         let missing_accounts = parent_state.forgotten_accounts(
@@ -683,7 +695,11 @@ mod test_headers {
         // The current fake implementation of fetch_fee_receipts returns
         // some fee info. To validate the proposal we need to insert these
         // records here.
-        for fee_info in fetch_fee_receipts(None, None) {
+        for fee_info in genesis_state
+            .l1_client
+            .get_finalized_deposits(None, 0)
+            .await
+        {
             proposal_state.insert_fee_deposit(fee_info).unwrap();
         }
 

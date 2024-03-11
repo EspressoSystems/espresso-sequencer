@@ -135,7 +135,7 @@ impl L1Client {
     }
     /// Get fee info for each `Deposit` ocurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
-    pub async fn _get_finalized_deposits(
+    pub async fn get_finalized_deposits(
         &self,
         prev_finalized: Option<u64>,
         new_finalized: u64,
@@ -299,7 +299,7 @@ mod test {
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
-        let pending = l1_client._get_finalized_deposits(None, deposits + 1).await;
+        let pending = l1_client.get_finalized_deposits(None, deposits + 1).await;
 
         assert_eq!(deposits as usize, pending.len());
         assert_eq!(&wallet_address, &pending[0].account().into());
@@ -311,21 +311,25 @@ mod test {
 
         // check a few more cases
         let pending = l1_client
-            ._get_finalized_deposits(Some(0), deposits + 1)
+            .get_finalized_deposits(Some(0), deposits + 1)
             .await;
         assert_eq!(deposits as usize, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(0), 0).await;
+        let pending = l1_client.get_finalized_deposits(Some(0), 0).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(0), 1).await;
+        let pending = l1_client.get_finalized_deposits(Some(0), 1).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(1), 1).await;
+        let pending = l1_client.get_finalized_deposits(Some(1), 1).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(1), 2).await;
+        let pending = l1_client.get_finalized_deposits(Some(1), 2).await;
         assert_eq!(1, pending.len());
+
+        // what happends if `new_finalized` is `0`?
+        let pending = l1_client.get_finalized_deposits(Some(1), 0).await;
+        assert_eq!(0, pending.len());
 
         Ok(())
     }
