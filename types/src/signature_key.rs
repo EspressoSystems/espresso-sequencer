@@ -18,7 +18,6 @@ use jf_primitives::{
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use tracing::instrument;
-use typenum::U32;
 
 /// BLS private key used to sign a message
 pub type BLSPrivKey = SignKey;
@@ -40,19 +39,17 @@ impl SignatureKey for BLSPubKey {
     #[instrument(skip(self))]
     fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool {
         // This is the validation for QC partial signature before append().
-        let generic_msg: &GenericArray<u8, U32> = GenericArray::from_slice(data);
-        BLSOverBN254CurveSignatureScheme::verify(&(), self, generic_msg, signature).is_ok()
+        BLSOverBN254CurveSignatureScheme::verify(&(), self, data, signature).is_ok()
     }
 
     fn sign(
         sk: &Self::PrivateKey,
         data: &[u8],
     ) -> Result<Self::PureAssembledSignatureType, Self::SignError> {
-        let generic_msg = GenericArray::from_slice(data);
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::sign(
             &(),
-            generic_msg,
             sk,
+            data,
             &mut rand::thread_rng(),
         )
     }

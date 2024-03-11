@@ -55,13 +55,14 @@ where
     type MessageLength = U32;
     type QuorumSize = U256;
 
-    fn sign<R: CryptoRng + RngCore>(
-        agg_sig_pp: &A::PublicParameter,
-        message: &GenericArray<A::MessageUnit, Self::MessageLength>,
+    /// Sign a message with the signing key
+    fn sign<R: CryptoRng + RngCore, M: AsRef<[A::MessageUnit]>>(
+        pp: &A::PublicParameter,
         sk: &A::SigningKey,
+        msg: M,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError> {
-        A::sign(agg_sig_pp, sk, message, prng)
+        A::sign(pp, sk, msg, prng)
     }
 
     fn assemble(
@@ -214,27 +215,15 @@ mod tests {
                 agg_sig_pp,
             };
             let msg = [72u8; 32];
-            let sig1 = BitVectorQC::<$aggsig>::sign(
-                &agg_sig_pp,
-                &msg.into(),
-                key_pair1.sign_key_ref(),
-                &mut rng,
-            )
-            .unwrap();
-            let sig2 = BitVectorQC::<$aggsig>::sign(
-                &agg_sig_pp,
-                &msg.into(),
-                key_pair2.sign_key_ref(),
-                &mut rng,
-            )
-            .unwrap();
-            let sig3 = BitVectorQC::<$aggsig>::sign(
-                &agg_sig_pp,
-                &msg.into(),
-                key_pair3.sign_key_ref(),
-                &mut rng,
-            )
-            .unwrap();
+            let sig1 =
+                BitVectorQC::<$aggsig>::sign(&agg_sig_pp, key_pair1.sign_key_ref(), &msg, &mut rng)
+                    .unwrap();
+            let sig2 =
+                BitVectorQC::<$aggsig>::sign(&agg_sig_pp, key_pair2.sign_key_ref(), &msg, &mut rng)
+                    .unwrap();
+            let sig3 =
+                BitVectorQC::<$aggsig>::sign(&agg_sig_pp, key_pair3.sign_key_ref(), &msg, &mut rng)
+                    .unwrap();
 
             // happy path
             let signers = bitvec![0, 1, 1];

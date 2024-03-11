@@ -42,12 +42,14 @@ pub trait QuorumCertificateScheme<
     /// # Errors
     ///
     /// Should return error if the underlying signature scheme fail to sign.
-    fn sign<R: CryptoRng + RngCore>(
-        agg_sig_pp: &A::PublicParameter,
-        message: &GenericArray<A::MessageUnit, Self::MessageLength>,
+    fn sign<R: CryptoRng + RngCore, M: AsRef<[A::MessageUnit]>>(
+        pp: &A::PublicParameter,
         sk: &A::SigningKey,
+        msg: M,
         prng: &mut R,
-    ) -> Result<A::Signature, PrimitivesError>;
+    ) -> Result<A::Signature, PrimitivesError> {
+        A::sign(pp, sk, msg, prng)
+    }
 
     /// Computes an aggregated signature from a set of partial signatures and the verification keys involved
     /// * `qc_pp` - public parameters for generating the QC

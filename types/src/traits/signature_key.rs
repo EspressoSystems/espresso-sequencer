@@ -87,6 +87,7 @@ pub trait SignatureKey:
     // of serialization, to avoid Cryptographic pitfalls
     /// Validate a signature
     fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool;
+
     /// Produce a signature
     /// # Errors
     /// If unable to sign the data with the key
@@ -94,6 +95,7 @@ pub trait SignatureKey:
         private_key: &Self::PrivateKey,
         data: &[u8],
     ) -> Result<Self::PureAssembledSignatureType, Self::SignError>;
+
     /// Produce a public key from a private key
     fn from_private(private_key: &Self::PrivateKey) -> Self;
     /// Serialize a public key to bytes

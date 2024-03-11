@@ -57,13 +57,14 @@ where
     type MessageLength = U32;
     type QuorumSize = U256;
 
-    fn sign<R: CryptoRng + RngCore>(
-        agg_sig_pp: &A::PublicParameter,
-        message: &GenericArray<A::MessageUnit, Self::MessageLength>,
+    /// Sign a message with the signing key
+    fn sign<R: CryptoRng + RngCore, M: AsRef<[A::MessageUnit]>>(
+        pp: &A::PublicParameter,
         sk: &A::SigningKey,
+        msg: M,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError> {
-        A::sign(agg_sig_pp, sk, message, prng)
+        A::sign(pp, sk, msg, prng)
     }
 
     fn assemble(
