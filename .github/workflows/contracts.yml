@@ -74,6 +74,8 @@ jobs:
       - name: Run tests
         run: |
           nix develop --accept-flake-config -c cargo build --bin diff-test --release
+          # Limit parallelism
+          export RAYON_NUM_THREADS=4
           nix develop --accept-flake-config -c forge test -vvv
 
       - name: Gas Report
