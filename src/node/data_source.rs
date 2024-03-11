@@ -24,24 +24,41 @@
 //! updated implicitly via the [availability API update
 //! trait](crate::availability::UpdateAvailabilityData).
 
-use super::query_data::{BlockId, LeafQueryData, SyncStatus};
-use crate::{QueryResult, SignatureKey, VidShare};
+use super::query_data::{BlockHash, BlockId, SyncStatus, TimeWindowQueryData};
+use crate::{Header, QueryResult, VidShare};
 use async_trait::async_trait;
+use derivative::Derivative;
+use derive_more::From;
 use hotshot_types::traits::node_implementation::NodeType;
+
+#[derive(Derivative, From)]
+#[derivative(Copy(bound = ""), Debug(bound = ""))]
+pub enum WindowStart<Types: NodeType> {
+    #[from(ignore)]
+    Time(u64),
+    #[from(ignore)]
+    Height(u64),
+    Hash(BlockHash<Types>),
+}
+
+impl<Types: NodeType> Clone for WindowStart<Types> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 #[async_trait]
 pub trait NodeDataSource<Types: NodeType> {
     async fn block_height(&self) -> QueryResult<usize>;
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>>;
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize>;
     async fn count_transactions(&self) -> QueryResult<usize>;
     async fn payload_size(&self) -> QueryResult<usize>;
     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
     async fn sync_status(&self) -> QueryResult<SyncStatus>;
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>>;
 }

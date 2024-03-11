@@ -21,8 +21,8 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus},
-    Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    Header, Payload, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -158,18 +158,6 @@ where
         Ok(0)
     }
 
-    async fn get_proposals(
-        &self,
-        _id: &SignatureKey<Types>,
-        _limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        Err(QueryError::Missing)
-    }
-
-    async fn count_proposals(&self, _id: &SignatureKey<Types>) -> QueryResult<usize> {
-        Err(QueryError::Missing)
-    }
-
     async fn count_transactions(&self) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
@@ -186,6 +174,14 @@ where
     }
 
     async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        Err(QueryError::Missing)
+    }
+
+    async fn get_header_window(
+        &self,
+        _start: impl Into<WindowStart<Types>> + Send + Sync,
+        _end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         Err(QueryError::Missing)
     }
 }
@@ -494,24 +490,6 @@ pub mod testing {
             }
         }
 
-        async fn get_proposals(
-            &self,
-            proposer: &SignatureKey<MockTypes>,
-            limit: Option<usize>,
-        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
-            match self {
-                Self::Sql(data_source) => data_source.get_proposals(proposer, limit).await,
-                Self::NoStorage(data_source) => data_source.get_proposals(proposer, limit).await,
-            }
-        }
-
-        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
-            match self {
-                Self::Sql(data_source) => data_source.count_proposals(proposer).await,
-                Self::NoStorage(data_source) => data_source.count_proposals(proposer).await,
-            }
-        }
-
         async fn count_transactions(&self) -> QueryResult<usize> {
             match self {
                 Self::Sql(data_source) => data_source.count_transactions().await,
@@ -540,6 +518,17 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.sync_status().await,
                 Self::NoStorage(data_source) => data_source.sync_status().await,
+            }
+        }
+
+        async fn get_header_window(
+            &self,
+            start: impl Into<WindowStart<MockTypes>> + Send + Sync,
+            end: u64,
+        ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
+            match self {
+                Self::Sql(data_source) => data_source.get_header_window(start, end).await,
+                Self::NoStorage(data_source) => data_source.get_header_window(start, end).await,
             }
         }
     }

@@ -27,6 +27,7 @@ use crate::{
         request::{self, PayloadRequest},
         Callback,
     },
+    types::HeightIndexed,
     Header, Payload, QueryResult,
 };
 use async_std::sync::{Arc, RwLockReadGuard};
@@ -189,10 +190,6 @@ where
     {
         storage.storage.get_block_range(range).await
     }
-
-    fn height(&self) -> usize {
-        self.height() as usize
-    }
 }
 
 pub(super) fn fetch_block_with_header<Types, S, P>(
@@ -304,10 +301,6 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         storage.storage.get_payload_range(range).await
-    }
-
-    fn height(&self) -> usize {
-        self.height() as usize
     }
 }
 

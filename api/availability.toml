@@ -104,7 +104,6 @@ Get the headers based on their position in the ledger,
 the headers are taken starting from the given :from up until the given :until.
 """
 
-
 [route.stream_headers]
 PATH = ["stream/headers/:height"]
 METHOD = "SOCKET"

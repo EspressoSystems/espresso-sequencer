@@ -21,23 +21,25 @@ use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
         query_data::{
-            BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
-            TransactionHash, TransactionIndex, VidCommonQueryData,
+            BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryableHeader,
+            QueryablePayload, TransactionHash, TransactionIndex, VidCommonQueryData,
         },
     },
     data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus},
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, SignatureKey, VidCommitment,
-    VidShare,
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    types::HeightIndexed,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
-use futures::stream::{self, StreamExt, TryStreamExt};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
-use std::collections::hash_map::{Entry, HashMap};
+use std::collections::{
+    hash_map::{Entry, HashMap},
+    BTreeMap,
+};
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::ops::{Bound, RangeBounds};
@@ -57,12 +59,7 @@ where
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_payload_hash: HashMap<VidCommitment, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
-    index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
-    // We have separate indexes for VID than for other data, because of the special case where VID
-    // information does not exist for the genesis block. This means that VID data for blocks that
-    // are duplicates of the genesis block may exist but not be findable through the block indexes.
-    index_vid_by_block_hash: HashMap<BlockHash<Types>, u64>,
-    index_vid_by_payload_hash: HashMap<VidCommitment, u64>,
+    index_by_time: BTreeMap<u64, Vec<u64>>,
     num_transactions: usize,
     payload_size: usize,
     #[debug(skip)]
@@ -90,6 +87,7 @@ impl<Types: NodeType> PruneStorage for FileSystemStorage<Types> where
 impl<Types: NodeType> FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
 {
     /// Create a new [FileSystemStorage] with storage at `path`.
     ///
@@ -131,9 +129,7 @@ where
             index_by_block_hash: Default::default(),
             index_by_payload_hash: Default::default(),
             index_by_txn_hash: Default::default(),
-            index_by_proposer_id: Default::default(),
-            index_vid_by_block_hash: Default::default(),
-            index_vid_by_payload_hash: Default::default(),
+            index_by_time: Default::default(),
             num_transactions: 0,
             payload_size: 0,
             top_storage: None,
@@ -162,23 +158,23 @@ where
             CACHED_VID_COMMON_COUNT,
         )?;
 
-        let mut index_by_proposer_id = HashMap::new();
         let mut index_by_block_hash = HashMap::new();
         let mut index_by_payload_hash = HashMap::new();
+        let mut index_by_time = BTreeMap::<u64, Vec<u64>>::new();
         let index_by_leaf_hash = leaf_storage
             .iter()
             .flatten()
             .map(|leaf| {
-                index_by_proposer_id
-                    .entry(leaf.proposer())
-                    .or_insert_with(Vec::new)
-                    .push(leaf.height());
                 update_index_by_hash(&mut index_by_block_hash, leaf.block_hash(), leaf.height());
                 update_index_by_hash(
                     &mut index_by_payload_hash,
                     leaf.payload_hash(),
                     leaf.height(),
                 );
+                index_by_time
+                    .entry(leaf.header().timestamp())
+                    .or_default()
+                    .push(leaf.height());
                 (leaf.hash(), leaf.height())
             })
             .collect();
@@ -196,29 +192,12 @@ where
             }
         }
 
-        let mut index_vid_by_block_hash = HashMap::new();
-        let mut index_vid_by_payload_hash = HashMap::new();
-        for (common, _) in vid_storage.iter().flatten() {
-            update_index_by_hash(
-                &mut index_vid_by_block_hash,
-                common.block_hash(),
-                common.height(),
-            );
-            update_index_by_hash(
-                &mut index_vid_by_payload_hash,
-                common.payload_hash(),
-                common.height(),
-            );
-        }
-
         Ok(Self {
             index_by_leaf_hash,
             index_by_block_hash,
             index_by_payload_hash,
             index_by_txn_hash,
-            index_by_proposer_id,
-            index_vid_by_block_hash,
-            index_vid_by_payload_hash,
+            index_by_time,
             num_transactions,
             payload_size,
             leaf_storage,
@@ -248,20 +227,6 @@ where
             BlockId::PayloadHash(h) => {
                 Ok(*self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize)
             }
-        }
-    }
-
-    fn get_vid_index(&self, id: BlockId<Types>) -> QueryResult<usize> {
-        match id {
-            BlockId::Number(n) => Ok(n),
-            BlockId::Hash(h) => Ok(*self
-                .index_vid_by_block_hash
-                .get(&h)
-                .context(NotFoundSnafu)? as usize),
-            BlockId::PayloadHash(h) => Ok(*self
-                .index_vid_by_payload_hash
-                .get(&h)
-                .context(NotFoundSnafu)? as usize),
         }
     }
 }
@@ -335,6 +300,7 @@ where
 impl<Types: NodeType> AvailabilityStorage<Types> for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let n = match id {
@@ -368,7 +334,7 @@ where
         Ok(self
             .vid_storage
             .iter()
-            .nth(self.get_vid_index(id)?)
+            .nth(self.get_block_index(id)?)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)?
             .0)
@@ -432,6 +398,7 @@ where
 impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
 {
     type Error = PersistenceError;
 
@@ -439,10 +406,6 @@ where
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
-        self.index_by_proposer_id
-            .entry(leaf.proposer())
-            .or_default()
-            .push(leaf.height());
         update_index_by_hash(
             &mut self.index_by_block_hash,
             leaf.block_hash(),
@@ -453,6 +416,10 @@ where
             leaf.payload_hash(),
             leaf.height(),
         );
+        self.index_by_time
+            .entry(leaf.header().timestamp())
+            .or_default()
+            .push(leaf.height());
         Ok(())
     }
 
@@ -481,12 +448,8 @@ where
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
     ) -> Result<(), Self::Error> {
-        let height = common.height();
-        let block_hash = common.block_hash();
-        let payload_hash = common.payload_hash();
-        self.vid_storage.insert(height as usize, (common, share))?;
-        update_index_by_hash(&mut self.index_vid_by_block_hash, block_hash, height);
-        update_index_by_hash(&mut self.index_vid_by_payload_hash, payload_hash, height);
+        self.vid_storage
+            .insert(common.height() as usize, (common, share))?;
         Ok(())
     }
 }
@@ -513,37 +476,10 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 impl<Types: NodeType> NodeDataSource<Types> for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.leaf_storage.iter().len())
-    }
-
-    async fn get_proposals(
-        &self,
-        id: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let all_ids = self
-            .index_by_proposer_id
-            .get(id)
-            .cloned()
-            .unwrap_or_default();
-        let start_from = match limit {
-            Some(count) => all_ids.len().saturating_sub(count),
-            None => 0,
-        };
-        stream::iter(all_ids)
-            .skip(start_from)
-            .then(|height| self.get_leaf((height as usize).into()))
-            .try_collect()
-            .await
-    }
-
-    async fn count_proposals(&self, id: &SignatureKey<Types>) -> QueryResult<usize> {
-        Ok(match self.index_by_proposer_id.get(id) {
-            Some(ids) => ids.len(),
-            None => 0,
-        })
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {
@@ -560,7 +496,7 @@ where
     {
         self.vid_storage
             .iter()
-            .nth(self.get_vid_index(id.into())?)
+            .nth(self.get_block_index(id.into())?)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)?
             .1
@@ -587,5 +523,51 @@ where
             missing_vid_shares: missing_vid + null_vid_shares,
             pruned_height: None,
         })
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        let first_block = match start.into() {
+            WindowStart::Height(h) => h,
+            WindowStart::Hash(h) => self.get_header(h.into()).await?.block_number(),
+            WindowStart::Time(t) => {
+                // Find the minimum timestamp which is at least `t`, and all the blocks with that
+                // timestamp.
+                let blocks = self
+                    .index_by_time
+                    .range(t..)
+                    .next()
+                    .context(NotFoundSnafu)?
+                    .1;
+                // Multiple blocks can have the same timestamp (when truncated to seconds); we want
+                // the first one. It is an invariant that any timestamp which has an entry in
+                // `index_by_time` has a non-empty list associated with it, so this indexing is
+                // safe.
+                blocks[0]
+            }
+        } as usize;
+
+        let mut res = TimeWindowQueryData::default();
+
+        // Include the block just before the start of the window, if there is one.
+        if first_block > 0 {
+            res.prev = Some(self.get_header((first_block - 1).into()).await?);
+        }
+
+        // Add blocks to the window, starting from `first_block`, until we reach the end of the
+        // requested time window.
+        for block in self.get_block_range(first_block..).await? {
+            let header = block?.header().clone();
+            if header.timestamp() >= end {
+                res.next = Some(header);
+                break;
+            }
+            res.window.push(header);
+        }
+
+        Ok(res)
     }
 }

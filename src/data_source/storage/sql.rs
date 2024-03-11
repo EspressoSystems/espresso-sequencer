@@ -65,17 +65,17 @@ use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
 pub use crate::include_migrations;
 use crate::{
     availability::{
-        get_proposer, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
-        QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
-        UpdateAvailabilityData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
-    node::{NodeDataSource, SyncStatus},
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, SignatureKey,
-    VidShare,
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    types::HeightIndexed,
+    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidShare,
 };
 
 /// Embed migrations from the given directory into the current binary.
@@ -459,6 +459,33 @@ impl SqlStorage {
 
         Ok(height)
     }
+
+    /// Load a header from storage.
+    ///
+    /// This function is similar to `AvailabilityStorage::get_header`, but
+    /// * does not require the `QueryablePayload` bound that that trait impl does
+    /// * makes it easier to specify types since the type parameter is on the function and not on a
+    ///   trait impl
+    /// * allows type conversions for the `id` parameter
+    /// This more ergonomic interface is useful as loading headers is important for many SQL storage
+    /// functions, not just the `AvailabilityStorage` interface.
+    async fn load_header<Types: NodeType>(
+        &self,
+        id: impl Into<BlockId<Types>>,
+    ) -> QueryResult<Header<Types>> {
+        let (where_clause, param) = header_where_clause(id.into());
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_header::<Types>(row)
+    }
 }
 
 #[async_trait]
@@ -653,18 +680,7 @@ where
     }
 
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-        let (where_clause, param) = header_where_clause(id);
-        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
-        // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
-            "SELECT {HEADER_COLUMNS}
-               FROM header AS h
-              WHERE {where_clause}
-              ORDER BY h.height ASC
-              LIMIT 1"
-        );
-        let row = self.query_one(&query, [param]).await?;
-        parse_header::<Types>(row)
+        self.load_header(id).await
     }
 
     async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
@@ -854,12 +870,11 @@ where
         })?;
         tx.upsert(
             "leaf",
-            ["height", "hash", "proposer", "block_hash", "leaf", "qc"],
+            ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.hash().to_string()),
-                sql_param(&leaf.proposer().to_string()),
                 sql_param(&leaf.block_hash().to_string()),
                 sql_param(&leaf_json),
                 sql_param(&qc_json),
@@ -995,36 +1010,6 @@ where
         }
     }
 
-    async fn get_proposals(
-        &self,
-        proposer: &SignatureKey<Types>,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
-        if let Some(limit) = limit {
-            // If there is a limit on the number of leaves to return, we want to return the most
-            // recent leaves, so order by descending height.
-            query = format!("{query} ORDER BY height DESC limit {limit}");
-        }
-        let rows = self.query(&query, &[&proposer.to_string()]).await?;
-        let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
-
-        if limit.is_some() {
-            // If there was a limit, we selected the leaves in descending order to get the most
-            // recent leaves. Now reverse them to put them back in chronological order.
-            leaves.reverse();
-        }
-
-        Ok(leaves)
-    }
-
-    async fn count_proposals(&self, proposer: &SignatureKey<Types>) -> QueryResult<usize> {
-        let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self.query_one(query, &[&proposer.to_string()]).await?;
-        let count: i64 = row.get(0);
-        Ok(count as usize)
-    }
-
     async fn count_transactions(&self) -> QueryResult<usize> {
         let row = self
             .query_one_static("SELECT count(*) FROM transaction")
@@ -1133,6 +1118,140 @@ where
             missing_vid_shares,
             pruned_height,
         })
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        // Find the specific block that starts the requested window.
+        let first_block = match start.into() {
+            WindowStart::Time(t) => {
+                // If the request is not to start from a specific block, but from a timestamp, we
+                // use a different method to find the window, as detecting whether we have
+                // sufficient data to answer the query is not as simple as just trying `load_header`
+                // for a specific block ID.
+                return self.time_window::<Types>(t, end).await;
+            }
+            WindowStart::Height(h) => h,
+            WindowStart::Hash(h) => self.load_header::<Types>(h).await?.block_number(),
+        };
+
+        // Find all blocks starting from `first_block` with timestamps less than `end`. Block
+        // timestamps are monotonically increasing, so this query is guaranteed to return a
+        // contiguous range of blocks ordered by increasing height.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.height >= $1 AND h.timestamp < $2
+              ORDER BY h.height"
+        );
+        let rows = self
+            .query(&query, [&(first_block as i64), &(end as i64)])
+            .await?;
+        let window = rows
+            .map(|row| {
+                parse_header::<Types>(row.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
+
+        // Find the block just before the window.
+        let prev = if first_block > 0 {
+            Some(self.load_header::<Types>(first_block as usize - 1).await?)
+        } else {
+            None
+        };
+
+        // Find the block just after the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1
+              ORDER BY h.height
+              LIMIT 1"
+        );
+        let next = self
+            .query_opt(&query, [&(end as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        Ok(TimeWindowQueryData { window, prev, next })
+    }
+}
+
+impl SqlStorage {
+    async fn time_window<Types: NodeType>(
+        &self,
+        start: u64,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
+        // are monotonically increasing, so this query is guaranteed to return a contiguous range of
+        // blocks ordered by increasing height. Note that we order by height explicitly, rather than
+        // ordering by timestamp (which might be more efficient, since it could reuse the timestamp
+        // index that is used in the WHERE clause) because multiple blocks may have the same
+        // timestamp, due to the 1-second timestamp resolution.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1 AND h.timestamp < $2
+              ORDER BY h.height"
+        );
+        let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
+        let window: Vec<_> = rows
+            .map(|row| {
+                parse_header::<Types>(row.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
+
+        // Find the block just after the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp >= $1
+              ORDER BY h.height
+              LIMIT 1"
+        );
+        let next = self
+            .query_opt(&query, [&(end as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        // If the `next` block exists, _or_ if any block in the window exists, we know we have
+        // enough information to definitively say at least where the window starts (we may or may
+        // not have where it ends, depending on how many blocks have thus far been produced).
+        // However, if we have neither a block in the window nor a block after it, we cannot say
+        // whether the next block produced will have a timestamp before or after the window start.
+        // In this case, we don't know what the `prev` field of the response should be, so we return
+        // an error: the caller must try again after more blocks have been produced.
+        if window.is_empty() && next.is_none() {
+            return Err(QueryError::NotFound);
+        }
+
+        // Find the block just before the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE h.timestamp < $1
+              ORDER BY h.height DESC
+              LIMIT 1"
+        );
+        let prev = self
+            .query_opt(&query, [&(start as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
+
+        Ok(TimeWindowQueryData { window, prev, next })
     }
 }
 
@@ -1529,7 +1648,6 @@ where
 
     Ok(BlockQueryData {
         num_transactions: payload.len(header.metadata()) as u64,
-        proposer_id: get_proposer::<Types>(header.clone()),
         header,
         payload,
         size,
@@ -1971,6 +2089,7 @@ mod test {
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header.block_number = i;
+            leaf.leaf.block_header.timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }
@@ -2048,6 +2167,7 @@ mod test {
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header.block_number = i;
+            leaf.leaf.block_header.timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }

@@ -127,6 +127,7 @@ pub mod availability_tests {
             mocks::{mock_transaction, MockTypes},
             setup_test,
         },
+        types::HeightIndexed,
     };
     use async_std::sync::RwLock;
     use commit::Committable;
@@ -551,17 +552,18 @@ pub mod persistence_tests {
 #[cfg(any(test, feature = "testing"))]
 #[espresso_macros::generic_tests]
 pub mod node_tests {
-    use super::test_helpers::*;
     use crate::{
-        availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
-        node::{BlockId, SyncStatus},
+        availability::{BlockQueryData, LeafQueryData, QueryableHeader, VidCommonQueryData},
+        node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
             mocks::{mock_transaction, MockPayload, MockTypes},
             setup_test,
         },
-        VidShare,
+        types::HeightIndexed,
+        Header, VidShare,
     };
+    use commit::Committable;
     use futures::{future::join_all, stream::StreamExt};
     use hotshot_example_types::{
         block_types::{TestBlockHeader, TestBlockPayload},
@@ -572,88 +574,6 @@ pub mod node_tests {
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_primitives::vid::VidScheme;
-    use std::collections::HashSet;
-
-    async fn validate(ds: &impl TestableDataSource) {
-        let mut leaves = leaf_range(ds, ..).await;
-
-        // Check the consistency of our indexes by proposer for every leaf.
-        while let Some(leaf) = leaves.next().await {
-            assert!(ds
-                .get_proposals(&leaf.proposer(), None)
-                .await
-                .unwrap()
-                .contains(&leaf));
-        }
-
-        // Validate the list of proposals for every distinct proposer ID in the chain.
-        for proposer in leaf_range(ds, ..)
-            .await
-            .map(|leaf| leaf.proposer())
-            .collect::<HashSet<_>>()
-            .await
-        {
-            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
-            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
-            // one proposal from this proposer.
-            assert!(!proposals.is_empty());
-            // If we select with a limit, we should get the most recent `limit` proposals in
-            // chronological order.
-            let suffix = ds
-                .get_proposals(&proposer, Some(proposals.len() / 2))
-                .await
-                .unwrap();
-            assert_eq!(suffix.len(), proposals.len() / 2);
-            assert!(proposals.ends_with(&suffix));
-
-            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
-            // that the list of proposals is in chronological order.
-            let mut prev_height = None;
-            for leaf in proposals {
-                assert_eq!(proposer, leaf.proposer());
-                if let Some(prev_height) = prev_height {
-                    assert!(prev_height < leaf.height());
-                }
-                prev_height = Some(leaf.height());
-            }
-        }
-    }
-
-    #[async_std::test]
-    pub async fn test_proposer_queries<D: TestableDataSource>() {
-        setup_test();
-
-        let mut network = MockNetwork::<D>::init().await;
-        let ds = network.data_source();
-
-        network.start().await;
-
-        // Wait for a few blocks to be produced, then validate the chain. We will wait for more
-        // blocks than there are nodes in the network, so we have some blocks with the same proposer.
-        let mut leaves = {
-            ds.read()
-                .await
-                .subscribe_leaves(0)
-                .await
-                .take(2 * network.num_nodes())
-        };
-        while let Some(leaf) = leaves.next().await {
-            tracing::info!("got leaf {}", leaf.height());
-        }
-        {
-            validate(&*ds.read().await).await;
-        }
-
-        // Check that all the updates have been committed to storage, not simply held in memory: a
-        // new data source created from the same underlying storage should have valid proposer
-        // indexes.
-        tracing::info!("checking persisted storage");
-
-        // Lock the original data source to prevent concurrent updates.
-        let _ = ds.read().await;
-        let storage = D::connect(network.storage()).await;
-        validate(&storage).await;
-    }
 
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>() {
@@ -807,6 +727,7 @@ pub mod node_tests {
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
+                timestamp: i,
                 payload_commitment,
             };
 
@@ -938,6 +859,159 @@ pub mod node_tests {
         let recovered = MockPayload::from_bytes(bytes.into_iter(), &());
         assert_eq!(recovered, *block.payload());
         assert_eq!(recovered.transactions, vec![txn]);
+    }
+
+    #[async_std::test]
+    pub async fn test_timestamp_window<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        network.start().await;
+
+        // Wait for blocks with at least three different timestamps to be sequenced. This lets us
+        // test all the edge cases.
+        let mut leaves = { ds.read().await.subscribe_leaves(0).await };
+        // `test_blocks` is a list of lists of headers with the same timestamp. The flattened list
+        // of headers is contiguous.
+        let mut test_blocks: Vec<Vec<Header<MockTypes>>> = vec![];
+        while test_blocks.len() < 3 {
+            // Wait for the next block to be sequenced.
+            let leaf = leaves.next().await.unwrap();
+            let header = leaf.header().clone();
+            if let Some(last_timestamp) = test_blocks.last_mut() {
+                if last_timestamp[0].timestamp() == header.timestamp() {
+                    last_timestamp.push(header);
+                } else {
+                    test_blocks.push(vec![header]);
+                }
+            } else {
+                test_blocks.push(vec![header]);
+            }
+        }
+        tracing::info!("blocks for testing: {test_blocks:#?}");
+
+        // Define invariants that every response should satisfy.
+        let check_invariants =
+            |res: &TimeWindowQueryData<Header<MockTypes>>, start, end, check_prev| {
+                let mut prev = res.prev.as_ref();
+                if let Some(prev) = prev {
+                    if check_prev {
+                        assert!(prev.timestamp() < start);
+                    }
+                } else {
+                    // `prev` can only be `None` if the first block in the window is the genesis
+                    // block.
+                    assert_eq!(res.from().unwrap(), 0);
+                };
+                for header in &res.window {
+                    assert!(start <= header.timestamp());
+                    assert!(header.timestamp() < end);
+                    if let Some(prev) = prev {
+                        assert!(prev.timestamp() <= header.timestamp());
+                    }
+                    prev = Some(header);
+                }
+                if let Some(next) = &res.next {
+                    assert!(next.timestamp() >= end);
+                    // If there is a `next`, there must be at least one previous block (either `prev`
+                    // itself or the last block if the window is nonempty), so we can `unwrap` here.
+                    assert!(next.timestamp() >= prev.unwrap().timestamp());
+                }
+            };
+
+        let get_window = |start, end| {
+            let ds = ds.clone();
+            async move {
+                let window = ds
+                    .read()
+                    .await
+                    .get_header_window(WindowStart::Time(start), end)
+                    .await
+                    .unwrap();
+                tracing::info!("window for timestamp range {start}-{end}: {window:#?}");
+                check_invariants(&window, start, end, true);
+                window
+            }
+        };
+
+        // Case 0: happy path. All blocks are available, including prev and next.
+        let start = test_blocks[1][0].timestamp();
+        let end = start + 1;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
+        assert_eq!(res.window, test_blocks[1]);
+        assert_eq!(res.next.unwrap(), test_blocks[2][0]);
+
+        // Case 1: no `prev`, start of window is before genesis.
+        let start = 0;
+        let end = test_blocks[0][0].timestamp() + 1;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev, None);
+        assert_eq!(res.window, test_blocks[0]);
+        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
+
+        // Case 2: no `next`, end of window is after the most recently sequenced block.
+        let start = test_blocks[2][0].timestamp();
+        let end = i64::MAX as u64;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
+        // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
+        // that the prefix of the window is correct.
+        assert_eq!(res.window[..test_blocks[2].len()], test_blocks[2]);
+        assert_eq!(res.next, None);
+        // Fetch more blocks using the `from` form of the endpoint. Start from the last block we had
+        // previously (ie fetch a slightly overlapping window) to ensure there is at least one block
+        // in the new window.
+        let from = test_blocks.iter().flatten().count() - 1;
+        let more = {
+            ds.read()
+                .await
+                .get_header_window(WindowStart::Height(from as u64), end)
+                .await
+                .unwrap()
+        };
+        check_invariants(&more, start, end, false);
+        assert_eq!(
+            more.prev.as_ref().unwrap(),
+            test_blocks.iter().flatten().nth(from - 1).unwrap()
+        );
+        assert_eq!(
+            more.window[..res.window.len() - test_blocks[2].len() + 1],
+            res.window[test_blocks[2].len() - 1..]
+        );
+        assert_eq!(res.next, None);
+        // We should get the same result whether we query by block height or hash.
+        let more2 = {
+            ds.read()
+                .await
+                .get_header_window(test_blocks[2].last().unwrap().commit(), end)
+                .await
+                .unwrap()
+        };
+        check_invariants(&more2, start, end, false);
+        assert_eq!(more2.from().unwrap(), more.from().unwrap());
+        assert_eq!(more2.prev, more.prev);
+        assert_eq!(more2.next, more.next);
+        assert_eq!(more2.window[..more.window.len()], more.window);
+
+        // Case 3: the window is empty.
+        let start = test_blocks[1][0].timestamp();
+        let end = start;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
+        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
+        assert_eq!(res.window, vec![]);
+
+        // Case 5: no relevant blocks are available yet.
+        {
+            ds.read()
+                .await
+                .get_header_window(WindowStart::Time((i64::MAX - 1) as u64), i64::MAX as u64)
+                .await
+                .unwrap_err();
+        }
     }
 }
 

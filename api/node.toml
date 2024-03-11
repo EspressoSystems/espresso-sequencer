@@ -19,10 +19,10 @@ A node's view of a HotShot chain
 The node API provides a subjective view of the HotShot blockchain, from the perspective of one
 particular node. It provides access to information that the availability API does not, because this
 information depends on the perspective of the node observing it, and may be subject to eventual
-consistency. For example, `/node/block-height` and `/node/proposals/:proposer_id/count` may both
-return smaller counts than expected, if the node being queried is not fully synced with the entire
-history of the chain. However, the node will _eventually_ sync and return the expected counts. See
-`/node/sync-status` for information on how in or out of sync the node currently is.
+consistency. For example, `/node/block-height` may return smaller counts than expected, if the node
+being queried is not fully synced with the entire history of the chain. However, the node will
+_eventually_ sync and return the expected counts. See `/node/sync-status` for information on how in
+or out of sync the node currently is.
 """
 
 [route.block_height]
@@ -31,44 +31,6 @@ DOC = """
 The current height of the chain, as observed by this node.
 
 Returns an integer.
-"""
-
-[route.count_proposals]
-PATH = ["proposals/:proposer_id/count"]
-":proposer_id" = "TaggedBase64"
-DOC = """
-Get the number of committed blocks proposed by `proposer_id`, known to this node.
-
-Warning: count may be low if data is currently being indexed (see `sync-status`).
-
-Returns an integer.
-"""
-
-[route.get_proposals]
-PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
-":proposer_id" = "TaggedBase64"
-":count" = "Integer"
-DOC = """
-Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
-the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
-return all the leaves from the proposer.
-
-Warning: response may be incomplete if data is currently being indexed (see `sync-status`).
-
-Returns a list of
-
-```
-{
-    "leaf": {
-        "view_number": integer,
-        "justify_qc": QC,
-        "parent_commitment": TaggedBase64,
-        "block_header": app-specific header type,
-        "proposer_id": TaggedBase64,
-    },
-    "qc": QC,
-}
-```
 """
 
 [route.count_transactions]
@@ -117,4 +79,42 @@ Returns
     "pruned_height": null | integer,
 }
 ```
+"""
+
+[route.get_header_window]
+PATH = [
+    "header/window/:start/:end",
+    "header/window/from/:height/:end",
+    "header/window/from/hash/:hash/:end",
+]
+":start" = "Integer"
+":end" = "Integer"
+":height" = "Integer"
+":hash" = "TaggedBase64"
+DOC = """
+Get block headers in a time window.
+
+Returns all available headers, in order, whose timestamps fall between `:start` (inclusive) and
+`:end` (exclusive), or between the block indicated by `:height` or `:hash` (inclusive) and `:end`
+(exclusive). The response also includes one block before the desired window (unless the window
+includes the genesis block) and one block after the window. This proves to the client that the
+server has not omitted any blocks whose timestamps fall within the desired window.
+
+It is possible that not all blocks in the desired window are available when this endpoint is called.
+In that case, whichever blocks are available are included in the response, and `next` is `null` to
+indicate that the response is not complete. The client can then use one of the `/from/` forms of
+this endpoint to fetch the remaining blocks from where the first response left off, once they become
+available. If no blocks are available, not even `prev`, this endpoint will return an error.
+
+Returns
+
+```json
+{
+    "window": ["Header"],
+    "prev": "Header", // nullable
+    "next": "Header"  // nullable
+}
+```
+
+All timestamps are denominated in an integer number of seconds.
 """

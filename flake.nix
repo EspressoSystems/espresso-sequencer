@@ -111,6 +111,8 @@
         RUST_BACKTRACE = 1;
         RUST_LOG = "info";
         RUSTFLAGS=" --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+        # Use a distinct target dir for builds from within nix shells.
+        CARGO_TARGET_DIR = "target/nix";
       in {
       	checks = {
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
@@ -178,7 +180,7 @@
               rustToolchain
             ] ++ myPython ++ rustDeps;
 
-          inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS;
+          inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS CARGO_TARGET_DIR;
         };
         devShells = {
           perfShell = pkgs.mkShell {
@@ -186,7 +188,7 @@
             buildInputs = with pkgs;
               [ nixWithFlakes cargo-llvm-cov rustToolchain ] ++ rustDeps;
 
-            inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS;
+            inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS CARGO_TARGET_DIR;
           };
         };
       });

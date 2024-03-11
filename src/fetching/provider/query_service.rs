@@ -178,6 +178,7 @@ mod test {
             mocks::{mock_transaction, MockTypes},
             setup_test, sleep,
         },
+        types::HeightIndexed,
         VidCommitment,
     };
     use async_std::task::spawn;

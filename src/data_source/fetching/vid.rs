@@ -20,6 +20,7 @@ use crate::{
     availability::{BlockId, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData},
     data_source::{storage::AvailabilityStorage, VersionedDataSource},
     fetching::{self, request, Callback},
+    types::HeightIndexed,
     Header, Payload, QueryResult, VidCommon,
 };
 use async_std::sync::{Arc, RwLockReadGuard};
@@ -118,10 +119,6 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         storage.storage.get_vid_common_range(range).await
-    }
-
-    fn height(&self) -> usize {
-        self.height() as usize
     }
 }
 

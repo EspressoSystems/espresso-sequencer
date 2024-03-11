@@ -258,13 +258,15 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use hotshot_query_service::{QueryResult, SignatureKey, VidShare};
+//! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
 //! #   PayloadQueryData, TransactionHash, TransactionIndex, VidCommonQueryData,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
-//! # use hotshot_query_service::node::{NodeDataSource, SyncStatus};
+//! # use hotshot_query_service::node::{
+//! #   NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart,
+//! # };
 //! # use hotshot_query_service::status::StatusDataSource;
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
@@ -333,18 +335,6 @@
 //!         self.hotshot_qs.block_height().await
 //!     }
 //!
-//!     async fn get_proposals(
-//!         &self,
-//!         id: &SignatureKey<AppTypes>,
-//!         limit: Option<usize>,
-//!     ) -> QueryResult<Vec<LeafQueryData<AppTypes>>> {
-//!         self.hotshot_qs.get_proposals(id, limit).await
-//!     }
-//!
-//!     async fn count_proposals(&self, id: &SignatureKey<AppTypes>) -> QueryResult<usize> {
-//!         self.hotshot_qs.count_proposals(id).await
-//!     }
-//!
 //!     async fn count_transactions(&self) -> QueryResult<usize> {
 //!         self.hotshot_qs.count_transactions().await
 //!     }
@@ -362,6 +352,14 @@
 //!
 //!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
 //!         self.hotshot_qs.sync_status().await
+//!     }
+//!
+//!     async fn get_header_window(
+//!         &self,
+//!         start: impl Into<WindowStart<AppTypes>> + Send + Sync,
+//!         end: u64,
+//!     ) -> QueryResult<TimeWindowQueryData<Header<AppTypes>>> {
+//!         self.hotshot_qs.get_header_window(start, end).await
 //!     }
 //! }
 //!
@@ -413,6 +411,7 @@ mod resolvable;
 pub mod status;
 mod task;
 pub mod testing;
+pub mod types;
 
 pub use error::Error;
 pub use resolvable::Resolvable;
@@ -545,7 +544,7 @@ mod test {
             VidCommonQueryData,
         },
         metrics::PrometheusMetrics,
-        node::{NodeDataSource, SyncStatus},
+        node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::StatusDataSource,
         testing::{
             consensus::MockDataSource,
@@ -557,9 +556,7 @@ mod test {
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
 
     use futures::FutureExt;
-    use hotshot::types::SignatureKey as _;
     use hotshot_example_types::state_types::TestInstanceState;
-    use hotshot_types::signature_key::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -663,16 +660,6 @@ mod test {
         async fn block_height(&self) -> QueryResult<usize> {
             StatusDataSource::block_height(self).await
         }
-        async fn get_proposals(
-            &self,
-            proposer: &SignatureKey<MockTypes>,
-            limit: Option<usize>,
-        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
-            self.hotshot_qs.get_proposals(proposer, limit).await
-        }
-        async fn count_proposals(&self, proposer: &SignatureKey<MockTypes>) -> QueryResult<usize> {
-            self.hotshot_qs.count_proposals(proposer).await
-        }
         async fn count_transactions(&self) -> QueryResult<usize> {
             self.hotshot_qs.count_transactions().await
         }
@@ -687,6 +674,13 @@ mod test {
         }
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             self.hotshot_qs.sync_status().await
+        }
+        async fn get_header_window(
+            &self,
+            start: impl Into<WindowStart<MockTypes>> + Send + Sync,
+            end: u64,
+        ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
+            self.hotshot_qs.get_header_window(start, end).await
         }
     }
 
@@ -788,15 +782,8 @@ mod test {
                 .unwrap(),
             1
         );
-        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
-        assert_eq!(
-            client
-                .get::<u64>(&format!("node/proposals/{key}/count"))
-                .send()
-                .await
-                .unwrap(),
-            0
-        );
+        let sync_status: SyncStatus = client.get("node/sync-status").send().await.unwrap();
+        assert!(sync_status.is_fully_synced(), "{sync_status:?}");
         assert_eq!(
             client
                 .get::<MockHeader>("availability/header/0")

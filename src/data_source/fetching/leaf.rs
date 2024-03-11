@@ -20,6 +20,7 @@ use crate::{
     availability::{LeafId, LeafQueryData, QueryablePayload, UpdateAvailabilityData},
     data_source::{storage::AvailabilityStorage, VersionedDataSource},
     fetching::{self, request, Callback},
+    types::HeightIndexed,
     Payload, QueryResult,
 };
 use async_std::sync::{Arc, RwLockReadGuard};
@@ -155,10 +156,6 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         storage.storage.get_leaf_range(range).await
-    }
-
-    fn height(&self) -> usize {
-        self.height() as usize
     }
 }
 

@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Header, Metadata, Payload, SignatureKey, Transaction, VidCommon};
+use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
@@ -240,10 +240,6 @@ impl<Types: NodeType> LeafQueryData<Types> {
         &self.leaf.block_header
     }
 
-    pub fn height(&self) -> u64 {
-        self.header().block_number()
-    }
-
     pub fn hash(&self) -> LeafHash<Types> {
         self.leaf.commit()
     }
@@ -255,9 +251,11 @@ impl<Types: NodeType> LeafQueryData<Types> {
     pub fn payload_hash(&self) -> VidCommitment {
         self.header().payload_commitment()
     }
+}
 
-    pub fn proposer(&self) -> SignatureKey<Types> {
-        self.leaf.get_proposer_id()
+impl<Types: NodeType> HeightIndexed for LeafQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header().block_number()
     }
 }
 
@@ -269,7 +267,6 @@ pub struct BlockQueryData<Types: NodeType> {
     pub(crate) hash: BlockHash<Types>,
     pub(crate) size: u64,
     pub(crate) num_transactions: u64,
-    pub(crate) proposer_id: SignatureKey<Types>,
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
@@ -281,7 +278,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
             hash: header.commit(),
             size: payload_size::<Types>(&payload),
             num_transactions: payload.len(header.metadata()) as u64,
-            proposer_id: get_proposer::<Types>(header.clone()),
             header,
             payload,
         }
@@ -315,20 +311,12 @@ impl<Types: NodeType> BlockQueryData<Types> {
         self.hash
     }
 
-    pub fn height(&self) -> u64 {
-        self.header.block_number()
-    }
-
     pub fn size(&self) -> u64 {
         self.size
     }
 
     pub fn num_transactions(&self) -> u64 {
         self.num_transactions
-    }
-
-    pub fn proposer(&self) -> SignatureKey<Types> {
-        self.proposer_id.clone()
     }
 }
 
@@ -369,6 +357,12 @@ where
     }
 }
 
+impl<Types: NodeType> HeightIndexed for BlockQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header.block_number()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct PayloadQueryData<Types: NodeType> {
@@ -399,10 +393,6 @@ impl<Types: NodeType> PayloadQueryData<Types> {
         BlockQueryData::genesis(instance_state).into()
     }
 
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
     pub fn hash(&self) -> VidCommitment {
         self.hash
     }
@@ -417,6 +407,12 @@ impl<Types: NodeType> PayloadQueryData<Types> {
 
     pub fn data(&self) -> &Payload<Types> {
         &self.data
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for PayloadQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.height
     }
 }
 
@@ -450,10 +446,6 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
         Self::new(leaf.block_header, disperse.common)
     }
 
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }
@@ -464,6 +456,12 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
 
     pub fn common(&self) -> &VidCommon {
         &self.common
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for VidCommonQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.height
     }
 }
 
@@ -515,7 +513,6 @@ pub struct BlockSummaryQueryData<Types: NodeType> {
     pub(crate) hash: BlockHash<Types>,
     pub(crate) size: u64,
     pub(crate) num_transactions: u64,
-    pub(crate) proposer_id: SignatureKey<Types>,
 }
 
 // Add some basic getters to the BlockSummaryQueryData type.
@@ -528,10 +525,6 @@ impl<Types: NodeType> BlockSummaryQueryData<Types> {
         self.hash
     }
 
-    pub fn height(&self) -> u64 {
-        self.header.block_number()
-    }
-
     pub fn size(&self) -> u64 {
         self.size
     }
@@ -539,21 +532,12 @@ impl<Types: NodeType> BlockSummaryQueryData<Types> {
     pub fn num_transactions(&self) -> u64 {
         self.num_transactions
     }
-
-    pub fn proposer(&self) -> SignatureKey<Types> {
-        self.proposer_id.clone()
-    }
 }
 
-// Get the Proposer from the given header.  At the moment the proposer cannot
-// be determined from the header, however it is intended to in the future.
-// For now we will just generate one with dummy data.
-// TODO update this function to retrieve the proposer from the Header type once
-//      the Header type has been updated to include the proposer.
-pub(crate) fn get_proposer<Types: NodeType>(_header: Header<Types>) -> SignatureKey<Types> {
-    use hotshot::types::SignatureKey;
-    let (key, _) = SignatureKey::generated_from_seed_indexed([0; 32], 0);
-    key
+impl<Types: NodeType> HeightIndexed for BlockSummaryQueryData<Types> {
+    fn height(&self) -> u64 {
+        self.header.block_number()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -580,7 +564,6 @@ where
             hash: value.hash,
             size: value.size,
             num_transactions: value.num_transactions,
-            proposer_id: value.proposer_id,
         }
     }
 }
