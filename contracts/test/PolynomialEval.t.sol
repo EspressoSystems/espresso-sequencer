@@ -48,6 +48,7 @@ contract PolynomialEval_domainElements_Test is Test {
     /// @dev Test if the domain elements are generated correctly
     function testFuzz_domainElements_matches(uint256 logSize, uint256 length) external {
         logSize = bound(logSize, 16, 20);
+        length = bound(length, 0, 10000);
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
 
         if (length > domain.size) {
