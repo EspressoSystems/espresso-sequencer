@@ -4,21 +4,11 @@ use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*}
 use hotshot_testing::{
     predicates::{exact, is_at_view_number, quorum_proposal_send},
     task_helpers::vid_scheme_from_view_number,
+    test_helpers::permute_input_with_index_order,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use jf_primitives::vid::VidScheme;
-
-fn permute<T>(inputs: Vec<T>, order: Vec<usize>) -> Vec<T>
-where
-    T: Clone,
-{
-    let mut ordered_inputs = Vec::with_capacity(inputs.len());
-    for &index in &order {
-        ordered_inputs.push(inputs[index].clone());
-    }
-    ordered_inputs
-}
 
 /// Runs a basic test where a qualified proposal occurs (i.e. not initiated by the genesis view or node 1).
 /// This proposal should happen no matter how the `input_permutation` is specified.
@@ -91,7 +81,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         ]
     };
 
-    let view_2_inputs = permute(inputs, input_permutation);
+    let view_2_inputs = permute_input_with_index_order(inputs, input_permutation);
 
     // This stage transitions from view 1 to view 2.
     let view_2 = TestScriptStage {
