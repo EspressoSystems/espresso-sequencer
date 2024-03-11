@@ -79,7 +79,6 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           export FOUNDRY_PROFILE=quick
-          export RAYON_NUM_THREADS=4
           nix develop --accept-flake-config -c  forge test -vvv
 
       - name: Run tests (full version for main)
