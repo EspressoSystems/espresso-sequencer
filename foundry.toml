@@ -17,8 +17,30 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
+
+[profile.defender]
+# Note that if we want to move the `./contracts` directory into it's own repo we
+# need to move the foundry.toml and remove the `./contracts` prefix from the
+# directories below.
+src = 'contracts/src'
+out = 'out'
+test = 'contracts/test'
+libs = ['contracts/lib']
+script = "contracts/script"
+broadcast = "contracts/broadcast"
+cache_path = "contracts/cache"
+# Version should match the solc installed via flake, otherwise the contract
+# artifacts may differ slightly.
+solc = "0.8.23"
+# The bytecode hash is no longer deterministic and prevents us from generating
+# deterministic bindings. The "none" setting prevents solc from appending the
+# IPFS hash to the bytecode.
+bytecode_hash = "none"
+ffi = true
+# needed for openzeppelin defender
 build_info = true
 extra_output = ["storageLayout"]
+
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
@@ -8,6 +8,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { UUPSUpgradeable } from
     "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
+/// @custom:oz-upgrades-from FeeContract
 contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
@@ -22,8 +23,9 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice max amount allowed to be deposited to prevent fat finger errors
     // @TODO confirm this amount with product
 
-    uint256 public immutable MAX_DEPOSIT_AMOUNT = 1 ether;
-    uint256 public immutable MIN_DEPOSIT_AMOUNT = 0.001 ether;
+    uint256 public maxDepositAmount;
+
+    uint256 public minDepositAmount;
 
     // === Errors ===
     //
@@ -39,14 +41,16 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice since the constuctor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
-    constructor() {
-        _disableInitializers();
-    }
+    // constructor() {
+    //     _disableInitializers();
+    // }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize() public initializer {
-        __Ownable_init(msg.sender); //sets owner to msg.sender
+    function initialize(address multisig) public initializer {
+        __Ownable_init(multisig); //sets owner to msg.sender
         __UUPSUpgradeable_init();
+        maxDepositAmount = 1 ether;
+        minDepositAmount = 0.001 ether;
     }
 
     /// @notice Revert if a method name does not exist
@@ -64,10 +68,10 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Allows anyone to deposit an ETH balance for any user
     /// @dev the deposit amount is less than a specified threshold to prevent fat finger errors
     function deposit(address user) public payable {
-        if (msg.value < MIN_DEPOSIT_AMOUNT) {
+        if (msg.value < minDepositAmount) {
             revert DepositTooSmall();
         }
-        if (msg.value > MAX_DEPOSIT_AMOUNT) {
+        if (msg.value > maxDepositAmount) {
             revert DepositTooLarge();
         }
         if (user == address(0)) {
