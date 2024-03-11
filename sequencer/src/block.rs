@@ -122,6 +122,7 @@ mod reference {
         pub static ref NS_TABLE: Value = load_reference!("ns_table");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
+        pub static ref TRANSACTION: Value = load_reference!("transaction");
     }
 
     fn reference_test<T: DeserializeOwned, C: Committable>(
@@ -170,6 +171,15 @@ mod reference {
             HEADER.clone(),
             "BLOCK~CltsD5AWVMRYoPCVoir_T8qU3qJTIxi5qBjyWu9vr-gC",
             |header| header.commit(),
+        );
+    }
+
+    #[test]
+    fn test_reference_transaction() {
+        reference_test::<Transaction, _>(
+            TRANSACTION.clone(),
+            "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
+            |tx| tx.commit(),
         );
     }
 }

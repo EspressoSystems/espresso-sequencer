@@ -22,6 +22,7 @@ use l1_client::L1Client;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
+pub mod bytes;
 mod l1_client;
 pub mod persistence;
 mod state;

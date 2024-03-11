@@ -1,6 +1,6 @@
 use crate::block::entry::TxTableEntry;
 use crate::block::payload::TableWordTraits;
-use crate::{BlockBuildingSnafu, Error, NamespaceId};
+use crate::{bytes::Bytes, BlockBuildingSnafu, Error, NamespaceId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -14,8 +14,6 @@ pub trait Table<TableWord: TableWordTraits> {
     // Parse these bytes into a `TxTableEntry` and return.
     // Returns raw bytes, no checking for large values
     fn get_table_len(&self, offset: usize) -> TxTableEntry;
-
-    fn get_payload(&self) -> Vec<u8>;
 
     fn byte_len() -> usize {
         size_of::<TableWord>()
@@ -35,24 +33,20 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
         entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.bytes[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
     }
-
-    fn get_payload(&self) -> Vec<u8> {
-        self.bytes.clone()
-    }
 }
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
 pub struct NameSpaceTable<TableWord: TableWordTraits> {
-    pub(super) bytes: Vec<u8>,
+    pub(super) bytes: Bytes,
     #[serde(skip)]
     pub(super) phantom: PhantomData<TableWord>,
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
-    pub fn from_vec(v: Vec<u8>) -> Self {
+    pub fn from_bytes(bytes: impl Into<Bytes>) -> Self {
         Self {
-            bytes: v,
+            bytes: bytes.into(),
             phantom: Default::default(),
         }
     }
@@ -60,12 +54,12 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     pub fn from_namespace_offsets(
         namespace_offsets: Vec<(NamespaceId, usize)>,
     ) -> Result<Self, Error> {
-        let mut ns_table = NameSpaceTable::from_vec(Vec::from(
+        let mut ns_table = NameSpaceTable::from_bytes(
             TxTableEntry::try_from(namespace_offsets.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
                 .to_bytes(),
-        ));
+        );
         for (id, offset) in namespace_offsets {
             ns_table.add_new_entry_ns_id(id)?;
             ns_table.add_new_entry_payload_len(offset)?;
@@ -73,15 +67,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         Ok(ns_table)
     }
 
-    // TODO don't clone the entire payload
-    pub fn from_bytes(b: &[u8]) -> Self {
-        Self {
-            bytes: b.to_vec(),
-            phantom: Default::default(),
-        }
-    }
-
-    pub fn get_bytes(&self) -> &Vec<u8> {
+    pub fn get_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
@@ -264,10 +250,6 @@ pub(super) mod test {
         fn get_table_len(&self, offset: usize) -> TxTableEntry {
             TxTable::get_len(&self.raw_payload, offset)
         }
-
-        fn get_payload(&self) -> Vec<u8> {
-            self.raw_payload.clone()
-        }
     }
     impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
         #[cfg(test)]
@@ -283,6 +265,10 @@ pub(super) mod test {
                 raw_payload: tx_table,
                 phantom: Default::default(),
             }
+        }
+
+        pub fn get_payload(&self) -> Vec<u8> {
+            self.raw_payload.clone()
         }
     }
 }

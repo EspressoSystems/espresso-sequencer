@@ -1,6 +1,9 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
+use crate::{
+    bytes::{bytes, Bytes},
+    BlockBuildingSnafu, Error, NamespaceId, Transaction,
+};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
@@ -69,7 +72,7 @@ pub(super) struct NamespaceInfo {
 // TODO remove the generic type param, use local constants instead
 pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
-    pub(super) raw_payload: Vec<u8>,
+    pub(super) raw_payload: Bytes,
 
     // Sequence of bytes representing the namespace table
     pub(super) ns_table: NameSpaceTable<TableWord>,
@@ -125,7 +128,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         // fix this when we settle on an error handling pattern
         Some(NamespaceProof::Existence {
             ns_id,
-            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
+            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.into(),
             ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
@@ -169,11 +172,8 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
-            raw_payload: vec![],
-            ns_table: NameSpaceTable {
-                bytes: vec![],
-                phantom: Default::default(),
-            },
+            raw_payload: bytes![],
+            ns_table: NameSpaceTable::default(),
             tx_table_len_proof: Default::default(),
         };
         for tx in txs.into_iter() {
@@ -215,9 +215,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         namespaces: HashMap<NamespaceId, NamespaceInfo>,
     ) -> Result<(), Error> {
         // fill payload and namespace table
-        let mut payload = Vec::new();
+        let mut payload = bytes![];
 
-        self.ns_table = NameSpaceTable::from_vec(Vec::from(
+        self.ns_table = NameSpaceTable::from_bytes(Vec::from(
             TxTableEntry::try_from(namespaces.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
@@ -262,7 +262,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
     Existence {
-        ns_payload_flat: Vec<u8>,
+        ns_payload_flat: Bytes,
         ns_id: NamespaceId,
         ns_proof: LargeRangeProofType,
         vid_common: VidCommon,
@@ -729,7 +729,7 @@ mod test {
             // TODO don't initialize Payload with empty namespace table
             let block = Payload::from_bytes(
                 test_case.payload.iter().cloned(),
-                &NameSpaceTable::from_vec(Vec::new()),
+                &NameSpaceTable::default(),
             );
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
@@ -775,7 +775,7 @@ mod test {
         // TODO don't initialize Payload with empty namespace table
         let block = Payload::from_bytes(
             test_case.payload.iter().cloned(),
-            &NameSpaceTable::from_vec(Vec::new()),
+            &NameSpaceTable::default(),
         );
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
