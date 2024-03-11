@@ -53,3 +53,26 @@ Script ran successfully.
 proxy: address payable 0x61B4C96475B99A6ce01AfF0da7910605D048c125
 multisig: address 0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE
 ```
+
+## Upgrading the Fee Contract
+
+Steps:
+
+1. In the `FeeContractWithDefender.s.sol` file, in the contract named, `FeeContractDefenderUpgradeScript`, replace the
+   `proxyAddress` with the proxy address for the FeeContract. Ensure that the salt has been updated in the `.env` file
+   and the run the following command.
+
+```bash
+export FOUNDRY_PROFILE=defender && \
+forge clean && \
+forge build && \
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
+export FOUNDRY_PROFILE=default && \
+rm -rf out
+```
+
+2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
+   opens up the Safe UI where your signers for that Safe multi-sig wallet can confirm the transaction.
+
+The transactions being confirmed are: (i) the deployment of the new fee contract (ii) the execution of the
+`upgradeToAndCall` method which updates the implementation contract that the proxy contract is referencing.

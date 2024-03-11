@@ -11,6 +11,8 @@ import { FeeContract as FC } from "../src/FeeContract.sol";
 
 contract FeeContractDefenderDeployScript is Script {
     function run() public returns (address payable proxy, address multisig) {
+        bytes32 contractSalt = bytes32(abi.encodePacked(vm.envString("FEE_CONTRACT_SALT")));
+
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;
 
@@ -28,10 +30,7 @@ contract FeeContractDefenderDeployScript is Script {
 
         Options memory opts;
         opts.defender.useDefenderDeploy = true;
-        /*TODO
-        * use a better salt and get salt from environment variable
-        */
-        opts.defender.salt = "1";
+        opts.defender.salt = contractSalt;
 
         proxy = payable(
             Upgrades.deployUUPSProxy(
@@ -45,14 +44,18 @@ contract FeeContractDefenderDeployScript is Script {
     }
 }
 
-contract FeeContractUpgradeDefenderScript is Script {
-    function run() public {
+contract FeeContractDefenderUpgradeScript is Script {
+    function run() public returns (string memory proposalId, string memory proposalUrl) {
+        bytes32 contractSalt = bytes32(abi.encodePacked(vm.envString("FEE_CONTRACT_SALT")));
         Options memory opts;
         opts.defender.useDefenderDeploy = true;
-        opts.defender.salt = "1";
+        opts.defender.salt = contractSalt;
         address proxyAddress = 0x61B4C96475B99A6ce01AfF0da7910605D048c125;
         string memory newContractName = "FeeContract.sol";
 
-        Defender.proposeUpgrade(proxyAddress, newContractName, opts);
+        ProposeUpgradeResponse memory response =
+            Defender.proposeUpgrade(proxyAddress, newContractName, opts);
+
+        return (response.proposalId, response.url);
     }
 }
