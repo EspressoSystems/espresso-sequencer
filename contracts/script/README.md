@@ -76,3 +76,16 @@ rm -rf out
 
 The transactions being confirmed are: (i) the deployment of the new fee contract (ii) the execution of the
 `upgradeToAndCall` method which updates the implementation contract that the proxy contract is referencing.
+
+## Deploying the Light Client Contract
+
+Read Deploying the Fee Contract for a more detailed version of this.
+
+```bash
+export FOUNDRY_PROFILE=defender && \
+forge clean && \
+forge build && \
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
+export FOUNDRY_PROFILE=default && \
+rm -rf out
+```

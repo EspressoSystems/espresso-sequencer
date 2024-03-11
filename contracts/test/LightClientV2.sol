@@ -34,9 +34,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice This number represent the semantic version (semver) of the contract.
     /// @dev They must be constants and cannot be set using a constructor.
-    uint256 public immutable MAJOR = 2;
-    uint256 public immutable MINOR = 0;
-    uint256 public immutable PATCH = 0;
+    uint256 public majorVersion;
+    uint256 public minorVersion;
+    uint256 public patchVersion;
 
     /// @notice genesis block commitment index
     uint32 internal immutable GENESIS_STATE = 0;
@@ -111,14 +111,15 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
+    /**
+     * TODO
+     * instead of setVersion, create a method getVersion which gives the latest version info
+     */
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch)
-        public
-        initializer
-    {
-        __Ownable_init(msg.sender); //sets owner to msg.sender
-        __UUPSUpgradeable_init();
-        _initializeState(genesis, numBlocksPerEpoch);
+    function setVersion() public {
+        majorVersion = 2;
+        minorVersion = 0;
+        patchVersion = 0;
     }
 
     /// @notice only the owner can authorize an upgrade

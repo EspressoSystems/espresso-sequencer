@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
@@ -28,6 +28,7 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// - the active stake table commitment<br>
 /// @dev You can use this contract to keep track of its finalized states in safe,
 /// authenticated ways.
+
 contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
@@ -47,14 +48,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice This number represent the semantic version (semver) of the contract.
     /// @dev They must be constants and cannot be set using a constructor.
-    uint256 public immutable MAJOR = 1;
-    uint256 public immutable MINOR = 0;
-    uint256 public immutable PATCH = 0;
+    uint256 public majorVersion;
+    uint256 public minorVersion;
+    uint256 public patchVersion;
 
     /// @notice genesis block commitment index
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint32 internal immutable GENESIS_STATE = 0;
 
     /// @notice Finalized HotShot's light client state index
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint32 internal immutable FINALIZED_STATE = 1;
 
     // === Storage ===
@@ -116,6 +119,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
@@ -128,6 +132,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init(msg.sender); //sets owner to msg.sender
         __UUPSUpgradeable_init();
         _initializeState(genesis, numBlocksPerEpoch);
+
+        majorVersion = 1;
+        minorVersion = 0;
+        patchVersion = 0;
     }
 
     /// @notice only the owner can authorize an upgrade
