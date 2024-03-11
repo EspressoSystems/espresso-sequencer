@@ -14,7 +14,7 @@ ark-ff = { workspace = true }
 ark-poly = { workspace = true }
 ark-srs = { git = "https://github.com/alxiong/ark-srs", tag = "v0.1.0" }
 ark-std = { workspace = true }
-clap = { version = "^4.4", features = ["derive"] }
+clap = { version = "^4.5", features = ["derive"] }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
