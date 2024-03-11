@@ -1,0 +1,81 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
+        RUST_LOG: info
+    steps:
+      - uses: styfle/cancel-workflow-action@0.12.0
+        name: Cancel Outdated Builds
+        with:
+          all_but_latest: true
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Git
+        run: |
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      - name: Format Check
+        run: cargo fmt -- --check
+
+      # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
+      # don't compile with all combinations of features.
+      - uses: actions-rs/clippy-check@v1
+        name: Clippy
+        with:
+          token: ${{ github.token }}
+          args: --workspace --all-features --all-targets -- -D warnings
+
+      - name: Audit
+        run: cargo audit --ignore RUSTSEC-2023-0018 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2023-0065
+
+      - name: Build
+        # Build in release without `testing` feature, this should work without `hotshot_example` config.
+        run: |
+          cargo build --workspace --release
+
+      - name: Test
+        # Build test binary with `testing` feature, which requires `hotshot_example` config
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          cargo test --workspace --release --all-features --no-run
+          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+        timeout-minutes: 60
+
+      - name: Generate Documentation
+        run: |
+          cargo doc --no-deps --lib --release
+          echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
+
+      - name: Deploy Documentation
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          cname: tide-disco.docs.espressosys.com
