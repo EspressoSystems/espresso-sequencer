@@ -71,11 +71,19 @@ jobs:
           git status
           git diff
 
-      - name: Run tests
+      - name: Build diff-test
         run: |
           nix develop --accept-flake-config -c cargo build --bin diff-test --release
-          # Limit parallelism
-          export RAYON_NUM_THREADS=4
+
+      - name: Run tests (quick version for PR)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          export FOUNDRY_PROFILE=quick
+          nix develop --accept-flake-config -c  forge test -vvv
+
+      - name: Run tests (full version for main)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
           nix develop --accept-flake-config -c forge test -vvv
 
       - name: Gas Report
