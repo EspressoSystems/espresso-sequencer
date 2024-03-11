@@ -169,6 +169,7 @@ mod test {
     use super::*;
     use crate::{
         data_source::ExtensibleDataSource,
+        task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::MockTypes,
@@ -176,10 +177,7 @@ mod test {
         },
         Error, Header, VidShare,
     };
-    use async_std::{
-        sync::RwLock,
-        task::{sleep, spawn},
-    };
+    use async_std::{sync::RwLock, task::sleep};
     use commit::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::event::EventType;
@@ -204,7 +202,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("node", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{}", port)));
+        network.spawn("server", app.serve(format!("0.0.0.0:{}", port)));
 
         // Start a client.
         let client =
@@ -347,7 +345,7 @@ mod test {
     async fn test_extensions() {
         setup_test();
 
-        let dir = TempDir::new().unwrap();
+        let dir = TempDir::with_prefix("test_node_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
             MockDataSource::create(dir.path(), Default::default())
                 .await
@@ -390,7 +388,7 @@ mod test {
         app.register_module("node", api).unwrap();
 
         let port = pick_unused_port().unwrap();
-        spawn(app.serve(format!("0.0.0.0:{}", port)));
+        let _server = BackgroundTask::spawn("server", app.serve(format!("0.0.0.0:{}", port)));
 
         let client =
             Client::<Error>::new(format!("http://localhost:{}/node", port).parse().unwrap());

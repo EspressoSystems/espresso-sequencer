@@ -202,6 +202,7 @@ mod test {
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
         data_source::{storage::sql::testing::TmpDb, VersionedDataSource},
         fetching::provider::{NoFetching, QueryServiceProvider},
+        task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::MockTypes,
@@ -210,7 +211,6 @@ mod test {
         types::HeightIndexed,
         Error,
     };
-    use async_std::task::spawn;
     use futures::stream::StreamExt;
     use portpicker::pick_unused_port;
     use tide_disco::App;
@@ -229,7 +229,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("availability", define_api(&Default::default()).unwrap())
             .unwrap();
-        spawn(app.serve(format!("0.0.0.0:{port}")));
+        let _server = BackgroundTask::spawn("server", app.serve(format!("0.0.0.0:{port}")));
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;

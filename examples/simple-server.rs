@@ -72,7 +72,7 @@ async fn init_db() -> Db {
 
 #[cfg(target_os = "windows")]
 async fn init_db() -> Db {
-    Db::new().unwrap()
+    Db::with_prefix("simple-server-db").unwrap()
 }
 
 #[cfg(not(target_os = "windows"))]

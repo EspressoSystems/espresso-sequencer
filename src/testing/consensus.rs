@@ -17,14 +17,15 @@ use crate::{
     fetching::provider::NoFetching,
     node::NodeDataSource,
     status::{StatusDataSource, UpdateStatusData},
+    task::BackgroundTask,
     SignatureKey,
 };
-use async_std::{
-    sync::{Arc, RwLock},
-    task::spawn,
-};
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use futures::{future::join_all, stream::StreamExt};
+use futures::{
+    future::{join_all, Future},
+    stream::StreamExt,
+};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
     types::{Event, SystemContextHandle},
@@ -38,8 +39,10 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use tracing::{info_span, Instrument};
 
 struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
@@ -48,6 +51,7 @@ struct MockNode<D: DataSourceLifeCycle> {
 }
 
 pub struct MockNetwork<D: DataSourceLifeCycle> {
+    tasks: Vec<BackgroundTask>,
     nodes: Vec<MockNode<D>>,
     pub_keys: Vec<BLSPubKey>,
 }
@@ -111,6 +115,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                     let election_config =
                         MockMembership::default_election_config(total_nodes.get() as u64);
 
+                    let span = info_span!("initialize node", node_id);
                     async move {
                         let storage = D::create(node_id).await;
                         let data_source = D::connect(&storage).await;
@@ -159,12 +164,17 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             storage,
                         }
                     }
+                    .instrument(span)
                 }),
         )
         .await;
 
-        let network = Self { nodes, pub_keys };
-        D::setup(&network).await;
+        let mut network = Self {
+            nodes,
+            pub_keys,
+            tasks: Default::default(),
+        };
+        D::setup(&mut network).await;
         network
     }
 }
@@ -198,12 +208,16 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         &self.nodes[0].storage
     }
 
+    pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        self.tasks.push(BackgroundTask::spawn(name, task));
+    }
+
     pub async fn shut_down(mut self) {
         self.shut_down_impl().await
     }
 
     async fn shut_down_impl(&mut self) {
-        for mut node in std::mem::take(&mut self.nodes) {
+        for node in &mut self.nodes {
             node.hotshot.shut_down().await;
         }
     }
@@ -215,13 +229,19 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         for (i, node) in self.nodes.iter_mut().enumerate() {
             let ds = node.data_source.clone();
             let mut events = node.hotshot.get_event_stream();
-            spawn(async move {
-                while let Some(event) = events.next().await {
-                    tracing::info!(node = i, event = ?event.event, "EVENT");
-                    let mut ds = ds.write().await;
-                    ds.handle_event(&event).await;
-                }
-            });
+            self.tasks.push(BackgroundTask::spawn(
+                format!("update node {i}"),
+                async move {
+                    while let Some(event) = events.next().await {
+                        tracing::info!(node = i, event = ?event.event, "EVENT");
+                        {
+                            let mut ds = ds.write().await;
+                            ds.handle_event(&event).await;
+                        }
+                        async_std::task::yield_now().await;
+                    }
+                },
+            ));
         }
 
         join_all(
@@ -253,7 +273,7 @@ pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
     async fn handle_event(&mut self, event: &Event<MockTypes>);
 
     /// Setup runs after setting up the network but before starting a test.
-    async fn setup(_network: &MockNetwork<Self>) {}
+    async fn setup(_network: &mut MockNetwork<Self>) {}
 }
 
 pub trait TestableDataSource:

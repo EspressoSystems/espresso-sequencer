@@ -277,7 +277,7 @@ mod test {
     async fn test_ledger_log_creation() {
         setup_test();
 
-        let dir = TempDir::new().unwrap();
+        let dir = TempDir::with_prefix("test_ledger_log").unwrap();
 
         // Create and populuate a log.
         {
@@ -307,7 +307,7 @@ mod test {
     async fn test_ledger_log_insert() {
         setup_test();
 
-        let dir = TempDir::new().unwrap();
+        let dir = TempDir::with_prefix("test_ledger_log").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_ledger_log").unwrap();
         let mut log = LedgerLog::<u64>::create(&mut loader, "ledger", 3).unwrap();
         let mut store = AtomicStore::open(loader).unwrap();
@@ -351,7 +351,7 @@ mod test {
     async fn test_ledger_log_iter() {
         setup_test();
 
-        let dir = TempDir::new().unwrap();
+        let dir = TempDir::with_prefix("test_ledger_log").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_ledger_log").unwrap();
         let mut log = LedgerLog::<u64>::create(&mut loader, "ledger", 3).unwrap();
         let mut store = AtomicStore::open(loader).unwrap();
