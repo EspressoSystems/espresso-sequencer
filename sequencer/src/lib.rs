@@ -417,7 +417,7 @@ pub mod testing {
             .map(|_| StateKeyPair::generate())
             .collect::<Vec<_>>();
 
-        let mut nodes_with_stake = pub_keys
+        let nodes_with_stake = pub_keys
             .iter()
             .zip(&state_key_pairs)
             .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
@@ -550,15 +550,6 @@ pub mod testing {
         ) -> SequencerContext<network::Memory> {
             let mut config = self.config.clone();
 
-            // config.my_own_validator_config = ValidatorConfig {
-            //     public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
-            //     private_key: self.priv_keys[i].clone(),
-            //     stake_value: config.known_nodes_with_stake[i]
-            //         .stake_table_entry
-            //         .stake_amount
-            //         .as_u64(),
-            //     state_key_pair: self.state_key_pairs[i].clone(),
-            // };
             let num_staked_nodes = self.num_staked_nodes();
             if is_staked {
                 config.my_own_validator_config = self.get_validator_config(i, is_staked);
@@ -684,7 +675,7 @@ mod test {
         let config = TestConfig::default();
         let handles = config.init_nodes().await;
 
-        // only listen on builder handle as it is the last handle
+        // try to listen on builder handle as it is the last handle
         let mut events = handles[5].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
