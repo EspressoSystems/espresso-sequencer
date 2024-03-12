@@ -17,8 +17,7 @@ use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
-use crate::merklized_state::{MerklizedStateDataSource, Snapshot};
-use crate::QueryError;
+use crate::merklized_state::MerklizedStateDataSource;
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -32,12 +31,10 @@ use crate::{
     types::HeightIndexed,
     Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
-use ark_serialize::CanonicalDeserialize;
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use jf_primitives::merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath};
 
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
@@ -49,7 +46,6 @@ use std::convert::Infallible;
 use std::hash::Hash;
 use std::ops::{Bound, RangeBounds};
 use std::path::Path;
-use typenum::Unsigned;
 
 const CACHED_LEAVES_COUNT: usize = 100;
 const CACHED_BLOCKS_COUNT: usize = 100;
@@ -583,21 +579,5 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for FileSystemStorage<Type
 where
     Payload<Types>: QueryablePayload,
 {
-    type Error = QueryError;
-
-    async fn get_path<
-        E: Element + Send + DeserializeOwned,
-        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-        A: Unsigned,
-        T: NodeValue + Send + CanonicalDeserialize,
-    >(
-        &self,
-        _state_type: &'static str,
-        _tree_height: usize,
-        _header_state_commitment_field: &'static str,
-        _snapshot: Snapshot<Types>,
-        _key: serde_json::Value,
-    ) -> QueryResult<MerklePath<E, I, T>> {
-        Err(QueryError::NotFound)
-    }
+    type Error = Infallible;
 }

@@ -25,12 +25,13 @@ use crate::{
 };
 use ark_serialize::CanonicalDeserialize;
 use async_trait::async_trait;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
 use jf_primitives::{
     circuit::merkle_tree::MembershipProof,
     merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath},
 };
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use std::{fmt::Display, ops::RangeBounds};
 use typenum::Unsigned;
 
@@ -285,10 +286,12 @@ where
 }
 
 #[async_trait]
-impl<D, U, Proof, E, I, T> UpdateStateStorage<Proof, E, I, T> for ExtensibleDataSource<D, U>
+impl<D, U, Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T>
+    for ExtensibleDataSource<D, U>
 where
-    D: UpdateStateStorage<Proof, E, I, T> + Send + Sync,
+    D: UpdateStateStorage<Types, Proof, E, I, T> + Send + Sync,
     U: Send + Sync,
+    Types: NodeType,
     Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
     E: Element + Send + Sync + Display + 'static,
     T: NodeValue + Send + Sync + Display + 'static,
@@ -300,8 +303,9 @@ where
         name: String,
         proof: Proof,
         path: Vec<usize>,
+        leaf: Leaf<Types>,
     ) -> Result<(), Self::Error> {
-        self.data_source.insert_nodes(name, proof, path).await
+        self.data_source.insert_nodes(name, proof, path, leaf).await
     }
 }
 
@@ -323,7 +327,7 @@ where
         tree_height: usize,
         header_state_commitment_field: &'static str,
         snapshot: Snapshot<Types>,
-        key: serde_json::Value,
+        key: Value,
     ) -> Result<MerklePath<E, I, T>, Self::Error> {
         self.get_path::<E, I, A, T>(
             state_type,

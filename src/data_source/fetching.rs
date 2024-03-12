@@ -740,7 +740,7 @@ where
 impl<Types, S> NotifyStorage<Types, S>
 where
     Types: NodeType,
-    S: MerklizedStateDataSource<Types>,
+    S: MerklizedStateDataSource<Types> + Send + Sync,
 {
     async fn get_path<
         E: Element + Send + DeserializeOwned,

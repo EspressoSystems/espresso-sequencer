@@ -559,27 +559,6 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl<Types: NodeType> MerklizedStateDataSource<Types> for NoStorage {
-        type Error = QueryError;
-
-        async fn get_path<
-            E: Element + Send + DeserializeOwned,
-            I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-            A: Unsigned,
-            T: NodeValue + Send + CanonicalDeserialize,
-        >(
-            &self,
-            _state_type: &'static str,
-            _tree_height: usize,
-            _header_state_commitment_field: &'static str,
-            _snapshot: Snapshot<Types>,
-            _key: Value,
-        ) -> QueryResult<MerklePath<E, I, T>> {
-            Err(QueryError::NotFound)
-        }
-    }
-
-    #[async_trait]
     impl MerklizedStateDataSource<MockTypes> for DataSource {
         type Error = QueryError;
 

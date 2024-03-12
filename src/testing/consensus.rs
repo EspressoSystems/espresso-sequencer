@@ -69,13 +69,13 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..NUM_NODES)
             .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
             .unzip();
-        let num_staked_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
-        let state_key_pairs = (0..num_staked_nodes.into())
+        let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
+        let state_key_pairs = (0..num_nodes_with_stake.into())
             .map(|i| StateKeyPair::generate_from_seed_indexed([0; 32], i as u64))
             .collect::<Vec<_>>();
         let master_map = MasterMap::new();
         let stake = 1u64;
-        let known_nodes_with_stake = (0..num_staked_nodes.into())
+        let known_nodes_with_stake = (0..num_nodes_with_stake.into())
             .map(|id| PeerConfig {
                 stake_table_entry: pub_keys[id].get_stake_table_entry(stake),
                 state_ver_key: state_key_pairs[id].ver_key(),
@@ -93,8 +93,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         state_key_pair: state_key_pairs[node_id].clone(),
                     };
                     let config = HotShotConfig {
-                        num_nodes_with_stake: num_staked_nodes,
-                        num_nodes_without_stake: 0,
                         known_nodes_with_stake: known_nodes_with_stake.clone(),
                         known_nodes_without_stake: vec![],
                         my_own_validator_config,
@@ -110,6 +108,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         execution_type: ExecutionType::Continuous,
                         election_config: None,
                         da_staked_committee_size: pub_keys.len(),
+                        num_nodes_with_stake,
+                        num_nodes_without_stake: 0,
+                        known_nodes_without_stake: Vec::new(),
                         da_non_staked_committee_size: 0,
                     };
 
@@ -117,8 +118,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                     let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
                     let master_map = master_map.clone();
-                    let election_config =
-                        MockMembership::default_election_config(num_staked_nodes.get() as u64, 0);
+                    let election_config = MockMembership::default_election_config(
+                        num_nodes_with_stake.get() as u64,
+                        0,
+                    );
 
                     let span = info_span!("initialize node", node_id);
                     async move {

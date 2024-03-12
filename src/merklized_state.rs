@@ -144,6 +144,7 @@ mod test {
         stream::StreamExt,
         task::{sleep, spawn},
     };
+    use hotshot::types::EventType;
     use jf_primitives::merkle_tree::prelude::LightWeightSHA3MerkleTree;
     use portpicker::pick_unused_port;
     use tide_disco::App;
@@ -178,7 +179,12 @@ mod test {
         spawn(app.serve(format!("0.0.0.0:{}", port)));
         sleep(Duration::from_secs(5)).await;
         while let Some(event) = events.next().await {
-            println!("event : {:?}", event);
+            if let EventType::Decide { leaf_chain, .. } = event.event {
+                for leaf in leaf_chain.iter() {
+                    let state = leaf.state.clone();
+                    let delta = leaf.delta.clone();
+                }
+            };
         }
 
         network.shut_down().await;
