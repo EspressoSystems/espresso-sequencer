@@ -19,7 +19,7 @@ commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot" }
-hotshot-types = { workspace = true, default-features = false }
+hotshot-types = { workspace = true }
 hotshot-utils = { path = "../utils" }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }

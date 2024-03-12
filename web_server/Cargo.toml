@@ -10,7 +10,7 @@ async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 clap = { version = "4.0", features = ["derive", "env"], optional = false }
 futures = { workspace = true }
-hotshot-types = { workspace = true, default-features = false }
+hotshot-types = { workspace = true }
 tide-disco = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }

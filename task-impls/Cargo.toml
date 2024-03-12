@@ -13,7 +13,7 @@ futures = { workspace = true }
 snafu = { workspace = true }
 async-lock = { workspace = true }
 tracing = { workspace = true }
-hotshot-types = { workspace = true, default-features = false }
+hotshot-types = { workspace = true }
 hotshot-utils = { path = "../utils" }
 jf-primitives = { workspace = true }
 time = { workspace = true }
