@@ -1,4 +1,4 @@
-use crate::{Header, L1BlockInfo, Leaf, NodeState, SeqTypes};
+use crate::{Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -215,7 +215,7 @@ fn charge_fee(
     }
 }
 
-/// Validate builder account by verifiying signature and charging the account.
+/// Validate builder account by verifying signature and charging the account.
 fn validate_and_charge_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
     proposed_header: &Header,
@@ -297,16 +297,27 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // through returned value.
         let mut validated_state = self.clone();
 
+        let accounts = std::iter::once(proposed_header.fee_info.account);
+
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = fetch_fee_receipts(
-            parent_leaf.get_block_header().l1_finalized,
-            proposed_header.l1_finalized,
-        );
+        let l1_deposits = if let Some(block_info) = proposed_header.l1_finalized {
+            instance
+                .l1_client
+                .get_finalized_deposits(
+                    parent_leaf
+                        .get_block_header()
+                        .l1_finalized
+                        .map(|block_info| block_info.number),
+                    block_info.number,
+                )
+                .await
+        } else {
+            vec![]
+        };
 
         // Find missing state entries
         let missing_accounts = self.forgotten_accounts(
-            std::iter::once(proposed_header.fee_info.account)
-                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let view = parent_leaf.get_view_number();
@@ -603,16 +614,6 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
             .map(|i| i as usize)
             .collect()
     }
-}
-
-/// Fetch all deposit receitps between `prev_l1_finalized` and
-/// `new_l1_finalized`. This is currently a mock function to be
-/// implemented in the future.
-pub fn fetch_fee_receipts(
-    _prev_l1_finalized: Option<L1BlockInfo>,
-    _new_l1_finalized: Option<L1BlockInfo>,
-) -> Vec<FeeInfo> {
-    vec![]
 }
 
 pub type FeeMerkleTree =

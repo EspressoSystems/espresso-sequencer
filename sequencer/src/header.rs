@@ -1,7 +1,7 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     l1_client::L1Snapshot,
-    state::{fetch_fee_receipts, BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
     L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
@@ -242,19 +242,28 @@ impl BlockHeader<SeqTypes> for Header {
     ) -> Self {
         let mut validated_state = parent_state.clone();
 
+        let accounts = std::iter::once(FeeAccount::from(instance_state.builder_address.address()));
+
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = fetch_fee_receipts(
-            parent_leaf.get_block_header().l1_finalized,
-            l1_snapshot.finalized,
-        );
-
+        let l1_deposits = if let Some(block_info) = l1_snapshot.finalized {
+            instance_state
+                .l1_client
+                .get_finalized_deposits(
+                    parent_leaf
+                        .get_block_header()
+                        .l1_finalized
+                        .map(|block_info| block_info.number),
+                    block_info.number,
+                )
+                .await
+        } else {
+            vec![]
+        };
         // Find missing fee state entries
-        let missing_accounts = parent_state.forgotten_accounts(
-            std::iter::once(FeeAccount::from(instance_state.builder_address.address()))
-                .chain(l1_deposits.iter().map(|info| info.account())),
-        );
+        let missing_accounts = parent_state
+            .forgotten_accounts(accounts.chain(l1_deposits.iter().map(|info| info.account())));
         if !missing_accounts.is_empty() {
             tracing::warn!(
                 "fetching {} missing accounts from peers",
@@ -680,10 +689,11 @@ mod test_headers {
         .await;
 
         let mut proposal_state = parent_state.clone();
-        // The current fake implementation of fetch_fee_receipts returns
-        // some fee info. To validate the proposal we need to insert these
-        // records here.
-        for fee_info in fetch_fee_receipts(None, None) {
+        for fee_info in genesis_state
+            .l1_client
+            .get_finalized_deposits(None, 0)
+            .await
+        {
             proposal_state.insert_fee_deposit(fee_info).unwrap();
         }
 
