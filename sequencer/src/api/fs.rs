@@ -1,18 +1,14 @@
-use super::{
-    data_source::{Provider, SequencerDataSource},
-    endpoints::TimeWindowQueryData,
-};
+use super::data_source::{Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{
-    availability::{AvailabilityDataSource, BlockId, BlockQueryData},
+    availability::{AvailabilityDataSource, BlockQueryData},
     data_source::{ExtensibleDataSource, FileSystemDataSource},
     node::NodeDataSource,
     types::HeightIndexed,
-    NotFoundSnafu, QueryError, QueryResult,
+    QueryError,
 };
-use snafu::OptionExt;
 use std::{collections::BTreeMap, path::Path};
 
 #[derive(Clone, Debug, Default)]
@@ -73,67 +69,6 @@ impl SequencerDataSource for DataSource {
         }
 
         Ok(())
-    }
-
-    async fn window(&self, start: u64, end: u64) -> QueryResult<TimeWindowQueryData> {
-        // Find the minimum timestamp which is at least `start`, and all the blocks with that
-        // timestamp.
-        let blocks = self
-            .as_ref()
-            .blocks_by_time
-            .range(start..)
-            .next()
-            .context(NotFoundSnafu)?
-            .1;
-        // Multiple blocks can have the same timestamp (when truncated to seconds); we want the
-        // first one. It is an invariant that any timestamp which has an entry in `blocks_by_time`
-        // has a non-empty list associated with it, so this indexing is safe.
-        let first_block = blocks[0];
-        self.window_from(first_block as usize, end).await
-    }
-
-    async fn window_from<ID>(&self, from: ID, end: u64) -> QueryResult<TimeWindowQueryData>
-    where
-        ID: Into<BlockId<SeqTypes>> + Send + Sync,
-    {
-        let first_block = match from.into() {
-            BlockId::Number(n) => n,
-            id => self
-                .get_block(id)
-                .await
-                .try_resolve()
-                .map_err(|_| QueryError::Missing)?
-                .height() as usize,
-        };
-
-        let mut res = TimeWindowQueryData::default();
-
-        // Include the block just before the start of the window, if there is one.
-        if first_block > 0 {
-            let prev = self
-                .get_block(first_block - 1)
-                .await
-                .try_resolve()
-                .map_err(|_| QueryError::Missing)?;
-            res.prev = Some(prev.header().clone());
-        }
-
-        // Add blocks to the window, starting from `first_block`, until we reach the end of the
-        // requested time window.
-        let mut blocks = self
-            .get_block_range(first_block..self.block_height().await?)
-            .await;
-        while let Some(block) = blocks.next().await {
-            let block = block.try_resolve().map_err(|_| QueryError::Missing)?;
-            let header = block.header().clone();
-            if header.timestamp >= end {
-                res.next = Some(header);
-                break;
-            }
-            res.window.push(header);
-        }
-
-        Ok(res)
     }
 }
 

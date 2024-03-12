@@ -10,14 +10,14 @@ use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
     network,
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
-    Header, NamespaceId, SeqTypes, Transaction,
+    NamespaceId, SeqTypes, Transaction,
 };
 use async_std::sync::{Arc, RwLock};
 use commit::Committable;
 use ethers::prelude::U256;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource, BlockHash, CustomSnafu, FetchBlockSnafu},
+    availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
@@ -33,25 +33,6 @@ use tide_disco::{
 pub struct NamespaceProofQueryData {
     pub proof: NamespaceProof,
     pub transactions: Vec<Transaction>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimeWindowQueryData {
-    pub window: Vec<Header>,
-    pub prev: Option<Header>,
-    pub next: Option<Header>,
-}
-
-impl TimeWindowQueryData {
-    /// The block height of the block that starts the window.
-    ///
-    /// If the window is empty, this is the height of the block that ends the window.
-    pub fn from(&self) -> Option<u64> {
-        self.window
-            .first()
-            .or(self.next.as_ref())
-            .map(|header| header.height)
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -129,27 +110,6 @@ where
             Ok(NamespaceProofQueryData {
                 transactions,
                 proof,
-            })
-        }
-        .boxed()
-    })?
-    .get("gettimestampwindow", |req, state| {
-        async move {
-            let end = req.integer_param("end")?;
-            let res = if let Some(height) = req.opt_integer_param("height")? {
-                state.inner().window_from::<usize>(height, end).await
-            } else if let Some(hash) = req.opt_blob_param("hash")? {
-                state
-                    .inner()
-                    .window_from::<BlockHash<SeqTypes>>(hash, end)
-                    .await
-            } else {
-                let start: u64 = req.integer_param("start")?;
-                state.inner().window(start, end).await
-            };
-            res.map_err(|err| availability::Error::Custom {
-                message: err.to_string(),
-                status: err.status(),
             })
         }
         .boxed()

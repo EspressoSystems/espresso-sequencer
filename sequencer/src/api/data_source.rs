@@ -1,5 +1,4 @@
 use super::{
-    endpoints::TimeWindowQueryData,
     fs,
     options::{Options, Query},
     sql,
@@ -9,12 +8,11 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
-    availability::{AvailabilityDataSource, BlockId},
+    availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
-    QueryResult,
 };
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 use tide_disco::Url;
@@ -65,14 +63,6 @@ pub trait SequencerDataSource:
     /// Any blocks in the data sources with number `from_block` or greater will be incorporated into
     /// sequencer-specific data structures.
     async fn refresh_indices(&mut self, from_block: usize) -> anyhow::Result<()>;
-
-    /// Retrieve a list of blocks whose timestamps fall within the window [start, end).
-    async fn window(&self, start: u64, end: u64) -> QueryResult<TimeWindowQueryData>;
-
-    /// Retrieve a list of blocks starting from `from` with timestamps less than `end`.
-    async fn window_from<ID>(&self, from: ID, end: u64) -> QueryResult<TimeWindowQueryData>
-    where
-        ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
 /// Provider for fetching missing data for the query service.
