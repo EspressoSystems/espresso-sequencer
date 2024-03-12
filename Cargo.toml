@@ -62,7 +62,7 @@ jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0"
 snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.6" }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.6" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.7" }
 tracing = "0.1"
 trait-variant = "0.1"
 bytesize = "1.3"
