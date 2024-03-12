@@ -1,10 +1,13 @@
-use std::{hash::Hash, marker::PhantomData};
-
 use hotshot_types::event::Event;
+use hotshot_types::{
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
+    utils::BuilderCommitment,
+    vid::VidCommitment,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
-#[serde(bound = "")]
+use std::{hash::Hash, marker::PhantomData};
+#[derive(Clone, Debug)]
 pub struct EventInfo<I: NodeType> {
     pub event: Event<I>,
     pub signature: <<I as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,

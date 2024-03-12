@@ -93,7 +93,7 @@ impl tide_disco::error::Error for Error {
 pub fn define_api<State, Types: NodeType>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + BuilderDataSource<Types>,
+    <State as ReadState>::State: Send + Sync + EventsSource<Types>,
     Types: NodeType,
     <<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType:
         for<'a> TryFrom<&'a TaggedBase64> + Into<TaggedBase64> + Display,
@@ -109,11 +109,11 @@ where
     api.with_version("0.0.1".parse().unwrap())
         .get("available_hotshot_events", |req, state| {
             async move {
-                let view_number = req.blob_param("view_number")?;
+                let view_number= req.blob_param("view_number")?;
                 state
-                    .get_available_hotshot_events(&view_number)
+                    .get_available_hotshot_events(view_number)
                     .await
-                    .context(AvailableEventSnafu {
+                    .context(EventAvailableSnafu {
                         resource: view_number.to_string(),
                     })
             }
