@@ -1781,12 +1781,12 @@ pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LTree(String);
 
 impl<I, Iter: Iterator<Item = I> + DoubleEndedIterator> From<Iter> for LTree
 where
-    I: Display,
+    I: Display + Clone,
 {
     fn from(iter: Iter) -> Self {
         Self(
@@ -1821,6 +1821,20 @@ impl ToSql for LTree {
     }
 
     to_sql_checked!();
+}
+use tokio_postgres::types::FromSql;
+use tokio_postgres::types::Type;
+impl<'a> FromSql<'a> for LTree {
+    fn from_sql(
+        ty: &Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        <String as FromSql>::from_sql(ty, raw).map(LTree)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <String as FromSql>::accepts(ty)
+    }
 }
 
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these

@@ -120,11 +120,9 @@ where
                     Snapshot::<Types>::Commit(req.blob_param("commit")?)
                 };
 
-                // let key =
-                //     serde_json::value::from_value::<T::Index>(req.string_param("key")?.into())
-                //         .map_err(internal)?;
-
-                let key = serde_json::to_value(req.string_param("key")?).map_err(internal)?;
+                //TODO: FIX THIS
+                let key =
+                    serde_json::to_value(req.blob_param::<_, String>("key")?).map_err(internal)?;
 
                 state
                     .get_path::<M::Element, M::Index, M::Arity, M::NodeValue>(

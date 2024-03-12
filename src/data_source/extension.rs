@@ -14,7 +14,7 @@ use super::VersionedDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
     merklized_state::UpdateStateStorage,
@@ -24,7 +24,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use async_trait::async_trait;
-use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::{
     circuit::merkle_tree::MembershipProof,
     merkle_tree::{Element, Index, NodeValue},
@@ -282,17 +282,14 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T>
-    for ExtensibleDataSource<D, U>
+impl<D, U, Proof, E, I, T> UpdateStateStorage<Proof, E, I, T> for ExtensibleDataSource<D, U>
 where
-    D: UpdateStateStorage<Types, Proof, E, I, T> + Send + Sync,
+    D: UpdateStateStorage<Proof, E, I, T> + Send + Sync,
     U: Send + Sync,
     Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
     E: Element + Send + Sync + Display + 'static,
     T: NodeValue + Send + Sync + Display + 'static,
     I: Index + Send + Sync + Display + 'static,
-    Types: NodeType,
-    Header<Types>: QueryableHeader<Types>,
 {
     type Error = D::Error;
     async fn insert_nodes(
@@ -300,12 +297,8 @@ where
         name: String,
         proof: Proof,
         path: Vec<usize>,
-        elem: E,
-        leaf: Leaf<Types>,
     ) -> Result<(), Self::Error> {
-        self.data_source
-            .insert_nodes(name, proof, path, elem, leaf)
-            .await
+        self.data_source.insert_nodes(name, proof, path).await
     }
 }
 
