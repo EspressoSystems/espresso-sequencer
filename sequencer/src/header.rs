@@ -242,31 +242,28 @@ impl BlockHeader<SeqTypes> for Header {
     ) -> Self {
         let mut validated_state = parent_state.clone();
 
+        let accounts = std::iter::once(FeeAccount::from(instance_state.builder_address.address()));
+
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = instance_state
-            .l1_client
-            .get_finalized_deposits(
-                parent_leaf
-                    .get_block_header()
-                    .l1_finalized
-                    .map(|block_info| block_info.number),
-                l1_snapshot
-                    .finalized
-                    .map(|block_info| block_info.number)
-                    .unwrap_or(0), // I'm not sure its possible for
-                                   // this to be `None`, but supplying
-                                   // 0 will give us back an empty
-                                   // `Vec`.,
-            )
-            .await;
-
+        let l1_deposits = if let Some(block_info) = l1_snapshot.finalized {
+            instance_state
+                .l1_client
+                .get_finalized_deposits(
+                    parent_leaf
+                        .get_block_header()
+                        .l1_finalized
+                        .map(|block_info| block_info.number),
+                    block_info.number,
+                )
+                .await
+        } else {
+            vec![]
+        };
         // Find missing fee state entries
-        let missing_accounts = parent_state.forgotten_accounts(
-            std::iter::once(FeeAccount::from(instance_state.builder_address.address()))
-                .chain(l1_deposits.iter().map(|info| info.account())),
-        );
+        let missing_accounts = parent_state
+            .forgotten_accounts(accounts.chain(l1_deposits.iter().map(|info| info.account())));
         if !missing_accounts.is_empty() {
             tracing::warn!(
                 "fetching {} missing accounts from peers",
