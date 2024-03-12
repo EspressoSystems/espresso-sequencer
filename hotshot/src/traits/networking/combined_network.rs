@@ -3,7 +3,7 @@
 use super::NetworkError;
 use crate::traits::implementations::{Libp2pNetwork, WebServerNetwork};
 use async_lock::RwLock;
-use hotshot_constants::{
+use hotshot_types::constants::{
     COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
     COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
 };

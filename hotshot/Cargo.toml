@@ -35,10 +35,9 @@ either = { workspace = true }
 embed-doc-image = "0.1.4"
 ethereum-types = { workspace = true }
 futures = { workspace = true }
-hotshot-constants = { path = "../constants" }
 hotshot-web-server = { version = "0.1.1", path = "../web_server", default-features = false }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-types = { path = "../types", version = "0.1.0", default-features = false }
+hotshot-types = { workspace = true, version = "0.1.0", default-features = false }
 hotshot-task = { path = "../task" }
 hotshot-utils = { path = "../utils" }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }

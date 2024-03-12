@@ -87,7 +87,6 @@ bimap = "0.6.3"
 bincode = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"], optional = true }
 commit = { workspace = true }
-hotshot-constants = { path = "../constants" }
 custom_debug = { workspace = true }
 dashmap = "5.5.1"
 either = { workspace = true }
@@ -95,7 +94,7 @@ embed-doc-image = "0.1.4"
 futures = { workspace = true }
 hotshot-web-server = { version = "0.1.1", path = "../web_server", default-features = false }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-types = { path = "../types", version = "0.1.0", default-features = false }
+hotshot-types = { workspace = true, version = "0.1.0", default-features = false }
 hotshot-utils = { path = "../utils" }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
 libp2p-identity = { workspace = true }

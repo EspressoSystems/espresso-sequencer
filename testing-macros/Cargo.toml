@@ -15,7 +15,7 @@ commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", default-features = false }
-hotshot-types = { path = "../types", default-features = false }
+hotshot-types = { workspace = true, default-features = false }
 hotshot-testing = { path = "../testing", default-features = false }
 hotshot-example-types = { path = "../example-types" }
 jf-primitives = { workspace = true }

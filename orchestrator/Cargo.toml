@@ -10,7 +10,7 @@ clap = { version = "4.0", features = ["derive", "env"], optional = false }
 futures = { workspace = true }
 libp2p = { workspace = true }
 blake3 = { workspace = true }
-hotshot-types = { version = "0.1.0", path = "../types", default-features = false }
+hotshot-types = { workspace = true, version = "0.1.0" , default-features = false }
 hotshot-utils = { path = "../utils" }
 tide-disco = { workspace = true }
 surf-disco = { workspace = true }

@@ -1,7 +1,6 @@
 use crate::types::SystemContextHandle;
 
 use async_trait::async_trait;
-use hotshot_constants::VERSION_0_1;
 use hotshot_task_impls::{
     consensus::{CommitmentAndMetadata, ConsensusTaskState},
     da::DATaskState,
@@ -10,6 +9,7 @@ use hotshot_task_impls::{
     vid::VIDTaskState,
     view_sync::ViewSyncTaskState,
 };
+use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::traits::election::Membership;
 use hotshot_types::traits::{
     block_contents::vid_commitment,

@@ -19,8 +19,8 @@ use hotshot_example_types::state_types::TestInstanceState;
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 
-use hotshot_constants::EVENT_CHANNEL_SIZE;
 use hotshot_task::task::{Task, TaskRegistry, TestTask};
+use hotshot_types::constants::EVENT_CHANNEL_SIZE;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::Leaf,

@@ -1,6 +1,6 @@
 //! Utilities for reading version number
 
-use hotshot_constants::Version;
+use hotshot_types::constants::Version;
 
 /// Read the version number from a message (passed a byte vector),
 /// returning `None` is there are not enough bytes.

@@ -32,7 +32,7 @@ use async_compatibility_layer::{
     channel::{unbounded, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
 use futures::{select, FutureExt, StreamExt};
-use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
+use hotshot_types::constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use libp2p::{core::transport::ListenerId, StreamProtocol};
 use libp2p::{
     gossipsub::{

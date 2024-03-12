@@ -26,10 +26,10 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use commit::Committable;
 use futures::join;
-use hotshot_constants::{EVENT_CHANNEL_SIZE, VERSION_0_1};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_task_impls::helpers::broadcast_event;
 use hotshot_task_impls::network;
+use hotshot_types::constants::{EVENT_CHANNEL_SIZE, VERSION_0_1};
 
 use hotshot_task::task::TaskRegistry;
 use hotshot_types::{

@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use commit::Committable;
 use either::Left;
 
-use hotshot_constants::Version;
+use hotshot_types::constants::Version;
 
 use hotshot_example_types::node_types::TestTypes;
 

@@ -9,9 +9,9 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use async_std::task::JoinHandle;
 use commit::Committable;
 use core::time::Duration;
-use hotshot_constants::Version;
-use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::task::{Task, TaskState};
+use hotshot_types::constants::Version;
+use hotshot_types::constants::LOOK_AHEAD;
 
 use async_broadcast::Sender;
 

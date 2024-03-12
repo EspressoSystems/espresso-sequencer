@@ -9,12 +9,12 @@ use hotshot::traits::implementations::{
 };
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
-use hotshot_constants::VERSION_0_1;
 use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestValidatedState,
 };
+use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::message::Message;
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::network::ConnectedNetwork;

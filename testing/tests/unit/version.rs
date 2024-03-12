@@ -1,5 +1,5 @@
 #[cfg(test)]
-use hotshot_constants::Version;
+use hotshot_types::constants::Version;
 use hotshot_utils::version::read_version;
 
 #[test]
