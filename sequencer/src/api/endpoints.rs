@@ -60,6 +60,12 @@ pub struct AccountQueryData {
     pub proof: FeeAccountProof,
 }
 
+impl From<(FeeAccountProof, U256)> for AccountQueryData {
+    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
+        Self { balance, proof }
+    }
+}
+
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
 pub(super) type AvailState<N, D> = Arc<RwLock<StorageState<N, D>>>;

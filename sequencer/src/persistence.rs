@@ -190,7 +190,7 @@ mod persistence_tests {
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
 
         // Store a leaf.
-        let leaf1 = Leaf::genesis(&NodeState::default());
+        let leaf1 = Leaf::genesis(&NodeState::mock());
         storage.save_anchor_leaf(&leaf1).await.unwrap();
         assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf1);
 
