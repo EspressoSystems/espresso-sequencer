@@ -253,7 +253,12 @@ pub async fn sync_state(
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
+    tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
+    tracing::info!(
+        "Current HotShot block height on contract: {}",
+        old_state.block_height
+    );
     if old_state.block_height >= bundle.state.block_height {
         tracing::info!("No update needed.");
         return Ok(());
