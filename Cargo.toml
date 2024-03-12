@@ -38,16 +38,16 @@ cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0" }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.22" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.13" }
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", branch = "cl/sig-key-apis", features = [
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.14" }
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.0", features = [
   "test-apis",
   "test-srs",
 ] }

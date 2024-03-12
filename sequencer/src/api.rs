@@ -429,18 +429,19 @@ mod api_tests {
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
-    use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
+    use endpoints::NamespaceProofQueryData;
     use futures::{
         future::join_all,
         stream::{StreamExt, TryStreamExt},
     };
-    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        types::HeightIndexed,
+    };
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -671,183 +672,6 @@ mod api_tests {
             .await
             .unwrap();
         assert_eq!(chain, new_chain);
-    }
-
-    #[async_std::test]
-    pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
-        setup_logging();
-        setup_backtrace();
-
-        // Start query service.
-        let port = pick_unused_port().expect("No ports free");
-        let storage = D::create_storage().await;
-        let _network = TestNetwork::new(
-            D::options(&storage, options::Http { port }.into()).status(Default::default()),
-        )
-        .await;
-
-        // Connect client.
-        let client: Client<ServerError> =
-            Client::new(format!("http://localhost:{port}").parse().unwrap());
-        client.connect(None).await;
-
-        // Wait for blocks with at least three different timestamps to be sequenced. This lets us
-        // test all the edge cases.
-        let mut test_blocks: Vec<Vec<Header>> = vec![];
-        while test_blocks.len() < 3 {
-            let num_blocks = test_blocks.iter().flatten().count();
-
-            // Wait for the next block to be sequenced.
-            loop {
-                let block_height = client
-                    .get::<usize>("status/block-height")
-                    .send()
-                    .await
-                    .unwrap();
-                if block_height > num_blocks {
-                    break;
-                }
-                tracing::info!("waiting for block {num_blocks}, current height {block_height}");
-                sleep(Duration::from_secs(1)).await;
-            }
-
-            let block: BlockQueryData<SeqTypes> = client
-                .get(&format!("availability/block/{num_blocks}"))
-                .send()
-                .await
-                .unwrap();
-            let header = block.header().clone();
-            if let Some(last_timestamp) = test_blocks.last_mut() {
-                if last_timestamp[0].timestamp == header.timestamp {
-                    last_timestamp.push(header);
-                } else {
-                    test_blocks.push(vec![header]);
-                }
-            } else {
-                test_blocks.push(vec![header]);
-            }
-        }
-        tracing::info!("blocks for testing: {test_blocks:#?}");
-
-        // Define invariants that every response should satisfy.
-        let check_invariants = |res: &TimeWindowQueryData, start, end, check_prev| {
-            let mut prev = res.prev.as_ref();
-            if let Some(prev) = prev {
-                if check_prev {
-                    assert!(prev.timestamp < start);
-                }
-            } else {
-                // `prev` can only be `None` if the first block in the window is the genesis block.
-                assert_eq!(res.from().unwrap(), 0);
-            };
-            for header in &res.window {
-                assert!(start <= header.timestamp);
-                assert!(header.timestamp < end);
-                if let Some(prev) = prev {
-                    assert!(prev.timestamp <= header.timestamp);
-                }
-                prev = Some(header);
-            }
-            if let Some(next) = &res.next {
-                assert!(next.timestamp >= end);
-                // If there is a `next`, there must be at least one previous block (either `prev`
-                // itself or the last block if the window is nonempty), so we can `unwrap` here.
-                assert!(next.timestamp >= prev.unwrap().timestamp);
-            }
-        };
-
-        let get_window = |start, end| {
-            let client = client.clone();
-            async move {
-                let res = client
-                    .get(&format!("availability/headers/window/{start}/{end}"))
-                    .send()
-                    .await
-                    .unwrap();
-                tracing::info!("window for timestamp range {start}-{end}: {res:#?}");
-                check_invariants(&res, start, end, true);
-                res
-            }
-        };
-
-        // Case 0: happy path. All blocks are available, including prev and next.
-        let start = test_blocks[1][0].timestamp;
-        let end = start + 1;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
-        assert_eq!(res.window, test_blocks[1]);
-        assert_eq!(res.next.unwrap(), test_blocks[2][0]);
-
-        // Case 1: no `prev`, start of window is before genesis.
-        let start = 0;
-        let end = test_blocks[0][0].timestamp + 1;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev, None);
-        assert_eq!(res.window, test_blocks[0]);
-        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
-
-        // Case 2: no `next`, end of window is after the most recently sequenced block.
-        let start = test_blocks[2][0].timestamp;
-        let end = i64::MAX as u64;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
-        // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
-        // that the prefix of the window is correct.
-        assert_eq!(res.window[..test_blocks[2].len()], test_blocks[2]);
-        assert_eq!(res.next, None);
-        // Fetch more blocks using the `from` form of the endpoint. Start from the last block we had
-        // previously (ie fetch a slightly overlapping window) to ensure there is at least one block
-        // in the new window.
-        let from = test_blocks.iter().flatten().count() - 1;
-        let more: TimeWindowQueryData = client
-            .get(&format!("availability/headers/window/from/{from}/{end}",))
-            .send()
-            .await
-            .unwrap();
-        check_invariants(&more, start, end, false);
-        assert_eq!(
-            more.prev.as_ref().unwrap(),
-            test_blocks.iter().flatten().nth(from - 1).unwrap()
-        );
-        assert_eq!(
-            more.window[..res.window.len() - test_blocks[2].len() + 1],
-            res.window[test_blocks[2].len() - 1..]
-        );
-        assert_eq!(res.next, None);
-        // We should get the same result whether we query by block height or hash.
-        let more2: TimeWindowQueryData = client
-            .get(&format!(
-                "availability/headers/window/from/hash/{}/{}",
-                test_blocks[2].last().unwrap().commit(),
-                end
-            ))
-            .send()
-            .await
-            .unwrap();
-        check_invariants(&more2, start, end, false);
-        assert_eq!(more2.from().unwrap(), more.from().unwrap());
-        assert_eq!(more2.prev, more.prev);
-        assert_eq!(more2.next, more.next);
-        assert_eq!(more2.window[..more.window.len()], more.window);
-
-        // Case 3: the window is empty.
-        let start = test_blocks[1][0].timestamp;
-        let end = start;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
-        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
-        assert_eq!(res.window, vec![]);
-
-        // Case 5: no relevant blocks are available yet.
-        client
-            .get::<TimeWindowQueryData>(&format!(
-                "availability/headers/window/{}/{}",
-                i64::MAX - 1,
-                i64::MAX
-            ))
-            .send()
-            .await
-            .unwrap_err();
     }
 }
 

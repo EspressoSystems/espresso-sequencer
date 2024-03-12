@@ -11,7 +11,7 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use hotshot_query_service::{availability::BlockQueryData, Error};
+use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
