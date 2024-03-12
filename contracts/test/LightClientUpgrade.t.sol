@@ -70,16 +70,18 @@ contract LightClientUpgradeTest is Test {
 
     // check that the proxy address remains the same
     function testUpgradesSameProxyAddress() public {
-        assertEq(lcV1Proxy.majorVersion(), 1);
-        assertEq(lcV1Proxy.minorVersion(), 0);
-        assertEq(lcV1Proxy.patchVersion(), 0);
+        (uint8 major, uint8 minor, uint8 patch) = lcV1Proxy.getVersion();
+        assertEq(major, 1);
+        assertEq(minor, 0);
+        assertEq(patch, 0);
 
         //upgrade box
         lcV2Proxy = LCV2(upgrader.run(admin, proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
-        assertEq(lcV2Proxy.majorVersion(), 2);
-        assertEq(lcV2Proxy.minorVersion(), 0);
-        assertEq(lcV2Proxy.patchVersion(), 0);
+        (uint8 majorV2, uint8 minorV2, uint8 patchV2) = lcV2Proxy.getVersion();
+        assertEq(majorV2, 2);
+        assertEq(minorV2, 0);
+        assertEq(patchV2, 0);
     }
 
     function testMaliciousUpgradeFails() public {

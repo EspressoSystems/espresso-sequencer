@@ -86,4 +86,13 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
         emit Upgrade(newImplementation);
     }
+
+    /// @notice Use this to get the implementation contract version
+    function getVersion()
+        public
+        pure
+        returns (uint8 majorVersion, uint8 minorVersion, uint8 patchVersion)
+    {
+        return (1, 0, 0);
+    }
 }

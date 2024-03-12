@@ -115,7 +115,7 @@ library PlonkVerifier {
         uint256[][] memory publicInputs,
         IPlonkVerifier.PlonkProof[] memory proofs,
         bytes[] memory extraTranscriptInitMsgs
-    ) external view returns (bool) {
+    ) internal view returns (bool) {
         if (
             verifyingKeys.length != proofs.length || publicInputs.length != proofs.length
                 || extraTranscriptInitMsgs.length != proofs.length || proofs.length == 0

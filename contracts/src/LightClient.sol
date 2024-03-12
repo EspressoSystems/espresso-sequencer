@@ -28,7 +28,6 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// - the active stake table commitment<br>
 /// @dev You can use this contract to keep track of its finalized states in safe,
 /// authenticated ways.
-
 contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
@@ -46,19 +45,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
 
-    /// @notice This number represent the semantic version (semver) of the contract.
-    /// @dev They must be constants and cannot be set using a constructor.
-    uint256 public majorVersion;
-    uint256 public minorVersion;
-    uint256 public patchVersion;
-
     /// @notice genesis block commitment index
-    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    uint32 internal immutable GENESIS_STATE = 0;
+    uint32 internal genesisState;
 
     /// @notice Finalized HotShot's light client state index
-    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    uint32 internal immutable FINALIZED_STATE = 1;
+    uint32 internal finalizedState;
 
     // === Storage ===
 
@@ -125,17 +116,24 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch)
+    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch, address owner)
         public
         initializer
     {
-        __Ownable_init(msg.sender); //sets owner to msg.sender
+        __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
+        genesisState = 0;
+        finalizedState = 1;
         _initializeState(genesis, numBlocksPerEpoch);
+    }
 
-        majorVersion = 1;
-        minorVersion = 0;
-        patchVersion = 0;
+    /// @notice Use this to get the implementation contract version
+    function getVersion()
+        public
+        pure
+        returns (uint8 majorVersion, uint8 minorVersion, uint8 patchVersion)
+    {
+        return (1, 0, 0);
     }
 
     /// @notice only the owner can authorize an upgrade
@@ -160,8 +158,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidArgs();
         }
 
-        states[GENESIS_STATE] = genesis;
-        states[FINALIZED_STATE] = genesis;
+        states[genesisState] = genesis;
+        states[finalizedState] = genesis;
         currentEpoch = 0;
 
         blocksPerEpoch = numBlockPerEpoch;
@@ -200,7 +198,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[FINALIZED_STATE].blockHeight == epochEndingBlockHeight;
+        bool isNewEpoch = states[finalizedState].blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
@@ -220,18 +218,18 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         verifyProof(newState, proof);
 
         // upon successful verification, update the latest finalized state
-        states[FINALIZED_STATE] = newState;
+        states[finalizedState] = newState;
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
 
     /// @dev Simple getter function for the genesis state
     function getGenesisState() public view returns (LightClientState memory) {
-        return states[GENESIS_STATE];
+        return states[genesisState];
     }
 
     /// @dev Simple getter function for the finalized state
     function getFinalizedState() public view returns (LightClientState memory) {
-        return states[FINALIZED_STATE];
+        return states[finalizedState];
     }
 
     // === Pure or View-only APIs ===
@@ -248,9 +246,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[FINALIZED_STATE].stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
 
         return publicInput;
     }
@@ -273,12 +271,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() private {
-        bytes32 newStakeTableComm = computeStakeTableComm(states[FINALIZED_STATE]);
+        bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedState]);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
 
         votingThreshold = frozenThreshold;
-        frozenThreshold = states[FINALIZED_STATE].threshold;
+        frozenThreshold = states[finalizedState].threshold;
 
         currentEpoch += 1;
         emit EpochChanged(currentEpoch);

@@ -2,9 +2,14 @@ pragma solidity ^0.8.20;
 
 import { Script } from "forge-std/Script.sol";
 
-import { Defender, ApprovalProcessResponse } from "openzeppelin-foundry-upgrades/Defender.sol";
+import {
+    Defender,
+    ApprovalProcessResponse,
+    ProposeUpgradeResponse
+} from "openzeppelin-foundry-upgrades/Defender.sol";
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientV2 as LC2 } from "../test/LightClientV2.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 
 contract LightClientDefenderDeployScript is Script {
@@ -47,7 +52,9 @@ contract LightClientDefenderDeployScript is Script {
         opts.defender.salt = contractSalt;
 
         proxy = Upgrades.deployUUPSProxy(
-            "LightClient.sol", abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch)), opts
+            "LightClient.sol",
+            abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, admin)),
+            opts
         );
         vm.stopBroadcast();
 
@@ -59,11 +66,31 @@ contract DeployUUPSContract {
     function deployUUPSContract(
         LC.LightClientState memory state,
         uint32 numBlocksPerEpoch,
+        address admin,
         Options memory opts
     ) external returns (address proxy) {
         proxy = Upgrades.deployUUPSProxy(
-            "LightClient.sol", abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch)), opts
+            "LightClient.sol",
+            abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, admin)),
+            opts
         );
         return proxy;
+    }
+}
+
+contract LightClientDefenderUpgradeScript is Script {
+    function run() public returns (string memory proposalId, string memory proposalUrl) {
+        bytes32 contractSalt = bytes32(abi.encodePacked(vm.envString("LIGHT_CLIENT_SALT")));
+        Options memory opts;
+        opts.defender.useDefenderDeploy = true;
+        opts.defender.salt = contractSalt;
+        opts.referenceContract = "LightClient.sol";
+        address proxyAddress = 0xf897eD651867A38cA24CFe443e12beFb804CDC2E;
+        string memory newContractName = "LightClientV2.sol";
+
+        ProposeUpgradeResponse memory response =
+            Defender.proposeUpgrade(proxyAddress, newContractName, opts);
+
+        return (response.proposalId, response.url);
     }
 }

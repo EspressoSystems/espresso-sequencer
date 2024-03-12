@@ -29,10 +29,7 @@ contract UpgradeLightClientScript is Script {
         LC proxy = LC(proxyAddress); //make the function call on the previous implementation
         vm.prank(admin);
 
-        // the data is the method call to update the version
-        bytes memory data = abi.encodeWithSignature("setVersion()");
-
-        proxy.upgradeToAndCall(newLightClient, data); //proxy address now points to the new
+        proxy.upgradeToAndCall(newLightClient, ""); //proxy address now points to the new
             // implementation
         return address(proxy);
     }
