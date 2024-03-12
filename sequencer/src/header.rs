@@ -692,9 +692,6 @@ mod test_headers {
         .await;
 
         let mut proposal_state = parent_state.clone();
-        // The current fake implementation of fetch_fee_receipts returns
-        // some fee info. To validate the proposal we need to insert these
-        // records here.
         for fee_info in genesis_state
             .l1_client
             .get_finalized_deposits(None, 0)
