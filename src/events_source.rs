@@ -14,5 +14,6 @@ where
 {
     async fn get_available_hotshot_events(
         &self,
+        view_number: I::Time,
     ) -> Result<Vec<EventInfo<I>>, EventError>;
 }
