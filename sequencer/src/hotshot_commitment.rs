@@ -8,7 +8,7 @@ use futures::{
     future,
     stream::{self, StreamExt},
 };
-use hotshot_query_service::availability::LeafQueryData;
+use hotshot_query_service::{availability::LeafQueryData, types::HeightIndexed};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
