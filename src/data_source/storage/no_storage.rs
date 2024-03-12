@@ -22,8 +22,8 @@ use crate::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
         VersionedDataSource,
     },
-    node::{NodeDataSource, SyncStatus},
-    Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    Header, Payload, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -208,7 +208,6 @@ pub mod testing {
         Error,
     };
     use ark_serialize::CanonicalDeserialize;
-    use async_std::task::spawn;
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
     use jf_primitives::merkle_tree::{
@@ -556,6 +555,27 @@ pub mod testing {
                 Self::Sql(data_source) => data_source.metrics(),
                 Self::NoStorage(data_source) => data_source.metrics(),
             }
+        }
+    }
+
+    #[async_trait]
+    impl<Types: NodeType> MerklizedStateDataSource<Types> for NoStorage {
+        type Error = QueryError;
+
+        async fn get_path<
+            E: Element + Send + DeserializeOwned,
+            I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+            A: Unsigned,
+            T: NodeValue + Send + CanonicalDeserialize,
+        >(
+            &self,
+            _state_type: &'static str,
+            _tree_height: usize,
+            _header_state_commitment_field: &'static str,
+            _snapshot: Snapshot<Types>,
+            _key: Value,
+        ) -> QueryResult<MerklePath<E, I, T>> {
+            Err(QueryError::NotFound)
         }
     }
 
