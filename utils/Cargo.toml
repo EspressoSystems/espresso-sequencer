@@ -14,6 +14,6 @@ contract-bindings = { path = "../contract-bindings" }
 ethers = "2.0.4"
 portpicker = "0.1.1"
 surf = "2.3.2"
-tempfile = "3.9.0"
+tempfile = "3.10.1"
 tracing = "0.1.37"
 url = "2.3.1"
