@@ -161,7 +161,7 @@
               enable = true;
               description = "Spell checking";
               entry = "typos";
-              pass_filenames = false;
+              pass_filenames = true;
             };
             nixpkgs-fmt.enable = true;
           };
