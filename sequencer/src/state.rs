@@ -215,7 +215,7 @@ fn charge_fee(
     }
 }
 
-/// Validate builder account by verifiying signature and charging the account.
+/// Validate builder account by verifying signature and charging the account.
 fn validate_and_charge_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
     proposed_header: &Header,
@@ -297,26 +297,27 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // through returned value.
         let mut validated_state = self.clone();
 
-        // Fetch the new L1 deposits between parent and current finalized L1 block.
+        let accounts = std::iter::once(proposed_header.fee_info.account);
 
-        let l1_deposits = instance
-            .l1_client
-            .get_finalized_deposits(
-                parent_leaf
-                    .get_block_header()
-                    .l1_finalized
-                    .map(|block_info| block_info.number),
-                proposed_header
-                    .l1_finalized
-                    .map(|block_info| block_info.number)
-                    .unwrap_or(0),
-            )
-            .await;
+        // Fetch the new L1 deposits between parent and current finalized L1 block.
+        let l1_deposits = if let Some(block_info) = proposed_header.l1_finalized {
+            instance
+                .l1_client
+                .get_finalized_deposits(
+                    parent_leaf
+                        .get_block_header()
+                        .l1_finalized
+                        .map(|block_info| block_info.number),
+                    block_info.number,
+                )
+                .await
+        } else {
+            vec![]
+        };
 
         // Find missing state entries
         let missing_accounts = self.forgotten_accounts(
-            std::iter::once(proposed_header.fee_info.account)
-                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let view = parent_leaf.get_view_number();
