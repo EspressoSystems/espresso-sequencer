@@ -3,6 +3,7 @@ use crate::{
     helpers::{broadcast_event, cancel_task},
     vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
+use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
@@ -12,9 +13,7 @@ use core::time::Duration;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::constants::Version;
 use hotshot_types::constants::LOOK_AHEAD;
-
-use async_broadcast::Sender;
-
+use hotshot_types::event::LeafInfo;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, QuorumProposal, VidDisperse},
@@ -519,11 +518,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let parent = if justify_qc.is_genesis {
                     // Send the `Decide` event for the genesis block if the justify QC is genesis.
                     let leaf = Leaf::genesis(&consensus.instance_state);
+                    let (validated_state, state_delta) =
+                        TYPES::ValidatedState::genesis(&consensus.instance_state);
+                    let state = Arc::new(validated_state);
                     broadcast_event(
                         Event {
                             view_number: TYPES::Time::genesis(),
                             event: EventType::Decide {
-                                leaf_chain: Arc::new(vec![(leaf.clone(), None)]),
+                                leaf_chain: Arc::new(vec![LeafInfo::new(
+                                    leaf.clone(),
+                                    state.clone(),
+                                    Some(Arc::new(state_delta)),
+                                    None,
+                                )]),
                                 qc: Arc::new(justify_qc.clone()),
                                 block_size: None,
                             },
@@ -531,7 +538,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         &self.output_event_stream,
                     )
                     .await;
-                    let state = Arc::new(TYPES::ValidatedState::genesis(&consensus.instance_state));
                     Some((leaf, state))
                 } else {
                     match consensus
@@ -540,7 +546,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                     {
                         Some(leaf) => {
-                            if let Some(state) = consensus.get_state(leaf.view_number) {
+                            if let (Some(state), _) =
+                                consensus.get_state_and_delta(leaf.view_number)
+                            {
                                 Some((leaf, state.clone()))
                             } else {
                                 error!("Parent state not found! Consensus internally inconsistent");
@@ -584,6 +592,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             view_inner: ViewInner::Leaf {
                                 leaf: leaf.commit(),
                                 state,
+                                delta: None,
                             },
                         },
                     );
@@ -624,7 +633,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     return;
                 };
-                let Ok(state) = parent_state
+                let Ok((validated_state, state_delta)) = parent_state
                     .validate_and_apply_header(
                         &consensus.instance_state,
                         &parent_leaf,
@@ -635,7 +644,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Block header doesn't extend the proposal",);
                     return;
                 };
-                let state = Arc::new(state);
+                let state = Arc::new(validated_state);
+                let delta = Arc::new(state_delta);
                 let parent_commitment = parent_leaf.commit();
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
@@ -664,7 +674,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     justify_qc.get_view_number(),
                     Terminator::Inclusive(consensus.locked_view),
                     false,
-                    |leaf| {
+                    |leaf, _, _| {
                         // if leaf view no == locked view no then we're done, report success by
                         // returning true
                         leaf.view_number != consensus.locked_view
@@ -723,7 +733,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         parent_view,
                         Terminator::Exclusive(old_anchor_view),
                         true,
-                        |leaf| {
+                        |leaf, state, delta| {
                             if !new_decide_reached {
                                 if last_view_number_visited == leaf.view_number + 1 {
                                     last_view_number_visited = leaf.view_number;
@@ -774,7 +784,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     .get(&leaf.get_view_number())
                                     .map(|vid_proposal| vid_proposal.data.clone());
 
-                                leaf_views.push((leaf.clone(), vid));
+                                leaf_views.push(LeafInfo::new(leaf.clone(), state.clone(), delta.clone(), vid));
                                 leafs_decided.push(leaf.clone());
                                 if let Some(ref payload) = leaf.block_payload {
                                     for txn in payload
@@ -810,7 +820,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     View {
                         view_inner: ViewInner::Leaf {
                             leaf: leaf.commit(),
-                            state,
+                            state: state.clone(),
+                            delta: Some(delta.clone()),
                         },
                     },
                 );
@@ -1270,7 +1281,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             return false;
         };
         // Leaf hash in view inner does not match high qc hash - Why?
-        let Some((leaf_commitment, state)) = parent_view.get_leaf() else {
+        let Some((leaf_commitment, state)) = parent_view.get_leaf_and_state() else {
             error!(
                 ?parent_view_number,
                 ?parent_view,

@@ -272,12 +272,11 @@ async fn build_quorum_proposal_and_signature(
 
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
-        let state_new_view = Arc::new(
-            parent_state
-                .validate_and_apply_header(&TestInstanceState {}, &parent_leaf, &block_header)
-                .await
-                .unwrap(),
-        );
+        let (state_new_view, delta_new_view) = parent_state
+            .validate_and_apply_header(&TestInstanceState {}, &parent_leaf, &block_header)
+            .await
+            .unwrap();
+        let state_new_view = Arc::new(state_new_view);
         // save states for the previous view to pass all the qc checks
         // In the long term, we want to get rid of this, do not manually update consensus state
         consensus.validated_state_map.insert(
@@ -286,6 +285,7 @@ async fn build_quorum_proposal_and_signature(
                 view_inner: ViewInner::Leaf {
                     leaf: leaf.commit(),
                     state: state_new_view.clone(),
+                    delta: Some(Arc::new(delta_new_view)),
                 },
             },
         );

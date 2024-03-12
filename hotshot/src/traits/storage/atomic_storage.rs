@@ -179,11 +179,6 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
         Ok(self.inner.leaves.load_by_key_2_ref(hash).await)
     }
 
-    #[instrument(name = "AtomicStorage::get_state", skip_all)]
-    async fn get_state(&self, hash: &Commitment<Leaf<STATE>>) -> StorageResult<Option<STATE>> {
-        Ok(self.inner.states.get(hash).await)
-    }
-
     async fn get_internal_state(&self) -> StorageState<STATE> {
         let mut blocks: Vec<(Commitment<STATE::BlockPayload>, STATE::BBlockPayloadlock)> =
             self.inner.blocks.load_all().await.into_iter().collect();

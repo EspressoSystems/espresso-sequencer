@@ -2,7 +2,7 @@ use hotshot::{traits::TestableNodeImplementation, HotShotError};
 
 use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{
-    data::{Leaf, VidDisperse},
+    data::Leaf,
     error::RoundTimedoutState,
     event::{Event, EventType, LeafChain},
     simple_certificate::QuorumCertificate,
@@ -160,7 +160,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                 block_size: maybe_block_size,
             } => {
                 // Skip the genesis leaf.
-                if leaf_chain.last().unwrap().0.get_view_number() == TYPES::Time::genesis() {
+                if leaf_chain.last().unwrap().leaf.get_view_number() == TYPES::Time::genesis() {
                     return None;
                 }
                 let paired_up = (leaf_chain.to_vec(), (*qc).clone());
@@ -205,7 +205,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             view.update_status(
                 threshold,
                 len,
-                &key.0,
+                &key,
                 check_leaf,
                 check_block,
                 transaction_threshold,
@@ -358,11 +358,12 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         idx: usize,
         result: (LeafChain<TYPES>, QuorumCertificate<TYPES>),
         maybe_block_size: Option<u64>,
-    ) -> Option<(Leaf<TYPES>, Option<VidDisperse<TYPES>>)> {
+    ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
 
-        let maybe_leaf: Option<(Leaf<TYPES>, _)> = result.0.into_iter().last();
-        if let Some((leaf, _)) = maybe_leaf.clone() {
+        let maybe_leaf = result.0.into_iter().last();
+        if let Some(leaf_info) = maybe_leaf.clone() {
+            let leaf = leaf_info.leaf;
             match self.leaf_map.entry(leaf.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
@@ -393,8 +394,9 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                     }
                 }
             }
+            return Some(leaf);
         }
-        maybe_leaf
+        None
     }
 
     /// check if the test failed due to not enough nodes getting through enough views
@@ -474,8 +476,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         for (leaf_vec, _) in self.success_nodes.values() {
             let most_recent_leaf = leaf_vec.iter().last();
-            if let Some((leaf, _)) = most_recent_leaf {
-                match leaves.entry(leaf.clone()) {
+            if let Some(leaf_info) = most_recent_leaf {
+                match leaves.entry(leaf_info.leaf.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut o) => {
                         *o.get_mut() += 1;
                     }

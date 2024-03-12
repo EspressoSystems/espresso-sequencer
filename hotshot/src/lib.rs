@@ -202,6 +202,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
                     state: validated_state,
+                    delta: initializer.state_delta,
                 },
             },
         );
@@ -229,6 +230,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let consensus = Consensus {
             instance_state,
             validated_state_map,
+            vid_shares: BTreeMap::new(),
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
@@ -625,6 +627,11 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// the state from the block header.
     validated_state: Option<Arc<TYPES::ValidatedState>>,
 
+    /// Optional state delta.
+    ///
+    /// If it's given, we'll use it to constrcut the `SystemContext`.
+    state_delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
+
     /// Starting view number that we are confident won't lead to a double vote after restart.
     start_view: TYPES::Time,
 }
@@ -634,11 +641,12 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
     pub fn from_genesis(instance_state: TYPES::InstanceState) -> Result<Self, HotShotError<TYPES>> {
-        let validated_state = Some(Arc::new(TYPES::ValidatedState::genesis(&instance_state)));
+        let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
         Ok(Self {
             inner: Leaf::genesis(&instance_state),
             instance_state,
-            validated_state,
+            validated_state: Some(Arc::new(validated_state)),
+            state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::Time::new(0),
         })
     }
@@ -660,6 +668,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             inner: anchor_leaf,
             instance_state,
             validated_state,
+            state_delta: None,
             start_view,
         }
     }

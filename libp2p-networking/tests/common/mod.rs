@@ -131,7 +131,7 @@ pub async fn test_bed<S: 'static + Send + Default + Debug + Clone, F, FutF, G: C
         handle.handle.shutdown().await.unwrap();
     }
     for switch in kill_switches {
-        switch.send(()).await.unwrap();
+        let _ = switch.send(()).await;
     }
 
     for fut in handler_futures {

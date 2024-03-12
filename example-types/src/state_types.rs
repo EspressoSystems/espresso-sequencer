@@ -6,7 +6,7 @@ use hotshot_types::{
     traits::{
         block_contents::BlockHeader,
         node_implementation::NodeType,
-        states::{InstanceState, TestableState, ValidatedState},
+        states::{InstanceState, StateDelta, TestableState, ValidatedState},
         BlockPayload,
     },
 };
@@ -22,6 +22,12 @@ pub use crate::node_types::TestTypes;
 pub struct TestInstanceState {}
 
 impl InstanceState for TestInstanceState {}
+
+/// Application-specific state delta implementation for testing purposes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TestStateDelta {}
+
+impl StateDelta for TestStateDelta {}
 
 /// Validated state implementation for testing purposes.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -59,6 +65,8 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
 
     type Instance = TestInstanceState;
 
+    type Delta = TestStateDelta;
+
     type Time = ViewNumber;
 
     async fn validate_and_apply_header(
@@ -66,11 +74,14 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
         _instance: &Self::Instance,
         _parent_leaf: &Leaf<TYPES>,
         _proposed_header: &TYPES::BlockHeader,
-    ) -> Result<Self, Self::Error> {
-        Ok(TestValidatedState {
-            block_height: self.block_height + 1,
-            prev_state_commitment: self.commit(),
-        })
+    ) -> Result<(Self, Self::Delta), Self::Error> {
+        Ok((
+            TestValidatedState {
+                block_height: self.block_height + 1,
+                prev_state_commitment: self.commit(),
+            },
+            TestStateDelta {},
+        ))
     }
 
     fn from_header(block_header: &TYPES::BlockHeader) -> Self {
@@ -82,8 +93,8 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
 
     fn on_commit(&self) {}
 
-    fn genesis(_instance: &Self::Instance) -> Self {
-        Self::default()
+    fn genesis(_instance: &Self::Instance) -> (Self, Self::Delta) {
+        (Self::default(), TestStateDelta {})
     }
 }
 
