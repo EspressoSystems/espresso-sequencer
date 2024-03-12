@@ -157,6 +157,12 @@
               types_or = [ "markdown" ];
               pass_filenames = true;
             };
+            spell-checking = {
+              enable = true;
+              description = "Spell checking";
+              entry = "typos";
+              pass_filenames = true;
+            };
             nixpkgs-fmt.enable = true;
           };
         };
@@ -187,6 +193,7 @@
             cargo-audit
             cargo-edit
             cargo-sort
+            typos
             just
             fenix.packages.${system}.rust-analyzer
 

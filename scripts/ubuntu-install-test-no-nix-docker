@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # This script is to test the ubuntu installation instructions locally on
 # non-ubuntu machines by running through the installation and tests inside an
-# ubuntu docker contrainer.
+# ubuntu docker container.
 set -e
 
 # Create a temporary copy of the repository to be mounted into the container.

@@ -72,7 +72,7 @@ library Transcript {
     }
 
     /// @dev Append the verifying key and the public inputs to the transcript.
-    /// @param verifyingKey verifiying key
+    /// @param verifyingKey verifying key
     /// @param publicInput a list of field elements
     function appendVkAndPubInput(
         TranscriptData memory self,
