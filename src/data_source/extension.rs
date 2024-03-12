@@ -17,19 +17,22 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    merklized_state::UpdateStateStorage,
+    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateStorage},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
     Header, Payload, QueryResult, VidShare,
 };
+use ark_serialize::CanonicalDeserialize;
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::{
     circuit::merkle_tree::MembershipProof,
-    merkle_tree::{Element, Index, NodeValue},
+    merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath},
 };
+use serde::de::DeserializeOwned;
 use std::{fmt::Display, ops::RangeBounds};
+use typenum::Unsigned;
 
 /// Wrapper to add extensibility to an existing data source.
 ///
@@ -299,6 +302,37 @@ where
         path: Vec<usize>,
     ) -> Result<(), Self::Error> {
         self.data_source.insert_nodes(name, proof, path).await
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType, D, U> MerklizedStateDataSource<Types> for ExtensibleDataSource<D, U>
+where
+    D: MerklizedStateDataSource<Types> + Send + Sync,
+    U: Send + Sync,
+{
+    type Error = D::Error;
+    async fn get_path<
+        E: Element + Send + DeserializeOwned,
+        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+        A: Unsigned,
+        T: NodeValue + Send + CanonicalDeserialize,
+    >(
+        &self,
+        state_type: &'static str,
+        tree_height: usize,
+        header_state_commitment_field: &'static str,
+        snapshot: Snapshot<Types>,
+        key: serde_json::Value,
+    ) -> Result<MerklePath<E, I, T>, Self::Error> {
+        self.get_path::<E, I, A, T>(
+            state_type,
+            tree_height,
+            header_state_commitment_field,
+            snapshot,
+            key,
+        )
+        .await
     }
 }
 

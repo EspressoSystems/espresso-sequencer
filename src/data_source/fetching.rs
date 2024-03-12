@@ -73,8 +73,11 @@
 //! different request for the same object, one that permitted an active fetch. Or it may have been
 //! fetched [proactively](#proactive-fetching).
 
-use super::storage::pruning::PruneStorage;
-use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
+use super::{
+    notifier::Notifier,
+    storage::{pruning::PruneStorage, AvailabilityStorage},
+    VersionedDataSource,
+};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -82,6 +85,7 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
+    merklized_state::{MerklizedStateDataSource, Snapshot},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -90,6 +94,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
+use ark_serialize::CanonicalDeserialize;
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::sleep,
@@ -102,6 +107,10 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
+use jf_primitives::merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use typenum::Unsigned;
 
 use std::{
     cmp::min,
@@ -540,6 +549,43 @@ where
 }
 
 #[async_trait]
+impl<Types, S, P> MerklizedStateDataSource<Types> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: MerklizedStateDataSource<Types> + Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    type Error = S::Error;
+
+    async fn get_path<
+        E: Element + Send + DeserializeOwned,
+        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+        A: Unsigned,
+        T: NodeValue + Send + CanonicalDeserialize,
+    >(
+        &self,
+        state_type: &'static str,
+        tree_height: usize,
+        header_state_commitment_field: &'static str,
+        snapshot: Snapshot<Types>,
+        key: serde_json::Value,
+    ) -> Result<MerklePath<E, I, T>, Self::Error> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .get_path::<E, I, A, T>(
+                state_type,
+                tree_height,
+                header_state_commitment_field,
+                snapshot,
+                key,
+            )
+            .await
+    }
+}
+
+#[async_trait]
 impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
@@ -688,6 +734,36 @@ where
             self.height = common.height() + 1;
         }
         self.storage.insert_vid(common, share).await
+    }
+}
+
+impl<Types, S> NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: MerklizedStateDataSource<Types>,
+{
+    async fn get_path<
+        E: Element + Send + DeserializeOwned,
+        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+        A: Unsigned,
+        T: NodeValue + Send + CanonicalDeserialize,
+    >(
+        &self,
+        state_type: &'static str,
+        tree_height: usize,
+        header_state_commitment_field: &'static str,
+        snapshot: Snapshot<Types>,
+        key: Value,
+    ) -> Result<MerklePath<E, I, T>, S::Error> {
+        self.storage
+            .get_path::<E, I, A, T>(
+                state_type,
+                tree_height,
+                header_state_commitment_field,
+                snapshot,
+                key,
+            )
+            .await
     }
 }
 

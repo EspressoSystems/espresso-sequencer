@@ -11,14 +11,14 @@
 // see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    data_source::storage::{sql::*, SqlStorage},
-    QueryError, QueryResult,
+    availability::QueryablePayload,
+    data_source::storage::{sql::*, FileSystemStorage, NoStorage, SqlStorage},
+    Payload, QueryError, QueryResult,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::stream::StreamExt;
 use bit_vec::BitVec;
-use derive_more::Display;
-use derive_more::From;
+use derive_more::{Display, From};
 
 use async_trait::async_trait;
 use commit::Commitment;
@@ -413,6 +413,51 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
     }
 }
 
+#[async_trait]
+impl<Types: NodeType> MerklizedStateDataSource<Types> for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    type Error = QueryError;
+
+    async fn get_path<
+        E: Element + Send + DeserializeOwned,
+        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+        A: Unsigned,
+        T: NodeValue + Send + CanonicalDeserialize,
+    >(
+        &self,
+        _state_type: &'static str,
+        _tree_height: usize,
+        _header_state_commitment_field: &'static str,
+        _snapshot: Snapshot<Types>,
+        _key: Value,
+    ) -> QueryResult<MerklePath<E, I, T>> {
+        Err(QueryError::NotFound)
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType> MerklizedStateDataSource<Types> for NoStorage {
+    type Error = QueryError;
+
+    async fn get_path<
+        E: Element + Send + DeserializeOwned,
+        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+        A: Unsigned,
+        T: NodeValue + Send + CanonicalDeserialize,
+    >(
+        &self,
+        _state_type: &'static str,
+        _tree_height: usize,
+        _header_state_commitment_field: &'static str,
+        _snapshot: Snapshot<Types>,
+        _key: Value,
+    ) -> QueryResult<MerklePath<E, I, T>> {
+        Err(QueryError::NotFound)
+    }
+}
+
 type MerkleCommitment<Types> = Commitment<Leaf<Types>>;
 
 #[derive(Derivative, From, Display)]
@@ -470,18 +515,24 @@ impl From<ParseError> for QueryError {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
 
-    use super::{testing::TmpDb, *};
+    use super::*;
+
+    use super::testing::TmpDb;
+
     use crate::{
         data_source::VersionedDataSource,
+        merklized_state::MerklizedState,
         testing::{mocks::MockTypes, setup_test},
     };
+
     use jf_primitives::merkle_tree::{
         prelude::{LightWeightSHA3MerkleTree, Sha3Node},
         AppendableMerkleTreeScheme, MerkleTreeScheme,
     };
-    use rand::thread_rng;
-    use rand::{distributions::Alphanumeric, Rng};
+
+    use rand::{distributions::Alphanumeric, thread_rng, Rng};
     use typenum::U3;
+
     #[async_std::test]
     async fn test_merklized_state_storage() {
         setup_test();
@@ -575,5 +626,18 @@ mod test {
             proof.merkle_path().clone(),
             "merkle paths mismatch"
         )
+    }
+
+    type TestMerkleTree = LightWeightSHA3MerkleTree<usize>;
+
+    impl MerklizedState for TestMerkleTree {
+        type Arity = U3;
+        fn state_type(&self) -> &'static str {
+            "test_tree"
+        }
+
+        fn header_state_commitment_field(&self) -> &'static str {
+            "block_merkle_tree_root"
+        }
     }
 }

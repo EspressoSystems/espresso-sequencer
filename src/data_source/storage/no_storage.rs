@@ -13,16 +13,17 @@
 #![cfg(feature = "no-storage")]
 
 use super::AvailabilityStorage;
-use crate::data_source::storage::pruning::PrunedHeightStorage;
-use crate::data_source::storage::pruning::{PruneStorage, PrunerConfig};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
-    data_source::VersionedDataSource,
-    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    Header, Payload, QueryError, QueryResult, VidShare,
+    data_source::{
+        storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
+        VersionedDataSource,
+    },
+    node::{NodeDataSource, SyncStatus},
+    Header, Payload, QueryError, QueryResult, SignatureKey, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -196,6 +197,7 @@ pub mod testing {
             storage::sql::testing::TmpDb, FetchingDataSource, SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
+        merklized_state::{MerklizedStateDataSource, Snapshot},
         metrics::PrometheusMetrics,
         node::NodeDataSource,
         status::StatusDataSource,
@@ -205,11 +207,19 @@ pub mod testing {
         },
         Error,
     };
+    use ark_serialize::CanonicalDeserialize;
+    use async_std::task::spawn;
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
+    use jf_primitives::merkle_tree::{
+        prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath,
+    };
     use portpicker::pick_unused_port;
+    use serde::de::DeserializeOwned;
+    use serde_json::Value;
     use std::{fmt::Display, time::Duration};
     use tide_disco::App;
+    use typenum::Unsigned;
 
     /// Either Postgres or no storage.
     ///
@@ -549,6 +559,38 @@ pub mod testing {
         }
     }
 
+    #[async_trait]
+    impl MerklizedStateDataSource<MockTypes> for DataSource {
+        type Error = QueryError;
+
+        async fn get_path<
+            E: Element + Send + DeserializeOwned,
+            I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
+            A: Unsigned,
+            T: NodeValue + Send + CanonicalDeserialize,
+        >(
+            &self,
+            state_type: &'static str,
+            tree_height: usize,
+            header_state_commitment_field: &'static str,
+            snapshot: Snapshot<MockTypes>,
+            key: Value,
+        ) -> QueryResult<MerklePath<E, I, T>> {
+            match self {
+                Self::Sql(ds) => {
+                    ds.get_path::<E, I, A, T>(
+                        state_type,
+                        tree_height,
+                        header_state_commitment_field,
+                        snapshot,
+                        key,
+                    )
+                    .await
+                }
+                Self::NoStorage(_) => Err(QueryError::Missing),
+            }
+        }
+    }
     fn err_msg<E: Display>(err: E) -> QueryError {
         QueryError::Error {
             message: err.to_string(),

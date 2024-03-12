@@ -39,8 +39,7 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
-use tokio_postgres::types::private::BytesMut;
-use tokio_postgres::types::to_sql_checked;
+use tokio_postgres::types::{private::BytesMut, to_sql_checked};
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
 // crate which doesn't have `include_dir` as a dependency.
@@ -1822,8 +1821,7 @@ impl ToSql for LTree {
 
     to_sql_checked!();
 }
-use tokio_postgres::types::FromSql;
-use tokio_postgres::types::Type;
+use tokio_postgres::types::{FromSql, Type};
 impl<'a> FromSql<'a> for LTree {
     fn from_sql(
         ty: &Type,

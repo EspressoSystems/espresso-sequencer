@@ -12,9 +12,7 @@
 
 use anyhow::bail;
 use async_trait::async_trait;
-use std::error::Error;
-use std::fmt::Debug;
-use std::time::Duration;
+use std::{error::Error, fmt::Debug, time::Duration};
 
 #[derive(Clone, Debug)]
 pub struct PrunerCfg {

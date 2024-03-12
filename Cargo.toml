@@ -17,8 +17,6 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 license = "GPL-3.0-or-later"
 
-[profile.test]
-opt-level = 2
 
 [features]
 default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]

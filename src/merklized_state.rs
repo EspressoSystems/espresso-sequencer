@@ -10,7 +10,8 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::api::load_api;
+use std::{fmt::Display, path::PathBuf};
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use clap::Args;
 use derive_more::From;
@@ -19,15 +20,15 @@ use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::merkle_tree::{Index, MerkleTreeScheme, ToTraversalPath};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt::Display;
-use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use typenum::Unsigned;
+
+use crate::api::load_api;
 
 pub(crate) mod data_source;
 pub use data_source::*;
 
-#[derive(Args)]
+#[derive(Args, Default)]
 pub struct Options {
     #[arg(
         long = "merklized-state-api-path",
@@ -35,12 +36,12 @@ pub struct Options {
     )]
     pub api_path: Option<PathBuf>,
 
-    /// Additional API specification files to merge with `status-api-path`.
+    /// Additional API specification files to merge with `merklized-state-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic status API.
     #[arg(
-        long = "status-extension",
+        long = "merklized-state-extension",
         env = "HOTSHOT_MERKLIZED_STATE_EXTENSIONS",
         value_delimiter = ','
     )]
@@ -67,14 +68,6 @@ fn internal<M: Display>(msg: M) -> Error {
         reason: msg.to_string(),
     }
 }
-
-// pub struct MerklizedStateType(&'static str);
-
-// impl Display for MerklizedStateType {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", self.0)
-//     }
-// }
 
 pub trait MerklizedState: MerkleTreeScheme {
     type Arity: Unsigned;
@@ -139,4 +132,55 @@ where
         })?;
 
     Ok(api)
+}
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+
+    use std::time::Duration;
+
+    use async_std::{
+        stream::StreamExt,
+        task::{sleep, spawn},
+    };
+    use jf_primitives::merkle_tree::prelude::LightWeightSHA3MerkleTree;
+    use portpicker::pick_unused_port;
+    use tide_disco::App;
+
+    use crate::{
+        merklized_state::define_api,
+        testing::{
+            consensus::{MockNetwork, MockSqlDataSource},
+            setup_test,
+        },
+        Error,
+    };
+
+    #[async_std::test]
+    async fn test_merklized_state_api() {
+        // TODO:
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
+        let mut events = network.handle().get_event_stream();
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        let test_tree = LightWeightSHA3MerkleTree::<usize>::new(3);
+
+        app.register_module("node", define_api(&Default::default(), test_tree).unwrap())
+            .unwrap();
+
+        spawn(app.serve(format!("0.0.0.0:{}", port)));
+        sleep(Duration::from_secs(5)).await;
+        while let Some(event) = events.next().await {
+            println!("event : {:?}", event);
+        }
+
+        network.shut_down().await;
+    }
 }
