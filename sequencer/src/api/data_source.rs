@@ -56,13 +56,6 @@ pub trait SequencerDataSource:
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
-
-    /// Update sequencer-specific indices when a new block is added.
-    ///
-    /// `from_block` should be the height of the chain the last time `refresh_indices` was called.
-    /// Any blocks in the data sources with number `from_block` or greater will be incorporated into
-    /// sequencer-specific data structures.
-    async fn refresh_indices(&mut self, from_block: usize) -> anyhow::Result<()>;
 }
 
 /// Provider for fetching missing data for the query service.

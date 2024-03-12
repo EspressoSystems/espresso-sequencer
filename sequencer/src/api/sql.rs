@@ -17,12 +17,6 @@ impl SequencerDataSource for DataSource {
 
         Ok(cfg.connect(provider).await?)
     }
-
-    async fn refresh_indices(&mut self, _from_block: usize) -> anyhow::Result<()> {
-        // We don't maintain any extra sequencer-specific indices ourselves. They are implicitly
-        // managed by the Postgres engine.
-        Ok(())
-    }
 }
 
 #[cfg(test)]

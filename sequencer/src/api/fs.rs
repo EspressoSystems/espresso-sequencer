@@ -1,22 +1,10 @@
 use super::data_source::{Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
-use futures::StreamExt;
-use hotshot_query_service::{
-    availability::{AvailabilityDataSource, BlockQueryData},
-    data_source::{ExtensibleDataSource, FileSystemDataSource},
-    node::NodeDataSource,
-    types::HeightIndexed,
-    QueryError,
-};
-use std::{collections::BTreeMap, path::Path};
+use hotshot_query_service::data_source::FileSystemDataSource;
+use std::path::Path;
 
-#[derive(Clone, Debug, Default)]
-pub struct Index {
-    blocks_by_time: BTreeMap<u64, Vec<u64>>,
-}
-
-pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes, Provider>, Index>;
+pub type DataSource = FileSystemDataSource<SeqTypes, Provider>;
 
 #[async_trait]
 impl SequencerDataSource for DataSource {
@@ -31,55 +19,9 @@ impl SequencerDataSource for DataSource {
                 FileSystemDataSource::open(path, provider).await?
             }
         };
-        let mut index = Index::default();
 
-        // Index blocks by timestamp.
-        let mut blocks = data_source
-            .get_block_range(..data_source.block_height().await?)
-            .await;
-        while let Some(block) = blocks.next().await {
-            index_block_by_time(
-                &mut index.blocks_by_time,
-                &block.try_resolve().map_err(|_| QueryError::Missing)?,
-            );
-        }
-        drop(blocks);
-
-        Ok(ExtensibleDataSource::new(data_source, index))
+        Ok(data_source)
     }
-
-    async fn refresh_indices(&mut self, from_block: usize) -> anyhow::Result<()> {
-        // We can't update the index in `self.as_mut()` at the same time as the stream
-        // `self.get_block_range()` is live, since that would require conflicting borrows against
-        // `self`. By collecting the stream into a vector, we drop our borrow of `self`. This
-        // function is called every time a new block is added so this usually requires loading only
-        // one block into memory, and rarely very many.
-        let blocks: Vec<_> = self
-            .get_block_range(from_block..self.block_height().await?)
-            .await
-            .enumerate()
-            .collect()
-            .await;
-        for (i, block) in blocks {
-            let Ok(block) = block.try_resolve() else {
-                tracing::warn!("missing block {}, index may be out of date", from_block + i);
-                continue;
-            };
-            index_block_by_time(&mut self.as_mut().blocks_by_time, &block);
-        }
-
-        Ok(())
-    }
-}
-
-fn index_block_by_time(
-    blocks_by_time: &mut BTreeMap<u64, Vec<u64>>,
-    block: &BlockQueryData<SeqTypes>,
-) {
-    blocks_by_time
-        .entry(block.header().timestamp)
-        .or_default()
-        .push(block.height());
 }
 
 #[cfg(test)]

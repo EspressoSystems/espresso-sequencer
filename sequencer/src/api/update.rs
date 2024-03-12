@@ -5,10 +5,7 @@ use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_query_service::{
-    data_source::{UpdateDataSource, VersionedDataSource},
-    status::StatusDataSource,
-};
+use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
 
 pub(super) async fn update_loop<N, D>(
     state: Arc<RwLock<StorageState<N, D>>>,
@@ -44,12 +41,7 @@ where
     N: network::Type,
     D: SequencerDataSource + Send + Sync,
 {
-    // Remember the current block height, so we can update our local index
-    // based on any new blocks that get added.
-    let prev_block_height = state.block_height().await?;
-
     state.update(event).await?;
-    state.inner_mut().refresh_indices(prev_block_height).await?;
     state.commit().await?;
 
     Ok(())
