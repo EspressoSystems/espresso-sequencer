@@ -64,13 +64,6 @@ fn main() {
     let ((bls_comm, schnorr_comm, stake_comm), threshold) =
         stake_table_commitment_for_demo(&args.private_staking_keys, &args.private_state_keys);
 
-    std::println!(
-        "{:?}\n{:?}",
-        args.private_staking_keys,
-        args.private_state_keys
-    );
-    std::println!("{threshold}");
-
     let pi = vec![
         u256_to_field(threshold),
         F::from(0_u64), // Arbitrary value for view number
