@@ -19,6 +19,8 @@ jobs:
           toolchain: nightly
           override: true
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: Run cargo-udeps
         uses: aig787/cargo-udeps-action@v1
         with:
