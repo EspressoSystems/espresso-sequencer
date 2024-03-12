@@ -9,6 +9,7 @@ use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId, BlockQueryData},
     data_source::{ExtensibleDataSource, FileSystemDataSource},
     node::NodeDataSource,
+    types::HeightIndexed,
     NotFoundSnafu, QueryError, QueryResult,
 };
 use snafu::OptionExt;

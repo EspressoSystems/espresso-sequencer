@@ -421,7 +421,10 @@ mod api_tests {
         future::join_all,
         stream::{StreamExt, TryStreamExt},
     };
-    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        types::HeightIndexed,
+    };
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
     use std::time::Duration;

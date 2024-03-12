@@ -8,6 +8,7 @@ use futures::{StreamExt, TryStreamExt};
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId},
     data_source::sql::{Config, Query, SqlDataSource},
+    types::HeightIndexed,
     QueryError, QueryResult,
 };
 use tokio_postgres::Row;
