@@ -44,7 +44,7 @@ contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
-    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
     constructor() {
         _disableInitializers();
