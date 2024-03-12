@@ -154,7 +154,7 @@ pub fn load_proving_key() -> ProvingKey {
 
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
-        let srs = crs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs = ark_srs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
         let srs_elapsed = srs_timer.elapsed();
         std::println!("Done in {srs_elapsed:.3}");
 
@@ -501,7 +501,7 @@ mod test {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = crs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -543,15 +543,19 @@ mod test {
         let signer = Wallet::from(anvil.keys()[0].clone());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        let status = Command::new("just")
+        let output = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
             .arg(TEST_MNEMONIC)
             .arg(BLOCKS_PER_EPOCH.to_string())
             .arg(NUM_INIT_VALIDATORS.to_string())
-            .status()
+            .output()
             .expect("fail to deploy");
-        assert!(status.success());
+
+        if !output.status.success() {
+            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
+            return Err(anyhow!("failed to deploy contract"));
+        }
 
         let last_blk_num = provider.get_block_number().await?;
         // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol

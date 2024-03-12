@@ -1,5 +1,5 @@
 use super::{Deserialize, Serialize};
-use crate::VmId;
+use crate::NamespaceId;
 use core::fmt;
 use std::mem::size_of;
 
@@ -69,17 +69,17 @@ impl TryFrom<TxTableEntry> for usize {
     }
 }
 
-impl TryFrom<VmId> for TxTableEntry {
+impl TryFrom<NamespaceId> for TxTableEntry {
     type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
 
-    fn try_from(value: VmId) -> Result<Self, Self::Error> {
-        TxTableEntryWord::try_from(value.0).map(Self)
+    fn try_from(value: NamespaceId) -> Result<Self, Self::Error> {
+        TxTableEntryWord::try_from(u64::from(value)).map(Self)
     }
 }
-impl TryFrom<TxTableEntry> for VmId {
+impl TryFrom<TxTableEntry> for NamespaceId {
     type Error = <u64 as TryFrom<TxTableEntryWord>>::Error;
 
     fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
-        Ok(Self(From::from(value.0)))
+        Ok((value.0 as u64).into())
     }
 }

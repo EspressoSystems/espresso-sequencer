@@ -32,10 +32,11 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 ] }
 async-std = "1.12.0"
 async-trait = "0.1.77"
+base64 = "0.22"
 clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
-ethers = { version = "2.0", features = ["ws"] }
+ethers = { version = "2.0" }
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "cl/state-key-pair-fix" }

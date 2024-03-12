@@ -1,10 +1,41 @@
+use crate::bytes::Bytes;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::{Commitment, Committable};
+use derive_more::{Display, From, Into};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_primitives::merkle_tree::namespaced_merkle_tree::Namespaced;
+use jf_primitives::merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{Deserialize, Serialize};
 
-use crate::vm::{Vm, VmId, VmTransaction};
+#[derive(
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Debug,
+    Display,
+    PartialEq,
+    Eq,
+    Hash,
+    Into,
+    From,
+    Default,
+    CanonicalDeserialize,
+    CanonicalSerialize,
+    PartialOrd,
+    Ord,
+)]
+#[display(fmt = "{_0}")]
+pub struct NamespaceId(u64);
+
+impl Namespace for NamespaceId {
+    fn max() -> Self {
+        Self(u64::max_value())
+    }
+
+    fn min() -> Self {
+        Self(u64::min_value())
+    }
+}
 
 #[derive(
     Clone,
@@ -18,29 +49,24 @@ use crate::vm::{Vm, VmId, VmTransaction};
     CanonicalDeserialize,
 )]
 pub struct Transaction {
-    vm: VmId,
-    payload: Vec<u8>,
+    namespace: NamespaceId,
+    payload: Bytes,
 }
 
 impl Transaction {
-    pub fn new(vm: VmId, payload: Vec<u8>) -> Self {
-        Self { vm, payload }
+    pub fn new(namespace: NamespaceId, payload: impl Into<Bytes>) -> Self {
+        Self {
+            namespace,
+            payload: payload.into(),
+        }
     }
 
-    pub fn vm(&self) -> VmId {
-        self.vm
+    pub fn namespace(&self) -> NamespaceId {
+        self.namespace
     }
 
     pub fn payload(&self) -> &[u8] {
         &self.payload
-    }
-
-    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
-        if self.vm() == vm.id() {
-            V::Transaction::decode(self.payload())
-        } else {
-            None
-        }
     }
 
     #[cfg(any(test, feature = "testing"))]
@@ -48,46 +74,26 @@ impl Transaction {
         use rand::Rng;
         let len = rng.gen_range(0..100);
         Self::new(
-            VmId(rng.gen_range(0..10)),
-            (0..len).map(|_| rand::random::<u8>()).collect(),
+            NamespaceId(rng.gen_range(0..10)),
+            (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct ApplicationTransaction(Vec<u8>);
-
-impl ApplicationTransaction {
-    #[allow(unused)]
-    pub(crate) fn new(payload: Vec<u8>) -> Self {
-        Self(payload)
-    }
-}
-
-impl VmTransaction for ApplicationTransaction {
-    fn encode(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
-    }
-
-    fn decode(bytes: &[u8]) -> Option<Self> {
-        bincode::deserialize(bytes).ok()
     }
 }
 
 impl HotShotTransaction for Transaction {}
 
 impl Namespaced for Transaction {
-    type Namespace = VmId;
+    type Namespace = NamespaceId;
     fn get_namespace(&self) -> Self::Namespace {
-        self.vm
+        self.namespace
     }
 }
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Transaction")
-            .u64_field("vm", self.vm.0)
-            .var_size_bytes(&self.payload) // TODO how can we specify a field name like "payload"
+            .u64_field("namespace", self.namespace.into())
+            .var_size_bytes(&self.payload)
             .finalize()
     }
 }

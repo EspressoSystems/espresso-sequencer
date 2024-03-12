@@ -134,6 +134,10 @@ pub struct Options {
     /// Url we will use for RPC communication with L1.
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider_url: Url,
+
+    /// Peer nodes use to fetch missing state
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
+    pub state_peers: Vec<Url>,
 }
 
 impl Options {

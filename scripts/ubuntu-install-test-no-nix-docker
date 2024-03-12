@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# This script is to test the ubuntu installation instructions locally on
+# non-ubuntu machines by running through the installation and tests inside an
+# ubuntu docker contrainer.
+set -e
+
+# Create a temporary copy of the repository to be mounted into the container.
+REPO_COPY_DIR="$(mktemp -d)"
+
+# Remove repo copy on exit, error etc.
+trap "exit" INT TERM
+trap cleanup EXIT
+cleanup(){
+    echo "Cleaning up repo copy: $REPO_COPY_DIR, need sudo"
+    sudo rm -rf "$REPO_COPY_DIR"
+}
+
+git clone --recursive . "$REPO_COPY_DIR"
+
+# Run the installation and tests inside the container.
+docker run -it --rm \
+    -v "$REPO_COPY_DIR:/code" \
+    ubuntu:latest \
+    bash -c "cd /code && ./scripts/ubuntu-install-test-no-nix"

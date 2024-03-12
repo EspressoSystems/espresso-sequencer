@@ -86,10 +86,11 @@ mod test_helpers {
     use super::*;
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
+        catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Transaction, VmId,
+        Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -101,6 +102,7 @@ mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
     use hotshot_types::traits::{metrics::NoMetrics, node_implementation::ConsensusTime};
+    use itertools::izip;
     use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -116,28 +118,35 @@ mod test_helpers {
     impl TestNetwork {
         pub async fn with_state(
             opt: Options,
+            state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
             let cfg = TestConfig::default();
-            let mut nodes =
-                join_all(persistence.into_iter().enumerate().map(|(i, persistence)| {
+            let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
+                |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
                     let cfg = &cfg;
                     async move {
                         if i == 0 {
                             opt.serve(|metrics| {
                                 let cfg = cfg.clone();
-                                async move { cfg.init_node(0, persistence, &*metrics).await }
-                                    .boxed()
+                                async move {
+                                    cfg.init_node(0, state, persistence, catchup, &*metrics)
+                                        .await
+                                }
+                                .boxed()
                             })
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics).await
+                            cfg.init_node(i, state, persistence, catchup, &NoMetrics)
+                                .await
                         }
                     }
-                }))
-                .await;
+                },
+            ))
+            .await;
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -150,7 +159,13 @@ mod test_helpers {
         }
 
         pub async fn new(opt: Options) -> Self {
-            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES]).await
+            Self::with_state(
+                opt,
+                Default::default(),
+                [NoStorage; TestConfig::NUM_NODES],
+                std::array::from_fn(|_| MockStateCatchup::default()),
+            )
+            .await
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -215,7 +230,7 @@ mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -409,8 +424,9 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
+        catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header, Transaction, VmId,
+        Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -456,7 +472,7 @@ mod api_tests {
         setup_backtrace();
 
         let vid = vid_scheme(5);
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
@@ -498,6 +514,11 @@ mod api_tests {
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
+            let header: Header = client
+                .get(&format!("availability/header/{block_num}"))
+                .send()
+                .await
+                .unwrap();
             let ns_query_res: NamespaceProofQueryData = client
                 .get(&format!("availability/block/{block_num}/namespace/0"))
                 .send()
@@ -505,11 +526,7 @@ mod api_tests {
                 .unwrap();
             ns_query_res
                 .proof
-                .verify(
-                    &vid,
-                    &ns_query_res.header.payload_commitment,
-                    &ns_query_res.header.ns_table,
-                )
+                .verify(&vid, &header.payload_commitment, &header.ns_table)
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
@@ -546,7 +563,9 @@ mod api_tests {
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
+            Default::default(),
             persistence,
+            std::array::from_fn(|_| MockStateCatchup::default()),
         )
         .await;
 
@@ -587,6 +606,10 @@ mod api_tests {
             .try_collect()
             .await
             .unwrap();
+        let decided_view = chain.last().unwrap().leaf().view_number;
+
+        // Get the most recent state, for catchup.
+        let state = network.server.consensus().get_decided_state().await;
 
         // Fully shut down the API servers.
         drop(network);
@@ -599,7 +622,24 @@ mod api_tests {
             .unwrap();
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
+            Default::default(),
             persistence,
+            std::array::from_fn(|i| {
+                let catchup: Box<dyn StateCatchup> = if i == 0 {
+                    // Give the server node a copy of the full state to use for catchup. This
+                    // simulates a node with archival state storage, which is then able to seed the
+                    // rest of the network after a restart.
+                    Box::new(MockStateCatchup::from_iter([(decided_view, state.clone())]))
+                } else {
+                    // The remaining nodes should use this archival node as a peer for catchup.
+                    Box::new(StatePeers::from_urls(vec![format!(
+                        "http://localhost:{port}"
+                    )
+                    .parse()
+                    .unwrap()]))
+                };
+                catchup
+            }),
         )
         .await;
         let client: Client<ServerError> =
@@ -814,7 +854,17 @@ mod api_tests {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{
+        catchup::StatePeers, persistence::no_storage::NoStorage, testing::TestConfig, Header,
+        NodeState,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use commit::Committable;
+    use ethers::prelude::Signer;
+    use futures::stream::StreamExt;
+    use hotshot::types::EventType;
+    use hotshot_types::traits::block_contents::BlockHeader;
+    use jf_primitives::merkle_tree::AppendableMerkleTreeScheme;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
@@ -857,5 +907,67 @@ mod test {
     #[async_std::test]
     async fn state_test_without_query_module() {
         state_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn test_catchup() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create some non-trivial initial state. We will give all the nodes in the network this
+        // state, except for one, which will have a forgotten state and need to catch up.
+        let mut state = ValidatedState::default();
+        // Prefund an arbitrary account so the fee state has some data to forget.
+        state.prefund_account(Default::default(), 1000.into());
+        // Push an arbitrary header commitment so the block state has some data to forget.
+        state
+            .block_merkle_tree
+            .push(
+                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
+                    .commit(),
+            )
+            .unwrap();
+        let states = std::array::from_fn(|i| {
+            if i == TestConfig::NUM_NODES - 1 {
+                state.forget()
+            } else {
+                state.clone()
+            }
+        });
+
+        // Start a sequencer network, using the query service for catchup.
+        let port = pick_unused_port().expect("No ports free");
+        let network = TestNetwork::with_state(
+            Options::from(options::Http { port }).state(Default::default()),
+            states,
+            [NoStorage; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::from_urls(vec![format!("http://localhost:{port}").parse().unwrap()])
+            }),
+        )
+        .await;
+        let mut events = network.server.get_event_stream();
+
+        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
+        // up.
+        let builder = TestConfig::builder_wallet(TestConfig::NUM_NODES - 1)
+            .address()
+            .into();
+        'outer: loop {
+            let event = events.next().await.unwrap();
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for (leaf, _) in leaf_chain.iter().rev() {
+                let height = leaf.block_header.height;
+                let leaf_builder = leaf.block_header.fee_info.account();
+                tracing::info!(
+                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
+                );
+                if height > 1 && leaf_builder == builder {
+                    break 'outer;
+                }
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 pub mod api;
 pub mod block;
+pub mod catchup;
 mod chain_variables;
 pub mod context;
 mod header;
@@ -8,6 +9,7 @@ pub mod options;
 pub mod state_signature;
 
 use block::entry::TxTableEntryWord;
+use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -19,14 +21,13 @@ use ethers::{
 
 use l1_client::L1Client;
 
-use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
+pub mod bytes;
 mod l1_client;
 pub mod persistence;
 mod state;
 pub mod transaction;
-mod vm;
 
 use derivative::Derivative;
 use hotshot::{
@@ -70,8 +71,7 @@ pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
-pub use transaction::Transaction;
-pub use vm::{Vm, VmId, VmTransaction};
+pub use transaction::{NamespaceId, Transaction};
 
 pub mod network {
     use hotshot_types::message::Message;
@@ -140,28 +140,54 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type CommitteeNetwork = N::DAChannel;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeState {
     l1_client: L1Client,
+    peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
 }
 
 impl NodeState {
+    pub fn new(
+        l1_client: L1Client,
+        builder_address: Wallet<SigningKey>,
+        catchup: impl StateCatchup + 'static,
+    ) -> Self {
+        Self {
+            l1_client,
+            peers: Arc::new(catchup),
+            genesis_state: Default::default(),
+            builder_address,
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock() -> Self {
+        Self::new(
+            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            state::FeeAccount::test_wallet(),
+            catchup::mock::MockStateCatchup::default(),
+        )
+    }
+
+    pub fn with_l1(mut self, l1_client: L1Client) -> Self {
+        self.l1_client = l1_client;
+        self
+    }
+
+    pub fn with_builder(mut self, wallet: Wallet<SigningKey>) -> Self {
+        self.builder_address = wallet;
+        self
+    }
+
+    pub fn with_genesis(mut self, state: ValidatedState) -> Self {
+        self.genesis_state = state;
+        self
+    }
+
     fn l1_client(&self) -> &L1Client {
         &self.l1_client
-    }
-}
-
-impl Default for NodeState {
-    fn default() -> Self {
-        let wallet = FeeAccount::test_wallet();
-
-        Self {
-            genesis_state: ValidatedState::default(),
-            builder_address: wallet,
-            l1_client: L1Client::new("http://localhost:3331".parse().unwrap()),
-        }
     }
 }
 
@@ -213,6 +239,7 @@ pub struct NetworkParams {
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
+    pub state_peers: Vec<Url>,
 }
 
 #[derive(Clone, Debug)]
@@ -308,12 +335,13 @@ pub async fn init_node(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url);
+    let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState {
         l1_client,
         builder_address: wallet,
         genesis_state,
+        peers: Arc::new(StatePeers::from_urls(network_params.state_peers)),
     };
 
     let mut ctx = SequencerContext::init(
@@ -335,7 +363,7 @@ pub async fn init_node(
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::persistence::no_storage::NoStorage;
+    use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
     use commit::Committable;
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
@@ -425,17 +453,25 @@ pub mod testing {
         }
 
         pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
-            join_all(
-                (0..self.num_nodes())
-                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
-            )
+            join_all((0..self.num_nodes()).map(|i| async move {
+                self.init_node(
+                    i,
+                    ValidatedState::default(),
+                    NoStorage,
+                    MockStateCatchup::default(),
+                    &NoMetrics,
+                )
+                .await
+            }))
             .await
         }
 
         pub async fn init_node(
             &self,
             i: usize,
+            state: ValidatedState,
             persistence: impl SequencerPersistence,
+            catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
         ) -> SequencerContext<network::Memory> {
             let mut config = self.config.clone();
@@ -461,10 +497,14 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let node_state = NodeState {
-                l1_client: L1Client::new(self.anvil.endpoint().parse().unwrap()),
-                ..Default::default()
-            };
+            let wallet = Self::builder_wallet(i);
+            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let node_state = NodeState::new(
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                wallet,
+                catchup,
+            )
+            .with_genesis(state);
 
             SequencerContext::init(
                 config,
@@ -477,6 +517,15 @@ pub mod testing {
             )
             .await
             .unwrap()
+        }
+
+        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
+            MnemonicBuilder::<English>::default()
+                .phrase("test test test test test test test test test test test junk")
+                .index(i as u32)
+                .unwrap()
+                .build()
+                .unwrap()
         }
     }
 
@@ -518,7 +567,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use super::{transaction::ApplicationTransaction, vm::TestVm, *};
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use futures::StreamExt;
@@ -544,15 +593,14 @@ mod test {
         }
 
         // Submit target transaction to handle
-        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
         handles[0]
-            .submit_transaction(submitted_txn.clone())
+            .submit_transaction(txn.clone())
             .await
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
+        wait_for_decide_on_handle(&mut events, &txn).await;
     }
 
     #[async_std::test]
@@ -581,7 +629,7 @@ mod test {
                     .collect();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = NodeState::default();
+            let genesis_state = NodeState::mock();
             Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
         };
 
