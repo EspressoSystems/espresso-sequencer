@@ -87,11 +87,11 @@ pub fn init_stake_table(
     Ok(st)
 }
 
-pub async fn init_stake_table_from_config(
-    config: &StateProverConfig,
+pub async fn init_stake_table_from_orchestrator(
+    orchestrator_url: &Url,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     tracing::info!("Initializing stake table from HotShot orchestrator.");
-    let client = Client::<ServerError>::new(config.orchestrator_url.clone());
+    let client = Client::<ServerError>::new(orchestrator_url.clone());
     let mut num_retries = 10;
     while num_retries > 0 {
         match client.get::<bool>("api/peer_pub_ready").send().await {
@@ -263,6 +263,8 @@ pub async fn sync_state(
         tracing::info!("No update needed.");
         return Ok(());
     }
+    tracing::info!("Old state: {old_state:?}");
+    tracing::info!("New state: {:?}", bundle.state);
 
     let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
     tracing::info!("Threshold before syncing state: {}", threshold);
@@ -340,7 +342,7 @@ fn start_http_server(port: u16, lightclient_address: Address) -> io::Result<()> 
 
 pub async fn run_prover_service(config: StateProverConfig) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(init_stake_table_from_config(&config).await);
+    let st = Arc::new(init_stake_table_from_orchestrator(&config.orchestrator_url).await);
     let proving_key = Arc::new(load_proving_key());
     let relay_server_client = Arc::new(Client::<ServerError>::new(config.relay_server.clone()));
     let config = Arc::new(config);
@@ -370,7 +372,7 @@ pub async fn run_prover_service(config: StateProverConfig) {
 
 /// Run light client state prover once
 pub async fn run_prover_once(config: StateProverConfig) {
-    let st = init_stake_table_from_config(&config).await;
+    let st = init_stake_table_from_orchestrator(&config.orchestrator_url).await;
     let proving_key = load_proving_key();
     let relay_server_client = Client::<ServerError>::new(config.relay_server.clone());
 

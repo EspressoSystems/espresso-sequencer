@@ -14,7 +14,7 @@ if [[ -z "${ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS}" ]]; then
     forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript  \
      --sig "runDemo(uint32 numBlocksPerEpoch)" $ESPRESSO_SEQUENCER_HOTSHOT_NUM_BLOCKS_PER_EPOCH \
             --fork-url $ESPRESSO_SEQUENCER_L1_PROVIDER --broadcast
-    ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS=$(cat contracts/broadcast/LightClient.s.sol/*/runDemo-latest.json | jq -r .receipts[1].contractAddress)
+    ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS=$(cat contracts/broadcast/LightClient.s.sol/*/runDemo-latest.json | jq -r .receipts[-1].contractAddress)
     echo "Light client contract address: $ESPRESSO_SEQUENCER_LIGHTCLIENT_ADDRESS"
     echo "Number of nodes: $ESPRESSO_ORCHESTRATOR_NUM_NODES"
     echo "Orchestrator KeyGen Seed : $ESPRESSO_ORCHESTRATOR_KEYGEN_SEED"
