@@ -327,7 +327,7 @@ mod test {
         let pending = l1_client.get_finalized_deposits(Some(1), 2).await;
         assert_eq!(1, pending.len());
 
-        // what happends if `new_finalized` is `0`?
+        // what happens if `new_finalized` is `0`?
         let pending = l1_client.get_finalized_deposits(Some(1), 0).await;
         assert_eq!(0, pending.len());
 
