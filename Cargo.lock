@@ -940,6 +940,9 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07b30ef0ea5c20caaa54baea49514a206308989c68be7ecd86c7f956e4da6378"
 dependencies = [
+ "async-native-tls",
+ "async-std",
+ "async-tls",
  "futures-io",
  "futures-util",
  "log",
@@ -3631,7 +3634,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.6",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -3716,9 +3719,9 @@ dependencies = [
  "serde",
  "serde-inline-default",
  "serde_json",
- "surf-disco",
+ "surf-disco 0.4.6",
  "thiserror",
- "tide-disco",
+ "tide-disco 0.4.6",
  "tokio",
  "toml 0.8.10",
  "tracing",
@@ -3762,9 +3765,9 @@ dependencies = [
  "serde_json",
  "snafu",
  "spin_sleep",
- "surf-disco",
+ "surf-disco 0.4.6",
  "tempfile",
- "tide-disco",
+ "tide-disco 0.4.6",
  "time 0.3.34",
  "tokio",
  "tokio-postgres",
@@ -3829,9 +3832,9 @@ dependencies = [
  "sequencer-utils",
  "serde",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.7",
  "tagged-base64",
- "tide-disco",
+ "tide-disco 0.4.6",
  "time 0.3.34",
  "toml 0.8.10",
  "tracing",
@@ -3980,7 +3983,7 @@ dependencies = [
  "futures",
  "hotshot-types",
  "rand 0.8.5",
- "tide-disco",
+ "tide-disco 0.4.6",
  "tokio",
  "toml 0.8.10",
  "tracing",
@@ -4134,7 +4137,7 @@ dependencies = [
  "iana-time-zone-haiku",
  "js-sys",
  "wasm-bindgen",
- "windows-core 0.52.0",
+ "windows-core",
 ]
 
 [[package]]
@@ -7493,10 +7496,10 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.7",
  "tagged-base64",
  "tempfile",
- "tide-disco",
+ "tide-disco 0.4.6",
  "time 0.3.34",
  "tokio-postgres",
  "toml 0.8.10",
@@ -8163,7 +8166,24 @@ dependencies = [
  "serde",
  "serde_json",
  "surf",
- "tide-disco",
+ "tide-disco 0.4.6",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.4.7"
+source = "git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.7#070e18d1daf0c9783e009a1a3b7f8b28b4546e24"
+dependencies = [
+ "async-std",
+ "async-tungstenite 0.13.1",
+ "derivative",
+ "futures",
+ "hex",
+ "serde",
+ "serde_json",
+ "surf",
+ "tide-disco 0.4.7",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -8497,6 +8517,57 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber 0.3.18",
  "url",
+]
+
+[[package]]
+name = "tide-disco"
+version = "0.4.7"
+source = "git+https://github.com/EspressoSystems/tide-disco.git?tag=v0.4.7#1f8515bde918b9e2c50875a68dfa0e23b8167579"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "async-trait",
+ "clap",
+ "config",
+ "derivative",
+ "derive_more",
+ "dirs",
+ "edit-distance",
+ "futures",
+ "futures-util",
+ "http 1.0.0",
+ "include_dir",
+ "lazy_static",
+ "libc",
+ "markdown",
+ "maud",
+ "num-derive",
+ "num-traits",
+ "parking_lot",
+ "prometheus",
+ "routefinder",
+ "semver 1.0.21",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "shellexpand",
+ "signal-hook",
+ "signal-hook-async-std",
+ "snafu",
+ "strum",
+ "strum_macros",
+ "surf",
+ "tagged-base64",
+ "tide",
+ "tide-websockets",
+ "toml 0.8.10",
+ "tracing",
+ "tracing-distributed",
+ "tracing-futures",
+ "tracing-log",
+ "tracing-subscriber 0.3.18",
+ "url",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -9030,6 +9101,7 @@ dependencies = [
  "httparse",
  "input_buffer",
  "log",
+ "native-tls",
  "rand 0.8.5",
  "sha-1",
  "thiserror",
@@ -9280,6 +9352,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
+name = "versioned-binary-serialization"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/versioned-binary-serialization.git?tag=0.1.0#6b5bf0c0b74f8384c940880d5a988d5ec757de3e"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "displaydoc",
+ "serde",
+ "serde_with",
+]
+
+[[package]]
 name = "void"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9485,7 +9569,7 @@ version = "0.51.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca229916c5ee38c2f2bc1e9d8f04df975b4bd93f9955dc69fabb5d91270045c9"
 dependencies = [
- "windows-core 0.51.1",
+ "windows-core",
  "windows-targets 0.48.5",
 ]
 
@@ -9496,15 +9580,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1f8cf84f35d2db49a46868f947758c7a1138116f7fac3bc844f43ade1292e64"
 dependencies = [
  "windows-targets 0.48.5",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
-dependencies = [
- "windows-targets 0.52.0",
 ]
 
 [[package]]
