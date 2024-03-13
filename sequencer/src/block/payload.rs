@@ -756,7 +756,7 @@ mod test {
                 &block.raw_payload,
                 0..std::cmp::min(TxTableEntry::byte_len(), block.raw_payload.len()),
             )
-            .unwrap(), //block.get_tx_table_len_proof(&vid).unwrap().clone(),
+            .unwrap(),
             vid.payload_proof(&block.raw_payload, 0..3).unwrap(),
         );
 
