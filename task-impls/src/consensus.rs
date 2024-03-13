@@ -1410,6 +1410,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::QuorumProposalRecv(_, _)
                 | HotShotEvent::QuorumVoteRecv(_)
                 | HotShotEvent::QCFormed(_)
+                | HotShotEvent::UpgradeCertificateFormed(_)
                 | HotShotEvent::DACRecv(_)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::SendPayloadCommitmentAndMetadata(..)

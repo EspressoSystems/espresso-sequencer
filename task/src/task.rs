@@ -115,6 +115,18 @@ impl<S: TaskState + Send + 'static> Task<S> {
             state,
         }
     }
+
+    /// The Task analog of `TaskState::handle_event`.
+    pub fn handle_event(
+        &mut self,
+        event: S::Event,
+    ) -> impl Future<Output = Option<S::Output>> + Send + '_
+    where
+        Self: Sized,
+    {
+        S::handle_event(event, self)
+    }
+
     /// Spawn the task loop, consuming self.  Will continue until
     /// the task reaches some shutdown condition
     pub fn run(mut self) -> JoinHandle<()> {

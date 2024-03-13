@@ -1,0 +1,20 @@
+[package]
+name = "hotshot-macros"
+version = "0.1.0"
+edition = "2021"
+description = "Macros for hotshot tests"
+
+[dependencies]
+# proc macro stuff
+quote = "1.0.33"
+syn = { version = "2.0.50", features = ["full", "extra-traits"] }
+proc-macro2 = "1.0.78"
+derive_builder = "0.13.1"
+
+[dev-dependencies]
+async-lock = { workspace = true }
+
+[lib]
+proc-macro = true
+[lints]
+workspace = true

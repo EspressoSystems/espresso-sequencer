@@ -239,7 +239,7 @@ impl TestView {
         }
     }
 
-    pub fn create_vote(
+    pub fn create_quorum_vote(
         &self,
         handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     ) -> QuorumVote<TestTypes> {
@@ -252,6 +252,20 @@ impl TestView {
             handle.private_key(),
         )
         .expect("Failed to generate a signature on QuorumVote")
+    }
+
+    pub fn create_upgrade_vote(
+        &self,
+        data: UpgradeProposalData<TestTypes>,
+        handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    ) -> UpgradeVote<TestTypes> {
+        UpgradeVote::<TestTypes>::create_signed_vote(
+            data,
+            self.view_number,
+            handle.public_key(),
+            handle.private_key(),
+        )
+        .expect("Failed to generate a signature on UpgradVote")
     }
 }
 

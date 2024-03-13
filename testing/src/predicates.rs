@@ -12,6 +12,12 @@ pub struct Predicate<INPUT> {
     pub info: String,
 }
 
+impl<INPUT> std::fmt::Debug for Predicate<INPUT> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.info)
+    }
+}
+
 pub fn exact<TYPES>(event: HotShotEvent<TYPES>) -> Predicate<HotShotEvent<TYPES>>
 where
     TYPES: NodeType,
@@ -43,6 +49,61 @@ where
 {
     let info = "QuorumVoteSend".to_string();
     let function = |e: &_| matches!(e, QuorumVoteSend(_));
+
+    Predicate {
+        function: Box::new(function),
+        info,
+    }
+}
+
+pub fn view_change<TYPES>() -> Predicate<HotShotEvent<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "ViewChange".to_string();
+    let function = |e: &_| matches!(e, ViewChange(_));
+
+    Predicate {
+        function: Box::new(function),
+        info,
+    }
+}
+
+pub fn upgrade_certificate_formed<TYPES>() -> Predicate<HotShotEvent<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "UpgradeCertificateFormed".to_string();
+    let function = |e: &_| matches!(e, UpgradeCertificateFormed(_));
+
+    Predicate {
+        function: Box::new(function),
+        info,
+    }
+}
+
+pub fn quorum_proposal_send_with_upgrade_certificate<TYPES>() -> Predicate<HotShotEvent<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "QuorumProposalSend with UpgradeCertificate attached".to_string();
+    let function = |e: &_| match e {
+        QuorumProposalSend(proposal, _) => proposal.data.upgrade_certificate.is_some(),
+        _ => false,
+    };
+
+    Predicate {
+        function: Box::new(function),
+        info,
+    }
+}
+
+pub fn quorum_proposal_validated<TYPES>() -> Predicate<HotShotEvent<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "QuorumProposalValidated".to_string();
+    let function = |e: &_| matches!(e, QuorumProposalValidated(_));
 
     Predicate {
         function: Box::new(function),

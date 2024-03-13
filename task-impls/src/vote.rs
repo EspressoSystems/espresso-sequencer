@@ -73,6 +73,7 @@ impl<
         event_stream: &Sender<HotShotEvent<TYPES>>,
     ) -> Option<HotShotTaskCompleted> {
         if vote.get_leader(&self.membership) != self.public_key {
+            error!("Received vote for a view in which we were not the leader.");
             return None;
         }
 

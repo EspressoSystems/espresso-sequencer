@@ -40,7 +40,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
 
     for view in (&mut generator).take(3) {
         proposals.push(view.quorum_proposal.clone());
-        votes.push(view.create_vote(&handle));
+        votes.push(view.create_quorum_vote(&handle));
         leaders.push(view.leader_public_key);
     }
 
