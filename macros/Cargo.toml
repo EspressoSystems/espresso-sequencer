@@ -8,7 +8,7 @@ description = "Macros for hotshot tests"
 # proc macro stuff
 quote = "1.0.33"
 syn = { version = "2.0.50", features = ["full", "extra-traits"] }
-proc-macro2 = "1.0.78"
+proc-macro2 = "1.0.79"
 derive_builder = "0.13.1"
 
 [dev-dependencies]
