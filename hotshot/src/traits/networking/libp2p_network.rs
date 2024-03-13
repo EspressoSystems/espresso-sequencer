@@ -179,6 +179,7 @@ where
         da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
+        _secondary_network_delay: Duration,
     ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         assert!(
             da_committee_size <= expected_node_count,

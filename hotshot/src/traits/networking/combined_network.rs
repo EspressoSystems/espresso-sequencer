@@ -88,7 +88,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     ///
     /// Panics if `COMBINED_NETWORK_CACHE_SIZE` is 0
     #[must_use]
-    pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>) -> Self {
+    pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>, delay_duration: Duration) -> Self {
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(LruCache::new(
@@ -96,7 +96,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             ))),
             primary_down: Arc::new(AtomicU64::new(0)),
             delayed_tasks: Arc::default(),
-            delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
+            delay_duration: Arc::new(RwLock::new(delay_duration)),
         }
     }
 
@@ -187,6 +187,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         da_committee_size: usize,
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
+        secondary_network_delay: Duration,
     ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         let generators = (
             <WebServerNetwork<
@@ -198,6 +199,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 da_committee_size,
                 is_da,
                 None,
+                Duration::default(),
             ),
             <Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> as TestableNetworkingImplementation<_>>::generator(
                 expected_node_count,
@@ -206,6 +208,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 da_committee_size,
                 is_da,
                 reliability_config,
+                Duration::default(),
             )
         );
         Box::new(move |node_id| {
@@ -228,7 +231,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 ))),
                 primary_down: Arc::new(AtomicU64::new(0)),
                 delayed_tasks: Arc::default(),
-                delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
+                delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
             };
             let da_net = Self {
                 networks: Arc::new(da_networks),
@@ -237,7 +240,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 ))),
                 primary_down: Arc::new(AtomicU64::new(0)),
                 delayed_tasks: Arc::default(),
-                delay_duration: Arc::new(RwLock::new(Duration::from_millis(1000))),
+                delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
             };
             (quorum_net.into(), da_net.into())
         })

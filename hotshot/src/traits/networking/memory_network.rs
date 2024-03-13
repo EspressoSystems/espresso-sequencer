@@ -11,6 +11,7 @@ use async_compatibility_layer::{
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 use bincode::Options;
+use core::time::Duration;
 use dashmap::DashMap;
 use futures::StreamExt;
 use hotshot_types::{
@@ -187,6 +188,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
+        _secondary_network_delay: Duration,
     ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
         let master: Arc<_> = MasterMap::new();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
