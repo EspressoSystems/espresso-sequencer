@@ -503,46 +503,37 @@ impl<TYPES: NodeType> Inner<TYPES> {
                 }
             }
 
-            let maybe_event = receiver.try_recv();
-            match maybe_event {
-                Ok(event) => {
-                    match event {
-                        // TODO ED Should add extra error checking here to make sure we are intending to cancel a task
-                        ConsensusIntentEvent::CancelPollForVotes(event_view)
-                        | ConsensusIntentEvent::CancelPollForProposal(event_view)
-                        | ConsensusIntentEvent::CancelPollForDAC(event_view)
-                        | ConsensusIntentEvent::CancelPollForViewSyncCertificate(event_view)
-                        | ConsensusIntentEvent::CancelPollForVIDDisperse(event_view)
-                        | ConsensusIntentEvent::CancelPollForLatestProposal(event_view)
-                        | ConsensusIntentEvent::CancelPollForLatestViewSyncCertificate(
-                            event_view,
-                        )
-                        | ConsensusIntentEvent::CancelPollForViewSyncVotes(event_view) => {
-                            if view_number == event_view {
-                                debug!("Shutting down polling task for view {}", event_view);
-                                return Ok(());
-                            }
-                        }
-                        ConsensusIntentEvent::CancelPollForTransactions(event_view) => {
-                            // Write the most recent tx index so we can pick up where we left off later
-
-                            let mut lock = self.tx_index.write().await;
-                            *lock = tx_index;
-
-                            if view_number == event_view {
-                                debug!("Shutting down polling task for view {}", event_view);
-                                return Ok(());
-                            }
-                        }
-
-                        _ => {
-                            unimplemented!()
+            if let Ok(event) = receiver.try_recv() {
+                match event {
+                    // TODO ED Should add extra error checking here to make sure we are intending to cancel a task
+                    ConsensusIntentEvent::CancelPollForVotes(event_view)
+                    | ConsensusIntentEvent::CancelPollForProposal(event_view)
+                    | ConsensusIntentEvent::CancelPollForDAC(event_view)
+                    | ConsensusIntentEvent::CancelPollForViewSyncCertificate(event_view)
+                    | ConsensusIntentEvent::CancelPollForVIDDisperse(event_view)
+                    | ConsensusIntentEvent::CancelPollForLatestProposal(event_view)
+                    | ConsensusIntentEvent::CancelPollForLatestViewSyncCertificate(event_view)
+                    | ConsensusIntentEvent::CancelPollForViewSyncVotes(event_view) => {
+                        if view_number == event_view {
+                            debug!("Shutting down polling task for view {}", event_view);
+                            return Ok(());
                         }
                     }
-                }
-                // Nothing on receiving channel
-                Err(_) => {
-                    debug!("Nothing on receiving channel");
+                    ConsensusIntentEvent::CancelPollForTransactions(event_view) => {
+                        // Write the most recent tx index so we can pick up where we left off later
+
+                        let mut lock = self.tx_index.write().await;
+                        *lock = tx_index;
+
+                        if view_number == event_view {
+                            debug!("Shutting down polling task for view {}", event_view);
+                            return Ok(());
+                        }
+                    }
+
+                    _ => {
+                        unimplemented!()
+                    }
                 }
             }
         }
