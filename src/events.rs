@@ -2,28 +2,20 @@ use std::{fmt::Display, path::PathBuf};
 
 use clap::Args;
 use derive_more::From;
-use futures::FutureExt;
-use hotshot_types::{
-    traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    utils::BuilderCommitment,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 use tagged_base64::TaggedBase64;
-use tide_disco::{
-    api::ApiError,
-    method::{ReadState, WriteState},
-    Api, RequestError, StatusCode,
-};
+use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
-use crate::{
-    api::load_api,
-    events_source::{EventsSource},
-};
+use crate::{api::load_api, events_source::EventsSource};
 
 #[derive(Args, Default)]
 pub struct Options {
-    #[arg(long = "hotshot-events-service-api-path", env = "HOTSHOT_EVENTS_SERVICE_API_PATH")]
+    #[arg(
+        long = "hotshot-events-service-api-path",
+        env = "HOTSHOT_EVENTS_SERVICE_API_PATH"
+    )]
     pub api_path: Option<PathBuf>,
 
     /// Additional API specification files to merge with `hotshot-events-service-api-path`.
@@ -49,7 +41,6 @@ pub enum EventError {
     #[snafu(display("Failed to fetch requested resource: {message}"))]
     Error { message: String },
 }
-
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -80,8 +71,7 @@ impl tide_disco::error::Error for Error {
     fn status(&self) -> StatusCode {
         match self {
             Error::Request { .. } => StatusCode::BadRequest,
-            Error::EventAvailable { source, .. } => match source
-            {
+            Error::EventAvailable { source, .. } => match source {
                 EventError::NotFound => StatusCode::NotFound,
                 EventError::Missing => StatusCode::NotFound,
                 EventError::Error { .. } => StatusCode::InternalServerError,
@@ -109,7 +99,7 @@ where
     api.with_version("0.0.1".parse().unwrap())
         .get("available_hotshot_events", |req, state| {
             async move {
-                let view_number= req.blob_param("view_number")?;
+                let view_number = req.blob_param("view_number")?;
                 state
                     .get_available_hotshot_events(view_number)
                     .await

@@ -1,15 +1,10 @@
+use crate::{events::EventError, events_info::EventInfo};
 use async_trait::async_trait;
-use std::{hash::Hash, marker::PhantomData};
-use hotshot_types::event::Event;
-use serde::{Deserialize, Serialize};
 use hotshot_types::{
+    data::ViewNumber,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    utils::BuilderCommitment,
-    vid::VidCommitment,
-    data::ViewNumber
 };
 use tagged_base64::TaggedBase64;
-use crate::{events_info::{EventInfo}, events::EventError};
 
 #[async_trait]
 pub trait EventsSource<I>
