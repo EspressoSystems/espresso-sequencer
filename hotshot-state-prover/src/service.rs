@@ -18,19 +18,17 @@ use ethers::{
     types::{Address, U256},
 };
 use futures::FutureExt;
+use hotshot::types::{BLSPrivKey, SignatureKey};
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::signature_key::BLSPubKey;
-use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
-use hotshot_types::{
-    light_client::{
-        CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
-    },
-    traits::signature_key::StakeTableEntryType,
+use hotshot_types::light_client::{
+    CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
 };
+use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
+use hotshot_types::{light_client::StateSignKey, signature_key::BLSPubKey};
 use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
@@ -43,11 +41,6 @@ use url::Url;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
-
-type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<
-    BLSPubKey,
-    hotshot::traits::election::static_committee::StaticElectionConfig,
->;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -62,12 +55,14 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Address of the hotshot orchestrator, used for stake table initialization.
-    pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     pub port: Option<u16>,
+    /// List of BLS signing keys
+    pub private_staking_keys: Vec<BLSPrivKey>,
+    /// List of state signing keys
+    pub private_state_keys: Vec<StateSignKey>,
 }
 
 pub fn init_stake_table(
@@ -90,55 +85,77 @@ pub fn init_stake_table(
 pub async fn init_stake_table_from_config(
     config: &StateProverConfig,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    tracing::info!("Initializing stake table from HotShot orchestrator.");
-    let client = Client::<ServerError>::new(config.orchestrator_url.clone());
-    let mut num_retries = 10;
-    while num_retries > 0 {
-        match client.get::<bool>("api/peer_pub_ready").send().await {
-            Ok(true) => {
-                match client
-                    .get::<NetworkConfig>("api/config_after_peer_collected")
-                    .send()
-                    .await
-                {
-                    Ok(config) => {
-                        let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
-                            STAKE_TABLE_CAPACITY,
-                        );
-                        config
-                            .config
-                            .known_nodes_with_stake
-                            .into_iter()
-                            .for_each(|config| {
-                                st.register(
-                                    *config.stake_table_entry.get_key(),
-                                    config.stake_table_entry.get_stake(),
-                                    config.state_ver_key,
-                                )
-                                .expect("Key registration shouldn't fail.");
-                            });
-                        st.advance();
-                        st.advance();
-                        return st;
-                    }
-                    Err(e) => {
-                        num_retries -= 1;
-                        tracing::warn!("Orchestrator error: {e}, retrying.");
-                    }
-                }
-            }
-            Ok(false) => {
-                num_retries -= 1;
-                tracing::info!("Peers' keys are not ready.");
-            }
-            Err(e) => {
-                num_retries -= 1;
-                tracing::warn!("Orchestrator error {e}, retrying.");
-            }
-        }
-        sleep(Duration::from_secs(2)).await;
-    }
-    panic!("Failed initializing stake table.")
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    config
+        .private_staking_keys
+        .iter()
+        .zip(config.private_state_keys.iter())
+        .for_each(|(bls_priv_key, state_priv_key)| {
+            let bls_ver_key = BLSPubKey::from_private(bls_priv_key);
+            let state_ver_key = StateVerKey::from(state_priv_key);
+            st.register(bls_ver_key, U256::one(), state_ver_key)
+                .expect("Key registration shouldn't fail.");
+        });
+    st.advance();
+    st.advance();
+    st
+    // Lines below are initializing the stake table from HotShot orchestrator.
+    // However, the ordering of keys from orchestrator is not consistent in different runs.
+    // We now initialize the stake table from environment strings.
+    //
+    // tracing::info!("Initializing stake table from HotShot orchestrator.");
+    // let client = Client::<ServerError>::new(config.orchestrator_url.clone());
+    // let mut num_retries = 10;
+    // while num_retries > 0 {
+    //     match client.get::<bool>("api/peer_pub_ready").send().await {
+    //         Ok(true) => {
+    //             match client
+    //                 .get::<NetworkConfig>("api/config_after_peer_collected")
+    //                 .send()
+    //                 .await
+    //             {
+    //                 Ok(config) => {
+    //                     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+    //                         STAKE_TABLE_CAPACITY,
+    //                     );
+    //                     config
+    //                         .config
+    //                         .known_nodes_with_stake
+    //                         .into_iter()
+    //                         .for_each(|config| {
+    //                             tracing::info!(
+    //                                 "Register key: {}",
+    //                                 *config.stake_table_entry.get_key()
+    //                             );
+    //                             st.register(
+    //                                 *config.stake_table_entry.get_key(),
+    //                                 config.stake_table_entry.get_stake(),
+    //                                 config.state_ver_key,
+    //                             )
+    //                             .expect("Key registration shouldn't fail.");
+    //                         });
+    //                     st.advance();
+    //                     st.advance();
+    //                     return st;
+    //                 }
+    //                 Err(e) => {
+    //                     num_retries -= 1;
+    //                     tracing::warn!("Orchestrator error: {e}, retrying.");
+    //                 }
+    //             }
+    //         }
+    //         Ok(false) => {
+    //             num_retries -= 1;
+    //             tracing::info!("Peers' keys are not ready.");
+    //         }
+    //         Err(e) => {
+    //             num_retries -= 1;
+    //             tracing::warn!("Orchestrator error {e}, retrying.");
+    //         }
+    //     }
+    //     sleep(Duration::from_secs(2)).await;
+    // }
+    // panic!("Failed initializing stake table.")
 }
 
 pub fn load_proving_key() -> ProvingKey {
@@ -593,8 +610,9 @@ mod test {
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
-                orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
+                private_staking_keys: vec![],
+                private_state_keys: vec![],
             }
         }
     }

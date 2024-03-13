@@ -5,6 +5,8 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
+use hotshot_types::light_client::StateSignKey;
+use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
 use std::{str::FromStr as _, time::Duration};
 use url::Url;
@@ -51,20 +53,27 @@ struct Args {
     )]
     eth_account_index: u32,
 
-    /// URL of the HotShot orchestrator.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
-        default_value = "http://localhost:8080"
-    )]
-    pub orchestrator_url: Url,
-
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_PROVER_SERVICE_PORT")]
     pub port: Option<u16>,
+
+    // Sequencer Private Staking key list
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_STAKING_PRIVATE_KEY_LIST",
+        value_delimiter = ','
+    )]
+    pub private_staking_keys: Vec<BLSPrivKey>,
+
+    // Sequencer State signing key list
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_STATE_PRIVATE_KEY_LIST",
+        value_delimiter = ','
+    )]
+    pub private_state_keys: Vec<StateSignKey>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -104,8 +113,9 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        orchestrator_url: args.orchestrator_url,
         port: args.port,
+        private_staking_keys: args.private_staking_keys,
+        private_state_keys: args.private_state_keys,
     };
 
     if args.daemon {
