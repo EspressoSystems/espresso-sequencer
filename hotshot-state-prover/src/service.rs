@@ -263,6 +263,8 @@ pub async fn sync_state(
         tracing::info!("No update needed.");
         return Ok(());
     }
+    tracing::debug!("Old state: {old_state:?}");
+    tracing::debug!("New state: {:?}", bundle.state);
 
     let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
     tracing::info!("Threshold before syncing state: {}", threshold);
