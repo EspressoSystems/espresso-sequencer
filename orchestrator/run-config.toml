@@ -1,4 +1,4 @@
-rounds = 10
+rounds = 100
 transactions_per_round = 10
 transaction_size = 1749
 node_index = 0
@@ -37,6 +37,7 @@ seed = [
     0,
 ]
 start_delay_seconds = 0
+cdn_marshal_address = "127.0.0.1:9000"
 
 [config]
 num_nodes_with_stake = 10

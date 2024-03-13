@@ -78,6 +78,15 @@ path = "combined/validator.rs"
 name = "orchestrator-combined"
 path = "combined/orchestrator.rs"
 
+# Push CDN
+[[example]]
+name = "all-push-cdn"
+path = "push-cdn/all.rs"
+
+[[example]]
+name = "validator-push-cdn"
+path = "push-cdn/validator.rs"
+
 [dependencies]
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
@@ -116,8 +125,15 @@ tracing = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
+cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-broker = { workspace = true, features = ["insecure", "runtime-tokio", "strong_consistency", "local_discovery"] }
+cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
+
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
+cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-broker = { workspace = true, features = ["insecure", "runtime-async-std", "strong_consistency", "local_discovery"] }
+cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
 
 [dev-dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }

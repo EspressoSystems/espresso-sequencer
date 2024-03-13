@@ -1,4 +1,4 @@
-use hotshot_example_types::node_types::{Libp2pImpl, MemoryImpl, WebImpl};
+use hotshot_example_types::node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_testing::completion_task::{
     CompletionTaskDescription, TimeBasedCompletionTaskDescription,
@@ -12,7 +12,7 @@ use std::time::Duration;
 
 cross_tests!(
     TestName: test_success,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl],
+    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
@@ -31,7 +31,7 @@ cross_tests!(
 // Test one node leaving the network.
 cross_tests!(
     TestName: test_with_failures_one,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl],
+    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
@@ -59,7 +59,7 @@ cross_tests!(
 // Test f/2 nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_half_f,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl],
+    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
@@ -99,7 +99,7 @@ cross_tests!(
 // Test f nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_f,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl],
+    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
@@ -152,7 +152,7 @@ cross_tests!(
 // Test that a good leader can succeed in the view directly after view sync
 cross_tests!(
     TestName: test_with_failures_2,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl],
+    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {

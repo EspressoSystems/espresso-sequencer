@@ -59,10 +59,10 @@ async fn test_catchup() {
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_catchup_web() {
+async fn test_catchup_cdn() {
     use std::time::Duration;
 
-    use hotshot_example_types::node_types::{TestTypes, WebImpl};
+    use hotshot_example_types::node_types::{PushCdnImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
@@ -103,7 +103,7 @@ async fn test_catchup_web() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, WebImpl>(0)
+        .gen_launcher::<TestTypes, PushCdnImpl>(0)
         .launch()
         .run_test()
         .await;

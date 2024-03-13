@@ -8,6 +8,8 @@
 pub mod combined_network;
 pub mod libp2p_network;
 pub mod memory_network;
+/// The Push CDN network
+pub mod push_cdn_network;
 pub mod web_server_network;
 use std::{
     collections::HashMap,

@@ -51,11 +51,20 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+anyhow = "1.0.79"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
+cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-broker = { workspace = true, features = ["insecure", "runtime-tokio", "strong_consistency", "local_discovery"] }
+cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
+
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
+cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-broker = { workspace = true, features = ["insecure", "runtime-async-std", "strong_consistency", "local_discovery"] }
+cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
+
 
 [dev-dependencies]
 blake3 = { workspace = true }
