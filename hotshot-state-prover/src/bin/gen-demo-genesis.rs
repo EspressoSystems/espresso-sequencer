@@ -1,75 +1,36 @@
 use clap::Parser;
-use derive_more::From;
 use ethers::abi::AbiEncode;
-use ethers::types::U256;
-use ethers::utils::hex::{self, FromHexError};
 use hotshot_contract_adapter::jellyfish::u256_to_field;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
-use hotshot_state_prover::service::init_stake_table;
+use hotshot_state_prover::service::init_stake_table_from_orchestrator;
 use hotshot_types::light_client::GenericPublicInput;
-use hotshot_types::{
-    light_client::CircuitField,
-    traits::stake_table::{SnapshotVersion, StakeTableScheme as _},
-};
-use snafu::Snafu;
+use hotshot_types::traits::stake_table::SnapshotVersion;
+use hotshot_types::traits::stake_table::StakeTableScheme as _;
+use url::Url;
 
 type F = ark_ed_on_bn254::Fq;
 
 #[derive(Parser)]
 struct Args {
-    /// Number of nodes in the stake table.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
+    /// URL of the HotShot orchestrator.
     #[clap(
         short,
         long,
-        env = "ESPRESSO_ORCHESTRATOR_NUM_NODES",
-        default_value = "5"
+        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
+        default_value = "http://localhost:8080"
     )]
-    num_nodes: usize,
-
-    /// Seed to use for generating node keys.
-    /// WARNING: This is used temporarily to initialize a static stake table.
-    ///          In the future we should get the stake table from the contract.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
-    keygen_seed: [u8; 32],
+    pub orchestrator_url: Url,
 }
 
-#[derive(Debug, Snafu, From)]
-enum ParseSeedError {
-    #[snafu(display("seed must be valid hex: {source}"))]
-    Hex { source: FromHexError },
-
-    #[snafu(display("wrong length for seed {length} (expected 32)"))]
-    WrongLength { length: usize },
-}
-
-fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
-    <[u8; 32]>::try_from(hex::decode(s)?)
-        .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
-}
-
-pub fn stake_table_commitment_for_demo(
-    num_nodes: usize,
-    keygen_seed: [u8; 32],
-) -> ((CircuitField, CircuitField, CircuitField), U256) {
-    // We now initialize a static stake table as what hotshot orchestrator does.
-    // In the future we should get the stake table from the contract.
-    let mut st = init_stake_table(num_nodes, keygen_seed);
-    st.advance();
-    st.advance();
-    (
-        st.commitment(SnapshotVersion::LastEpochStart)
-            .expect("Commitment computation shouldn't fail."),
-        st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3,
-    )
-}
-
-fn main() {
+#[async_std::main]
+async fn main() {
     let args = Args::parse();
 
-    let ((bls_comm, schnorr_comm, stake_comm), threshold) =
-        stake_table_commitment_for_demo(args.num_nodes, args.keygen_seed);
+    let st = init_stake_table_from_orchestrator(&args.orchestrator_url).await;
+    let (bls_comm, schnorr_comm, stake_comm) = st
+        .commitment(SnapshotVersion::LastEpochStart)
+        .expect("Commitment computation shouldn't fail.");
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
     let pi = vec![
         u256_to_field(threshold),

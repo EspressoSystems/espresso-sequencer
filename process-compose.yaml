@@ -84,14 +84,16 @@ processes:
     command: ./scripts/launch-prover-service
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_URL
-      - ESPRESSO_ORCHESTRATOR_NUM_NODES
-      - ESPRESSO_ORCHESTRATOR_KEYGEN_SEED
       - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
+      - ESPRESSO_SEQUENCER_HOTSHOT_NUM_BLOCKS_PER_EPOCH
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
     depends_on:
+      orchestrator:
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       demo-l1-network:
