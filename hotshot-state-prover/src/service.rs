@@ -92,8 +92,7 @@ pub async fn init_stake_table_from_orchestrator(
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     tracing::info!("Initializing stake table from HotShot orchestrator.");
     let client = Client::<ServerError>::new(orchestrator_url.clone());
-    let mut num_retries = 10;
-    while num_retries > 0 {
+    loop {
         match client.get::<bool>("api/peer_pub_ready").send().await {
             Ok(true) => {
                 match client
@@ -122,23 +121,19 @@ pub async fn init_stake_table_from_orchestrator(
                         return st;
                     }
                     Err(e) => {
-                        num_retries -= 1;
                         tracing::warn!("Orchestrator error: {e}, retrying.");
                     }
                 }
             }
             Ok(false) => {
-                num_retries -= 1;
-                tracing::info!("Peers' keys are not ready.");
+                tracing::info!("Peers' keys are not ready, retrying.");
             }
             Err(e) => {
-                num_retries -= 1;
                 tracing::warn!("Orchestrator error {e}, retrying.");
             }
         }
         sleep(Duration::from_secs(2)).await;
     }
-    panic!("Failed initializing stake table.")
 }
 
 pub fn load_proving_key() -> ProvingKey {
