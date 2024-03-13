@@ -2,9 +2,10 @@ use std::{fmt::Display, path::PathBuf};
 
 use clap::Args;
 use derive_more::From;
+use futures::FutureExt;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
@@ -67,7 +68,6 @@ impl tide_disco::error::Error for Error {
             status,
         }
     }
-
     fn status(&self) -> StatusCode {
         match self {
             Error::Request { .. } => StatusCode::BadRequest,
@@ -76,6 +76,7 @@ impl tide_disco::error::Error for Error {
                 EventError::Missing => StatusCode::NotFound,
                 EventError::Error { .. } => StatusCode::InternalServerError,
             },
+            Error::Custom { .. } => StatusCode::InternalServerError,
         }
     }
 }
@@ -97,9 +98,10 @@ where
         options.extensions.clone(),
     )?;
     api.with_version("0.0.1".parse().unwrap())
-        .get("available_hotshot_events", |req, state| {
+        .get("hotshot_events", |req, state| {
             async move {
-                let view_number = req.blob_param("view_number")?;
+                //let view_number = req.blob_param("view_number")?;
+                let view_number = req.integer_param("view_number")?;
                 state
                     .get_available_hotshot_events(view_number)
                     .await

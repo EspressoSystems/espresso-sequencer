@@ -28,7 +28,7 @@ FORMAT_VERSION = "0.1.0"
 
 [route.hotshot_events]
 PATH = ["hotshotevents/:view_number"]
-":parent_hash" = "Integer"
+":view_number" = "Integer"
 DOC = """
 Get hotshot events starting from a given view number.
 """

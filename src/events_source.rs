@@ -1,9 +1,6 @@
 use crate::{events::EventError, events_info::EventInfo};
 use async_trait::async_trait;
-use hotshot_types::{
-    data::ViewNumber,
-    traits::{node_implementation::NodeType, signature_key::SignatureKey},
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use tagged_base64::TaggedBase64;
 
 #[async_trait]
@@ -15,6 +12,6 @@ where
 {
     async fn get_available_hotshot_events(
         &self,
-        view_number: ViewNumber,
+        view_number: u128,
     ) -> Result<Vec<EventInfo<I>>, EventError>;
 }
