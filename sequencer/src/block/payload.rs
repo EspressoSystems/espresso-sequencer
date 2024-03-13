@@ -315,7 +315,7 @@ mod test {
     use crate::{
         block::{
             entry::{TxTableEntry, TxTableEntryWord},
-            payload::{Payload, TableWordTraits},
+            payload::{parse_ns_payload, Payload, TableWordTraits},
             queryable,
             tables::{test::TxTableTest, NameSpaceTable, Table, TxTable},
             tx_iterator::TxIndex,
@@ -757,6 +757,317 @@ mod test {
             .is_none());
     }
 
+    #[test]
+    fn arbitrary_payloads() {
+        check_arbitrary_ns_table::<TxTableEntryWord>();
+        check_arbitrary_tx_table::<TxTableEntryWord>();
+    }
+
+    fn check_arbitrary_ns_table<TableWord: TableWordTraits>() {
+        setup_logging();
+        setup_backtrace();
+        let mut rng = jf_utils::test_rng();
+        let entry_len = TxTableEntry::byte_len();
+        let vid = vid_scheme(NUM_STORAGE_NODES);
+
+        // test 1
+        let mut ns1 = vec![0; 100];
+        rng.fill_bytes(&mut ns1);
+        write_usize(&mut ns1, 0, 13);
+
+        // test 2
+        let mut ns2 = vec![0; 100];
+        rng.fill_bytes(&mut ns2);
+        write_usize(&mut ns2, 0, 12);
+
+        // test 3
+        let mut ns3 = vec![0; 100];
+        rng.fill_bytes(&mut ns3);
+        write_usize(&mut ns3, 0, 12);
+        write_usize(&mut ns3, 2 * entry_len, 26);
+
+        // test 4
+        let namespace_offsets = vec![
+            (NamespaceId::from(0), 100),
+            (NamespaceId::from(1), 200),
+            (NamespaceId::from(2), 300),
+            (NamespaceId::from(3), 50),
+            (NamespaceId::from(4), 150),
+        ];
+        let ns4 = NameSpaceTable::<TableWord>::from_namespace_offsets(namespace_offsets)
+            .unwrap()
+            .get_bytes()
+            .to_vec();
+
+        let test_cases = vec![
+            // test 0: arbitrary random bytes
+            vec![random_bytes(100, &mut rng), random_bytes(2000, &mut rng)],
+            vec![vec![], random_bytes(100, &mut rng)],
+            vec![random_bytes(100, &mut rng), vec![]],
+            vec![vec![0u8, 0u8, 3u8], random_bytes(100, &mut rng)],
+            // test 1: ns-table suggests 13 entries but ns-table length is only 100 bytes (max 12 namespaces)
+            vec![ns1, random_bytes(130, &mut rng)],
+            // test 2: ns-table suggests 12 entries but payload is 47 bytes => 11 empty namespaces
+            // vec![ns2, random_bytes(47, &mut rng)],
+
+            // test 3: first entry in ns-table points to offset (26 * entry_len) but payload is only 100 bytes (max 25 namespaces)
+            vec![ns3, random_bytes(100, &mut rng)],
+            // test 4: overlapping namespaces is allowed but results in a zero-length namespace
+            vec![ns4, random_bytes(300, &mut rng)],
+            // test 5: more than one namespace with the same namespace id
+        ];
+
+        for test_case in test_cases.into_iter() {
+            let actual_ns_table_bytes = &test_case[0];
+            let actual_payload_bytes = &test_case[1];
+
+            let block = Payload::from_bytes(
+                actual_payload_bytes.iter().cloned(),
+                &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
+            );
+            let disperse_data = vid.disperse(&block.raw_payload).unwrap();
+
+            let ns_table = block.get_ns_table();
+            let ns_table_len = ns_table.len();
+
+            let actual_ns_table_len = {
+                let left = read_usize(actual_ns_table_bytes, 0);
+                let right = actual_ns_table_bytes
+                    .len()
+                    .saturating_sub(TxTableEntry::byte_len())
+                    / (2 * TxTableEntry::byte_len());
+                std::cmp::min(left, right)
+            };
+
+            assert_eq!(
+                ns_table_len, actual_ns_table_len,
+                "deduced ns table len is {} but actual ns table len is {}",
+                ns_table_len, actual_ns_table_len
+            );
+
+            let mut last_offset = 0;
+            for ns_idx in 0..ns_table_len {
+                let (ns_id, ns_range) = ns_table.get_payload_range(ns_idx, block.raw_payload.len());
+                // test ns range
+                let start = ns_range.start;
+                let end = ns_range.end;
+                assert!(start <= end, "ensure valid range for namespace",);
+                assert!(
+                    end <= block.raw_payload.len(),
+                    "deduced range of ns_idx: {} is ending at: {} but payload length is only: {}",
+                    ns_idx,
+                    end,
+                    actual_ns_table_bytes.len(),
+                );
+
+                // test ns proof
+                let ns_proof_option = block.namespace_with_proof(
+                    block.get_ns_table(),
+                    ns_id,
+                    disperse_data.common.clone(),
+                );
+                if let Some(ns_proof) = ns_proof_option {
+                    if let NamespaceProof::Existence {
+                        ref ns_payload_flat,
+                        ..
+                    } = ns_proof
+                    {
+                        assert_eq!(
+                        ns_payload_flat, &block.raw_payload[ns_range.clone()],
+                        "namespace {} incorrect payload bytes returned from namespace_with_proof",
+                        ns_id,
+                    );
+                    } else {
+                        panic!("expect NamespaceProof::Existence variant");
+                    };
+                } else {
+                    assert!(ns_range.is_empty());
+                }
+
+                // test overlapping namespaces
+                if ns_range.end < last_offset {
+                    assert!(ns_range.is_empty(), "identified overlapping namespaces but the resulting namespace range is not empty");
+                }
+                last_offset = ns_range.end;
+            }
+        }
+    }
+
+    fn check_arbitrary_tx_table<TableWord: TableWordTraits>() {
+        setup_logging();
+        setup_backtrace();
+        let mut rng = jf_utils::test_rng();
+        let entry_len = TxTableEntry::byte_len();
+
+        // test 1
+        let namespace_offsets = vec![
+            (NamespaceId::from(0), 100),
+            (NamespaceId::from(1), 200),
+            (NamespaceId::from(2), 300),
+        ];
+        let ns1 = NameSpaceTable::<TableWord>::from_namespace_offsets(namespace_offsets)
+            .unwrap()
+            .get_bytes()
+            .to_vec();
+        let mut payload1 = vec![0; 300];
+        rng.fill_bytes(&mut payload1);
+        write_usize(&mut payload1, 0, 25);
+
+        // test 2
+        let ns2 = ns1.clone();
+        let mut payload2 = vec![0; 300];
+        rng.fill_bytes(&mut payload2);
+        write_usize(&mut payload2, 0, 5);
+        write_usize(&mut payload2, entry_len, 101);
+
+        // test 3
+        let ns3 = ns1.clone();
+        let mut payload3 = vec![0; 300];
+        rng.fill_bytes(&mut payload3);
+        write_usize(&mut payload3, 200, 5);
+        write_usize(&mut payload3, 200 + entry_len, 6);
+        write_usize(&mut payload3, 200 + (2 * entry_len), 6);
+        write_usize(&mut payload3, 200 + (3 * entry_len), 101);
+
+        // test 4
+        let namespace_offsets = vec![
+            (NamespaceId::from(0), 1000),
+            (NamespaceId::from(1), 1300),
+            (NamespaceId::from(2), 2300),
+        ];
+        let ns4 = NameSpaceTable::<TableWord>::from_namespace_offsets(namespace_offsets)
+            .unwrap()
+            .get_bytes()
+            .to_vec();
+        let mut payload4 = vec![0; 2300];
+        rng.fill_bytes(&mut payload4);
+        write_usize(&mut payload4, 1000, 5);
+        write_usize(&mut payload4, 1000 + entry_len, 100);
+        write_usize(&mut payload4, 1000 + (2 * entry_len), 200);
+        write_usize(&mut payload4, 1000 + (3 * entry_len), 300);
+        write_usize(&mut payload4, 1000 + (4 * entry_len), 50);
+        write_usize(&mut payload4, 1000 + (5 * entry_len), 150);
+
+        let test_cases = vec![
+            // test 1: tx-table suggests 25 entries but ns length is only 100 bytes (max 24 txs)
+            vec![ns1, payload1],
+            // test 2: first entry in tx-table points to offset 101 but ns is only 100 bytes
+            vec![ns2, payload2],
+            // test 3: first two namespaces are random bytes.
+            // the third namespace has 5 txs
+            vec![ns3, payload3],
+            // test 4: 3 namespaces where first and last are random bytes.
+            // the middle namespace has overlapping transaction payloads
+            vec![ns4, payload4],
+        ];
+
+        for test_case in test_cases.into_iter() {
+            let actual_ns_table_bytes = &test_case[0];
+            let actual_payload_bytes = &test_case[1];
+
+            let block = Payload::from_bytes(
+                actual_payload_bytes.iter().cloned(),
+                &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
+            );
+            let ns_table = block.get_ns_table();
+            let mut total_tx_num = 0;
+            let mut tx_iter = block.iter(ns_table);
+            for ns_idx in 0..ns_table.len() {
+                let (ns_id, ns_range) = ns_table.get_payload_range(ns_idx, block.raw_payload.len());
+                let ns_bytes = &block.raw_payload[ns_range.clone()];
+
+                // ns cannot hold more than max num of txs
+                let tx_table_len = TxTable::get_tx_table_len(ns_bytes);
+                let max_tx_table_len = ns_bytes.len().saturating_sub(TxTableEntry::byte_len())
+                    / TxTableEntry::byte_len();
+                assert!(
+                    tx_table_len <= max_tx_table_len,
+                    "derived tx table len is {} but actual ns has room only for {} txs",
+                    tx_table_len,
+                    max_tx_table_len
+                );
+
+                let txs = parse_ns_payload(ns_bytes, ns_id);
+                total_tx_num += txs.len();
+
+                let actual_tx_table_len = read_usize(ns_bytes, 0);
+                if max_tx_table_len < actual_tx_table_len {
+                    assert!(txs.iter().all(|tx| tx.payload().is_empty()),
+                    "advertised tx-table length cannot possibly fit in namespace; all txs should be empty");
+                }
+
+                let tx_payloads_offset = (tx_table_len + 1) * TxTableEntry::byte_len();
+                let mut last_offset = tx_payloads_offset;
+                let mut tx_offset_bytes = vec![0u8; TxTableEntry::byte_len()];
+
+                for (tx_idx, tx) in txs.iter().enumerate() {
+                    assert!(tx_iter.next().is_some());
+
+                    let tx_range = TxTable::get_payload_range(ns_bytes, tx_idx, tx_table_len);
+                    // read tx end offset directly from raw payload bytes
+                    tx_offset_bytes[..TxTableEntry::byte_len()].copy_from_slice(
+                        &actual_payload_bytes[ns_range.start
+                            + (tx_idx + 1) * TxTableEntry::byte_len()
+                            ..(ns_range.start + (tx_idx + 2) * TxTableEntry::byte_len())],
+                    );
+                    let tx_offset = usize::try_from(
+                        TxTableEntry::from_bytes(&tx_offset_bytes).unwrap_or(TxTableEntry::zero()),
+                    )
+                    .unwrap_or(0);
+
+                    let mut malformed = false;
+                    let actual_tx_offset = tx_payloads_offset + tx_offset;
+
+                    // check derived tx byte range
+                    if actual_tx_offset > ns_bytes.len() {
+                        assert_eq!(
+                            tx_range.end,
+                            ns_bytes.len(),
+                            "tx offset should be clamped at the end of namespace"
+                        );
+                        if last_offset > ns_bytes.len() {
+                            assert_eq!(
+                                tx.payload().len(),
+                                0,
+                                "tx payload should be empty if start and end are both clamped"
+                            );
+                        }
+                        malformed = true;
+                    }
+
+                    // check overlapping tx payloads
+                    if actual_tx_offset < last_offset {
+                        assert_eq!(
+                            tx.payload().len(),
+                            0,
+                            "identified overlapping tx payloads; negative length tx is empty"
+                        );
+                        malformed = true;
+                    }
+
+                    // derive tx-length if tx is not malformed
+                    if !malformed {
+                        assert_eq!(
+                            tx.payload().len(),
+                            actual_tx_offset - last_offset,
+                            "tx payload is derived to be {} but should be {}",
+                            tx.payload().len(),
+                            actual_tx_offset - last_offset
+                        );
+                    }
+                    last_offset = actual_tx_offset;
+                }
+            }
+            assert_eq!(
+                block.len(&block.ns_table),
+                total_tx_num,
+                "block has {} txs but number of total tx from all namespaces is {}",
+                block.len(&block.ns_table),
+                total_tx_num
+            )
+        }
+    }
+
     struct TestCase<TableWord: TableWordTraits> {
         payload: Vec<u8>,
         num_txs: usize,
@@ -919,6 +1230,25 @@ mod test {
         pub fn tx_bodies_byte_len(entries: &[usize]) -> usize {
             // largest entry in the tx table dictates size of tx payloads
             *entries.iter().max().unwrap_or(&0)
+        }
+
+        pub fn write_usize(bytes: &mut [u8], pos: usize, val: usize) {
+            let end = std::cmp::min(pos + TxTableEntry::byte_len(), bytes.len());
+            let start = std::cmp::min(pos, end);
+            let range = start..end;
+            bytes[range.clone()]
+                .copy_from_slice(&TxTableEntry::from_usize(val).to_bytes()[..range.len()]);
+        }
+
+        pub fn read_usize(bytes: &[u8], pos: usize) -> usize {
+            let end = std::cmp::min(pos + TxTableEntry::byte_len(), bytes.len());
+            let start = std::cmp::min(pos, end);
+            let range = start..end;
+            let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+            entry_bytes[..range.len()].copy_from_slice(&bytes[start..end]);
+            TxTableEntry::from_bytes_array(entry_bytes)
+                .try_into()
+                .unwrap()
         }
 
         pub fn random_bytes<R: RngCore>(len: usize, rng: &mut R) -> Vec<u8> {
