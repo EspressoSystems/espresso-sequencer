@@ -31,7 +31,7 @@ struct Args {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
-        default_value = "http://127.0.0.1:8545"
+        default_value = "http://localhost:8545"
     )]
     l1_provider: Url,
 

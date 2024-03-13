@@ -67,6 +67,8 @@ services:
 
   prover-service:
     image: ghcr.io/espressosystems/espresso-sequencer/prover-service:main
+    ports:
+      - "$ESPRESSO_PROVER_SERVICE_PORT:$ESPRESSO_PROVER_SERVICE_PORT"
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
@@ -75,8 +77,6 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
-      - ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_LIST
-      - ESPRESSO_DEMO_SEQUENCER_PRIVATE_STATE_KEY_LIST
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
