@@ -59,6 +59,8 @@ hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
+portpicker = "0.1.1" # TODO: optional?
+tempfile = "3.9.0" # TODO: optional?
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
