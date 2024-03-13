@@ -16,7 +16,7 @@ use hotshot_types::constants::LOOK_AHEAD;
 use hotshot_types::event::LeafInfo;
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal, VidDisperse},
+    data::{Leaf, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
@@ -39,11 +39,7 @@ use tracing::warn;
 
 use crate::vote::HandleVoteEvent;
 use chrono::Utc;
-use std::{
-    collections::{BTreeMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{collections::HashSet, marker::PhantomData, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument};
@@ -129,12 +125,6 @@ pub struct ConsensusTaskState<
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
-
-    /// All the VID shares we've received for current and future views.
-    /// In the future we will need a different struct similar to VidDisperse except
-    /// it stores only one share.
-    /// TODO <https://github.com/EspressoSystems/HotShot/issues/1732>
-    pub vid_shares: BTreeMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -227,7 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             // Only vote if you has seen the VID share for this view
-            if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
+            if let Some(_vid_share) = consensus.vid_shares.get(&proposal.view_number) {
             } else {
                 debug!(
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
@@ -779,7 +769,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     leaf.fill_block_payload_unchecked(payload);
                                 }
 
-                                let vid = self
+                                let vid = consensus
                                     .vid_shares
                                     .get(&leaf.get_view_number())
                                     .map(|vid_proposal| vid_proposal.data.clone());
@@ -845,7 +835,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
                     let old_anchor_view = consensus.last_decided_view;
                     consensus.collect_garbage(old_anchor_view, new_anchor_view);
-                    self.vid_shares = self.vid_shares.split_off(&new_anchor_view);
                     consensus.last_decided_view = new_anchor_view;
                     consensus
                         .metrics
@@ -1121,7 +1110,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
-                self.vid_shares.insert(view, disperse);
+                self.consensus
+                    .write()
+                    .await
+                    .vid_shares
+                    .insert(view, disperse);
                 self.vote_if_able(&event_stream).await;
             }
             HotShotEvent::ViewChange(new_view) => {
