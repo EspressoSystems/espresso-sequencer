@@ -1,11 +1,10 @@
-use std::{fmt::Display, path::PathBuf};
-
 use clap::Args;
 use derive_more::From;
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt, TryFutureExt};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
+use std::{fmt::Display, path::PathBuf};
 use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
@@ -97,19 +96,25 @@ where
         include_str!("../api/hotshot_events.toml"),
         options.extensions.clone(),
     )?;
-    api.with_version("0.0.1".parse().unwrap())
-        .get("hotshot_events", |req, state| {
+    api.with_version("0.1.0".parse().unwrap())
+        .stream("hotshot_events", move |req, state| {
             async move {
-                //let view_number = req.blob_param("view_number")?;
                 let view_number = req.integer_param("view_number")?;
-                state
-                    .get_available_hotshot_events(view_number)
-                    .await
-                    .context(EventAvailableSnafu {
-                        resource: view_number.to_string(),
+                Ok(state
+                    .read(|state| {
+                        async move {
+                            state
+                                .get_available_hotshot_events(view_number)
+                                .await
+                                .map(Ok)
+                        }
+                        .boxed()
                     })
+                    .await)
             }
+            .try_flatten_stream()
             .boxed()
         })?;
+
     Ok(api)
 }
