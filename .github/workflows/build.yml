@@ -61,6 +61,7 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
+            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -100,6 +101,7 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
+            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
