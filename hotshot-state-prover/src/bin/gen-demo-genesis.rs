@@ -19,7 +19,7 @@ struct Args {
     // Sequencer Private Staking key list
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_STAKING_PRIVATE_KEY_LIST",
+        env = "ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_LIST",
         value_delimiter = ','
     )]
     pub private_staking_keys: Vec<BLSPrivKey>,
@@ -27,7 +27,7 @@ struct Args {
     // Sequencer State signing key list
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_STATE_PRIVATE_KEY_LIST",
+        env = "ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_LIST",
         value_delimiter = ','
     )]
     pub private_state_keys: Vec<StateSignKey>,
