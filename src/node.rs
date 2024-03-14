@@ -181,6 +181,7 @@ mod test {
     use commit::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::event::EventType;
+    use hotshot_types::event::LeafInfo;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -245,7 +246,7 @@ mod test {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            for (leaf, vid) in leaf_chain.iter().rev() {
+            for LeafInfo { leaf, vid, .. } in leaf_chain.iter().rev() {
                 headers.push(leaf.block_header.clone());
                 if leaf.block_header.block_number >= block_height as u64 {
                     break 'outer;

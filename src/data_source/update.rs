@@ -76,16 +76,18 @@ where
             let qcs = once((**qc).clone())
                 // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
                 // `leaf.justify_qc`.
-                .chain(leaf_chain.iter().map(|(leaf, _)| leaf.get_justify_qc()))
+                .chain(leaf_chain.iter().map(|leaf| leaf.leaf.get_justify_qc()))
                 // Put the QCs in chronological order.
                 .rev()
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
-            for (qc, (leaf, vid)) in qcs.zip(leaf_chain.iter().rev()) {
+            for (qc, leaf_info) in qcs.zip(leaf_chain.iter().rev()) {
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
+                let leaf = leaf_info.leaf.clone();
+                let vid = leaf_info.vid.clone();
                 let leaf_data =
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
                 self.insert_leaf(leaf_data.clone()).await?;
@@ -107,7 +109,7 @@ where
                     // these cases, the block payload is guaranteed to always be empty, so VID isn't
                     // really necessary. But for consistency, we will still store the VID dispersal
                     // data, computing it ourselves based on the well-known genesis VID commitment.
-                    store_genesis_vid(self, leaf).await;
+                    store_genesis_vid(self, &leaf).await;
                 } else {
                     tracing::error!(
                         "VID info for block {} not available at decide",

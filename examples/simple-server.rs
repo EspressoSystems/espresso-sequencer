@@ -147,8 +147,10 @@ async fn init_consensus(
         })
         .collect::<Vec<_>>();
     let config = HotShotConfig {
-        total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
+        num_nodes_with_stake: NonZeroUsize::new(pub_keys.len()).unwrap(),
+        num_nodes_without_stake: 0,
         known_nodes_with_stake: known_nodes_with_stake.clone(),
+        known_nodes_without_stake: vec![],
         start_delay: 0,
         round_start_delay: 0,
         next_view_timeout: 10000,
@@ -160,7 +162,8 @@ async fn init_consensus(
         num_bootstrap: 0,
         execution_type: ExecutionType::Continuous,
         election_config: None,
-        da_committee_size: pub_keys.len(),
+        da_staked_committee_size: pub_keys.len(),
+        da_non_staked_committee_size: 0,
         my_own_validator_config: Default::default(),
     };
     join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
@@ -182,8 +185,10 @@ async fn init_consensus(
                     state_key_pair: state_key_pairs[node_id].clone(),
                 };
 
-                let election_config =
-                    MockMembership::default_election_config(config.total_nodes.get() as u64);
+                let election_config = MockMembership::default_election_config(
+                    config.num_nodes_with_stake.get() as u64,
+                    0,
+                );
                 let membership = MockMembership::create_election(
                     known_nodes_with_stake.clone(),
                     election_config,
