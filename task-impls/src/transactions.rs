@@ -78,10 +78,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
     pub async fn handle(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        event_stream: Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::TransactionsRecv(transactions) => {
                 futures::join! {
                     self.api
@@ -101,7 +101,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                                     // If we didn't already know about this transaction, update our mempool metrics.
                                     if !self.seen_transactions.remove(&transaction.commit())
-                                        && txns.insert(transaction.commit(), transaction).is_none()
+                                        && txns.insert(transaction.commit(), transaction.clone()).is_none()
                                     {
                                         consensus.metrics.outstanding_transactions.update(1);
                                         consensus
@@ -173,6 +173,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 return None;
             }
             HotShotEvent::ViewChange(view) => {
+                let view = *view;
                 debug!("view change in transactions to view {:?}", view);
                 if (*view != 0 || *self.cur_view > 0) && *self.cur_view >= *view {
                     return None;
@@ -214,7 +215,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // send the sequenced transactions to VID and DA tasks
                 let block_view = if make_block { view } else { view + 1 };
                 broadcast_event(
-                    HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, block_view),
+                    Arc::new(HotShotEvent::TransactionsSequenced(
+                        encoded_transactions,
+                        metadata,
+                        block_view,
+                    )),
                     &event_stream,
                 )
                 .await;
@@ -299,13 +304,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
     for TransactionTaskState<TYPES, I, A>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
-    fn filter(&self, event: &HotShotEvent<TYPES>) -> bool {
+    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::TransactionsRecv(_)
                 | HotShotEvent::LeafDecided(_)
                 | HotShotEvent::Shutdown
@@ -322,6 +327,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }

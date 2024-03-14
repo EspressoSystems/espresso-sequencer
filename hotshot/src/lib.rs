@@ -146,9 +146,10 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub output_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
 
     /// access to the internal event stream, in case we need to, say, shut something down
+    #[allow(clippy::type_complexity)]
     internal_event_stream: (
-        Sender<HotShotEvent<TYPES>>,
-        InactiveReceiver<HotShotEvent<TYPES>>,
+        Sender<Arc<HotShotEvent<TYPES>>>,
+        InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
     ),
 
     /// uid for instrumentation
@@ -274,14 +275,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         debug!("Starting Consensus");
         self.internal_event_stream
             .0
-            .broadcast_direct(HotShotEvent::ViewChange(TYPES::Time::new(0)))
+            .broadcast_direct(Arc::new(HotShotEvent::ViewChange(TYPES::Time::new(0))))
             .await
             .expect("Genesis Broadcast failed");
         self.internal_event_stream
             .0
-            .broadcast_direct(HotShotEvent::QCFormed(either::Left(
+            .broadcast_direct(Arc::new(HotShotEvent::QCFormed(either::Left(
                 QuorumCertificate::genesis(),
-            )))
+            ))))
             .await
             .expect("Genesis Broadcast failed");
     }
@@ -414,8 +415,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
-            Sender<HotShotEvent<TYPES>>,
-            Receiver<HotShotEvent<TYPES>>,
+            Sender<Arc<HotShotEvent<TYPES>>>,
+            Receiver<Arc<HotShotEvent<TYPES>>>,
         ),
         HotShotError<TYPES>,
     > {

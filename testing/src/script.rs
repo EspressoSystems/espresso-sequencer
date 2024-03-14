@@ -6,9 +6,9 @@ use hotshot_task::task::{Task, TaskRegistry, TaskState};
 use hotshot_types::traits::node_implementation::NodeType;
 use std::sync::Arc;
 
-pub struct TestScriptStage<TYPES: NodeType, S: TaskState<Event = HotShotEvent<TYPES>>> {
+pub struct TestScriptStage<TYPES: NodeType, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>> {
     pub inputs: Vec<HotShotEvent<TYPES>>,
-    pub outputs: Vec<Predicate<HotShotEvent<TYPES>>>,
+    pub outputs: Vec<Predicate<Arc<HotShotEvent<TYPES>>>>,
     pub asserts: Vec<Predicate<S>>,
 }
 
@@ -72,7 +72,7 @@ where
 /// Note: the task is not spawned with an async thread; instead, the harness just calls `handle_event`.
 /// This has a few implications, e.g. shutting down tasks doesn't really make sense,
 /// and event ordering is deterministic.
-pub async fn run_test_script<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
+pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(
     mut script: TestScript<TYPES, S>,
     state: S,
 ) where
@@ -96,11 +96,11 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
 
     for (stage_number, stage) in script.iter_mut().enumerate() {
         tracing::debug!("Beginning test stage {}", stage_number);
-        for input in &mut *stage.inputs {
-            if !task.state_mut().filter(input) {
-                tracing::debug!("Test sent: {:?}", input);
+        for input in &stage.inputs {
+            if !task.state_mut().filter(&Arc::new(input.clone())) {
+                tracing::debug!("Test sent: {:?}", input.clone());
 
-                if let Some(res) = S::handle_event(input.clone(), &mut task).await {
+                if let Some(res) = S::handle_event(input.clone().into(), &mut task).await {
                     task.state_mut().handle_result(&res).await;
                 }
             }
@@ -131,7 +131,7 @@ pub struct TaskScript<TYPES: NodeType, S> {
 }
 
 pub struct Expectations<TYPES: NodeType, S> {
-    pub output_asserts: Vec<Predicate<HotShotEvent<TYPES>>>,
+    pub output_asserts: Vec<Predicate<Arc<HotShotEvent<TYPES>>>>,
     pub task_state_asserts: Vec<Predicate<S>>,
 }
 

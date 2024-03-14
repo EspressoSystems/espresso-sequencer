@@ -63,7 +63,7 @@ use std::{
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 /// Maximum size of a message
-pub const MAX_GOSSIP_MSG_SIZE: usize = 200_000_000;
+pub const MAX_GOSSIP_MSG_SIZE: usize = 2_000_000_000;
 
 /// Wrapped num of connections
 pub const ESTABLISHED_LIMIT: NonZeroU32 =

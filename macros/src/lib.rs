@@ -20,6 +20,7 @@ use quote::{format_ident, quote};
 ///
 /// The macro panics if the input stream cannot be parsed.
 /// The test will panic if the any of the scripts has a different number of stages from the input.
+#[allow(clippy::too_many_lines)]
 #[proc_macro]
 pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
     // Parse the input as an iter of Expr
@@ -94,10 +95,10 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
 
         for input in &input_group {
             #(
-                if !#task_names.state().filter(input) {
+                if !#task_names.state().filter(&input.clone().into()) {
                     tracing::debug!("Test sent: {:?}", input);
 
-                    if let Some(res) = #task_names.handle_event(input.clone()).await {
+                    if let Some(res) = #task_names.handle_event(input.clone().into()).await {
                         #task_names.state().handle_result(&res).await;
                     }
 

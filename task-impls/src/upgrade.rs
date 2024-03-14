@@ -67,10 +67,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Upgrade Task", level = "error")]
     pub async fn handle(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        tx: Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        tx: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::UpgradeProposalRecv(proposal, sender) => {
                 let should_vote = self.should_vote;
                 // If the proposal does not match our upgrade target, we immediately exit.
@@ -105,7 +105,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // We then validate that the proposal was issued by the leader for the view.
                 let view_leader_key = self.quorum_membership.get_leader(view);
-                if view_leader_key != sender {
+                if &view_leader_key != sender {
                     error!("Upgrade proposal doesn't have expected leader key for view {} \n Upgrade proposal is: {:?}", *view, proposal.data.clone());
                     return None;
                 }
@@ -127,7 +127,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // If everything is fine up to here, we generate and send a vote on the proposal.
                 let Ok(vote) = UpgradeVote::create_signed_vote(
-                    proposal.data.upgrade_proposal,
+                    proposal.data.upgrade_proposal.clone(),
                     view,
                     &self.public_key,
                     &self.private_key,
@@ -136,7 +136,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 };
                 debug!("Sending upgrade vote {:?}", vote.get_view_number());
-                broadcast_event(HotShotEvent::UpgradeVoteSend(vote), &tx).await;
+                broadcast_event(Arc::new(HotShotEvent::UpgradeVoteSend(vote)), &tx).await;
             }
             HotShotEvent::UpgradeVoteRecv(ref vote) => {
                 debug!("Upgrade vote recv, Main Task {:?}", vote.get_view_number());
@@ -182,6 +182,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::ViewChange(view) => {
+                let view = *view;
                 if *self.cur_view >= *view {
                     return None;
                 }
@@ -209,7 +210,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
     for UpgradeTaskState<TYPES, I, A>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
@@ -223,12 +224,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 
     fn filter(&self, event: &Self::Event) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::UpgradeProposalRecv(_, _)
                 | HotShotEvent::UpgradeVoteRecv(_)
                 | HotShotEvent::Shutdown

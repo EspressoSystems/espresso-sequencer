@@ -62,11 +62,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
     pub async fn handle(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        event_stream: Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
+                let encoded_transactions = encoded_transactions.clone();
                 // get the number of quorum committee members to be used for VID calculation
                 let num_storage_nodes = self.membership.total_nodes();
 
@@ -82,27 +83,28 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let vid_disperse = vid_disperse.unwrap();
                 // send the commitment and metadata to consensus for block building
                 broadcast_event(
-                    HotShotEvent::SendPayloadCommitmentAndMetadata(
+                    Arc::new(HotShotEvent::SendPayloadCommitmentAndMetadata(
                         vid_disperse.commit,
-                        metadata,
-                        view_number,
-                    ),
+                        metadata.clone(),
+                        *view_number,
+                    )),
                     &event_stream,
                 )
                 .await;
 
                 // send the block to the VID dispersal function
                 broadcast_event(
-                    HotShotEvent::BlockReady(
-                        VidDisperse::from_membership(view_number, vid_disperse, &self.membership),
-                        view_number,
-                    ),
+                    Arc::new(HotShotEvent::BlockReady(
+                        VidDisperse::from_membership(*view_number, vid_disperse, &self.membership),
+                        *view_number,
+                    )),
                     &event_stream,
                 )
                 .await;
             }
 
             HotShotEvent::BlockReady(vid_disperse, view_number) => {
+                let view_number = *view_number;
                 let Ok(signature) = TYPES::SignatureKey::sign(
                     &self.private_key,
                     vid_disperse.payload_commitment.as_ref().as_ref(),
@@ -112,20 +114,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
                 debug!("publishing VID disperse for view {}", *view_number);
                 broadcast_event(
-                    HotShotEvent::VidDisperseSend(
+                    Arc::new(HotShotEvent::VidDisperseSend(
                         Proposal {
                             signature,
-                            data: vid_disperse,
+                            data: vid_disperse.clone(),
                             _pd: PhantomData,
                         },
                         self.public_key.clone(),
-                    ),
+                    )),
                     &event_stream,
                 )
                 .await;
             }
 
             HotShotEvent::ViewChange(view) => {
+                let view = *view;
                 if (*view != 0 || *self.cur_view > 0) && *self.cur_view >= *view {
                     return None;
                 }
@@ -166,7 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
     for VIDTaskState<TYPES, I, A>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
@@ -180,7 +183,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
     fn filter(&self, event: &Self::Event) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::Shutdown
                 | HotShotEvent::TransactionsSequenced(_, _, _)
                 | HotShotEvent::BlockReady(_, _)
@@ -188,6 +191,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         )
     }
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }

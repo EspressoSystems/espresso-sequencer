@@ -70,7 +70,7 @@ impl<
     pub async fn accumulate_vote(
         &mut self,
         vote: &VOTE,
-        event_stream: &Sender<HotShotEvent<TYPES>>,
+        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         if vote.get_leader(&self.membership) != self.public_key {
             error!("Received vote for a view in which we were not the leader.");
@@ -93,7 +93,11 @@ impl<
             Either::Right(cert) => {
                 debug!("Certificate Formed! {:?}", cert);
 
-                broadcast_event(VOTE::make_cert_event(cert, &self.public_key), event_stream).await;
+                broadcast_event(
+                    Arc::new(VOTE::make_cert_event(cert, &self.public_key)),
+                    event_stream,
+                )
+                .await;
                 self.accumulator = None;
                 Some(HotShotTaskCompleted)
             }
@@ -117,7 +121,7 @@ impl<
 where
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
@@ -127,7 +131,7 @@ where
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }
 
@@ -142,12 +146,12 @@ where
     /// Handle a vote event
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted>;
 
     /// Event filter to use for this event
-    fn filter(event: &HotShotEvent<TYPES>) -> bool;
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool;
 }
 
 /// Info needed to create a vote accumulator task
@@ -168,8 +172,8 @@ pub struct AccumulatorInfo<TYPES: NodeType> {
 pub async fn create_vote_accumulator<TYPES, VOTE, CERT>(
     info: &AccumulatorInfo<TYPES>,
     vote: VOTE,
-    event: HotShotEvent<TYPES>,
-    sender: &Sender<HotShotEvent<TYPES>>,
+    event: Arc<HotShotEvent<TYPES>>,
+    sender: &Sender<Arc<HotShotEvent<TYPES>>>,
 ) -> Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>
 where
     TYPES: NodeType,
@@ -352,16 +356,16 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificat
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
-            HotShotEvent::QuorumVoteRecv(vote) => self.accumulate_vote(&vote, sender).await,
+        match event.as_ref() {
+            HotShotEvent::QuorumVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::QuorumVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::QuorumVoteRecv(_))
     }
 }
 
@@ -372,16 +376,16 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertific
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
-            HotShotEvent::UpgradeVoteRecv(vote) => self.accumulate_vote(&vote, sender).await,
+        match event.as_ref() {
+            HotShotEvent::UpgradeVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::UpgradeVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::UpgradeVoteRecv(_))
     }
 }
 
@@ -391,16 +395,16 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, DAVote<TYPES>, DACertificate<TYPES>
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
-            HotShotEvent::DAVoteRecv(vote) => self.accumulate_vote(&vote, sender).await,
+        match event.as_ref() {
+            HotShotEvent::DAVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::DAVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::DAVoteRecv(_))
     }
 }
 
@@ -410,16 +414,16 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertific
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
-            HotShotEvent::TimeoutVoteRecv(vote) => self.accumulate_vote(&vote, sender).await,
+        match event.as_ref() {
+            HotShotEvent::TimeoutVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::TimeoutVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::TimeoutVoteRecv(_))
     }
 }
 
@@ -430,18 +434,18 @@ impl<TYPES: NodeType>
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
-                self.accumulate_vote(&vote, sender).await
+                self.accumulate_vote(vote, sender).await
             }
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::ViewSyncPreCommitVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::ViewSyncPreCommitVoteRecv(_))
     }
 }
 
@@ -452,16 +456,16 @@ impl<TYPES: NodeType>
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
-            HotShotEvent::ViewSyncCommitVoteRecv(vote) => self.accumulate_vote(&vote, sender).await,
+        match event.as_ref() {
+            HotShotEvent::ViewSyncCommitVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::ViewSyncCommitVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::ViewSyncCommitVoteRecv(_))
     }
 }
 
@@ -472,17 +476,17 @@ impl<TYPES: NodeType>
 {
     async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
-                self.accumulate_vote(&vote, sender).await
+                self.accumulate_vote(vote, sender).await
             }
             _ => None,
         }
     }
-    fn filter(event: &HotShotEvent<TYPES>) -> bool {
-        matches!(event, HotShotEvent::ViewSyncFinalizeVoteRecv(_))
+    fn filter(event: Arc<HotShotEvent<TYPES>>) -> bool {
+        matches!(event.as_ref(), HotShotEvent::ViewSyncFinalizeVoteRecv(_))
     }
 }

@@ -28,9 +28,10 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// clone of the `Receiver` when they get output stream.
     pub(crate) output_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
     /// access to the internal event stream, in case we need to, say, shut something down
+    #[allow(clippy::type_complexity)]
     pub(crate) internal_event_stream: (
-        Sender<HotShotEvent<TYPES>>,
-        InactiveReceiver<HotShotEvent<TYPES>>,
+        Sender<Arc<HotShotEvent<TYPES>>>,
+        InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
     ),
     /// registry for controlling tasks
     pub(crate) registry: Arc<TaskRegistry>,
@@ -61,7 +62,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// - make the stream generic and in nodetypes or nodeimpelmentation
     /// - type wrapper
     /// NOTE: this is only used for sanity checks in our tests
-    pub fn get_internal_event_stream_known_impl(&self) -> Receiver<HotShotEvent<TYPES>> {
+    pub fn get_internal_event_stream_known_impl(&self) -> Receiver<Arc<HotShotEvent<TYPES>>> {
         self.internal_event_stream.1.activate_cloned()
     }
 

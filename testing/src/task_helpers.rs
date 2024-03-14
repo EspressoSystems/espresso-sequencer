@@ -55,8 +55,8 @@ pub async fn build_system_handle(
     node_id: u64,
 ) -> (
     SystemContextHandle<TestTypes, MemoryImpl>,
-    Sender<HotShotEvent<TestTypes>>,
-    Receiver<HotShotEvent<TestTypes>>,
+    Sender<Arc<HotShotEvent<TestTypes>>>,
+    Receiver<Arc<HotShotEvent<TestTypes>>>,
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 

@@ -108,7 +108,7 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
     > TaskState for ViewSyncTaskState<TYPES, I, A>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = ();
 
@@ -120,7 +120,7 @@ impl<
 
     fn filter(&self, event: &Self::Event) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(_)
                 | HotShotEvent::ViewSyncCommitCertificate2Recv(_)
                 | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
@@ -135,7 +135,7 @@ impl<
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }
 
@@ -177,7 +177,7 @@ pub struct ViewSyncReplicaTaskState<
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
     for ViewSyncReplicaTaskState<TYPES, I, A>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = ();
 
@@ -188,7 +188,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
     fn filter(&self, event: &Self::Event) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(_)
                 | HotShotEvent::ViewSyncCommitCertificate2Recv(_)
                 | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
@@ -203,7 +203,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }
 
@@ -218,9 +218,9 @@ impl<
     /// Handles incoming events for the main view sync task
     pub async fn send_to_or_create_replica(
         &mut self,
-        event: HotShotEvent<TYPES>,
+        event: Arc<HotShotEvent<TYPES>>,
         view: TYPES::Time,
-        sender: &Sender<HotShotEvent<TYPES>>,
+        sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
         // This certificate is old, we can throw it away
         // If next view = cert round, then that means we should already have a task running for it
@@ -277,10 +277,10 @@ impl<
     /// Handles incoming events for the main view sync task
     pub async fn handle(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        event_stream: Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
-        match &event {
+        match event.as_ref() {
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
                 debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.get_view_number();
@@ -378,7 +378,7 @@ impl<
                 }
             }
 
-            HotShotEvent::ViewSyncFinalizeVoteRecv(ref vote) => {
+            HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
                 let mut map = self.finalize_relay_map.write().await;
                 let vote_view = vote.get_view_number();
                 let relay = vote.get_data().relay;
@@ -508,7 +508,7 @@ impl<
                         .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
                         .await;
                     self.send_to_or_create_replica(
-                        HotShotEvent::ViewSyncTrigger(view_number + 1),
+                        Arc::new(HotShotEvent::ViewSyncTrigger(view_number + 1)),
                         view_number + 1,
                         &event_stream,
                     )
@@ -517,7 +517,9 @@ impl<
                     // If this is the first timeout we've seen advance to the next view
                     self.current_view = view_number;
                     broadcast_event(
-                        HotShotEvent::ViewChange(TYPES::Time::new(*self.current_view)),
+                        Arc::new(HotShotEvent::ViewChange(TYPES::Time::new(
+                            *self.current_view,
+                        ))),
                         &event_stream,
                     )
                     .await;
@@ -536,10 +538,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     /// Handle incoming events for the view sync replica task
     pub async fn handle(
         &mut self,
-        event: HotShotEvent<TYPES>,
-        event_stream: Sender<HotShotEvent<TYPES>>,
+        event: Arc<HotShotEvent<TYPES>>,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
                 let last_seen_certificate = ViewSyncPhase::PreCommit;
 
@@ -582,8 +584,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
-                    broadcast_event(HotShotEvent::ViewSyncCommitVoteSend(vote), &event_stream)
-                        .await;
+                    broadcast_event(
+                        Arc::new(HotShotEvent::ViewSyncCommitVoteSend(vote)),
+                        &event_stream,
+                    )
+                    .await;
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {
@@ -601,11 +606,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         info!("Vote sending timed out in ViewSyncPreCommitCertificateRecv, Relay = {}", relay);
 
                         broadcast_event(
-                            HotShotEvent::ViewSyncTimeout(
+                            Arc::new(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*next_view),
                                 relay,
                                 phase,
-                            ),
+                            )),
                             &stream,
                         )
                         .await;
@@ -655,8 +660,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncFinalizeVote(vote) = message {
-                    broadcast_event(HotShotEvent::ViewSyncFinalizeVoteSend(vote), &event_stream)
-                        .await;
+                    broadcast_event(
+                        Arc::new(HotShotEvent::ViewSyncFinalizeVoteSend(vote)),
+                        &event_stream,
+                    )
+                    .await;
                 }
 
                 info!(
@@ -664,9 +672,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     *self.next_view
                 );
 
-                broadcast_event(HotShotEvent::ViewChange(self.next_view - 1), &event_stream).await;
+                broadcast_event(
+                    Arc::new(HotShotEvent::ViewChange(self.next_view - 1)),
+                    &event_stream,
+                )
+                .await;
 
-                broadcast_event(HotShotEvent::ViewChange(self.next_view), &event_stream).await;
+                broadcast_event(
+                    Arc::new(HotShotEvent::ViewChange(self.next_view)),
+                    &event_stream,
+                )
+                .await;
 
                 if let Some(timeout_task) = self.timeout_task.take() {
                     cancel_task(timeout_task).await;
@@ -684,11 +700,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             relay
                         );
                         broadcast_event(
-                            HotShotEvent::ViewSyncTimeout(
+                            Arc::new(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*next_view),
                                 relay,
                                 phase,
-                            ),
+                            )),
                             &stream,
                         )
                         .await;
@@ -713,7 +729,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 };
 
-                broadcast_event(HotShotEvent::TimeoutVoteSend(vote), &event_stream).await;
+                broadcast_event(Arc::new(HotShotEvent::TimeoutVoteSend(vote)), &event_stream).await;
                 // Ignore certificate if it is for an older round
                 if certificate.get_view_number() < self.next_view {
                     warn!("We're already in a higher round");
@@ -756,11 +772,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     cancel_task(timeout_task).await;
                 }
 
-                broadcast_event(HotShotEvent::ViewChange(self.next_view), &event_stream).await;
+                broadcast_event(
+                    Arc::new(HotShotEvent::ViewChange(self.next_view)),
+                    &event_stream,
+                )
+                .await;
                 return Some(HotShotTaskCompleted);
             }
 
             HotShotEvent::ViewSyncTrigger(view_number) => {
+                let view_number = *view_number;
                 if self.next_view != TYPES::Time::new(*view_number) {
                     error!("Unexpected view number to triger view sync");
                     return None;
@@ -781,8 +802,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
-                    broadcast_event(HotShotEvent::ViewSyncPreCommitVoteSend(vote), &event_stream)
-                        .await;
+                    broadcast_event(
+                        Arc::new(HotShotEvent::ViewSyncPreCommitVoteSend(vote)),
+                        &event_stream,
+                    )
+                    .await;
                 }
 
                 self.timeout_task = Some(async_spawn({
@@ -794,11 +818,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         async_sleep(timeout).await;
                         info!("Vote sending timed out in ViewSyncTrigger");
                         broadcast_event(
-                            HotShotEvent::ViewSyncTimeout(
+                            Arc::new(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*next_view),
                                 relay,
                                 ViewSyncPhase::None,
-                            ),
+                            )),
                             &stream,
                         )
                         .await;
@@ -809,8 +833,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             HotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
+                let round = *round;
                 // Shouldn't ever receive a timeout for a relay higher than ours
-                if TYPES::Time::new(*round) == self.next_view && relay == self.relay {
+                if TYPES::Time::new(*round) == self.next_view && *relay == self.relay {
                     if let Some(timeout_task) = self.timeout_task.take() {
                         cancel_task(timeout_task).await;
                     }
@@ -834,7 +859,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                             if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
                                 broadcast_event(
-                                    HotShotEvent::ViewSyncPreCommitVoteSend(vote),
+                                    Arc::new(HotShotEvent::ViewSyncPreCommitVoteSend(vote)),
                                     &event_stream,
                                 )
                                 .await;
@@ -851,6 +876,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         let relay = self.relay;
                         let next_view = self.next_view;
                         let timeout = self.view_sync_timeout;
+                        let last_cert = last_seen_certificate.clone();
                         async move {
                             async_sleep(timeout).await;
                             info!(
@@ -858,11 +884,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 relay
                             );
                             broadcast_event(
-                                HotShotEvent::ViewSyncTimeout(
+                                Arc::new(HotShotEvent::ViewSyncTimeout(
                                     TYPES::Time::new(*next_view),
                                     relay,
-                                    last_seen_certificate,
-                                ),
+                                    last_cert,
+                                )),
                                 &stream,
                             )
                             .await;

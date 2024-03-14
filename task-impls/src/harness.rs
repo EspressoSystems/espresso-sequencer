@@ -15,7 +15,7 @@ pub struct TestHarnessState<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
     type Output = HotShotTaskCompleted;
 
     async fn handle_event(
@@ -27,7 +27,7 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
 }
 
@@ -43,7 +43,7 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
 /// Panics if any state the test expects is not set. Panicing causes a test failure
 #[allow(clippy::implicit_hasher)]
 #[allow(clippy::panic)]
-pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
+pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(
     input: Vec<HotShotEvent<TYPES>>,
     expected_output: HashMap<HotShotEvent<TYPES>, usize>,
     state: S,
@@ -74,7 +74,7 @@ pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
     tasks.push(task.run());
 
     for event in input {
-        to_task.broadcast_direct(event).await.unwrap();
+        to_task.broadcast_direct(Arc::new(event)).await.unwrap();
     }
 
     if async_timeout(Duration::from_secs(2), futures::future::join_all(tasks))
@@ -96,7 +96,7 @@ pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>>>(
 /// Will panic to fail the test when it receives and unexpected event
 #[allow(clippy::needless_pass_by_value)]
 pub fn handle_event<TYPES: NodeType>(
-    event: HotShotEvent<TYPES>,
+    event: Arc<HotShotEvent<TYPES>>,
     task: &mut Task<TestHarnessState<TYPES>>,
     allow_extra_output: bool,
 ) -> Option<HotShotTaskCompleted> {

@@ -2,7 +2,7 @@ use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
 use snafu::Snafu;
-use std::{collections::HashSet, marker::PhantomData};
+use std::{collections::HashSet, marker::PhantomData, sync::Arc};
 
 use crate::{test_runner::HotShotTaskCompleted, GlobalTestEvent};
 
@@ -54,7 +54,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState for ViewSy
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
     for ViewSyncTask<TYPES, I>
 {
-    type Message = HotShotEvent<TYPES>;
+    type Message = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
@@ -65,7 +65,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
         id: usize,
         task: &mut hotshot_task::task::TestTask<Self::State, Self>,
     ) -> Option<HotShotTaskCompleted> {
-        match message {
+        match message.as_ref() {
             // all the view sync events
             HotShotEvent::ViewSyncTimeout(_, _, _)
             | HotShotEvent::ViewSyncPreCommitVoteRecv(_)
