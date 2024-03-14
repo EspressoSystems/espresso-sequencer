@@ -50,7 +50,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
                 loader,
                 Default::default(),
                 file_pattern,
-                1u64 << 20, // 1 MB
+                10u64 << 20, // 10 MB
             )?,
             pending_inserts: 0,
             missing: 0,

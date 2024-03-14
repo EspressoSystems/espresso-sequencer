@@ -96,6 +96,7 @@ where
     /// The [FileSystemStorage] will manage its own persistence synchronization.
     pub async fn create(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
+        loader.retain_archives(1);
         let mut data_source = Self::create_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
@@ -108,6 +109,7 @@ where
     /// The [FileSystemStorage] will manage its own persistence synchronization.
     pub async fn open(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
+        loader.retain_archives(1);
         let mut data_source = Self::open_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
