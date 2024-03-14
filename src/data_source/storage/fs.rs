@@ -18,6 +18,7 @@ use super::{
     AvailabilityStorage,
 };
 use crate::merklized_state::{MerklizedStateDataSource, UpdateStateData};
+use crate::QueryError;
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -35,6 +36,8 @@ use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use jf_primitives::circuit::merkle_tree::MembershipProof;
+use jf_primitives::merkle_tree::{Element, Index, NodeValue};
 
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
@@ -396,9 +399,6 @@ where
     }
 }
 
-use crate::QueryError;
-use jf_primitives::circuit::merkle_tree::MembershipProof;
-use jf_primitives::merkle_tree::{Element, Index, NodeValue};
 #[async_trait]
 impl<Types> UpdateStateData for FileSystemStorage<Types>
 where
@@ -414,7 +414,7 @@ where
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        _name: String,
+        _name: &'static str,
         _proof: Proof,
         _traversal_path: Vec<usize>,
         _bh: u64,

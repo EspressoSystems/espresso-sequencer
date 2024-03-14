@@ -189,7 +189,7 @@ async fn init_consensus(
                 };
 
                 let election_config =
-                    MockMembership::default_election_config(pub_keys.len() as u64, 0);
+                    MockMembership::default_election_config(num_nodes_with_stake.get() as u64, 0);
                 let membership = MockMembership::create_election(
                     known_nodes_with_stake.clone(),
                     election_config,

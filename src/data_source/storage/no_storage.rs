@@ -191,6 +191,7 @@ where
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
+    use crate::QueryError;
     use crate::{
         availability::{define_api, AvailabilityDataSource, Fetch},
         data_source::{
@@ -210,6 +211,7 @@ pub mod testing {
     use ark_serialize::CanonicalDeserialize;
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
+    use jf_primitives::circuit::merkle_tree::MembershipProof;
     use jf_primitives::merkle_tree::{
         prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath,
     };
@@ -591,8 +593,6 @@ pub mod testing {
         }
     }
 
-    use crate::QueryError;
-    use jf_primitives::circuit::merkle_tree::MembershipProof;
     #[async_trait]
     impl UpdateStateData for DataSource {
         type Error = QueryError;
@@ -603,7 +603,7 @@ pub mod testing {
             T: NodeValue + Send + Sync,
         >(
             &mut self,
-            _name: String,
+            _name: &'static str,
             _proof: Proof,
             _traversal_path: Vec<usize>,
             _bh: u64,

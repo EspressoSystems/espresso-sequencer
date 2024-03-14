@@ -35,6 +35,7 @@ use hotshot_types::{
 };
 use jf_primitives::merkle_tree::prelude::{Sha3Digest, Sha3Node};
 use jf_primitives::merkle_tree::universal_merkle_tree::UniversalMerkleTree;
+use jf_primitives::merkle_tree::ToTraversalPath;
 use jf_primitives::merkle_tree::{MerkleTreeScheme, UniversalMerkleTreeScheme};
 use serde::{Deserialize, Serialize};
 use std::{ops::Range, sync::Arc};
@@ -132,8 +133,6 @@ impl MerklizedState<MockTypes> for TestMerkleTree {
     }
 }
 
-use jf_primitives::merkle_tree::ToTraversalPath;
-
 #[async_trait]
 impl UpdateStateStorage<MockTypes> for MockValidatedState {
     async fn update_storage(
@@ -152,12 +151,7 @@ impl UpdateStateStorage<MockTypes> for MockValidatedState {
                 <usize as ToTraversalPath<typenum::U8>>::to_traversal_path(key, tree.height());
 
             storage
-                .insert_merkle_nodes(
-                    tree.state_type().to_string(),
-                    proof,
-                    traversal_path,
-                    *block_number,
-                )
+                .insert_merkle_nodes(tree.state_type(), proof, traversal_path, *block_number)
                 .await
                 .unwrap()
         }

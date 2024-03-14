@@ -10,6 +10,11 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Api for querying merklized state
+//!
+//! The state API provides an interface for serving queries against arbitrarily old snapshots of the state.
+//! This allows a full Merkle tree to be reconstructed from storage.
+//! If any parent state is missing then the partial snapshot can not be queried.
 use std::{fmt::Display, path::PathBuf};
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -92,13 +97,17 @@ where
         options.extensions.clone(),
     )?;
 
+    // Determine the type of state for which the api is initialized
     let state_type = state.state_type();
     let tree_height = state.height();
+    // Identify the specific field in the header storing the Merkle Tree root commitment
+    // Useful for accessing the correct commitment among multiple state roots
     let header_state_commitment_field = state.header_state_commitment_field();
 
     api.with_version("0.0.1".parse().unwrap())
         .get("get_path", move |req, state| {
             async move {
+                // Determine the snapshot type based on request parameters, either index or commit
                 let snapshot = if let Some(height) = req.opt_integer_param("height")? {
                     Snapshot::<Types>::Index(height)
                 } else {
@@ -107,7 +116,6 @@ where
 
                 let key = req.integer_param::<_, usize>("key")?;
                 tracing::warn!("req {:?}", key);
-                //TODO: FIX THIS
                 let key = serde_json::to_value(key).map_err(internal)?;
 
                 state
@@ -168,6 +176,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         let validated_state = MockValidatedState::default();
 
+        // Register the api with a test merkle tree
         app.register_module(
             "state/test",
             define_api(&Default::default(), validated_state.tree).unwrap(),
@@ -176,44 +185,45 @@ mod test {
 
         spawn(app.serve(format!("0.0.0.0:{}", port)));
 
+        // Register client for querying the api
         let client = Client::<Error>::new(
             format!("http://localhost:{}/state/test", port)
                 .parse()
                 .unwrap(),
         );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
-
         'a: while let Some(event) = events.next().await {
             if let EventType::Decide { leaf_chain, .. } = event.event {
+                println!("leaf chain {:?}", leaf_chain);
+
                 for leaf in leaf_chain.iter() {
                     let state = leaf.state.clone();
                     let delta = leaf.delta.clone();
-
+                    let height = leaf.leaf.get_height();
                     if let Some(delta) = delta {
                         for key in delta.0.iter() {
-                            {
-                                let (_, proof_from_state) =
-                                    state.tree.lookup(key).expect_ok().unwrap();
+                            // Retrieve the proof from the state tree for the current key
+                            let (_, proof_from_state) = state.tree.lookup(key).expect_ok().unwrap();
 
-                                let merkle_path_from_storage = client
-                                    .get::<MerklePath<usize, usize, Sha3Node>>(&format!(
-                                        "{:?}/{key}",
-                                        leaf.leaf.get_height()
-                                    ))
-                                    .send()
-                                    .await
-                                    .unwrap();
+                            // Fetch the Merkle path from api for comparison
+                            let merkle_path_from_storage = client
+                                .get::<MerklePath<usize, usize, Sha3Node>>(&format!(
+                                    "{:?}/{key}",
+                                    height
+                                ))
+                                .send()
+                                .await
+                                .unwrap();
 
-                                assert_eq!(
-                                    merkle_path_from_storage, proof_from_state.proof,
-                                    "merkle paths don't match"
-                                );
+                            // Compare the Merkle paths retrieved from storage and state
+                            assert_eq!(
+                                merkle_path_from_storage, proof_from_state.proof,
+                                "merkle paths don't match"
+                            );
 
-                                tracing::warn!("leaf get height {:?}", leaf.leaf.get_height());
-
-                                if leaf.leaf.get_height() >= 20 {
-                                    break 'a;
-                                }
+                            // Terminate the loop if the block height exceeds 10 to prevent infinite testing
+                            if height >= 20 {
+                                break 'a;
                             }
                         }
                     }

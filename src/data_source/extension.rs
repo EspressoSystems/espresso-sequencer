@@ -332,7 +332,7 @@ where
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        name: String,
+        name: &'static str,
         proof: Proof,
         path: Vec<usize>,
         block_number: u64,

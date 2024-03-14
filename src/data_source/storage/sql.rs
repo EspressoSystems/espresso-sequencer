@@ -43,6 +43,7 @@ use hotshot_types::{
     },
 };
 use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::Debug;
 use tokio_postgres::types::{private::BytesMut, to_sql_checked, FromSql, Type};
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
@@ -381,6 +382,7 @@ impl SqlStorage {
             .await?;
 
         // Enable ltree extension
+        // this is used for state storage
         client
             .batch_execute("CREATE EXTENSION IF NOT EXISTS ltree")
             .await?;
@@ -1189,7 +1191,7 @@ where
         Ok(TimeWindowQueryData { window, prev, next })
     }
 }
-use std::fmt::Debug;
+
 #[async_trait]
 impl UpdateStateData for SqlStorage {
     type Error = QueryError;
@@ -1200,14 +1202,14 @@ impl UpdateStateData for SqlStorage {
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        name: String,
+        name: &'static str,
         proof: Proof,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
         let pos = proof.index().clone();
 
-        // first node in merkle path is the leaf
+        // First node in the merkle path is always the leaf node for which membership proof is provided
         let Some(MerkleNode::Leaf { value, elem, .. }) = proof.merkle_path().first() else {
             return Err(QueryError::Error {
                 message: "membership proof has a missing leaf".to_owned(),
@@ -1215,14 +1217,24 @@ impl UpdateStateData for SqlStorage {
         };
 
         let mut leaf_commit = Vec::new();
+        // Serialize the leaf node hash value into a vector
         value
             .serialize_compressed(&mut leaf_commit)
             .map_err(ParseError::Serialize)?;
 
+        // Define the LTREE path to be inserted for the leaf node.
+        // Note:
+        // The traversal path is from the leaf to the root.
+        // The LTREE path is created by appending 'R' for the Root node to this path and then reversing it.
+        // The LTREE data type is treated as a string and the hierarchy of the nodes is represented by a '.' separation.
+        // For example: A traversal path [2,0,0,1] would be represented as LTREE("R.1.0.0.2").
         let ltree_path = LTree::from(traversal_path.iter());
+        // The created field in the table is for the leaf height i.e block number
         let created = block_number as i64;
         let mut txn = self.transaction().await?;
 
+        // Insert the leaf hash into a separate table and use the id referenced by the state table
+        // This avoids redundancy of hashes in the state table to save space
         let insert_hash = txn
             .query_one(
                 "INSERT INTO hash(value) VALUES ($1) 
@@ -1233,8 +1245,9 @@ impl UpdateStateData for SqlStorage {
             .await?;
         let hash_id: i32 = insert_hash.get(0);
 
+        // upsert the leaf node
         txn.upsert(
-            &name,
+            name,
             ["pos", "created", "hash_id", "index", "entry"],
             ["pos", "created"],
             [[
@@ -1248,6 +1261,8 @@ impl UpdateStateData for SqlStorage {
         .await?;
 
         let mut traversal_path = traversal_path.into_iter();
+
+        // Insert the internal nodes using the membership proof.
         for node in proof.merkle_path().iter() {
             match node {
                 MerkleNode::Branch { value, children } => {
@@ -1257,6 +1272,7 @@ impl UpdateStateData for SqlStorage {
                         .serialize_compressed(&mut writer[..])
                         .map_err(ParseError::Serialize)?;
 
+                    // Insert the internal node hash value
                     let row = txn
                         .query_one(
                             "INSERT INTO hash(value) VALUES ($1) 
@@ -1267,24 +1283,24 @@ impl UpdateStateData for SqlStorage {
                         .await?;
 
                     let hash_id: i32 = row.get(0);
-                    // Get children
                     let mut children_values = Vec::new();
-                    let mut children_bitmap = BitVec::new();
+                    // We only insert the non-empty children in the children field of the table
+                    // BitVec is used to separate out Empty children positions
+                    let mut children_bitvec = BitVec::new();
                     for child in children {
                         let child = child.as_ref();
                         match child {
                             MerkleNode::Empty => {
-                                children_bitmap.push(false);
+                                children_bitvec.push(false);
                             }
                             MerkleNode::Branch { .. } => (),
-                            // Insert leaf too just in case?
                             MerkleNode::Leaf { .. } => (),
                             MerkleNode::ForgettenSubtree { value } => {
                                 let mut writer = [0_u8; 32];
                                 value
                                     .serialize_compressed(&mut writer[..])
                                     .map_err(ParseError::Serialize)?;
-
+                                // Insert hash value of each forgotten tree
                                 let r = txn
                                     .query_one(
                                         "INSERT INTO hash(value) VALUES ($1) 
@@ -1295,28 +1311,33 @@ impl UpdateStateData for SqlStorage {
                                     .await?;
 
                                 children_values.push(r.get::<_, i32>(0));
-                                children_bitmap.push(true);
+                                // Mark the entry as 1 in bitvec to indiciate a non-empty child
+                                children_bitvec.push(true);
                             }
                         }
                     }
 
+                    // advance the traversal path for the internal nodes at each iteration
+                    // The final node would be the Root node where this iterator is exhausted
                     traversal_path.next();
                     // insert internal node
                     txn.upsert(
-                        &name,
-                        ["pos", "created", "hash_id", "children", "children_bitmap"],
+                        name,
+                        ["pos", "created", "hash_id", "children", "children_bitvec"],
                         ["pos", "created"],
                         [[
                             sql_param(&LTree::from(traversal_path.clone())),
                             sql_param(&created),
                             sql_param(&hash_id),
                             sql_param(&children_values),
-                            sql_param(&children_bitmap),
+                            sql_param(&children_bitvec),
                         ]],
                     )
                     .await?;
                 }
 
+                // We only care about the Branch Nodes here
+                // Leaf node is already inserted
                 _ => continue,
             }
         }
@@ -1329,6 +1350,7 @@ impl UpdateStateData for SqlStorage {
 impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
     type Error = QueryError;
 
+    /// Retreives a Merkle path from the database
     async fn get_path<
         E: Element + Send + DeserializeOwned,
         I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
@@ -1343,6 +1365,7 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
         key: serde_json::Value,
     ) -> QueryResult<MerklePath<E, I, T>> {
         let index: I = serde_json::from_value(key).map_err(ParseError::Serde)?;
+        // Get the traversal path of the index
         let path = I::to_traversal_path(&index, tree_height)
             .into_iter()
             .map(|x| x as i64)
@@ -1351,7 +1374,7 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
         let created = match snapshot {
             Snapshot::<Types>::Commit(commit) => {
                 let commit: &[u8; 32] = commit.as_ref();
-
+                // Get the block height using the merkle commitment.
                 let query = self
                     .query_one(
                         &format!(
@@ -1366,6 +1389,8 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             }
             Snapshot::<Types>::Index(created) => {
                 let created = created as i64;
+                // Check if header exists
+                // For Snapshot::Commit the entry is already checked when retrieving the block height
                 self.query_one(
                     "SELECT 1 from HEADER where height = $1",
                     [sql_param(&created)],
@@ -1376,6 +1401,8 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             }
         };
 
+        // Get all the nodes in the path to the index.
+        // Order by pos DESC is fetch the nodes from the leaf to the root
         let nodes = self
             .query(
                 &format!(
@@ -1388,7 +1415,8 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             .await?;
 
         let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
-
+        // insert all the hash ids to a hashset which is used a query later
+        // HashSet is used to avoid duplicates
         let mut hash_ids = HashSet::new();
         nodes.iter().for_each(|n| {
             hash_ids.insert(n.hash_id);
@@ -1397,6 +1425,8 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             }
         });
 
+        // Find all the hash values and created a hashmap
+        // Hashmap will be used to get the hash value of the nodes children and the node itself.
         let hashes_query = self
             .query(
                 "SELECT * FROM hash WHERE id = ANY( $1)",
@@ -1413,7 +1443,7 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
         for Node {
             hash_id,
             children,
-            children_bitmap,
+            children_bitvec,
             index,
             entry,
             ..
@@ -1421,10 +1451,12 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
         {
             {
                 let value = hashes.get(hash_id).ok_or(QueryError::NotFound)?;
-                if let (Some(children), Some(children_bitmap)) = (children, children_bitmap) {
+                if let (Some(children), Some(children_bitvec)) = (children, children_bitvec) {
                     let mut children = children.iter();
 
-                    let child_nodes = children_bitmap
+                    // Reconstruct the Children MerkleNodes from storage.
+                    // Children bit_vec is used to create forgotten  or empty node
+                    let child_nodes = children_bitvec
                         .iter()
                         .map(|bit| {
                             if bit {
@@ -1440,12 +1472,14 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
                             }
                         })
                         .collect::<QueryResult<Vec<_>>>()?;
+                    // Use the Children merkle nodes to reconstruct the branch node
                     proof_path.push(MerkleNode::Branch {
                         value: T::deserialize_compressed(value.as_slice())
                             .map_err(ParseError::Deserialize)?,
                         children: child_nodes,
                     });
                 } else {
+                    // If the children for a node does not exist then the node is actually a leaf node
                     proof_path.push(MerkleNode::Leaf {
                         value: T::deserialize_compressed(value.as_slice())
                             .map_err(ParseError::Deserialize)?,
@@ -1460,11 +1494,15 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
     }
 }
 
+// Represents a Hash table row
 pub struct HashTableRow {
+    // Hash id to be used by the state table to save space
     pub id: i32,
+    // hash value
     pub value: Vec<u8>,
 }
 
+// Parse a row to a HashTableRow
 impl TryFrom<Row> for HashTableRow {
     type Error = QueryError;
     fn try_from(row: Row) -> QueryResult<Self> {
@@ -1479,6 +1517,7 @@ impl TryFrom<Row> for HashTableRow {
     }
 }
 
+// parsing errors
 pub enum ParseError {
     Serde(serde_json::Error),
     Deserialize(SerializationError),
@@ -1501,17 +1540,19 @@ impl From<ParseError> for QueryError {
     }
 }
 
+// Represents a row in a state table
 #[derive(Debug, Clone)]
 pub struct Node {
     pub pos: LTree,
     pub created: i64,
     pub hash_id: i32,
     pub children: Option<Vec<i32>>,
-    pub children_bitmap: Option<BitVec>,
+    pub children_bitvec: Option<BitVec>,
     pub index: serde_json::Value,
     pub entry: serde_json::Value,
 }
 
+// Parse a Row to a Node
 impl TryFrom<Row> for Node {
     type Error = QueryError;
     fn try_from(row: Row) -> Result<Self, Self::Error> {
@@ -1528,7 +1569,7 @@ impl TryFrom<Row> for Node {
             children: row.try_get(3).map_err(|e| QueryError::Error {
                 message: format!("failed to get column children {e}"),
             })?,
-            children_bitmap: row.try_get(4).map_err(|e| QueryError::Error {
+            children_bitvec: row.try_get(4).map_err(|e| QueryError::Error {
                 message: format!("failed to get column children bitmap {e}"),
             })?,
             index: row.try_get(5).unwrap_or(serde_json::Value::Null),
@@ -2365,7 +2406,7 @@ pub mod testing {
                 .tls()
                 .migrations(vec![Migration::unapplied(
                     "V11__create_test_merkle_tree_table.sql",
-                    &TestMerkleTreeMigration::create("node"),
+                    &TestMerkleTreeMigration::create("test_tree"),
                 )
                 .unwrap()])
         }
@@ -2388,6 +2429,7 @@ pub mod testing {
     }
 
     pub struct TestMerkleTreeMigration;
+
     impl TestMerkleTreeMigration {
         fn create(name: &str) -> String {
             format!(
@@ -2403,12 +2445,12 @@ pub mod testing {
                 created BIGINT NOT NULL,
                 hash_id INT NOT NULL REFERENCES hash (id),
                 children INT[],
-                children_bitmap BIT(8),
+                children_bitvec BIT(8),
                 index JSONB,
                 entry JSONB 
             );
             ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (pos, created);
-            CREATE INDEX {name}_path ON node USING GIST (pos);"
+            CREATE INDEX {name}_path ON {name} USING GIST (pos);"
             )
         }
     }
@@ -2422,6 +2464,7 @@ mod test {
     use jf_primitives::merkle_tree::UniversalMerkleTreeScheme;
 
     use super::{testing::TmpDb, *};
+    use crate::merklized_state::MerklizedState;
     use crate::testing::mocks::TestMerkleTree;
     use crate::testing::{mocks::MockTypes, setup_test};
 
@@ -2672,13 +2715,14 @@ mod test {
         setup_test();
 
         let db = TmpDb::init().await;
-
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
 
+        // define a test tree
         let mut test_tree = TestMerkleTree::new(3);
-
         let txn = storage.transaction().await.unwrap();
 
+        // insert some entries into the tree and the header table
+        // Header table is used the get_path query to check if the header exists for the block height.
         for i in 0..27 {
             test_tree.update(i, i).unwrap();
 
@@ -2695,32 +2739,34 @@ mod test {
             .unwrap();
         }
 
+        // index to be queried
         let index = 15;
+        // proof for the index from the tree
         let (_, proof) = test_tree.lookup(index).expect_ok().unwrap();
-        let traversal_path = <usize as ToTraversalPath<U8>>::to_traversal_path(&index, 20);
-
-        tracing::info!("Lookup Proof {:?}", &proof);
+        // traversal path for the index.
+        let traversal_path =
+            <usize as ToTraversalPath<U8>>::to_traversal_path(&index, test_tree.height());
 
         let leaf = Leaf::<MockTypes>::genesis(&Default::default());
+        let bn = leaf.block_header.block_number;
+        // insert the membership proof for the index
         storage
             .insert_merkle_nodes::<_, usize, usize, Sha3Node>(
-                "node".to_owned(),
+                test_tree.state_type(),
                 proof.clone(),
                 traversal_path,
-                leaf.block_header.block_number,
+                bn,
             )
             .await
             .expect("failed to insert nodes");
 
-        let bn = leaf.block_header.block_number;
-
-        tracing::info!("{:?}", bn);
         storage.commit().await.expect("failed to commit");
 
+        // Query the path for the index
         let merkle_path = storage
             .get_path::<usize, usize, U8, Sha3Node>(
-                "node",
-                20,
+                test_tree.state_type(),
+                test_tree.height(),
                 "header",
                 Snapshot::<MockTypes>::Index(bn),
                 index.into(),
@@ -2728,8 +2774,7 @@ mod test {
             .await
             .unwrap();
 
-        tracing::info!("Merkle path {:?}", &merkle_path);
-
+        // merkle path from the storage should match the path from test tree
         assert_eq!(
             merkle_path,
             proof.merkle_path().clone(),

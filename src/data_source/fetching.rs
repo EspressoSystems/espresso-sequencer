@@ -107,8 +107,10 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
+use jf_primitives::circuit::merkle_tree::MembershipProof;
 use jf_primitives::merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::Value;
 use typenum::Unsigned;
 
@@ -616,8 +618,7 @@ where
             .await
     }
 }
-use jf_primitives::circuit::merkle_tree::MembershipProof;
-use serde::Serialize;
+
 #[async_trait]
 impl<Types, S, P> UpdateStateData for FetchingDataSource<Types, S, P>
 where
@@ -635,7 +636,7 @@ where
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        name: String,
+        name: &'static str,
         proof: Proof,
         path: Vec<usize>,
         block_number: u64,
@@ -811,7 +812,7 @@ where
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        name: String,
+        name: &'static str,
         proof: Proof,
         traversal_path: Vec<usize>,
         block_number: u64,

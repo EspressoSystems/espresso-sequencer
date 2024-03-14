@@ -10,6 +10,11 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Data for the [`merklized_state`](super) API.
+//!
+//! This module facilitates storing the state of a Merkle Tree at a specific point in time
+//! and provides methods for querying and reconstructing the snapshot.
+//!
 use ark_serialize::CanonicalDeserialize;
 use derive_more::{Display, From};
 
@@ -32,6 +37,8 @@ use typenum::Unsigned;
 
 use std::{cmp::Ordering, sync::Arc};
 
+// This trait defines methods that a data source should implement
+// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
 #[async_trait]
 pub trait MerklizedStateDataSource<Types>
 where
@@ -55,6 +62,7 @@ where
     }
 }
 
+// This trait defines methods for updating the storage with the merkle tree state.
 #[async_trait]
 pub trait UpdateStateData: Send + Sync {
     type Error: std::error::Error + std::fmt::Debug + Send + Sync + 'static;
@@ -65,7 +73,7 @@ pub trait UpdateStateData: Send + Sync {
         T: NodeValue + Send + Sync,
     >(
         &mut self,
-        _name: String,
+        _name: &'static str,
         _proof: Proof,
         _path: Vec<usize>,
         _block_number: u64,
@@ -74,6 +82,12 @@ pub trait UpdateStateData: Send + Sync {
     }
 }
 
+// This trait should be implemented by types that represent validated states.
+// It enables services using the module to implement update functionality.
+// Some services may manage multiple Merkle trees within their validated state,
+// requiring updates for all state types with each event.
+// Therefore, the `insert_merkle_nodes` method of `UpdateStateData` should be called
+// for all state types within the validated state.
 #[async_trait]
 pub trait UpdateStateStorage<Types: NodeType> {
     async fn update_storage(
@@ -96,6 +110,8 @@ type MerkleCommitment<Types> = Commitment<Leaf<Types>>;
     Ord(bound = ""),
     Hash(bound = "")
 )]
+
+// Snapshot can be queried by block height (index) or merkle tree commitment
 pub enum Snapshot<Types: NodeType> {
     #[display(fmt = "{_0}")]
     Commit(MerkleCommitment<Types>),
@@ -115,6 +131,8 @@ impl<Types: NodeType> PartialOrd for Snapshot<Types> {
     }
 }
 
+// This trait should be implemented by the MerkleTree that the module is initialized for.
+// It defines methods utilized by the module.
 pub trait MerklizedState<Types>: MerkleTreeScheme
 where
     Types: NodeType,
@@ -122,7 +140,13 @@ where
     type Arity: Unsigned;
     type Key: Index;
 
+    /// Retrieves the name of the state being queried.
     fn state_type(&self) -> &'static str;
+
+    /// Determines the entries in the Merkle tree affected by the provided header.
     fn deltas(&self, header: <Types as NodeType>::BlockHeader) -> Vec<Self::Key>;
+
+    /// Retrieves the field in the header containing the Merkle tree commitment
+    /// for the state implementing this trait.
     fn header_state_commitment_field(&self) -> &'static str;
 }

@@ -98,13 +98,6 @@ where
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
-                if let Some(delta) = delta {
-                    state
-                        .update_storage(self, leaf, delta.clone())
-                        .await
-                        .unwrap()
-                }
-
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
@@ -147,6 +140,13 @@ where
                         "block {} not available at decide",
                         leaf.block_header.block_number()
                     );
+                }
+
+                // Update state storage if the state has changed
+                if let Some(delta) = delta {
+                    if let Err(e) = state.update_storage(self, leaf, delta.clone()).await {
+                        tracing::error!("failed to update state storage {e} for leaf {leaf}")
+                    }
                 }
             }
         }
