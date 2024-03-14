@@ -1,16 +1,17 @@
 [package]
-name = "hs-builder-api"
-version = "0.1.1"
+name = "hotshot-events-service"
+version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.15" }
 async-trait = "0.1"
 clap = { version = "4.4", features = ["derive", "env"] }
 derive_more = "0.99"
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.21" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot-types", tag = "0.1.5" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
