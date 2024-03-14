@@ -17,7 +17,7 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateStorage},
+    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -25,14 +25,13 @@ use crate::{
 };
 use ark_serialize::CanonicalDeserialize;
 use async_trait::async_trait;
-use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::{
     circuit::merkle_tree::MembershipProof,
     merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath},
 };
-use serde::de::DeserializeOwned;
-use serde_json::Value;
-use std::{fmt::Display, ops::RangeBounds};
+use serde::{de::DeserializeOwned, Serialize};
+use std::ops::RangeBounds;
 use typenum::Unsigned;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -286,36 +285,14 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T>
-    for ExtensibleDataSource<D, U>
-where
-    D: UpdateStateStorage<Types, Proof, E, I, T> + Send + Sync,
-    U: Send + Sync,
-    Types: NodeType,
-    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-    E: Element + Send + Sync + Display + 'static,
-    T: NodeValue + Send + Sync + Display + 'static,
-    I: Index + Send + Sync + Display + 'static,
-{
-    type Error = D::Error;
-    async fn insert_nodes(
-        &mut self,
-        name: String,
-        proof: Proof,
-        path: Vec<usize>,
-        leaf: Leaf<Types>,
-    ) -> Result<(), Self::Error> {
-        self.data_source.insert_nodes(name, proof, path, leaf).await
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType, D, U> MerklizedStateDataSource<Types> for ExtensibleDataSource<D, U>
+impl<D, U, Types> MerklizedStateDataSource<Types> for ExtensibleDataSource<D, U>
 where
     D: MerklizedStateDataSource<Types> + Send + Sync,
     U: Send + Sync,
+    Types: NodeType,
 {
     type Error = D::Error;
+
     async fn get_path<
         E: Element + Send + DeserializeOwned,
         I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
@@ -327,16 +304,42 @@ where
         tree_height: usize,
         header_state_commitment_field: &'static str,
         snapshot: Snapshot<Types>,
-        key: Value,
+        key: serde_json::Value,
     ) -> Result<MerklePath<E, I, T>, Self::Error> {
-        self.get_path::<E, I, A, T>(
-            state_type,
-            tree_height,
-            header_state_commitment_field,
-            snapshot,
-            key,
-        )
-        .await
+        self.data_source
+            .get_path(
+                state_type,
+                tree_height,
+                header_state_commitment_field,
+                snapshot,
+                key,
+            )
+            .await
+    }
+}
+
+#[async_trait]
+impl<D, U> UpdateStateData for ExtensibleDataSource<D, U>
+where
+    D: UpdateStateData + Send + Sync,
+    U: Send + Sync,
+{
+    type Error = D::Error;
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
+        &mut self,
+        name: String,
+        proof: Proof,
+        path: Vec<usize>,
+        block_number: u64,
+    ) -> Result<(), Self::Error> {
+        self.data_source
+            .insert_merkle_nodes(name, proof, path, block_number)
+            .await
     }
 }
 

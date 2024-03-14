@@ -20,7 +20,7 @@ DESCRIPTION = """
 [route.get_path]
 PATH = ["/:height/:key", "commit/:commit/:key"]
 ":height" = "Integer"
-":key" = "TaggedBase64"
+":key" = "Integer"
 ":commit" = "TaggedBase64"
 DOC = """
 

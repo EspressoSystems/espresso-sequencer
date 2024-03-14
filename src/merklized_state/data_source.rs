@@ -16,20 +16,21 @@ use derive_more::{Display, From};
 use async_trait::async_trait;
 use commit::Commitment;
 use derivative::Derivative;
+use hotshot::traits::ValidatedState;
 use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
 use jf_primitives::{
     circuit::merkle_tree::MembershipProof,
     merkle_tree::{
         prelude::{MerkleNode, MerklePath},
-        Element, Index, NodeValue, ToTraversalPath,
+        Element, Index, MerkleTreeScheme, NodeValue, ToTraversalPath,
     },
 };
 
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use typenum::Unsigned;
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
 
 #[async_trait]
 pub trait MerklizedStateDataSource<Types>
@@ -55,24 +56,32 @@ where
 }
 
 #[async_trait]
-pub trait UpdateStateStorage<
-    Types: NodeType,
-    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-    E: Element + Send + Sync,
-    I: Index + Send + Sync,
-    T: NodeValue + Send + Sync,
->
-{
+pub trait UpdateStateData: Send + Sync {
     type Error: std::error::Error + std::fmt::Debug + Send + Sync + 'static;
-    async fn insert_nodes(
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
         &mut self,
         _name: String,
         _proof: Proof,
         _path: Vec<usize>,
-        _leaf: Leaf<Types>,
+        _block_number: u64,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
+}
+
+#[async_trait]
+pub trait UpdateStateStorage<Types: NodeType> {
+    async fn update_storage(
+        &self,
+        storage: &mut impl UpdateStateData,
+        leaf: &Leaf<Types>,
+        delta: Arc<<<Types as NodeType>::ValidatedState as ValidatedState<Types>>::Delta>,
+    ) -> anyhow::Result<()>;
 }
 
 type MerkleCommitment<Types> = Commitment<Leaf<Types>>;
@@ -106,24 +115,14 @@ impl<Types: NodeType> PartialOrd for Snapshot<Types> {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
-#[cfg(all(test, not(target_os = "windows")))]
-mod test {
+pub trait MerklizedState<Types>: MerkleTreeScheme
+where
+    Types: NodeType,
+{
+    type Arity: Unsigned;
+    type Key: Index;
 
-    use crate::merklized_state::MerklizedState;
-    use jf_primitives::merkle_tree::prelude::LightWeightSHA3MerkleTree;
-    use typenum::U3;
-
-    type TestMerkleTree = LightWeightSHA3MerkleTree<usize>;
-
-    impl MerklizedState for TestMerkleTree {
-        type Arity = U3;
-        fn state_type(&self) -> &'static str {
-            "test_tree"
-        }
-
-        fn header_state_commitment_field(&self) -> &'static str {
-            "block_merkle_tree_root"
-        }
-    }
+    fn state_type(&self) -> &'static str;
+    fn deltas(&self, header: <Types as NodeType>::BlockHeader) -> Vec<Self::Key>;
+    fn header_state_commitment_field(&self) -> &'static str;
 }

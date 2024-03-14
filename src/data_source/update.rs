@@ -11,15 +11,18 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
+use crate::merklized_state::UpdateStateStorage;
 use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
     },
+    merklized_state::UpdateStateData,
     status::UpdateStatusData,
     Leaf, Payload,
 };
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
+use hotshot_types::event::LeafInfo;
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -40,7 +43,7 @@ use std::{error::Error, fmt::Debug, iter::once};
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>:
-    UpdateAvailabilityData<Types> + UpdateStatusData
+    UpdateAvailabilityData<Types> + UpdateStatusData + UpdateStateData
 {
     /// Update query state based on a new consensus event.
     ///
@@ -62,8 +65,9 @@ pub trait UpdateDataSource<Types: NodeType>:
 #[async_trait]
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
-    T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
+    T: UpdateAvailabilityData<Types> + UpdateStatusData + UpdateStateData + Send,
     Payload<Types>: QueryablePayload,
+    <Types as NodeType>::ValidatedState: UpdateStateStorage<Types>,
 {
     async fn update(
         &mut self,
@@ -84,9 +88,22 @@ where
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
-            for (qc, leaf_info) in qcs.zip(leaf_chain.iter().rev()) {
-                let leaf = leaf_info.leaf.clone();
-                let vid = leaf_info.vid.clone();
+            for (
+                qc,
+                LeafInfo {
+                    leaf,
+                    state,
+                    delta,
+                    vid,
+                },
+            ) in qcs.zip(leaf_chain.iter().rev())
+            {
+                if let Some(delta) = delta {
+                    state
+                        .update_storage(self, leaf, delta.clone())
+                        .await
+                        .unwrap()
+                }
 
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
@@ -114,7 +131,7 @@ where
                     // these cases, the block payload is guaranteed to always be empty, so VID isn't
                     // really necessary. But for consistency, we will still store the VID dispersal
                     // data, computing it ourselves based on the well-known genesis VID commitment.
-                    store_genesis_vid(self, &leaf).await;
+                    store_genesis_vid(self, leaf).await;
                 } else {
                     tracing::error!(
                         "VID info for block {} not available at decide",

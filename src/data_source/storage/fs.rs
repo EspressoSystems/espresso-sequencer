@@ -17,7 +17,7 @@ use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
-use crate::merklized_state::MerklizedStateDataSource;
+use crate::merklized_state::{MerklizedStateDataSource, UpdateStateData};
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -393,6 +393,33 @@ where
         let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
         let block = self.get_block((*height as usize).into()).await?;
         Ok((block, ix.clone()))
+    }
+}
+
+use crate::QueryError;
+use jf_primitives::circuit::merkle_tree::MembershipProof;
+use jf_primitives::merkle_tree::{Element, Index, NodeValue};
+#[async_trait]
+impl<Types> UpdateStateData for FileSystemStorage<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
+    type Error = QueryError;
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
+        &mut self,
+        _name: String,
+        _proof: Proof,
+        _traversal_path: Vec<usize>,
+        _bh: u64,
+    ) -> QueryResult<()> {
+        Ok(())
     }
 }
 

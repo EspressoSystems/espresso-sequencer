@@ -85,7 +85,7 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
-    merklized_state::{MerklizedStateDataSource, Snapshot},
+    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -616,6 +616,38 @@ where
             .await
     }
 }
+use jf_primitives::circuit::merkle_tree::MembershipProof;
+use serde::Serialize;
+#[async_trait]
+impl<Types, S, P> UpdateStateData for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: UpdateStateData + Send + Sync,
+    P: Send + Sync,
+{
+    type Error = S::Error;
+
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
+        &mut self,
+        name: String,
+        proof: Proof,
+        path: Vec<usize>,
+        block_number: u64,
+    ) -> Result<(), Self::Error> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .insert_merkle_nodes(name, proof, path, block_number)
+            .await
+    }
+}
 
 #[async_trait]
 impl<Types, S, P> NodeDataSource<Types> for FetchingDataSource<Types, S, P>
@@ -763,6 +795,29 @@ where
                 snapshot,
                 key,
             )
+            .await
+    }
+}
+
+impl<Types, S> NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: UpdateStateData + Send + Sync,
+{
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
+        &mut self,
+        name: String,
+        proof: Proof,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> Result<(), S::Error> {
+        self.storage
+            .insert_merkle_nodes(name, proof, traversal_path, block_number)
             .await
     }
 }

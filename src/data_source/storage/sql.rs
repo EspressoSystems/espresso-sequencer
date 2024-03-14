@@ -24,7 +24,7 @@ use std::{
 };
 
 pub use anyhow::Error;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
+use ark_serialize::{CanonicalDeserialize, SerializationError};
 use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
 use async_trait::async_trait;
 use bit_vec::BitVec;
@@ -81,7 +81,7 @@ use crate::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
-    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateStorage},
+    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     task::BackgroundTask,
     types::HeightIndexed,
@@ -1189,26 +1189,22 @@ where
         Ok(TimeWindowQueryData { window, prev, next })
     }
 }
-
+use std::fmt::Debug;
 #[async_trait]
-impl<Types, Proof, E, I, T> UpdateStateStorage<Types, Proof, E, I, T> for SqlStorage
-where
-    Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-    E: Element + Send + Sync + Display + Serialize + 'static,
-    I: Index + Send + Sync + Display + Serialize + 'static,
-    T: NodeValue + Send + Sync + CanonicalSerialize + 'static,
-    Types: NodeType,
-{
+impl UpdateStateData for SqlStorage {
     type Error = QueryError;
-    async fn insert_nodes(
+    async fn insert_merkle_nodes<
+        Proof: MembershipProof<E, I, T> + Send + Sync + Debug + 'static,
+        E: Element + Send + Sync + Serialize,
+        I: Index + Send + Sync + Serialize,
+        T: NodeValue + Send + Sync,
+    >(
         &mut self,
         name: String,
         proof: Proof,
         traversal_path: Vec<usize>,
-        leaf: Leaf<Types>,
+        block_number: u64,
     ) -> QueryResult<()> {
-        // Use height from proof and first entry in proof is always leaf so remove leaf param?
-        let created = leaf.block_header.block_number();
         let pos = proof.index().clone();
 
         // first node in merkle path is the leaf
@@ -1224,6 +1220,7 @@ where
             .map_err(ParseError::Serialize)?;
 
         let ltree_path = LTree::from(traversal_path.iter());
+        let created = block_number as i64;
         let mut txn = self.transaction().await?;
 
         let insert_hash = txn
@@ -1242,13 +1239,14 @@ where
             ["pos", "created"],
             [[
                 sql_param(&ltree_path),
-                sql_param(&(created as i64)),
+                sql_param(&created),
                 sql_param(&hash_id),
                 sql_param(&serde_json::to_value(&pos).map_err(ParseError::Serde)?),
                 sql_param(&serde_json::to_value(elem).map_err(ParseError::Serde)?),
             ]],
         )
         .await?;
+
         let mut traversal_path = traversal_path.into_iter();
         for node in proof.merkle_path().iter() {
             match node {
@@ -1305,12 +1303,12 @@ where
                     traversal_path.next();
                     // insert internal node
                     txn.upsert(
-                        "node",
+                        &name,
                         ["pos", "created", "hash_id", "children", "children_bitmap"],
                         ["pos", "created"],
                         [[
                             sql_param(&LTree::from(traversal_path.clone())),
-                            sql_param(&(created as i64)),
+                            sql_param(&created),
                             sql_param(&hash_id),
                             sql_param(&children_values),
                             sql_param(&children_bitmap),
@@ -1383,7 +1381,7 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
                 &format!(
                     "SELECT DISTINCT ON (pos) *
                     FROM {state_type} WHERE pos @> $1 and created <= $2
-                    ORDER BY pos DESC, created;"
+                    ORDER BY pos DESC, created DESC;"
                 ),
                 [sql_param(&LTree::from(path.iter())), sql_param(&created)],
             )
@@ -2276,6 +2274,7 @@ pub mod testing {
     };
 
     use portpicker::pick_unused_port;
+    use refinery::Migration;
 
     use super::Config;
     use crate::testing::sleep;
@@ -2286,7 +2285,6 @@ pub mod testing {
         port: u16,
         container_id: String,
     }
-
     impl TmpDb {
         pub async fn init() -> Self {
             let docker_hostname = env::var("DOCKER_HOSTNAME");
@@ -2365,6 +2363,11 @@ pub mod testing {
                 .host(self.host())
                 .port(self.port())
                 .tls()
+                .migrations(vec![Migration::unapplied(
+                    "V11__create_test_merkle_tree_table.sql",
+                    &TestMerkleTreeMigration::create("node"),
+                )
+                .unwrap()])
         }
     }
 
@@ -2383,6 +2386,32 @@ pub mod testing {
             }
         }
     }
+
+    pub struct TestMerkleTreeMigration;
+    impl TestMerkleTreeMigration {
+        fn create(name: &str) -> String {
+            format!(
+                "CREATE TABLE IF NOT EXISTS hash
+            (
+                id SERIAL PRIMARY KEY,
+                value BYTEA  NOT NULL UNIQUE
+            );
+        
+            CREATE TABLE {name}
+            (
+                pos LTREE NOT NULL, 
+                created BIGINT NOT NULL,
+                hash_id INT NOT NULL REFERENCES hash (id),
+                children INT[],
+                children_bitmap BIT(8),
+                index JSONB,
+                entry JSONB 
+            );
+            ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (pos, created);
+            CREATE INDEX {name}_path ON node USING GIST (pos);"
+            )
+        }
+    }
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
@@ -2390,9 +2419,12 @@ pub mod testing {
 mod test {
 
     use hotshot_example_types::state_types::TestInstanceState;
+    use jf_primitives::merkle_tree::UniversalMerkleTreeScheme;
 
     use super::{testing::TmpDb, *};
+    use crate::testing::mocks::TestMerkleTree;
     use crate::testing::{mocks::MockTypes, setup_test};
+
     #[async_std::test]
     async fn test_migrations() {
         setup_test();
@@ -2430,11 +2462,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V12__create_test_table.sql",
+                "V13__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V11__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+            Migration::unapplied("V12__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 
@@ -2550,16 +2582,8 @@ mod test {
         setup_test();
 
         let db = TmpDb::init().await;
-        let port = db.port();
-        let host = &db.host();
 
-        let cfg = Config::default()
-            .user("postgres")
-            .password("password")
-            .host(host)
-            .port(port);
-
-        let mut storage = SqlStorage::connect(cfg).await.unwrap();
+        let mut storage = SqlStorage::connect(db.config()).await.unwrap();
         let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         // insert some mock data
         for i in 0..20 {
@@ -2638,59 +2662,25 @@ mod test {
 
     use crate::data_source::VersionedDataSource;
 
-    use jf_primitives::merkle_tree::{
-        prelude::{LightWeightSHA3MerkleTree, Sha3Node},
-        AppendableMerkleTreeScheme, MerkleTreeScheme,
-    };
+    use jf_primitives::merkle_tree::{prelude::Sha3Node, MerkleTreeScheme};
 
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
-    use typenum::U3;
+    use typenum::U8;
 
     #[async_std::test]
     async fn test_merklized_state_storage() {
         setup_test();
 
         let db = TmpDb::init().await;
-        let port = db.port();
-        let host = &db.host();
 
-        let migration = vec![Migration::unapplied(
-            "V11__create_node_table.sql",
-            "CREATE TABLE hash
-                    (
-                        id SERIAL PRIMARY KEY,
-                        value BYTEA  NOT NULL UNIQUE
-                    );
+        let mut storage = SqlStorage::connect(db.config()).await.unwrap();
 
-                    CREATE TABLE node
-                    (
-                        pos LTREE NOT NULL, 
-                        created BIGINT NOT NULL,
-                        hash_id INT NOT NULL REFERENCES hash (id),
-                        children INT[],
-                        children_bitmap BIT(3),
-                        index JSONB,
-                        entry JSONB 
-                    );
-                    ALTER TABLE node ADD CONSTRAINT node_pk PRIMARY KEY (pos, created);
-                    CREATE INDEX node_path ON node USING GIST (pos);",
-        )
-        .unwrap()];
-        let cfg = Config::default()
-            .user("postgres")
-            .password("password")
-            .host(host)
-            .port(port)
-            .migrations(migration);
-
-        let mut storage = SqlStorage::connect(cfg).await.unwrap();
-
-        let mut test_tree = LightWeightSHA3MerkleTree::<usize>::new(3);
+        let mut test_tree = TestMerkleTree::new(3);
 
         let txn = storage.transaction().await.unwrap();
 
-        for i in 0..8 {
-            test_tree.push(i).unwrap();
+        for i in 0..27 {
+            test_tree.update(i, i).unwrap();
 
             let random_string: String = thread_rng()
                 .sample_iter(&Alphanumeric)
@@ -2705,29 +2695,35 @@ mod test {
             .unwrap();
         }
 
-        let index = 7;
+        let index = 15;
         let (_, proof) = test_tree.lookup(index).expect_ok().unwrap();
-        let traversal_path = <u64 as ToTraversalPath<U3>>::to_traversal_path(&index, 3);
+        let traversal_path = <usize as ToTraversalPath<U8>>::to_traversal_path(&index, 20);
 
         tracing::info!("Lookup Proof {:?}", &proof);
 
-        // Tree height is the length of merklepath which is one higher than merkle tree height
-        let height = proof.tree_height() - 1;
-        let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let leaf = Leaf::<MockTypes>::genesis(&Default::default());
         storage
-            .insert_nodes("node".to_owned(), proof.clone(), traversal_path, leaf)
+            .insert_merkle_nodes::<_, usize, usize, Sha3Node>(
+                "node".to_owned(),
+                proof.clone(),
+                traversal_path,
+                leaf.block_header.block_number,
+            )
             .await
             .expect("failed to insert nodes");
 
+        let bn = leaf.block_header.block_number;
+
+        tracing::info!("{:?}", bn);
         storage.commit().await.expect("failed to commit");
 
         let merkle_path = storage
-            .get_path::<usize, u64, U3, Sha3Node>(
+            .get_path::<usize, usize, U8, Sha3Node>(
                 "node",
-                height,
+                20,
                 "header",
-                Snapshot::<MockTypes>::Index(7),
-                7_u64.into(),
+                Snapshot::<MockTypes>::Index(bn),
+                index.into(),
             )
             .await
             .unwrap();

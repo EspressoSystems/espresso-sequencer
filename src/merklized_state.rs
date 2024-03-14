@@ -21,7 +21,6 @@ use jf_primitives::merkle_tree::{Index, MerkleTreeScheme, ToTraversalPath};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use typenum::Unsigned;
 
 use crate::api::load_api;
 
@@ -69,14 +68,7 @@ fn internal<M: Display>(msg: M) -> Error {
     }
 }
 
-pub trait MerklizedState: MerkleTreeScheme {
-    type Arity: Unsigned;
-
-    fn state_type(&self) -> &'static str;
-    fn header_state_commitment_field(&self) -> &'static str;
-}
-
-pub fn define_api<State, Types: NodeType, M: MerklizedState>(
+pub fn define_api<State, Types: NodeType, M: MerklizedState<Types>>(
     options: &Options,
     state: M,
 ) -> Result<Api<State, Error>, ApiError>
@@ -88,7 +80,7 @@ where
         Send + Sync + DeserializeOwned + CanonicalDeserialize + CanonicalSerialize,
     <M as MerkleTreeScheme>::Index: Index
         + Send
-        + ToTraversalPath<<M as MerklizedState>::Arity>
+        + ToTraversalPath<<M as MerklizedState<Types>>::Arity>
         + DeserializeOwned
         + CanonicalDeserialize
         + CanonicalSerialize,
@@ -113,9 +105,10 @@ where
                     Snapshot::<Types>::Commit(req.blob_param("commit")?)
                 };
 
+                let key = req.integer_param::<_, usize>("key")?;
+                tracing::warn!("req {:?}", key);
                 //TODO: FIX THIS
-                let key =
-                    serde_json::to_value(req.blob_param::<_, String>("key")?).map_err(internal)?;
+                let key = serde_json::to_value(key).map_err(internal)?;
 
                 state
                     .get_path::<M::Element, M::Index, M::Arity, M::NodeValue>(
@@ -140,15 +133,17 @@ mod test {
 
     use std::time::Duration;
 
-    use async_std::{
-        stream::StreamExt,
-        task::{sleep, spawn},
-    };
+    use async_std::{stream::StreamExt, task::spawn};
     use hotshot::types::EventType;
-    use jf_primitives::merkle_tree::prelude::LightWeightSHA3MerkleTree;
+    use jf_primitives::merkle_tree::{
+        prelude::{MerklePath, Sha3Node},
+        MerkleTreeScheme,
+    };
     use portpicker::pick_unused_port;
+    use surf_disco::Client;
     use tide_disco::App;
 
+    use crate::testing::mocks::MockValidatedState;
     use crate::{
         merklized_state::define_api,
         testing::{
@@ -160,29 +155,68 @@ mod test {
 
     #[async_std::test]
     async fn test_merklized_state_api() {
-        // TODO:
         setup_test();
 
         // Create the consensus network.
         let mut network = MockNetwork::<MockSqlDataSource>::init().await;
         let mut events = network.handle().get_event_stream();
+
         network.start().await;
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
         let mut app = App::<_, Error>::with_state(network.data_source());
-        let test_tree = LightWeightSHA3MerkleTree::<usize>::new(3);
+        let validated_state = MockValidatedState::default();
 
-        app.register_module("node", define_api(&Default::default(), test_tree).unwrap())
-            .unwrap();
+        app.register_module(
+            "state/test",
+            define_api(&Default::default(), validated_state.tree).unwrap(),
+        )
+        .unwrap();
 
         spawn(app.serve(format!("0.0.0.0:{}", port)));
-        sleep(Duration::from_secs(5)).await;
-        while let Some(event) = events.next().await {
+
+        let client = Client::<Error>::new(
+            format!("http://localhost:{}/state/test", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        'a: while let Some(event) = events.next().await {
             if let EventType::Decide { leaf_chain, .. } = event.event {
                 for leaf in leaf_chain.iter() {
                     let state = leaf.state.clone();
                     let delta = leaf.delta.clone();
+
+                    if let Some(delta) = delta {
+                        for key in delta.0.iter() {
+                            {
+                                let (_, proof_from_state) =
+                                    state.tree.lookup(key).expect_ok().unwrap();
+
+                                let merkle_path_from_storage = client
+                                    .get::<MerklePath<usize, usize, Sha3Node>>(&format!(
+                                        "{:?}/{key}",
+                                        leaf.leaf.get_height()
+                                    ))
+                                    .send()
+                                    .await
+                                    .unwrap();
+
+                                assert_eq!(
+                                    merkle_path_from_storage, proof_from_state.proof,
+                                    "merkle paths don't match"
+                                );
+
+                                tracing::warn!("leaf get height {:?}", leaf.leaf.get_height());
+
+                                if leaf.leaf.get_height() >= 20 {
+                                    break 'a;
+                                }
+                            }
+                        }
+                    }
                 }
             };
         }

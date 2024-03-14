@@ -10,27 +10,34 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::merklized_state::{MerklizedState, UpdateStateStorage};
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
     types::HeightIndexed,
 };
+use async_trait::async_trait;
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
     implementations::{MemoryNetwork, MemoryStorage},
-    NodeImplementation,
+    NodeImplementation, ValidatedState,
 };
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::{TestInstanceState, TestValidatedState},
+    state_types::TestInstanceState,
 };
+use hotshot_types::data::{BlockError, Leaf};
+use hotshot_types::traits::states::StateDelta;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     message::Message,
     signature_key::BLSPubKey,
     traits::node_implementation::NodeType,
 };
+use jf_primitives::merkle_tree::prelude::{Sha3Digest, Sha3Node};
+use jf_primitives::merkle_tree::universal_merkle_tree::UniversalMerkleTree;
+use jf_primitives::merkle_tree::{MerkleTreeScheme, UniversalMerkleTreeScheme};
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
@@ -87,8 +94,126 @@ impl NodeType for MockTypes {
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type InstanceState = TestInstanceState;
-    type ValidatedState = TestValidatedState;
+    type ValidatedState = MockValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
+}
+
+pub type TestMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum::U8, Sha3Node>;
+
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
+pub struct MockValidatedState {
+    pub tree: TestMerkleTree,
+    pub block_height: u64,
+}
+
+impl Default for MockValidatedState {
+    fn default() -> Self {
+        Self {
+            tree: TestMerkleTree::new(20),
+            block_height: 0,
+        }
+    }
+}
+
+impl MerklizedState<MockTypes> for TestMerkleTree {
+    type Arity = typenum::U8;
+    type Key = usize;
+
+    fn state_type(&self) -> &'static str {
+        "test_tree"
+    }
+
+    fn deltas(&self, _header: TestBlockHeader) -> Vec<Self::Key> {
+        Vec::new()
+    }
+
+    fn header_state_commitment_field(&self) -> &'static str {
+        "test_merkle_tree_root"
+    }
+}
+
+use jf_primitives::merkle_tree::ToTraversalPath;
+
+#[async_trait]
+impl UpdateStateStorage<MockTypes> for MockValidatedState {
+    async fn update_storage(
+        &self,
+        storage: &mut impl crate::merklized_state::UpdateStateData,
+        leaf: &Leaf<MockTypes>,
+        delta: Arc<<<MockTypes as NodeType>::ValidatedState as ValidatedState<MockTypes>>::Delta>,
+    ) -> anyhow::Result<()> {
+        let tree = &self.tree;
+        let block_number = &leaf.block_header.block_number;
+
+        for key in delta.0.iter() {
+            let (_, proof) = self.tree.lookup(key).expect_ok().unwrap();
+
+            let traversal_path =
+                <usize as ToTraversalPath<typenum::U8>>::to_traversal_path(key, tree.height());
+
+            storage
+                .insert_merkle_nodes(
+                    tree.state_type().to_string(),
+                    proof,
+                    traversal_path,
+                    *block_number,
+                )
+                .await
+                .unwrap()
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct MockStateDelta(pub Vec<usize>);
+impl StateDelta for MockStateDelta {}
+
+impl ValidatedState<MockTypes> for MockValidatedState {
+    type Error = BlockError;
+
+    type Instance = TestInstanceState;
+
+    type Delta = MockStateDelta;
+
+    type Time = ViewNumber;
+
+    async fn validate_and_apply_header(
+        &self,
+        _instance: &Self::Instance,
+        _parent_leaf: &Leaf<MockTypes>,
+        _proposed_header: &<MockTypes as NodeType>::BlockHeader,
+    ) -> Result<(Self, Self::Delta), Self::Error> {
+        let mut tree = self.tree.clone();
+
+        tree.update(
+            self.block_height as usize,
+            self.block_height as usize + 1000,
+        )
+        .unwrap();
+
+        Ok((
+            Self {
+                tree,
+                block_height: self.block_height + 1,
+            },
+            MockStateDelta(vec![(self.block_height).try_into().unwrap()]),
+        ))
+    }
+
+    fn from_header(_block_header: &<MockTypes as NodeType>::BlockHeader) -> Self {
+        Self {
+            tree: TestMerkleTree::new(20),
+            block_height: 0,
+        }
+    }
+
+    fn on_commit(&self) {}
+
+    fn genesis(_instance: &Self::Instance) -> (Self, Self::Delta) {
+        (Self::default(), MockStateDelta(vec![]))
+    }
 }
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;

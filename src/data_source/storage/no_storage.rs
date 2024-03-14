@@ -197,7 +197,7 @@ pub mod testing {
             storage::sql::testing::TmpDb, FetchingDataSource, SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
-        merklized_state::{MerklizedStateDataSource, Snapshot},
+        merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
         metrics::PrometheusMetrics,
         node::NodeDataSource,
         status::StatusDataSource,
@@ -590,6 +590,28 @@ pub mod testing {
             }
         }
     }
+
+    use crate::QueryError;
+    use jf_primitives::circuit::merkle_tree::MembershipProof;
+    #[async_trait]
+    impl UpdateStateData for DataSource {
+        type Error = QueryError;
+        async fn insert_merkle_nodes<
+            Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
+            E: Element + Send + Sync + serde::Serialize,
+            I: Index + Send + Sync + serde::Serialize,
+            T: NodeValue + Send + Sync,
+        >(
+            &mut self,
+            _name: String,
+            _proof: Proof,
+            _traversal_path: Vec<usize>,
+            _bh: u64,
+        ) -> QueryResult<()> {
+            Ok(())
+        }
+    }
+
     fn err_msg<E: Display>(err: E) -> QueryError {
         QueryError::Error {
             message: err.to_string(),
