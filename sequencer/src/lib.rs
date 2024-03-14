@@ -29,9 +29,6 @@ pub mod persistence;
 mod state;
 pub mod transaction;
 
-use ark_ec::models::CurveConfig;
-use ark_ed_on_bn254::EdwardsConfig;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -41,10 +38,9 @@ use hotshot::{
     types::SignatureKey,
     Networks,
 };
-use hotshot_types::{traits::network::ConnectedNetwork, ValidatorConfig};
-use jf_primitives::signatures::schnorr;
-use tagged_base64::tagged;
-use zeroize::Zeroize;
+use hotshot_types::{
+    light_client::StateSignKey, traits::network::ConnectedNetwork, ValidatorConfig,
+};
 
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -135,36 +131,6 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
-/// A private signing key for the Schnorr signature scheme.
-///
-/// This key is used to sign state commitments for use with the light client.
-// Note: defining this type here, rather than using `SignKey` from jf-primitives, is a workaround to
-// allow us to extract the inner field element and thus generate a `KeyPair`.
-// See https://github.com/EspressoSystems/jellyfish/issues/497.
-#[tagged("STATEKEY")]
-#[derive(Clone, Copy, Debug, Default, CanonicalSerialize, CanonicalDeserialize, Zeroize)]
-pub struct SchnorrPrivKey(<EdwardsConfig as CurveConfig>::ScalarField);
-
-pub type SchnorrPubKey = schnorr::VerKey<EdwardsConfig>;
-
-impl SchnorrPrivKey {
-    pub fn generate_from_seed_indexed(seed: [u8; 32], index: u64) -> Self {
-        Self(
-            *StateKeyPair::generate_from_seed_indexed(seed, index)
-                .0
-                .sign_key_internal(),
-        )
-    }
-
-    pub fn key_pair(self) -> StateKeyPair {
-        StateKeyPair(schnorr::KeyPair::generate_with_sign_key(self.0))
-    }
-
-    pub fn pub_key(self) -> SchnorrPubKey {
-        self.key_pair().0.ver_key()
-    }
-}
 
 type ElectionConfig = StaticElectionConfig;
 
@@ -272,7 +238,7 @@ pub struct NetworkParams {
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
-    pub private_state_key: SchnorrPrivKey,
+    pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
 }
 
@@ -304,11 +270,12 @@ pub async fn init_node(
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+    let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
         private_key: network_params.private_staking_key,
         stake_value: 1,
-        state_key_pair: network_params.private_state_key.key_pair(),
+        state_key_pair,
     };
 
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
