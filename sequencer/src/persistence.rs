@@ -18,7 +18,7 @@ use hotshot::{
     types::{Event, EventType},
     HotShotInitializer,
 };
-use hotshot_types::traits::node_implementation::ConsensusTime;
+use hotshot_types::{event::LeafInfo, traits::node_implementation::ConsensusTime};
 use std::cmp::max;
 
 pub mod fs;
@@ -134,7 +134,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     async fn handle_event(&mut self, event: &Event<SeqTypes>) {
         match &event.event {
             EventType::Decide { leaf_chain, .. } => {
-                if let Some((leaf, _)) = leaf_chain.first() {
+                if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
                     if let Err(err) = self.save_anchor_leaf(leaf).await {
                         tracing::error!(
                             ?leaf,

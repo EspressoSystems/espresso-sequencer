@@ -280,6 +280,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
     type Time = ViewNumber;
 
+    type Delta = ;
     fn on_commit(&self) {}
     /// Validate parent against known values (from state) and validate
     /// proposal descends from parent. Returns updated `ValidatedState`.

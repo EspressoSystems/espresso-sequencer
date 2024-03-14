@@ -81,6 +81,10 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         unimplemented!("TODO builder_commitment");
     }
+
+    fn get_transactions(&self, metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
+        unimplemented!("TODO get_transactions");
+    }
 }
 
 #[cfg(test)]
