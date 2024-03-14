@@ -110,7 +110,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&state),
-                    Some(Arc::new(ValidatedState::genesis(&state))),
+                    Some(Arc::new(ValidatedState::genesis(&state).0)),
                 )
             }
         };
