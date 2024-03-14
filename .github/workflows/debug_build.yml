@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install capnproto
+        uses: mstksg/get-package@v1
+        with:
+          brew: capnp
+          apt-get: capnproto libcapnp-dev
+
       - uses: styfle/cancel-workflow-action@0.12.1
         name: Cancel Outdated Builds
         with:

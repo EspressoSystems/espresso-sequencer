@@ -42,6 +42,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install capnproto
+        uses: mstksg/get-package@v1
+        with:
+          brew: capnp
+          apt-get: capnproto libcapnp-dev
+
       - name: Configure Git
         run: |
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
