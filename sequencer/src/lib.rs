@@ -68,11 +68,11 @@ use persistence::SequencerPersistence;
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
 pub use header::Header;
+use hotshot_types::traits::states::StateDelta;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
-
 pub mod network {
     use hotshot_types::message::Message;
 
@@ -139,6 +139,11 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
 }
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Delta {}
+
+impl StateDelta for Delta {}
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
