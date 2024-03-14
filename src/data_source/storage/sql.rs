@@ -1208,7 +1208,6 @@ impl UpdateStateData for SqlStorage {
         block_number: u64,
     ) -> QueryResult<()> {
         let pos = proof.index().clone();
-
         // First node in the merkle path is always the leaf node for which membership proof is provided
         let Some(MerkleNode::Leaf { value, elem, .. }) = proof.merkle_path().first() else {
             return Err(QueryError::Error {
@@ -1401,20 +1400,30 @@ impl<Types: NodeType> MerklizedStateDataSource<Types> for SqlStorage {
             }
         };
 
-        // Get all the nodes in the path to the index.
-        // Order by pos DESC is fetch the nodes from the leaf to the root
+        //  Get all the nodes in the path to the index.
+        // Order by pos DESC is to return nodes from the leaf to the root
         let nodes = self
             .query(
                 &format!(
-                    "SELECT DISTINCT ON (pos) *
-                    FROM {state_type} WHERE pos @> $1 and created <= $2
-                    ORDER BY pos DESC, created DESC;"
+                    " WITH recent_nodes AS (
+                        SELECT pos, MAX(created) AS max_created
+                        FROM {state_type}
+                        WHERE pos @> $1 AND created <= $2
+                        GROUP BY pos
+                    )
+                    SELECT s.*
+                    FROM {state_type} s
+                    JOIN recent_nodes n ON s.pos = n.pos AND s.created = n.max_created
+                    ORDER BY s.pos DESC;"
                 ),
                 [sql_param(&LTree::from(path.iter())), sql_param(&created)],
             )
             .await?;
 
         let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
+
+        tracing::warn!(" selected Nodes: {:?}", nodes);
+
         // insert all the hash ids to a hashset which is used a query later
         // HashSet is used to avoid duplicates
         let mut hash_ids = HashSet::new();
@@ -2707,7 +2716,6 @@ mod test {
 
     use jf_primitives::merkle_tree::{prelude::Sha3Node, MerkleTreeScheme};
 
-    use rand::{distributions::Alphanumeric, thread_rng, Rng};
     use typenum::U8;
 
     #[async_std::test]
@@ -2719,66 +2727,113 @@ mod test {
 
         // define a test tree
         let mut test_tree = TestMerkleTree::new(3);
-        let txn = storage.transaction().await.unwrap();
+
+        let block_height = 1;
 
         // insert some entries into the tree and the header table
         // Header table is used the get_path query to check if the header exists for the block height.
         for i in 0..27 {
             test_tree.update(i, i).unwrap();
 
-            let random_string: String = thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(30)
-                .map(char::from)
-                .collect();
-            txn.query_opt(
-                "INSERT INTO HEADER VALUES ($1, $2, 't', 0, '{}'::jsonb)",
-                [sql_param(&(i as i64)), sql_param(&random_string)],
-            )
-            .await
-            .unwrap();
+            storage
+                .query_opt(
+                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, '{}'::jsonb)",
+                    [sql_param(&(i as i64)), sql_param(&format!("randomHash{i}"))],
+                )
+                .await
+                .unwrap();
+            // proof for the index from the tree
+            let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
+            // traversal path for the index.
+            let traversal_path =
+                <usize as ToTraversalPath<U8>>::to_traversal_path(&i, test_tree.height());
+            storage
+                .insert_merkle_nodes::<_, usize, usize, Sha3Node>(
+                    test_tree.state_type(),
+                    proof.clone(),
+                    traversal_path.clone(),
+                    block_height,
+                )
+                .await
+                .expect("failed to insert nodes");
         }
 
-        // index to be queried
-        let index = 15;
-        // proof for the index from the tree
-        let (_, proof) = test_tree.lookup(index).expect_ok().unwrap();
+        //Get the path and check if it matches the lookup
+        for i in 0..27 {
+            // Query the path for the index
+            let merkle_path = storage
+                .get_path::<usize, usize, U8, Sha3Node>(
+                    test_tree.state_type(),
+                    test_tree.height(),
+                    "header",
+                    Snapshot::<MockTypes>::Index(block_height),
+                    i.into(),
+                )
+                .await
+                .unwrap();
+
+            let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
+
+            // merkle path from the storage should match the path from test tree
+            assert_eq!(
+                merkle_path,
+                proof.merkle_path().clone(),
+                "merkle paths mismatch"
+            );
+        }
+
+        // Lets insert some index again with different block height e.g 2
+        // Our database should then have 2 versions of this leaf node
+        // Update the node so that proof is also updated
+        test_tree.update(15, 99).unwrap();
+        let (_, proof_bh_2) = test_tree.lookup(15).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
-            <usize as ToTraversalPath<U8>>::to_traversal_path(&index, test_tree.height());
-
-        let leaf = Leaf::<MockTypes>::genesis(&Default::default());
-        let bn = leaf.block_header.block_number;
-        // insert the membership proof for the index
+            <usize as ToTraversalPath<U8>>::to_traversal_path(&15, test_tree.height());
+        // Update storage to insert a new version of this code
         storage
             .insert_merkle_nodes::<_, usize, usize, Sha3Node>(
                 test_tree.state_type(),
-                proof.clone(),
-                traversal_path,
-                bn,
+                proof_bh_2.clone(),
+                traversal_path.clone(),
+                2,
             )
             .await
             .expect("failed to insert nodes");
+        // Find all the nodes of Index 15 in table
+        let ltree_path = LTree::from(traversal_path.iter());
+        let rows = storage
+            .query(
+                "SELECT * from test_tree where pos = $1 ORDER BY CREATED",
+                [sql_param(&ltree_path)],
+            )
+            .await
+            .unwrap();
 
-        storage.commit().await.expect("failed to commit");
+        let nodes: Vec<_> = rows
+            .map(|res| Node::try_from(res.unwrap()))
+            .try_collect()
+            .await
+            .unwrap();
+        // There should be only 2 versions of this node
+        assert!(nodes.len() == 2, "incorrect number of nodes");
+        assert_eq!(nodes[0].created, 1, "wrong block height");
+        assert_eq!(nodes[1].created, 2, "wrong block height");
 
-        // Query the path for the index
-        let merkle_path = storage
+        // Now we can have two snapshots for Index 15
+        // One with created = 1 and other with 2
+        // Query snapshot with created = 2
+        let path_2 = storage
             .get_path::<usize, usize, U8, Sha3Node>(
                 test_tree.state_type(),
                 test_tree.height(),
                 "header",
-                Snapshot::<MockTypes>::Index(bn),
-                index.into(),
+                Snapshot::<MockTypes>::Index(2),
+                15.into(),
             )
             .await
             .unwrap();
 
-        // merkle path from the storage should match the path from test tree
-        assert_eq!(
-            merkle_path,
-            proof.merkle_path().clone(),
-            "merkle paths mismatch"
-        )
+        assert_eq!(path_2, proof_bh_2.proof);
     }
 }

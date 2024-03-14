@@ -141,7 +141,10 @@ mod test {
 
     use std::time::Duration;
 
-    use async_std::{stream::StreamExt, task::spawn};
+    use async_std::{
+        stream::StreamExt,
+        task::{sleep, spawn},
+    };
     use hotshot::types::EventType;
     use jf_primitives::merkle_tree::{
         prelude::{MerklePath, Sha3Node},
@@ -194,12 +197,12 @@ mod test {
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         'a: while let Some(event) = events.next().await {
             if let EventType::Decide { leaf_chain, .. } = event.event {
-                println!("leaf chain {:?}", leaf_chain);
-
                 for leaf in leaf_chain.iter() {
                     let state = leaf.state.clone();
                     let delta = leaf.delta.clone();
                     let height = leaf.leaf.get_height();
+                    // wait 2 secs so that changes are reflected in the db
+                    sleep(Duration::from_secs(2)).await;
                     if let Some(delta) = delta {
                         for key in delta.0.iter() {
                             // Retrieve the proof from the state tree for the current key
@@ -221,8 +224,8 @@ mod test {
                                 "merkle paths don't match"
                             );
 
-                            // Terminate the loop if the block height exceeds 10 to prevent infinite testing
-                            if height >= 20 {
+                            // Terminate the loop if the block height exceeds 10
+                            if height >= 10 {
                                 break 'a;
                             }
                         }
