@@ -92,6 +92,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download executables AMD
         uses: actions/download-artifact@v3
@@ -201,7 +203,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.state-relay-server.outputs.tags }}
           labels: ${{ steps.state-relay-server.outputs.labels }}
-      
+
       - name: Build and push prover-service docker
         uses: docker/build-push-action@v5
         with:
