@@ -10,6 +10,7 @@ use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
 };
 use hotshot_types::{
+    event::LeafInfo,
     light_client::{StateSignature, StateSignatureScheme},
     signature_key::BLSPubKey,
     traits::{
@@ -69,7 +70,7 @@ impl StateSigner {
         let EventType::Decide { leaf_chain, .. } = &event.event else {
             return;
         };
-        let Some((leaf, _)) = leaf_chain.first() else {
+        let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
             return;
         };
         match form_light_client_state(leaf, &self.stake_table_comm) {
