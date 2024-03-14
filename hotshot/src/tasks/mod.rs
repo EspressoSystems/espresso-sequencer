@@ -141,6 +141,27 @@ pub async fn inject_consensus_polls<
         .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForLatestViewSyncCertificate)
         .await;
+    // Start polling for proposals for the first view
+    consensus_state
+        .quorum_network
+        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(1))
+        .await;
+
+    consensus_state
+        .quorum_network
+        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(1))
+        .await;
+
+    if consensus_state
+        .quorum_membership
+        .get_leader(TYPES::Time::new(1))
+        == consensus_state.public_key
+    {
+        consensus_state
+            .quorum_network
+            .inject_consensus_info(ConsensusIntentEvent::PollForVotes(0))
+            .await;
+    }
 }
 
 /// add the consensus task

@@ -220,7 +220,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::ViewChange(view) => {
-                if *self.cur_view >= *view {
+                if (*view != 0 || *self.cur_view > 0) && *self.cur_view >= *view {
                     return None;
                 }
 
@@ -228,7 +228,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-                self.consensus.write().await.update_view(view);
 
                 // Inject view info into network
                 let is_da = self
@@ -255,7 +254,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // If we are not the next leader (DA leader for this view) immediately exit
                 if self.da_membership.get_leader(self.cur_view + 1) != self.public_key {
-                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
                 debug!("Polling for DA votes for view {}", *self.cur_view + 1);

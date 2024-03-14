@@ -50,8 +50,6 @@ pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {
     pub commitment: VidCommitment,
     /// Metadata for the block payload
     pub metadata: <PAYLOAD as BlockPayload>::Metadata,
-    /// Flag for if this data represents the genesis block
-    pub is_genesis: bool,
 }
 
 /// Alias for Optional type for Vote Collectors
@@ -152,69 +150,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
         if let Some(proposal) = &self.current_proposal {
             let consensus = self.consensus.read().await;
-
-            // ED Need to account for the genesis DA cert
-            // No need to check vid share nor da cert for genesis
-            if proposal.justify_qc.is_genesis && proposal.view_number == TYPES::Time::new(1) {
-                info!("Proposal is genesis!");
-
-                let view = TYPES::Time::new(*proposal.view_number);
-                let justify_qc = proposal.justify_qc.clone();
-                let parent = if justify_qc.is_genesis {
-                    Some(Leaf::genesis(&consensus.instance_state))
-                } else {
-                    consensus
-                        .saved_leaves
-                        .get(&justify_qc.get_data().leaf_commit)
-                        .cloned()
-                };
-
-                // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                let Some(parent) = parent else {
-                    error!(
-                        "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
-                        justify_qc.get_data().leaf_commit,
-                        proposal.view_number,
-                    );
-                    return false;
-                };
-                let parent_commitment = parent.commit();
-                let leaf: Leaf<_> = Leaf {
-                    view_number: view,
-                    justify_qc: proposal.justify_qc.clone(),
-                    parent_commitment,
-                    block_header: proposal.block_header.clone(),
-                    block_payload: None,
-                    proposer_id: self.quorum_membership.get_leader(view),
-                };
-                let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
-                    QuorumData {
-                        leaf_commit: leaf.commit(),
-                    },
-                    view,
-                    &self.public_key,
-                    &self.private_key,
-                ) else {
-                    error!("Failed to sign QuorumData!");
-                    return false;
-                };
-
-                let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
-
-                if let GeneralConsensusMessage::Vote(vote) = message {
-                    debug!(
-                        "Sending vote to next quorum leader {:?}",
-                        vote.get_view_number() + 1
-                    );
-                    broadcast_event(HotShotEvent::QuorumVoteSend(vote), event_stream).await;
-                    if let Some(commit_and_metadata) = &self.payload_commitment_and_metadata {
-                        if commit_and_metadata.is_genesis {
-                            self.payload_commitment_and_metadata = None;
-                        }
-                    }
-                    return true;
-                }
-            }
 
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = consensus.vid_shares.get(&proposal.view_number) {
@@ -1115,7 +1050,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await
                     .vid_shares
                     .insert(view, disperse);
-                self.vote_if_able(&event_stream).await;
+                if self.vote_if_able(&event_stream).await {
+                    self.current_proposal = None;
+                }
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
@@ -1220,7 +1157,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 self.payload_commitment_and_metadata = Some(CommitmentAndMetadata {
                     commitment: payload_commitment,
                     metadata,
-                    is_genesis: false,
                 });
                 if self.quorum_membership.get_leader(view) == self.public_key
                     && self.consensus.read().await.high_qc.get_view_number() + 1 == view

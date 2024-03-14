@@ -32,21 +32,28 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
-    let mut proposals = Vec::new();
-    let mut votes = Vec::new();
-    let mut leaders = Vec::new();
-
     let mut generator = TestViewGenerator::generate(quorum_membership.clone());
 
-    for view in (&mut generator).take(3) {
+    let mut proposals = Vec::new();
+    let mut leaders = Vec::new();
+    let mut votes = Vec::new();
+    let mut dacs = Vec::new();
+    let mut vids = Vec::new();
+    for view in (&mut generator).take(2) {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         leaders.push(view.leader_public_key);
+        dacs.push(view.da_certificate.clone());
+        vids.push(view.vid_proposal.clone());
     }
 
     // This stage transitions from the initial view to view 1
     let view_1 = TestScriptStage {
-        inputs: vec![QuorumProposalRecv(proposals[0].clone(), leaders[0])],
+        inputs: vec![
+            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            DACRecv(dacs[0].clone()),
+            VidDisperseRecv(vids[0].0.clone(), vids[0].1),
+        ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
             exact(QuorumProposalValidated(proposals[0].data.clone())),

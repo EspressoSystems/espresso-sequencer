@@ -220,9 +220,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 }
             };
             saved_payloads.insert(anchored_leaf.get_view_number(), encoded_txns.clone());
-            // View 1 doesn't have DA which is responsible for saving the payloads, so we store the
-            // payload for view 1 manually during the intialization.
-            saved_payloads.insert(TYPES::Time::new(1), encoded_txns);
         }
 
         let start_view = initializer.start_view;
@@ -275,6 +272,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Panics if sending genesis fails
     pub async fn start_consensus(&self) {
         debug!("Starting Consensus");
+        self.internal_event_stream
+            .0
+            .broadcast_direct(HotShotEvent::ViewChange(TYPES::Time::new(0)))
+            .await
+            .expect("Genesis Broadcast failed");
         self.internal_event_stream
             .0
             .broadcast_direct(HotShotEvent::QCFormed(either::Left(
