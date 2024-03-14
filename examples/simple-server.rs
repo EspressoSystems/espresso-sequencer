@@ -165,6 +165,7 @@ async fn init_consensus(
         da_staked_committee_size: pub_keys.len(),
         da_non_staked_committee_size: 0,
         my_own_validator_config: Default::default(),
+        data_request_delay: Duration::from_millis(200),
     };
     join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
         |(node_id, (priv_key, data_source))| {

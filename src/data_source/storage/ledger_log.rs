@@ -311,7 +311,7 @@ mod test {
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_ledger_log").unwrap();
         let mut log = LedgerLog::<u64>::create(&mut loader, "ledger", 3).unwrap();
         let mut store = AtomicStore::open(loader).unwrap();
-        assert_eq!(log.iter().collect::<Vec<_>>(), vec![]);
+        assert_eq!(log.iter().collect::<Vec<_>>(), Vec::<Option<u64>>::new());
 
         // Insert at end.
         log.insert(0, 1).unwrap();

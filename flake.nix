@@ -60,6 +60,8 @@
             # `postgresql` defaults to an older version (15), so we select the latest version (16)
             # explicitly.
             postgresql_16
+
+            capnproto
           ] ++ lib.optionals stdenv.isDarwin [
             darwin.apple_sdk.frameworks.Security
             darwin.apple_sdk.frameworks.CoreFoundation

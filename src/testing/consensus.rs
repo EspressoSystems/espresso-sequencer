@@ -109,6 +109,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         election_config: None,
                         da_staked_committee_size: pub_keys.len(),
                         da_non_staked_committee_size: 0,
+                        data_request_delay: Duration::from_millis(200),
                     };
 
                     let pub_keys = pub_keys.clone();
