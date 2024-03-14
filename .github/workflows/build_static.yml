@@ -12,6 +12,10 @@ on:
     - cron: "0 0 * * 1"
   pull_request:
   workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: 'Optional custom tag for Docker images'
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -121,6 +125,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate web-server docker metadata
         uses: docker/metadata-action@v5
@@ -128,6 +138,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/web-server
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate state-relay-server docker metadata
         uses: docker/metadata-action@v5
@@ -135,6 +151,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/state-relay-server
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate prover-service docker metadata
         uses: docker/metadata-action@v5
@@ -142,6 +164,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/prover-service
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate orchestrator docker metadata
         uses: docker/metadata-action@v5
@@ -149,6 +177,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate commitment task docker metadata
         uses: docker/metadata-action@v5
@@ -156,6 +190,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate submit-transactions docker metadata
         uses: docker/metadata-action@v5
@@ -163,6 +203,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/submit-transactions
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v5
@@ -170,6 +216,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
           flavor: suffix=musl
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
