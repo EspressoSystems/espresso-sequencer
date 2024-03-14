@@ -292,6 +292,7 @@ impl TestMetadata {
                 num_nodes_with_stake as u64,
                 0,
             )),
+            data_request_delay: Duration::from_millis(200),
         };
         let TimingData {
             next_view_timeout,

@@ -19,7 +19,9 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
-    simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
+    simple_certificate::{
+        QuorumCertificate, TimeoutCertificate, UpgradeCertificate, ViewSyncFinalizeCertificate2,
+    },
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
@@ -113,6 +115,10 @@ pub struct ConsensusTaskState<
 
     /// last Upgrade Certificate this node formed
     pub upgrade_cert: Option<UpgradeCertificate<TYPES>>,
+
+    // TODO: Merge view sync and timeout certs: https://github.com/EspressoSystems/HotShot/issues/2767
+    /// last View Sync Certificate this node formed
+    pub view_sync_cert: Option<ViewSyncFinalizeCertificate2<TYPES>>,
 
     /// most recent decided upgrade certificate
     pub decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
@@ -359,6 +365,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     *proposal.data.view_number
                 );
 
+                debug!("Received proposal {:?}", proposal);
+
                 // stop polling for the received proposal
                 self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
@@ -378,24 +386,42 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                // Verify a timeout certificate exists and is valid
+                // Verify a timeout certificate OR a view sync certificate exists and is valid.
                 if proposal.data.justify_qc.get_view_number() != view - 1 {
-                    let Some(timeout_cert) = proposal.data.timeout_certificate.clone() else {
+                    // Do we have a timeout certificate at all?
+                    if let Some(timeout_cert) = proposal.data.timeout_certificate.clone() {
+                        if timeout_cert.get_data().view != view - 1 {
+                            warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
+                            return;
+                        }
+
+                        if !timeout_cert.is_valid_cert(self.timeout_membership.as_ref()) {
+                            warn!("Timeout certificate for view {} was invalid", *view);
+                            return;
+                        }
+                    } else if let Some(cert) = &self.view_sync_cert {
+                        // View sync certs _must_ be for the current view.
+                        if cert.view_number != view {
+                            debug!(
+                                "Cert view number {:?} does not match proposal view number {:?}",
+                                cert.view_number, view
+                            );
+                            return;
+                        }
+
+                        // View sync certs must also be valid.
+                        if !cert.is_valid_cert(self.quorum_membership.as_ref()) {
+                            debug!("Invalid ViewSyncFinalize cert provided");
+                            return;
+                        }
+                    } else {
                         warn!(
-                            "Quorum proposal for view {} needed a timeout certificate but did not have one",
+                            "Quorum proposal for view {} needed a timeout or view sync certificate, but did not have one",
                             *view);
                         return;
                     };
 
-                    if timeout_cert.get_data().view != view - 1 {
-                        warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
-                        return;
-                    }
-
-                    if !timeout_cert.is_valid_cert(self.timeout_membership.as_ref()) {
-                        warn!("Timeout certificate for view {} was invalid", *view);
-                        return;
-                    }
+                    // If we have a ViewSyncFinalize cert, only vote if it is valid.
                 }
 
                 let justify_qc = proposal.data.justify_qc.clone();
@@ -1173,7 +1199,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.publish_proposal_if_able(view, None, &event_stream)
                         .await;
                 }
-                if let Some(tc) = &self.timeout_cert {
+
+                if let Some(tc) = self.timeout_cert.as_ref() {
                     if self.quorum_membership.get_leader(tc.get_view_number() + 1)
                         == self.public_key
                     {
@@ -1184,6 +1211,40 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         )
                         .await;
                     }
+                } else if let Some(vsc) = self.view_sync_cert.as_ref() {
+                    if self.quorum_membership.get_leader(vsc.get_view_number()) == self.public_key {
+                        self.publish_proposal_if_able(view, None, &event_stream)
+                            .await;
+                    }
+                }
+            }
+            HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
+                if !certificate.is_valid_cert(self.quorum_membership.as_ref()) {
+                    warn!(
+                        "View Sync Finalize certificate {:?} was invalid",
+                        certificate.get_data()
+                    );
+                    return;
+                }
+
+                self.view_sync_cert = Some(certificate.clone());
+
+                // cancel poll for votes
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                        *certificate.view_number - 1,
+                    ))
+                    .await;
+
+                let view = certificate.view_number;
+
+                if self.quorum_membership.get_leader(view) == self.public_key {
+                    debug!(
+                        "Attempting to publish proposal after forming a View Sync Finalized Cert for view {}",
+                        *certificate.view_number
+                    );
+                    self.publish_proposal_if_able(view, None, &event_stream)
+                        .await;
                 }
             }
             _ => {}
@@ -1251,7 +1312,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
         // Walk back until we find a decide
         if !reached_decided {
-            debug!("not reached decide fro view {:?}", self.cur_view);
+            debug!("We have not reached decide from view {:?}", self.cur_view);
             while let Some(next_parent_leaf) = consensus.saved_leaves.get(&next_parent_hash) {
                 if next_parent_leaf.view_number <= consensus.last_decided_view {
                     break;
@@ -1309,19 +1370,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
                 upgrade_certificate: upgrade_cert,
+                view_sync_certificate: self.view_sync_cert.clone(),
                 proposer_id: leaf.proposer_id,
             };
 
             self.timeout_cert = None;
+            self.view_sync_cert = None;
             let message = Proposal {
                 data: proposal,
                 signature,
                 _pd: PhantomData,
             };
-            debug!(
-                "Sending proposal for view {:?} \n {:?}",
-                leaf.view_number, ""
-            );
+            debug!("Sending proposal for view {:?}", leaf.view_number);
 
             broadcast_event(
                 Arc::new(HotShotEvent::QuorumProposalSend(
@@ -1358,6 +1418,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 | HotShotEvent::Timeout(_)
                 | HotShotEvent::TimeoutVoteRecv(_)
                 | HotShotEvent::VidDisperseRecv(..)
+                | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
                 | HotShotEvent::Shutdown,
         )
     }

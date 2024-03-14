@@ -168,6 +168,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             timeout_task: None,
             timeout_cert: None,
             upgrade_cert: None,
+            view_sync_cert: None,
             decided_upgrade_cert: None,
             current_network_version: VERSION_0_1,
             output_event_stream: handle.hotshot.output_event_stream.0.clone(),

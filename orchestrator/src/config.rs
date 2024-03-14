@@ -613,6 +613,7 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
             propose_min_round_time: val.propose_min_round_time,
             propose_max_round_time: val.propose_max_round_time,
             election_config: None,
+            data_request_delay: Duration::from_millis(200),
         }
     }
 }

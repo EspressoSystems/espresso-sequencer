@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{cmp::max, marker::PhantomData};
 
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
@@ -16,8 +16,14 @@ use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_types::{
     data::{Leaf, QuorumProposal, VidDisperse, ViewNumber},
     message::Proposal,
-    simple_certificate::{DACertificate, QuorumCertificate, UpgradeCertificate},
-    simple_vote::{UpgradeProposalData, UpgradeVote},
+    simple_certificate::{
+        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        ViewSyncFinalizeCertificate2,
+    },
+    simple_vote::{
+        TimeoutData, TimeoutVote, UpgradeProposalData, UpgradeVote, ViewSyncFinalizeData,
+        ViewSyncFinalizeVote,
+    },
     traits::{
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeType},
@@ -41,6 +47,8 @@ pub struct TestView {
     pub da_certificate: DACertificate<TestTypes>,
     pub transactions: Vec<TestTransaction>,
     upgrade_data: Option<UpgradeProposalData<TestTypes>>,
+    view_sync_finalize_data: Option<ViewSyncFinalizeData<TestTypes>>,
+    timeout_cert_data: Option<TimeoutData<TestTypes>>,
 }
 
 impl TestView {
@@ -82,6 +90,7 @@ impl TestView {
             justify_qc: QuorumCertificate::genesis(),
             timeout_certificate: None,
             upgrade_certificate: None,
+            view_sync_certificate: None,
             proposer_id: public_key,
         };
 
@@ -117,13 +126,23 @@ impl TestView {
             transactions,
             leader_public_key,
             upgrade_data: None,
+            view_sync_finalize_data: None,
+            timeout_cert_data: None,
         }
     }
 
-    pub fn next_view(&self) -> Self {
-        let old = self;
+    /// Moves the generator to the next view by referencing an ancestor. To have a standard,
+    /// sequentially ordered set of generated test views, use the `next_view` function. Otherwise,
+    /// this method can be used to start from an ancestor (whose view is at least one view older
+    /// than the current view) and construct valid views without the data structures in the task
+    /// failing by expecting views that they has never seen.
+    pub fn next_view_from_ancestor(&self, ancestor: TestView) -> Self {
+        let old = ancestor;
         let old_view = old.view_number;
-        let next_view = old_view + 1;
+
+        // This ensures that we're always moving forward in time since someone could pass in any
+        // test view here.
+        let next_view = max(old_view, self.view_number) + 1;
 
         let quorum_membership = &self.quorum_membership;
         let transactions = &self.transactions;
@@ -187,6 +206,44 @@ impl TestView {
             None
         };
 
+        let view_sync_certificate = if let Some(ref data) = self.view_sync_finalize_data {
+            let cert = build_cert::<
+                TestTypes,
+                ViewSyncFinalizeData<TestTypes>,
+                ViewSyncFinalizeVote<TestTypes>,
+                ViewSyncFinalizeCertificate2<TestTypes>,
+            >(
+                data.clone(),
+                quorum_membership,
+                next_view,
+                &public_key,
+                &private_key,
+            );
+
+            Some(cert)
+        } else {
+            None
+        };
+
+        let timeout_certificate = if let Some(ref data) = self.timeout_cert_data {
+            let cert = build_cert::<
+                TestTypes,
+                TimeoutData<TestTypes>,
+                TimeoutVote<TestTypes>,
+                TimeoutCertificate<TestTypes>,
+            >(
+                data.clone(),
+                quorum_membership,
+                next_view,
+                &public_key,
+                &private_key,
+            );
+
+            Some(cert)
+        } else {
+            None
+        };
+
         let block_header = TestBlockHeader {
             block_number: *next_view,
             timestamp: *next_view,
@@ -213,8 +270,9 @@ impl TestView {
             block_header: block_header.clone(),
             view_number: next_view,
             justify_qc: quorum_certificate.clone(),
-            timeout_certificate: None,
+            timeout_certificate,
             upgrade_certificate,
+            view_sync_certificate,
             proposer_id: public_key,
         };
 
@@ -236,7 +294,13 @@ impl TestView {
             // so we reset for the next view.
             transactions: Vec::new(),
             upgrade_data: None,
+            view_sync_finalize_data: None,
+            timeout_cert_data: None,
         }
+    }
+
+    pub fn next_view(&self) -> Self {
+        self.next_view_from_ancestor(self.clone())
     }
 
     pub fn create_quorum_vote(
@@ -301,6 +365,41 @@ impl TestViewGenerator {
             });
         } else {
             tracing::error!("Cannot attach transactions to the genesis view.");
+        }
+    }
+
+    pub fn add_view_sync_finalize(
+        &mut self,
+        view_sync_finalize_data: ViewSyncFinalizeData<TestTypes>,
+    ) {
+        if let Some(ref view) = self.current_view {
+            self.current_view = Some(TestView {
+                view_sync_finalize_data: Some(view_sync_finalize_data),
+                ..view.clone()
+            });
+        } else {
+            tracing::error!("Cannot attach view sync finalize to the genesis view.");
+        }
+    }
+
+    /// Advances to the next view by skipping the current view and not adding it to the state tree.
+    /// This is useful when simulating that a timeout has occurred.
+    pub fn advance_view_number_by(&mut self, n: u64) {
+        if let Some(ref view) = self.current_view {
+            self.current_view = Some(TestView {
+                view_number: view.view_number + n,
+                ..view.clone()
+            })
+        } else {
+            tracing::error!("Cannot attach view sync finalize to the genesis view.");
+        }
+    }
+
+    pub fn next_from_anscestor_view(&mut self, ancestor: TestView) {
+        if let Some(ref view) = self.current_view {
+            self.current_view = Some(view.next_view_from_ancestor(ancestor))
+        } else {
+            tracing::error!("Cannot attach ancestor to genesis view.");
         }
     }
 }

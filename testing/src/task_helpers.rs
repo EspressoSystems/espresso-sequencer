@@ -267,6 +267,7 @@ async fn build_quorum_proposal_and_signature(
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
         upgrade_certificate: None,
+        view_sync_certificate: None,
         proposer_id: leaf.proposer_id,
     };
 
@@ -326,6 +327,7 @@ async fn build_quorum_proposal_and_signature(
             justify_qc: created_qc,
             timeout_certificate: None,
             upgrade_certificate: None,
+            view_sync_certificate: None,
             proposer_id: leaf_new_view.clone().proposer_id,
         };
         proposal = proposal_new_view;
