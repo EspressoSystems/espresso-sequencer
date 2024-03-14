@@ -1,7 +1,14 @@
 name: Security audit
 on:
   push:
-    # For PR we only want to fail if dependencies were changed.
+    branches:
+      - main
+      - release-*
+    tags:
+      # YYYYMMDD
+      - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
+  pull_request:
+    # For PRs we only want to fail if dependencies were changed.
     paths:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
