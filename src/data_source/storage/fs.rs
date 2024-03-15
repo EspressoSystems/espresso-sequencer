@@ -15,7 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage,
+    AvailabilityStorage, ExplorerStorage,
 };
 
 use crate::{
@@ -456,6 +456,14 @@ where
             .insert(common.height() as usize, (common, share))?;
         Ok(())
     }
+}
+
+#[async_trait]
+impl<Types: NodeType> ExplorerStorage<Types> for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
 }
 
 /// Update an index mapping hashes of objects to their positions in the ledger.

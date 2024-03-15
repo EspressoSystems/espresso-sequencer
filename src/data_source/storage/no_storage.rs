@@ -12,7 +12,7 @@
 
 #![cfg(feature = "no-storage")]
 
-use super::AvailabilityStorage;
+use super::{AvailabilityStorage, ExplorerStorage};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
@@ -186,6 +186,9 @@ where
         Err(QueryError::Missing)
     }
 }
+
+#[async_trait]
+impl<Types: NodeType> ExplorerStorage<Types> for NoStorage where Payload<Types>: QueryablePayload {}
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]

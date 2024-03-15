@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{availability, merklized_state, node, status};
+use crate::{availability, explorer, merklized_state, node, status};
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -27,6 +27,11 @@ pub enum Error {
     Status { source: status::Error },
     #[snafu(display("{source}"))]
     MerklizedState { source: merklized_state::Error },
+    #[snafu(display("{source}"))]
+    Explorer {
+        #[serde(rename = "error")]
+        source: explorer::Error,
+    },
     #[snafu(display("error {status}: {message}"))]
     Custom { message: String, status: StatusCode },
 }
@@ -51,6 +56,7 @@ impl tide_disco::Error for Error {
             Self::Node { source } => source.status(),
             Self::Status { source } => source.status(),
             Self::MerklizedState { source } => source.status(),
+            Self::Explorer { source } => source.status(),
             Self::Custom { status, .. } => *status,
         }
     }

@@ -108,3 +108,11 @@ where
         hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
 }
+
+#[async_trait]
+pub trait ExplorerStorage<Types>: AvailabilityStorage<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+{
+}

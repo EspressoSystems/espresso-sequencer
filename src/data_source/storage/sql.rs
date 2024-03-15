@@ -12,7 +12,7 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
+use super::{pruning::PrunedHeightStorage, AvailabilityStorage, ExplorerStorage};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
@@ -1919,6 +1919,15 @@ impl SqlStorage {
 
         Ok(TimeWindowQueryData { window, prev, next })
     }
+}
+
+#[async_trait]
+impl<Types: NodeType> ExplorerStorage<Types> for SqlStorage
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
 }
 
 /// An atomic SQL transaction.

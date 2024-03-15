@@ -410,6 +410,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
+pub mod explorer;
 pub mod fetching;
 pub mod merklized_state;
 pub mod metrics;
@@ -498,6 +499,7 @@ where
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource
+        + explorer::data_source::ExplorerDataSource<Types>
         + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
         + Send
@@ -510,6 +512,7 @@ where
         availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;
     let node_api = node::define_api(&options.node, bind_version).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status, bind_version).map_err(Error::internal)?;
+    let explorer_api = explorer::define_api(bind_version).map_err(Error::internal)?;
 
     // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
     let data_source = Arc::new(RwLock::new(data_source));
@@ -519,6 +522,8 @@ where
         .register_module("node", node_api)
         .map_err(Error::internal)?
         .register_module("status", status_api)
+        .map_err(Error::internal)?
+        .register_module("explorer", explorer_api)
         .map_err(Error::internal)?;
 
     // Serve app.
@@ -545,6 +550,16 @@ where
 
 #[cfg(test)]
 mod test {
+    use self::explorer::{
+        data_source::{
+            BlockDetail, BlockIdentifier, BlockSummary, ExplorerDataSource, GetBlockDetailError,
+            GetBlockSummariesError, GetBlockSummariesRequest, GetExplorerSummaryError,
+            GetTransactionDetailError, GetTransactionSummariesError,
+            GetTransactionSummariesRequest, TransactionDetail, TransactionIdentifier,
+            TransactionSummary,
+        },
+        errors::Unimplemented,
+    };
     use super::*;
     use crate::{
         availability::{
@@ -563,7 +578,6 @@ mod test {
     use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
-
     use futures::FutureExt;
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
@@ -705,6 +719,43 @@ mod test {
         }
     }
 
+    #[async_trait]
+    impl ExplorerDataSource<MockTypes> for CompositeState {
+        async fn get_block_detail(
+            &self,
+            _request: BlockIdentifier<MockTypes>,
+        ) -> Result<BlockDetail, GetBlockDetailError> {
+            Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
+        }
+
+        async fn get_block_summaries(
+            &self,
+            _request: GetBlockSummariesRequest<MockTypes>,
+        ) -> Result<Vec<BlockSummary>, GetBlockSummariesError> {
+            Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
+        }
+
+        async fn get_transaction_detail(
+            &self,
+            _request: TransactionIdentifier<MockTypes>,
+        ) -> Result<TransactionDetail, GetTransactionDetailError> {
+            Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
+        }
+
+        async fn get_transaction_summaries(
+            &self,
+            _request: GetTransactionSummariesRequest<MockTypes>,
+        ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError> {
+            Err(GetTransactionSummariesError::Unimplemented(
+                Unimplemented {},
+            ))
+        }
+
+        async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError> {
+            Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
+        }
+    }
+
     #[async_std::test]
     async fn test_composition() {
         let dir = TempDir::with_prefix("test_composition").unwrap();
@@ -752,6 +803,8 @@ mod test {
             "status",
             status::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
         )
+        .unwrap()
+        .register_module("explorer", explorer::define_api(STATIC_VER_0_1).unwrap())
         .unwrap()
         .module::<Error, Version01>("mod", module_spec)
         .unwrap()

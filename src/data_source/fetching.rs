@@ -73,10 +73,16 @@
 //! different request for the same object, one that permitted an active fetch. Or it may have been
 //! fetched [proactively](#proactive-fetching).
 
-use super::{
-    notifier::Notifier,
-    storage::{pruning::PruneStorage, AvailabilityStorage},
-    VersionedDataSource,
+use super::storage::{pruning::PruneStorage, ExplorerStorage};
+use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
+use crate::explorer::{
+    data_source::{
+        BlockDetail, BlockIdentifier, BlockSummary, ExplorerDataSource, GetBlockDetailError,
+        GetBlockSummariesError, GetBlockSummariesRequest, GetExplorerSummaryError,
+        GetTransactionDetailError, GetTransactionSummariesError, GetTransactionSummariesRequest,
+        TransactionDetail, TransactionIdentifier, TransactionSummary,
+    },
+    errors::Unimplemented,
 };
 use crate::{
     availability::{
@@ -730,6 +736,45 @@ where
 
     async fn revert(&mut self) {
         self.fetcher.storage.write().await.revert().await
+    }
+}
+
+#[async_trait]
+impl<Types, S, P> ExplorerDataSource<Types> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: ExplorerStorage<Types> + Send + Sync,
+    P: Send + Sync,
+{
+    async fn get_block_detail(
+        &self,
+        _request: BlockIdentifier<Types>,
+    ) -> Result<BlockDetail, GetBlockDetailError> {
+        Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
+    }
+    async fn get_block_summaries(
+        &self,
+        _request: GetBlockSummariesRequest<Types>,
+    ) -> Result<Vec<BlockSummary>, GetBlockSummariesError> {
+        Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
+    }
+    async fn get_transaction_detail(
+        &self,
+        _request: TransactionIdentifier<Types>,
+    ) -> Result<TransactionDetail, GetTransactionDetailError> {
+        Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
+    }
+    async fn get_transaction_summaries(
+        &self,
+        _request: GetTransactionSummariesRequest<Types>,
+    ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError> {
+        Err(GetTransactionSummariesError::Unimplemented(
+            Unimplemented {},
+        ))
+    }
+    async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError> {
+        Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
     }
 }
 
