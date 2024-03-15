@@ -31,6 +31,10 @@ pub mod vote;
 /// Task for handling upgrades
 pub mod upgrade;
 
+/// Implementations for builder client
+/// Should contain builder task in the future
+pub mod builder;
+
 /// Helper functions used by any task
 pub mod helpers;
 
