@@ -102,11 +102,9 @@ where
                         Some(vid.shares.first_key_value().unwrap().1.clone()),
                     )
                     .await?;
-                } else if leaf.view_number.get_u64() < 2 {
-                    // HotShot does not run VID in consensus for the genesis block (and, as a
-                    // special case, for view 1, see
-                    // https://github.com/EspressoSystems/hotshot-query-service/issues/440). In
-                    // these cases, the block payload is guaranteed to always be empty, so VID isn't
+                } else if leaf.view_number.get_u64() == 0 {
+                    // HotShot does not run VID in consensus for the genesis block). In
+                    // this case, the block payload is guaranteed to always be empty, so VID isn't
                     // really necessary. But for consistency, we will still store the VID dispersal
                     // data, computing it ourselves based on the well-known genesis VID commitment.
                     store_genesis_vid(self, &leaf).await;
@@ -136,54 +134,36 @@ async fn store_genesis_vid<Types: NodeType>(
     storage: &mut impl UpdateAvailabilityData<Types>,
     leaf: &Leaf<Types>,
 ) {
-    let mut num_storage_nodes = GENESIS_VID_NUM_STORAGE_NODES;
-    tracing::info!(?leaf, num_storage_nodes, "generating genesis VID");
-
-    loop {
-        let payload = Payload::<Types>::genesis().0;
-        let bytes = match payload.encode() {
-            Ok(bytes) => bytes.collect::<Vec<_>>(),
-            Err(err) => {
-                tracing::error!(%err, "unable to encode genesis payload");
-                return;
-            }
-        };
-        match vid_scheme(num_storage_nodes).disperse(bytes) {
-            Ok(disperse) if disperse.commit != leaf.block_header.payload_commitment() => {
-                tracing::error!(
-                    computed = %disperse.commit,
-                    header = %leaf.block_header.payload_commitment(),
-                    "computed VID commit for genesis block does not match header",
-                );
-                if leaf.view_number.get_u64() == 1 {
-                    // Extremely special case: currently in HotShot, view 1 is a similar special
-                    // case as the genesis view, where HotShot doesn't do VID, and we have to
-                    // compute it ourselves. However, unlike the genesis view, this view does _not_
-                    // have a well-known scheme for computing the VID commitment. It uses the actual
-                    // number of storage nodes, which we do not have a good way of finding here.
-                    // This special case will be eliminated soon; in the meantime we brute force
-                    // search until we find a number of storage nodes that works.
-                    // See https://github.com/EspressoSystems/hotshot-query-service/issues/440
-                    num_storage_nodes += 1;
-                    continue;
-                }
-            }
-            Ok(mut disperse) => {
-                if let Err(err) = storage
-                    .insert_vid(
-                        VidCommonQueryData::new(leaf.block_header.clone(), disperse.common),
-                        Some(disperse.shares.remove(0)),
-                    )
-                    .await
-                {
-                    tracing::error!(%err, "unable to store genesis VID");
-                }
-            }
-            Err(err) => {
-                tracing::error!(%err, "unable to compute VID dispersal for genesis block");
+    let payload = Payload::<Types>::genesis().0;
+    let bytes = match payload.encode() {
+        Ok(bytes) => bytes.collect::<Vec<_>>(),
+        Err(err) => {
+            tracing::error!(%err, "unable to encode genesis payload");
+            return;
+        }
+    };
+    match vid_scheme(GENESIS_VID_NUM_STORAGE_NODES).disperse(bytes) {
+        Ok(disperse) if disperse.commit != leaf.block_header.payload_commitment() => {
+            tracing::error!(
+                computed = %disperse.commit,
+                header = %leaf.block_header.payload_commitment(),
+                "computed VID commit for genesis block does not match header",
+            );
+        }
+        Ok(mut disperse) => {
+            if let Err(err) = storage
+                .insert_vid(
+                    VidCommonQueryData::new(leaf.block_header.clone(), disperse.common),
+                    Some(disperse.shares.remove(0)),
+                )
+                .await
+            {
+                tracing::error!(%err, "unable to store genesis VID");
             }
         }
-        return;
+        Err(err) => {
+            tracing::error!(%err, "unable to compute VID dispersal for genesis block");
+        }
     }
 }
 
