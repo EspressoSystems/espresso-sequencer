@@ -32,25 +32,17 @@ use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
 };
+use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
     l1_client::L1Client,
-    //mock::MockStateCatchup,
     network,
     persistence::SequencerPersistence,
     state::FeeAccount,
     state::ValidatedState,
     state_signature::static_stake_table_commitment,
-    BuilderParams,
-    L1Params,
-    NetworkParams,
-    Node,
-    NodeState,
-    PrivKey,
-    PubKey,
-    SeqTypes,
-    Storage,
+    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes, Storage,
 };
 use std::{alloc::System, any, fmt::Debug, mem, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -325,13 +317,28 @@ pub mod testing {
             }
         }
     }
-    pub fn mock_node_state() -> NodeState {
-        NodeState::new(
-            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-            FeeAccount::test_wallet(),
-            MockStateCatchup::default(),
-        )
-    }
+
+    // use hotshot_types::data::ViewNumber;
+    // use std::collections::HashMap;
+    // pub struct MockStateCatchup {
+    //     state: HashMap<ViewNumber, Arc<ValidatedState>>,
+    // }
+    // // impl default for this MockStateCatchup
+    // impl Default for MockStateCatchup {
+    //     fn default() -> Self {
+    //         Self {
+    //             state: HashMap::new(),
+    //         }
+    //     }
+    // }
+
+    // pub fn mock_node_state() -> NodeState {
+    //     NodeState::new(
+    //         L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+    //         FeeAccount::test_wallet(),
+    //         MockStateCatchup::default(),
+    //     )
+    // }
     pub fn genereate_stake_table_entries(
         num_nodes: u64,
         stake_value: u64,
@@ -445,9 +452,25 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let node_state = mock_node_state(); //NodeState::new(L1Client::Default())
+            //let node_state = NodeState::mock(); //NodeState::new(L1Client::Default())
+            let wallet = Self::builder_wallet(i);
+            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let node_state = NodeState::new(
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                wallet,
+                MockStateCatchup::default(),
+            )
+            .with_genesis(ValidatedState::default());
 
             init_hotshot(config, node_state, networks, metrics, i as u64).await
+        }
+        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
+            MnemonicBuilder::<English>::default()
+                .phrase("test test test test test test test test test test test junk")
+                .index(i as u32)
+                .unwrap()
+                .build()
+                .unwrap()
         }
     }
     // Wait for decide event, make sure it matches submitted transaction. Return the block number
@@ -486,9 +509,8 @@ pub mod testing {
 }
 
 #[cfg(test)]
-#[cfg(any(test, feature = "testing"))]
 mod test {
-    use self::testing::mock_node_state;
+    //use self::testing::mock_node_state;
 
     use super::*;
     //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
@@ -515,7 +537,7 @@ mod test {
         let handles = config.init_nodes().await;
 
         // try to listen on builder handle as it is the last handle
-        let mut events = handles[5].get_event_stream();
+        let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
@@ -531,7 +553,7 @@ mod test {
                     .collect();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = mock_node_state();
+            let genesis_state = NodeState::mock();
             Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
         };
 

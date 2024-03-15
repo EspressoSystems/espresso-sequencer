@@ -29,9 +29,9 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git"
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 #hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
 #hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "main" }
+sequencer = { path = "../sequencer", features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"
-sequencer = { path = "../sequencer" }
 tracing = { workspace = true }
 tide-disco = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
