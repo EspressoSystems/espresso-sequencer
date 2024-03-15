@@ -87,6 +87,7 @@ dev-deploy url="http://localhost:8545" mnemonics="test test test test test test 
 # the lcov output is pushed to coveralls.
 code-coverage:
   @echo "Running code coverage"
-  nix develop .#coverage -c cargo test --all-features --no-fail-fast --release --workspace -- --skip service::test::test_
-  grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/
+  # nix develop .#coverage -c cargo test --all-features --no-fail-fast --release --workspace -- --skip service::test::test_
+  grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
+      --ignore 'contract-bindings/*' --ignore 'contracts/*'
   @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
