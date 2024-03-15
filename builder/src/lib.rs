@@ -159,8 +159,15 @@ pub async fn init_node(
         Arc::new(StatePeers::from_urls(network_params.state_peers)),
     );
 
-    let hotshot_handle =
-        init_hotshot(config.config, instance_state, networks, metrics, node_index).await;
+    let hotshot_handle = init_hotshot(
+        config.config,
+        None,
+        instance_state,
+        networks,
+        metrics,
+        node_index,
+    )
+    .await;
 
     let builder_ctx = BuilderContext {
         hotshot_handle,
@@ -186,6 +193,9 @@ impl<N: network::Type> BuilderContext<N> {
 #[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
     config: HotShotConfig<PubKey, ElectionConfig>,
+    stake_table_entries_for_non_voting_nodes: Option<
+        Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
+    >,
     instance_state: NodeState,
     networks: Networks<SeqTypes, Node<N>>,
     metrics: &dyn Metrics,
@@ -195,10 +205,20 @@ async fn init_hotshot<N: network::Type>(
         config.num_nodes_with_stake.get() as u64,
         config.num_nodes_without_stake as u64,
     );
-    let membership = GeneralStaticCommittee::create_election(
-        config.known_nodes_with_stake.clone(),
-        election_config,
-    );
+    let combined_known_nodes_with_stake = match stake_table_entries_for_non_voting_nodes {
+        Some(stake_table_entries) => {
+            let combined_entries = config
+                .known_nodes_with_stake
+                .iter()
+                .cloned()
+                .chain(stake_table_entries.into_iter())
+                .collect();
+            combined_entries
+        }
+        None => config.known_nodes_with_stake.clone(),
+    };
+    let membership =
+        GeneralStaticCommittee::create_election(combined_known_nodes_with_stake, election_config);
 
     let memberships = Memberships {
         quorum_membership: membership.clone(),
@@ -317,28 +337,6 @@ pub mod testing {
             }
         }
     }
-
-    // use hotshot_types::data::ViewNumber;
-    // use std::collections::HashMap;
-    // pub struct MockStateCatchup {
-    //     state: HashMap<ViewNumber, Arc<ValidatedState>>,
-    // }
-    // // impl default for this MockStateCatchup
-    // impl Default for MockStateCatchup {
-    //     fn default() -> Self {
-    //         Self {
-    //             state: HashMap::new(),
-    //         }
-    //     }
-    // }
-
-    // pub fn mock_node_state() -> NodeState {
-    //     NodeState::new(
-    //         L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-    //         FeeAccount::test_wallet(),
-    //         MockStateCatchup::default(),
-    //     )
-    // }
     pub fn genereate_stake_table_entries(
         num_nodes: u64,
         stake_value: u64,
@@ -462,8 +460,17 @@ pub mod testing {
             )
             .with_genesis(ValidatedState::default());
 
-            init_hotshot(config, node_state, networks, metrics, i as u64).await
+            init_hotshot(
+                config,
+                Some(self.non_staking_nodes_stake_entries.clone()),
+                node_state,
+                networks,
+                metrics,
+                i as u64,
+            )
+            .await
         }
+
         pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
             MnemonicBuilder::<English>::default()
                 .phrase("test test test test test test test test test test test junk")
@@ -537,7 +544,7 @@ mod test {
         let handles = config.init_nodes().await;
 
         // try to listen on builder handle as it is the last handle
-        let mut events = handles[0].get_event_stream();
+        let mut events = handles[5].get_event_stream();
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
