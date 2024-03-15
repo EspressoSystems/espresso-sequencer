@@ -157,6 +157,12 @@
               types_or = [ "markdown" ];
               pass_filenames = true;
             };
+            spell-checking = {
+              enable = true;
+              description = "Spell checking";
+              entry = "typos";
+              pass_filenames = true;
+            };
             nixpkgs-fmt.enable = true;
           };
         };
@@ -187,6 +193,7 @@
             cargo-audit
             cargo-edit
             cargo-sort
+            typos
             just
             fenix.packages.${system}.rust-analyzer
 
@@ -229,6 +236,24 @@
         crossShell { config = "x86_64-unknown-linux-musl"; };
       devShells.armCrossShell =
         crossShell { config = "aarch64-unknown-linux-musl"; };
+      devShells.nightly =
+        let
+          toolchain = pkgs.rust-bin.nightly.latest.minimal.override {
+            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+          };
+        in
+        mkShell {
+          buildInputs = [
+            # Rust dependencies
+            pkg-config
+            openssl
+            curl
+            protobuf # to compile libp2p-autonat
+            toolchain
+          ];
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+        };
+
       devShells.rustShell =
         let
           stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {

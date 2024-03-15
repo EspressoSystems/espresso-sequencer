@@ -1,6 +1,9 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, Transaction, VmId};
+use crate::{
+    bytes::{bytes, Bytes},
+    BlockBuildingSnafu, Error, NamespaceId, Transaction,
+};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
@@ -69,7 +72,7 @@ pub(super) struct NamespaceInfo {
 // TODO remove the generic type param, use local constants instead
 pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
-    pub(super) raw_payload: Vec<u8>,
+    pub(super) raw_payload: Bytes,
 
     // Sequence of bytes representing the namespace table
     pub(super) ns_table: NameSpaceTable<TableWord>,
@@ -106,7 +109,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     pub fn namespace_with_proof(
         &self,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
-        ns_id: VmId,
+        ns_id: NamespaceId,
         vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
         if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
@@ -125,7 +128,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         // fix this when we settle on an error handling pattern
         Some(NamespaceProof::Existence {
             ns_id,
-            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
+            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.into(),
             ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
@@ -167,13 +170,10 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     pub fn from_txs(
         txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as BlockPayload>::Transaction>,
     ) -> Result<Self, Error> {
-        let mut namespaces: HashMap<VmId, NamespaceInfo> = Default::default();
+        let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
-            raw_payload: vec![],
-            ns_table: NameSpaceTable {
-                bytes: vec![],
-                phantom: Default::default(),
-            },
+            raw_payload: bytes![],
+            ns_table: NameSpaceTable::default(),
             tx_table_len_proof: Default::default(),
         };
         for tx in txs.into_iter() {
@@ -185,12 +185,12 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     }
 
     fn update_namespace_with_tx(
-        namespaces: &mut HashMap<VmId, NamespaceInfo>,
+        namespaces: &mut HashMap<NamespaceId, NamespaceInfo>,
         tx: <Payload<TxTableEntryWord> as BlockPayload>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
-        let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
+        let namespace = namespaces.entry(tx.namespace()).or_insert(NamespaceInfo {
             tx_table: Vec::new(),
             tx_bodies: Vec::new(),
             tx_bytes_end: TxTableEntry::zero(),
@@ -212,12 +212,12 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     fn generate_raw_payload(
         &mut self,
-        namespaces: HashMap<VmId, NamespaceInfo>,
+        namespaces: HashMap<NamespaceId, NamespaceInfo>,
     ) -> Result<(), Error> {
         // fill payload and namespace table
-        let mut payload = Vec::new();
+        let mut payload = bytes![];
 
-        self.ns_table = NameSpaceTable::from_vec(Vec::from(
+        self.ns_table = NameSpaceTable::from_bytes(Vec::from(
             TxTableEntry::try_from(namespaces.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
@@ -262,13 +262,13 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
     Existence {
-        ns_payload_flat: Vec<u8>,
-        ns_id: VmId,
+        ns_payload_flat: Bytes,
+        ns_id: NamespaceId,
         ns_proof: LargeRangeProofType,
         vid_common: VidCommon,
     },
     NonExistence {
-        ns_id: VmId,
+        ns_id: NamespaceId,
     },
 }
 
@@ -282,7 +282,7 @@ impl NamespaceProof {
         vid: &VidSchemeType,
         commit: &VidCommitment,
         ns_table: &NameSpaceTable<TxTableEntryWord>,
-    ) -> Option<(Vec<Transaction>, VmId)> {
+    ) -> Option<(Vec<Transaction>, NamespaceId)> {
         match self {
             NamespaceProof::Existence {
                 ns_payload_flat,
@@ -326,7 +326,7 @@ impl NamespaceProof {
 }
 
 // TODO find a home for this function
-pub fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: VmId) -> Vec<Transaction> {
+pub fn parse_ns_payload(ns_payload_flat: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
     let num_txs = TxTable::get_tx_table_len(ns_payload_flat);
     let tx_bodies_offset = num_txs
         .saturating_add(1)
@@ -489,9 +489,8 @@ mod test {
                     ns_payload
                 };
 
-                let ns_id = crate::VmId(n.try_into().unwrap());
                 let already_exists = derived_nss.insert(
-                    ns_id,
+                    (n as u64).into(),
                     NamespaceInfo {
                         payload_flat: ns_payload_flat,
                         tx_table: tx_table_derived,
@@ -541,7 +540,7 @@ mod test {
             for (ns_idx, (ns_id, entry)) in
                 ns_table_iter::<TableWord>(actual_ns_table.get_bytes()).enumerate()
             {
-                // warning! ns_id may not equal VmId(ns_idx) due to HashMap nondeterminism
+                // warning! ns_id may not equal NamespaceId(ns_idx) due to HashMap nondeterminism
 
                 let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
@@ -560,8 +559,7 @@ mod test {
                     .unwrap();
                 assert_eq!(
                     actual_ns_payload_flat, derived_ns.payload_flat,
-                    "namespace {} incorrect payload bytes",
-                    ns_id.0,
+                    "namespace {ns_id} incorrect payload bytes",
                 );
 
                 // test ns proof
@@ -576,8 +574,7 @@ mod test {
                 {
                     assert_eq!(
                         ns_payload_flat, &derived_ns.payload_flat,
-                        "namespace {} incorrect payload bytes returned from namespace_with_proof",
-                        ns_id.0,
+                        "namespace {ns_id} incorrect payload bytes returned from namespace_with_proof",
                     );
                 } else {
                     // TODO test for non-existence
@@ -586,12 +583,13 @@ mod test {
 
                 let (ns_proof_txs, ns_proof_ns_id) = ns_proof
                     .verify(&vid, &disperse_data.commit, &actual_ns_table)
-                    .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id.0));
+                    .unwrap_or_else(|| panic!("namespace {ns_id} proof verification failure"));
                 assert_eq!(ns_proof_ns_id, ns_id);
                 assert_eq!(
                     ns_proof_txs,
                     derived_ns
                         .tx_payloads
+                        .clone()
                         .into_iter()
                         .map(|p| Transaction::new(ns_id, p))
                         .collect::<Vec<Transaction>>()
@@ -605,8 +603,7 @@ mod test {
                 assert_eq!(
                     actual_tx_table_len,
                     derived_ns.tx_table.len(),
-                    "namespace {} tx table length expect {} got {}",
-                    ns_id.0,
+                    "namespace {ns_id} tx table length expect {} got {}",
                     derived_ns.tx_table.len(),
                     actual_tx_table_len
                 );
@@ -621,45 +618,34 @@ mod test {
                     .collect();
                 assert_eq!(
                     actual_tx_table, derived_ns.tx_table,
-                    "namespace {} incorrect tx table for",
-                    ns_id.0
+                    "namespace {ns_id} incorrect tx table for",
                 );
 
                 // testing tx iterator
-                // TODO(746) incorporate this test into the following commented code when it's fixed
                 for tx_idx in 0..derived_ns.tx_table.len() {
                     let next_tx = block_iter.next().unwrap();
                     assert_eq!(ns_idx, next_tx.ns_idx);
                     assert_eq!(tx_idx, next_tx.tx_idx);
+
+                    let idx = TxIndex { ns_idx, tx_idx };
+                    let tx = block.transaction(&actual_ns_table, &idx).unwrap();
+                    let tx_payload = derived_ns.tx_payloads[tx_idx].to_vec();
+                    // test `transaction()`
+                    assert_eq!(ns_id, tx.namespace());
+                    assert_eq!(tx_payload, tx.payload());
+
+                    // TODO(1010) transaction_with_proof for multiple namespaces
+                    // test `transaction_with_proof()`
+                    // let (tx, proof) = block
+                    //     .transaction_with_proof(&actual_ns_table, &idx)
+                    //     .unwrap();
+                    // assert_eq!(tx_payload, tx.payload());
+                    // proof
+                    //     .verify(&tx, idx, &vid, &disperse_data.commit, &disperse_data.common)
+                    //     .unwrap()
+                    //     .unwrap();
                 }
 
-                // tests for individual txs in this namespace
-                // TODO(746) rework this part
-                //
-                // let mut block_iter = block.iter(); // test iterator correctness
-                // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
-                //     assert!(block_iter.next().is_some());
-                //     let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
-                //     tracing::info!("tx index {}", tx_index,);
-                //
-                //     // test `transaction_with_proof()`
-                //     let (tx, proof) = block.transaction_with_proof(&tx_index).unwrap();
-                //     assert_eq!(tx_payload, tx.payload());
-                //     proof
-                //         .verify(
-                //             &tx,
-                //             tx_index,
-                //             &vid,
-                //             &disperse_data.commit,
-                //             &disperse_data.common,
-                //         )
-                //         .unwrap()
-                //         .unwrap();
-                // }
-                // assert!(block_iter.next().is_none());
-
-                // prepare for the next loop iteration
-                // tx_index_offset += actual_tx_table.len();
                 prev_entry = entry;
                 derived_block_payload.extend(derived_ns.payload_flat.clone());
             }
@@ -743,7 +729,7 @@ mod test {
             // TODO don't initialize Payload with empty namespace table
             let block = Payload::from_bytes(
                 test_case.payload.iter().cloned(),
-                &NameSpaceTable::from_vec(Vec::new()),
+                &NameSpaceTable::default(),
             );
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
@@ -789,7 +775,7 @@ mod test {
         // TODO don't initialize Payload with empty namespace table
         let block = Payload::from_bytes(
             test_case.payload.iter().cloned(),
-            &NameSpaceTable::from_vec(Vec::new()),
+            &NameSpaceTable::default(),
         );
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
@@ -801,7 +787,7 @@ mod test {
         let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
         // make a fake proof for a nonexistent tx in the small block
-        let tx = Transaction::new(crate::VmId(0), Vec::new());
+        let tx = Transaction::new(Default::default(), Vec::new());
         let proof = queryable::gen_tx_proof_for_testing(
             block.get_tx_table_len(),
             block.get_tx_table_len_proof(&vid).unwrap().clone(),
@@ -854,7 +840,7 @@ mod test {
 
         /// Like `from_entries` except the tx bodies byte length is `body_len`.
         ///
-        /// Panics if `body_len` would not actually decrese the block size.
+        /// Panics if `body_len` would not actually decrease the block size.
         fn with_trimmed_body<R: RngCore>(entries: &[usize], body_len: usize, rng: &mut R) -> Self {
             assert!(
                 body_len < tx_bodies_byte_len(entries),
@@ -961,7 +947,7 @@ mod test {
         use crate::block::entry::TxTableEntry;
         use crate::block::payload::TableWordTraits;
         use crate::block::tables::{test::TxTableTest, NameSpaceTable, Table};
-        use crate::VmId;
+        use crate::NamespaceId;
         use rand::RngCore;
 
         pub fn tx_table_byte_len<TableWord: TableWordTraits>(entries: &[usize]) -> usize {
@@ -1019,12 +1005,12 @@ mod test {
 
         pub fn ns_table_iter<TableWord: TableWordTraits>(
             ns_table_bytes: &[u8],
-        ) -> impl Iterator<Item = (VmId, TxTableEntry)> + '_ {
-            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table lengh, skip that
+        ) -> impl Iterator<Item = (NamespaceId, TxTableEntry)> + '_ {
+            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table length, skip that
                 .chunks(2 * TxTableEntry::byte_len())
                 .map(|bytes| {
                     // read (namespace id, entry) from the namespace table
-                    let ns_id = VmId::try_from(
+                    let ns_id = NamespaceId::try_from(
                         TxTableEntry::from_bytes(&bytes[..TxTableEntry::byte_len()]).unwrap(),
                     )
                     .unwrap();

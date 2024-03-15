@@ -11,7 +11,7 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use hotshot_query_service::{availability::BlockQueryData, Error};
+use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
@@ -237,7 +237,7 @@ async fn submit_transactions(
         let hash = tx.commit();
         tracing::info!(
             "submitting transaction {hash} for namespace {} of size {}",
-            tx.vm(),
+            tx.namespace(),
             tx.payload().len()
         );
         if let Err(err) = client
@@ -271,13 +271,13 @@ async fn server(port: u16) {
 }
 
 fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
-    let vm = rng.gen_range(opt.min_namespace..=opt.max_namespace);
+    let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
     let mut payload = vec![0; len];
     rng.fill_bytes(&mut payload);
 
-    Transaction::new(vm.into(), payload)
+    Transaction::new(namespace.into(), payload)
 }
 
 fn random_seed() -> u64 {

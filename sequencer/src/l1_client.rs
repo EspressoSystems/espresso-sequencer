@@ -16,12 +16,13 @@
 //!   snapshot, which will cause the block builder to propose with a slightly old snapshot, but they
 //!   will still be able to propose on time.
 
+use crate::state::FeeInfo;
 use async_std::task::sleep;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
 use futures::join;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, time::Duration};
+use std::{cmp::Ordering, sync::Arc, time::Duration};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -90,14 +91,17 @@ pub struct L1Client {
     retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
     provider: Provider<Http>,
+    /// `Address` of fee contract.
+    _address: Address,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url) -> Self {
+    pub fn new(url: Url, contract_address: Address) -> Self {
         Self {
             retry_delay: Duration::from_secs(1),
             provider: Provider::new(Http::new(url)),
+            _address: contract_address,
         }
     }
     /// Get a snapshot from the l1.
@@ -128,6 +132,44 @@ impl L1Client {
                 }
             }
         }
+    }
+    /// Get fee info for each `Deposit` occurring between `prev`
+    /// and `new`. Returns `Vec<FeeInfo>`
+    pub async fn get_finalized_deposits(
+        &self,
+        prev_finalized: Option<u64>,
+        new_finalized: u64,
+    ) -> Vec<FeeInfo> {
+        // No new blocks have been finalized, therefore there are no
+        // new deposits.
+        if prev_finalized == Some(new_finalized) {
+            return vec![];
+        }
+
+        // `prev` should have already been processed unless we
+        // haven't processed *any* blocks yet.
+        let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
+
+        // query for deposit events, loop until successful.
+        let events = loop {
+            match contract_bindings::fee_contract::FeeContract::new(
+                self._address,
+                Arc::new(&self.provider),
+            )
+            .deposit_filter()
+            .from_block(prev)
+            .to_block(new_finalized)
+            .query()
+            .await
+            {
+                Ok(events) => break events,
+                Err(e) => {
+                    tracing::warn!("Fee Event Error: {}", e);
+                    sleep(self.retry_delay).await;
+                }
+            }
+        };
+        events.into_iter().map(Into::into).collect()
     }
 }
 
@@ -163,16 +205,18 @@ async fn get_finalized_block<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
 
+    use std::ops::Add;
+
     use super::*;
     use crate::NodeState;
-    use ethers::utils::Anvil;
+    use ethers::utils::{parse_ether, Anvil};
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
         let provider = &l1_client.provider;
 
         let version = provider.client_version().await.unwrap();
@@ -180,10 +224,10 @@ mod test {
 
         // Test that nothing funky is happening to the provider when
         // passed along in state.
-        let state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap()),
-            ..Default::default()
-        };
+        let state = NodeState::mock().with_l1(L1Client::new(
+            anvil.endpoint().parse().unwrap(),
+            Address::default(),
+        ));
         let version = state.l1_client().provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 
@@ -201,6 +245,91 @@ mod test {
         // If we drop `anvil` the same request will fail.
         drop(anvil);
         provider.client_version().await.unwrap_err();
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_get_finalized_deposits() -> anyhow::Result<()> {
+        // how many deposits will we make
+        let deposits = 5;
+
+        let anvil = Anvil::new().spawn();
+        let wallet_address = anvil.addresses().first().cloned().unwrap();
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let provider =
+            Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
+        let client = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        let client = Arc::new(client);
+
+        // Initialize a contract with some deposits
+        let contract = contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client), ())
+            .unwrap()
+            .send()
+            .await?;
+
+        // Anvil will produce a block for every transaction.
+        let head = l1_client.get_block_number().await;
+        assert_eq!(1, head);
+
+        // make some deposits.
+        for n in 1..=deposits {
+            // Varied amounts are less boring.
+            let amount = n as f32 / 10.0;
+            let receipt = contract
+                .deposit(wallet_address)
+                .value(parse_ether(amount).unwrap())
+                .send()
+                .await?
+                .await?;
+
+            // Successful transactions have `status` of `1`.
+            assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
+        }
+
+        let head = l1_client.get_block_number().await;
+        // Anvil will produce a block for every transaction.
+        assert_eq!(deposits + 1, head);
+
+        // Use non-signing `L1Client` to retrieve data.
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), contract.address());
+        // Set prev deposits to `None` so `Filter` will start at block
+        // 0. The test would also succeed if we pass `0` (b/c first
+        // block did not deposit).
+        let pending = l1_client.get_finalized_deposits(None, deposits + 1).await;
+
+        assert_eq!(deposits as usize, pending.len());
+        assert_eq!(&wallet_address, &pending[0].account().into());
+        assert_eq!(
+            U256::from(1500000000000000000u64),
+            pending.iter().fold(U256::from(0), |total, info| total
+                .add(U256::from(info.amount())))
+        );
+
+        // check a few more cases
+        let pending = l1_client
+            .get_finalized_deposits(Some(0), deposits + 1)
+            .await;
+        assert_eq!(deposits as usize, pending.len());
+
+        let pending = l1_client.get_finalized_deposits(Some(0), 0).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client.get_finalized_deposits(Some(0), 1).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client.get_finalized_deposits(Some(1), 1).await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client.get_finalized_deposits(Some(1), 2).await;
+        assert_eq!(1, pending.len());
+
+        // what happens if `new_finalized` is `0`?
+        let pending = l1_client.get_finalized_deposits(Some(1), 0).await;
+        assert_eq!(0, pending.len());
 
         Ok(())
     }

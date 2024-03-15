@@ -16,10 +16,12 @@ use entry::TxTableEntryWord;
 use payload::Payload;
 use tables::NameSpaceTable;
 
+pub type NsTable = NameSpaceTable<TxTableEntryWord>;
+
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = NameSpaceTable<TxTableEntryWord>;
+    type Metadata = NsTable;
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
     // https://github.com/EspressoSystems/HotShot/issues/2115
@@ -28,7 +30,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// Returns (Self, metadata).
     ///
     /// `metadata` is a bytes representation of the namespace table.
-    /// Why bytes? To make it easy to move metdata into payload in the future.
+    /// Why bytes? To make it easy to move metadata into payload in the future.
     ///
     /// Namespace table defined as follows for j>0:
     /// word[0]:    [number of entries in namespace table]
@@ -80,6 +82,10 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         unimplemented!("TODO builder_commitment");
     }
+
+    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
+        unimplemented!("TODO get_transactions");
+    }
 }
 
 #[cfg(test)]
@@ -122,6 +128,7 @@ mod reference {
         pub static ref NS_TABLE: Value = load_reference!("ns_table");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
+        pub static ref TRANSACTION: Value = load_reference!("transaction");
     }
 
     fn reference_test<T: DeserializeOwned, C: Committable>(
@@ -170,6 +177,15 @@ mod reference {
             HEADER.clone(),
             "BLOCK~CltsD5AWVMRYoPCVoir_T8qU3qJTIxi5qBjyWu9vr-gC",
             |header| header.commit(),
+        );
+    }
+
+    #[test]
+    fn test_reference_transaction() {
+        reference_test::<Transaction, _>(
+            TRANSACTION.clone(),
+            "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
+            |tx| tx.commit(),
         );
     }
 }

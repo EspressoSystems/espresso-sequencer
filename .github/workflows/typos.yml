@@ -1,4 +1,4 @@
-name: Lint
+name: Typos
 
 on:
   push:
@@ -16,22 +16,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
-  RUST_LOG: info,libp2p=off
-
 jobs:
-  lint:
+  typos:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         name: Checkout Repository
 
-      - uses: Swatinem/rust-cache@v2
-        name: Enable Rust Caching
-
-      - name: Format Check
-        run: cargo fmt -- --check
-
-      - name: Check
-        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - name: typos-action
+        uses: crate-ci/typos@v1.19.0

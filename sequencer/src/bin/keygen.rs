@@ -6,9 +6,8 @@ use anyhow::{self, bail, Context};
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use hotshot::types::SignatureKey;
-use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
-use sequencer::SchnorrPrivKey;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {
@@ -82,8 +81,12 @@ fn main() {
                 println!("PrivateKey: {} PublicKey: {}\n", priv_key, pubkey);
             }
             Scheme::Schnorr => {
-                let priv_key = SchnorrPrivKey::generate_from_seed_indexed(seed, index as u64);
-                println!("PrivateKey: {priv_key} PublicKey: {}\n", priv_key.pub_key(),);
+                let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index as u64);
+                println!(
+                    "PrivateKey: {} PublicKey: {}\n",
+                    key_pair.sign_key_ref(),
+                    key_pair.ver_key()
+                );
             }
         }
     }
