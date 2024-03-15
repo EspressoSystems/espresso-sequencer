@@ -70,7 +70,8 @@ impl<N: network::Type> SequencerContext<N> {
         let initializer = persistence.load_consensus_state(instance_state).await?;
 
         let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            config.total_nodes.get() as u64,
+            config.num_nodes_with_stake.get() as u64,
+            0,
         );
         let membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),

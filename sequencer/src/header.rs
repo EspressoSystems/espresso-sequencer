@@ -323,7 +323,7 @@ impl BlockHeader<SeqTypes> for Header {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
-        } = ValidatedState::genesis(instance_state);
+        } = ValidatedState::genesis(instance_state).0;
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
@@ -409,7 +409,7 @@ mod test_headers {
     impl Default for GenesisForTest {
         fn default() -> Self {
             let instance_state = NodeState::mock();
-            let validated_state = ValidatedState::genesis(&instance_state);
+            let validated_state = ValidatedState::genesis(&instance_state).0;
             let leaf = Leaf::genesis(&instance_state);
             let header = leaf.get_block_header().clone();
             let ns_table = leaf.get_block_payload().unwrap().get_ns_table().clone();
