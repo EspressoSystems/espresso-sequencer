@@ -16,7 +16,6 @@ use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
     },
-    merklized_state::UpdateStateData,
     status::UpdateStatusData,
     Leaf, Payload,
 };
@@ -43,7 +42,7 @@ use std::{error::Error, fmt::Debug, iter::once};
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>:
-    UpdateAvailabilityData<Types> + UpdateStatusData + UpdateStateData
+    UpdateAvailabilityData<Types> + UpdateStatusData
 {
     /// Update query state based on a new consensus event.
     ///
@@ -65,9 +64,9 @@ pub trait UpdateDataSource<Types: NodeType>:
 #[async_trait]
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
-    T: UpdateAvailabilityData<Types> + UpdateStatusData + UpdateStateData + Send,
+    T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
     Payload<Types>: QueryablePayload,
-    <Types as NodeType>::ValidatedState: UpdateStateStorage<Types>,
+    <Types as NodeType>::ValidatedState: UpdateStateStorage<Types, T>,
 {
     async fn update(
         &mut self,
@@ -78,11 +77,7 @@ where
             let qcs = once((**qc).clone())
                 // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
                 // `leaf.justify_qc`.
-                .chain(
-                    leaf_chain
-                        .iter()
-                        .map(|leaf_info| leaf_info.leaf.get_justify_qc()),
-                )
+                .chain(leaf_chain.iter().map(|leaf| leaf.leaf.get_justify_qc()))
                 // Put the QCs in chronological order.
                 .rev()
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
@@ -101,8 +96,6 @@ where
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
-                let leaf = leaf_info.leaf.clone();
-                let vid = leaf_info.vid.clone();
                 let leaf_data =
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
                 self.insert_leaf(leaf_data.clone()).await?;

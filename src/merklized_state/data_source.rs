@@ -15,71 +15,54 @@
 //! This module facilitates storing the state of a Merkle Tree at a specific point in time
 //! and provides methods for querying and reconstructing the snapshot.
 //!
-use ark_serialize::CanonicalDeserialize;
-use derive_more::{Display, From};
 
 use async_trait::async_trait;
-use commit::Commitment;
 use derivative::Derivative;
+use derive_more::Display;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
-use jf_primitives::{
-    circuit::merkle_tree::MembershipProof,
-    merkle_tree::{
-        prelude::{MerkleNode, MerklePath},
-        Element, Index, MerkleTreeScheme, NodeValue, ToTraversalPath,
-    },
-};
+use jf_primitives::merkle_tree::{prelude::MerklePath, Index, MerkleTreeScheme};
+use serde::Serialize;
+use std::fmt::Debug;
 
-use serde::{de::DeserializeOwned, Serialize};
-use serde_json::Value;
 use typenum::Unsigned;
 
 use std::{cmp::Ordering, sync::Arc};
 
+use crate::QueryResult;
+
 // This trait defines methods that a data source should implement
 // It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
 #[async_trait]
-pub trait MerklizedStateDataSource<Types>
+pub trait MerklizedStateDataSource<Types, State>
 where
     Types: NodeType,
+    State: MerklizedState<Types>,
 {
-    type Error: std::error::Error + std::fmt::Debug + Send + Sync + 'static;
-    async fn get_path<
-        E: Element + Send + DeserializeOwned,
-        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-        A: Unsigned,
-        T: NodeValue + Send + CanonicalDeserialize,
-    >(
+    async fn get_path(
         &self,
         _state_type: &'static str,
         _tree_height: usize,
         _header_state_commitment_field: &'static str,
-        _snapshot: Snapshot<Types>,
-        _key: Value,
-    ) -> Result<MerklePath<E, I, T>, Self::Error> {
-        Ok(vec![MerkleNode::Empty])
-    }
+        _snapshot: Snapshot<State>,
+        _key: String,
+    ) -> QueryResult<MerklePath<State::Element, State::Index, State::NodeValue>>;
 }
 
 // This trait defines methods for updating the storage with the merkle tree state.
 #[async_trait]
-pub trait UpdateStateData: Send + Sync {
-    type Error: std::error::Error + std::fmt::Debug + Send + Sync + 'static;
-    async fn insert_merkle_nodes<
-        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
-        E: Element + Send + Sync + Serialize,
-        I: Index + Send + Sync + Serialize,
-        T: NodeValue + Send + Sync,
-    >(
+pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types>>: Send + Sync
+where
+    State::Element: Serialize,
+    State::Index: Serialize,
+{
+    async fn insert_merkle_nodes(
         &mut self,
         _name: &'static str,
-        _proof: Proof,
-        _path: Vec<usize>,
+        _path: MerklePath<State::Element, State::Index, State::NodeValue>,
+        _traversal_path: Vec<usize>,
         _block_number: u64,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
+    ) -> QueryResult<()>;
 }
 
 // This trait should be implemented by types that represent validated states.
@@ -89,43 +72,34 @@ pub trait UpdateStateData: Send + Sync {
 // Therefore, the `insert_merkle_nodes` method of `UpdateStateData` should be called
 // for all state types within the validated state.
 #[async_trait]
-pub trait UpdateStateStorage<Types: NodeType> {
+pub trait UpdateStateStorage<Types: NodeType, D> {
     async fn update_storage(
         &self,
-        storage: &mut impl UpdateStateData,
+        storage: &mut D,
         leaf: &Leaf<Types>,
         delta: Arc<<<Types as NodeType>::ValidatedState as ValidatedState<Types>>::Delta>,
     ) -> anyhow::Result<()>;
 }
 
-type MerkleCommitment<Types> = Commitment<Leaf<Types>>;
-
-#[derive(Derivative, From, Display)]
+type MerkleCommitment<T> = <T as MerkleTreeScheme>::Commitment;
+#[derive(Derivative, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
 #[derivative(
-    Copy(bound = ""),
-    Debug(bound = ""),
+    Debug(bound = "T::Commitment: Debug"),
     PartialEq(bound = ""),
     Eq(bound = ""),
     Ord(bound = ""),
     Hash(bound = "")
 )]
-
 // Snapshot can be queried by block height (index) or merkle tree commitment
-pub enum Snapshot<Types: NodeType> {
-    #[display(fmt = "{_0}")]
-    Commit(MerkleCommitment<Types>),
+pub enum Snapshot<T: MerkleTreeScheme> {
+    #[display(bound = "T::Commitment: Display ", fmt = "{_0}")]
+    Commit(MerkleCommitment<T>),
     #[display(fmt = "{_0}")]
     Index(u64),
 }
 
-impl<Types: NodeType> Clone for Snapshot<Types> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<Types: NodeType> PartialOrd for Snapshot<Types> {
+impl<T: MerkleTreeScheme> PartialOrd for Snapshot<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }

@@ -17,8 +17,7 @@ use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
-use crate::merklized_state::{MerklizedStateDataSource, UpdateStateData};
-use crate::QueryError;
+
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -36,8 +35,6 @@ use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use jf_primitives::circuit::merkle_tree::MembershipProof;
-use jf_primitives::merkle_tree::{Element, Index, NodeValue};
 
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
@@ -400,30 +397,6 @@ where
 }
 
 #[async_trait]
-impl<Types> UpdateStateData for FileSystemStorage<Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
-{
-    type Error = QueryError;
-    async fn insert_merkle_nodes<
-        Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-        E: Element + Send + Sync + Serialize,
-        I: Index + Send + Sync + Serialize,
-        T: NodeValue + Send + Sync,
-    >(
-        &mut self,
-        _name: &'static str,
-        _proof: Proof,
-        _traversal_path: Vec<usize>,
-        _bh: u64,
-    ) -> QueryResult<()> {
-        Ok(())
-    }
-}
-
-#[async_trait]
 impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
@@ -599,12 +572,4 @@ where
 
         Ok(res)
     }
-}
-
-#[async_trait]
-impl<Types: NodeType> MerklizedStateDataSource<Types> for FileSystemStorage<Types>
-where
-    Payload<Types>: QueryablePayload,
-{
-    type Error = Infallible;
 }

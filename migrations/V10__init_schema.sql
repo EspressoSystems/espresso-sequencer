@@ -14,8 +14,6 @@ CREATE TABLE header
     data JSONB NOT NULL
 );
 
-CREATE INDEX ON header USING hash ((data->>'fee_merkle_tree_root'));
-CREATE INDEX ON header USING hash ((data->>'blocks_merkle_tree_root'));
 CREATE INDEX header_timestamp_idx ON header (timestamp);
 
 CREATE TABLE payload

@@ -85,7 +85,7 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
-    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -94,7 +94,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
-use ark_serialize::CanonicalDeserialize;
+
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::sleep,
@@ -107,12 +107,7 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::circuit::merkle_tree::MembershipProof;
-use jf_primitives::merkle_tree::{prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use serde_json::Value;
-use typenum::Unsigned;
+use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
 
 use std::{
     cmp::min,
@@ -551,32 +546,28 @@ where
 }
 
 #[async_trait]
-impl<Types, S, P> MerklizedStateDataSource<Types> for FetchingDataSource<Types, S, P>
+impl<Types, S, State, P> MerklizedStateDataSource<Types, State> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    S: MerklizedStateDataSource<Types> + Send + Sync + 'static,
+    S: MerklizedStateDataSource<Types, State> + Send + Sync + 'static,
     P: AvailabilityProvider<Types>,
+    State: MerklizedState<Types> + 'static,
+    <State as MerkleTreeScheme>::Commitment: Send,
 {
-    type Error = S::Error;
-
-    async fn get_path<
-        E: Element + Send + DeserializeOwned,
-        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-        A: Unsigned,
-        T: NodeValue + Send + CanonicalDeserialize,
-    >(
+    async fn get_path(
         &self,
         state_type: &'static str,
         tree_height: usize,
         header_state_commitment_field: &'static str,
-        snapshot: Snapshot<Types>,
-        key: serde_json::Value,
-    ) -> Result<MerklePath<E, I, T>, Self::Error> {
+        snapshot: Snapshot<State>,
+        key: String,
+    ) -> QueryResult<MerklePath<State::Element, State::Index, State::NodeValue>> {
         self.fetcher
             .storage
             .write()
             .await
-            .get_path::<E, I, A, T>(
+            .storage
+            .get_path(
                 state_type,
                 tree_height,
                 header_state_commitment_field,
@@ -615,37 +606,6 @@ where
             .write()
             .await
             .insert_vid(common, share)
-            .await
-    }
-}
-
-#[async_trait]
-impl<Types, S, P> UpdateStateData for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload,
-    S: UpdateStateData + Send + Sync,
-    P: Send + Sync,
-{
-    type Error = S::Error;
-
-    async fn insert_merkle_nodes<
-        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
-        E: Element + Send + Sync + Serialize,
-        I: Index + Send + Sync + Serialize,
-        T: NodeValue + Send + Sync,
-    >(
-        &mut self,
-        name: &'static str,
-        proof: Proof,
-        path: Vec<usize>,
-        block_number: u64,
-    ) -> Result<(), Self::Error> {
-        self.fetcher
-            .storage
-            .write()
-            .await
-            .insert_merkle_nodes(name, proof, path, block_number)
             .await
     }
 }
@@ -767,59 +727,6 @@ where
             self.height = common.height() + 1;
         }
         self.storage.insert_vid(common, share).await
-    }
-}
-
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
-    S: MerklizedStateDataSource<Types> + Send + Sync,
-{
-    async fn get_path<
-        E: Element + Send + DeserializeOwned,
-        I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-        A: Unsigned,
-        T: NodeValue + Send + CanonicalDeserialize,
-    >(
-        &self,
-        state_type: &'static str,
-        tree_height: usize,
-        header_state_commitment_field: &'static str,
-        snapshot: Snapshot<Types>,
-        key: Value,
-    ) -> Result<MerklePath<E, I, T>, S::Error> {
-        self.storage
-            .get_path::<E, I, A, T>(
-                state_type,
-                tree_height,
-                header_state_commitment_field,
-                snapshot,
-                key,
-            )
-            .await
-    }
-}
-
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
-    S: UpdateStateData + Send + Sync,
-{
-    async fn insert_merkle_nodes<
-        Proof: MembershipProof<E, I, T> + Send + Sync + std::fmt::Debug + 'static,
-        E: Element + Send + Sync + Serialize,
-        I: Index + Send + Sync + Serialize,
-        T: NodeValue + Send + Sync,
-    >(
-        &mut self,
-        name: &'static str,
-        proof: Proof,
-        traversal_path: Vec<usize>,
-        block_number: u64,
-    ) -> Result<(), S::Error> {
-        self.storage
-            .insert_merkle_nodes(name, proof, traversal_path, block_number)
-            .await
     }
 }
 

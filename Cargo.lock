@@ -3087,6 +3087,7 @@ dependencies = [
  "spin_sleep",
  "surf",
  "surf-disco",
+ "tagged-base64",
  "tempfile",
  "tide-disco",
  "time 0.3.34",
@@ -6991,7 +6992,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64"
 version = "0.3.4"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
@@ -7006,7 +7007,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64-macros"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "quote",
  "syn 1.0.109",

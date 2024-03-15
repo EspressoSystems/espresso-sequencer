@@ -198,7 +198,6 @@ pub mod testing {
             storage::sql::testing::TmpDb, FetchingDataSource, SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
-        merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
         metrics::PrometheusMetrics,
         node::NodeDataSource,
         status::StatusDataSource,
@@ -208,19 +207,11 @@ pub mod testing {
         },
         Error,
     };
-    use ark_serialize::CanonicalDeserialize;
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
-    use jf_primitives::circuit::merkle_tree::MembershipProof;
-    use jf_primitives::merkle_tree::{
-        prelude::MerklePath, Element, Index, NodeValue, ToTraversalPath,
-    };
     use portpicker::pick_unused_port;
-    use serde::de::DeserializeOwned;
-    use serde_json::Value;
     use std::{fmt::Display, time::Duration};
     use tide_disco::App;
-    use typenum::Unsigned;
 
     /// Either Postgres or no storage.
     ///
@@ -557,58 +548,6 @@ pub mod testing {
                 Self::Sql(data_source) => data_source.metrics(),
                 Self::NoStorage(data_source) => data_source.metrics(),
             }
-        }
-    }
-
-    #[async_trait]
-    impl MerklizedStateDataSource<MockTypes> for DataSource {
-        type Error = QueryError;
-
-        async fn get_path<
-            E: Element + Send + DeserializeOwned,
-            I: Index + Send + ToTraversalPath<A> + DeserializeOwned,
-            A: Unsigned,
-            T: NodeValue + Send + CanonicalDeserialize,
-        >(
-            &self,
-            state_type: &'static str,
-            tree_height: usize,
-            header_state_commitment_field: &'static str,
-            snapshot: Snapshot<MockTypes>,
-            key: Value,
-        ) -> QueryResult<MerklePath<E, I, T>> {
-            match self {
-                Self::Sql(ds) => {
-                    ds.get_path::<E, I, A, T>(
-                        state_type,
-                        tree_height,
-                        header_state_commitment_field,
-                        snapshot,
-                        key,
-                    )
-                    .await
-                }
-                Self::NoStorage(_) => Err(QueryError::Missing),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl UpdateStateData for DataSource {
-        type Error = QueryError;
-        async fn insert_merkle_nodes<
-            Proof: MembershipProof<E, I, T> + Send + Sync + 'static,
-            E: Element + Send + Sync + serde::Serialize,
-            I: Index + Send + Sync + serde::Serialize,
-            T: NodeValue + Send + Sync,
-        >(
-            &mut self,
-            _name: &'static str,
-            _proof: Proof,
-            _traversal_path: Vec<usize>,
-            _bh: u64,
-        ) -> QueryResult<()> {
-            Ok(())
         }
     }
 

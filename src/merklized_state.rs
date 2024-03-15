@@ -25,6 +25,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::merkle_tree::{Index, MerkleTreeScheme, ToTraversalPath};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
+use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
 use crate::api::load_api;
@@ -79,7 +80,7 @@ pub fn define_api<State, Types: NodeType, M: MerklizedState<Types>>(
 ) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types>,
+    <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M>,
     Types: NodeType,
     <M as MerkleTreeScheme>::Element:
         Send + Sync + DeserializeOwned + CanonicalDeserialize + CanonicalSerialize,
@@ -90,6 +91,8 @@ where
         + CanonicalDeserialize
         + CanonicalSerialize,
     <M as MerkleTreeScheme>::NodeValue: Send + Sync,
+    M::Commitment: for<'a> TryFrom<&'a TaggedBase64> + Display,
+    for<'a> <M::Commitment as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -109,22 +112,20 @@ where
             async move {
                 // Determine the snapshot type based on request parameters, either index or commit
                 let snapshot = if let Some(height) = req.opt_integer_param("height")? {
-                    Snapshot::<Types>::Index(height)
+                    Snapshot::Index(height)
                 } else {
-                    Snapshot::<Types>::Commit(req.blob_param("commit")?)
+                    Snapshot::Commit(req.blob_param("commit")?)
                 };
 
-                let key = req.integer_param::<_, usize>("key")?;
-                tracing::warn!("req {:?}", key);
-                let key = serde_json::to_value(key).map_err(internal)?;
+                let key = req.string_param("key")?;
 
                 state
-                    .get_path::<M::Element, M::Index, M::Arity, M::NodeValue>(
+                    .get_path(
                         state_type,
                         tree_height,
                         header_state_commitment_field,
                         snapshot,
-                        key,
+                        key.to_string(),
                     )
                     .await
                     .map_err(internal)
@@ -133,107 +134,4 @@ where
         })?;
 
     Ok(api)
-}
-
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
-#[cfg(all(test, not(target_os = "windows")))]
-mod test {
-
-    use std::time::Duration;
-
-    use async_std::{
-        stream::StreamExt,
-        task::{sleep, spawn},
-    };
-    use hotshot::types::EventType;
-    use jf_primitives::merkle_tree::{
-        prelude::{MerklePath, Sha3Node},
-        MerkleTreeScheme,
-    };
-    use portpicker::pick_unused_port;
-    use surf_disco::Client;
-    use tide_disco::App;
-
-    use crate::testing::mocks::MockValidatedState;
-    use crate::{
-        merklized_state::define_api,
-        testing::{
-            consensus::{MockNetwork, MockSqlDataSource},
-            setup_test,
-        },
-        Error,
-    };
-
-    #[async_std::test]
-    async fn test_merklized_state_api() {
-        setup_test();
-
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
-        let mut events = network.handle().get_event_stream();
-
-        network.start().await;
-
-        // Start the web server.
-        let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        let validated_state = MockValidatedState::default();
-
-        // Register the api with a test merkle tree
-        app.register_module(
-            "state/test",
-            define_api(&Default::default(), validated_state.tree).unwrap(),
-        )
-        .unwrap();
-
-        spawn(app.serve(format!("0.0.0.0:{}", port)));
-
-        // Register client for querying the api
-        let client = Client::<Error>::new(
-            format!("http://localhost:{}/state/test", port)
-                .parse()
-                .unwrap(),
-        );
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
-        'a: while let Some(event) = events.next().await {
-            if let EventType::Decide { leaf_chain, .. } = event.event {
-                for leaf in leaf_chain.iter() {
-                    let state = leaf.state.clone();
-                    let delta = leaf.delta.clone();
-                    let height = leaf.leaf.get_height();
-                    // wait 2 secs so that changes are reflected in the db
-                    sleep(Duration::from_secs(2)).await;
-                    if let Some(delta) = delta {
-                        for key in delta.0.iter() {
-                            // Retrieve the proof from the state tree for the current key
-                            let (_, proof_from_state) = state.tree.lookup(key).expect_ok().unwrap();
-
-                            // Fetch the Merkle path from api for comparison
-                            let merkle_path_from_storage = client
-                                .get::<MerklePath<usize, usize, Sha3Node>>(&format!(
-                                    "{:?}/{key}",
-                                    height
-                                ))
-                                .send()
-                                .await
-                                .unwrap();
-
-                            // Compare the Merkle paths retrieved from storage and state
-                            assert_eq!(
-                                merkle_path_from_storage, proof_from_state.proof,
-                                "merkle paths don't match"
-                            );
-
-                            // Terminate the loop if the block height exceeds 10
-                            if height >= 10 {
-                                break 'a;
-                            }
-                        }
-                    }
-                }
-            };
-        }
-
-        network.shut_down().await;
-    }
 }

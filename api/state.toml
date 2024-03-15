@@ -22,7 +22,7 @@ The state API provides an interface for serving queries against arbitrarily old 
 [route.get_path]
 PATH = ["/:height/:key", "commit/:commit/:key"]
 ":height" = "Integer"
-":key" = "Integer"
+":key" = "Literal"
 ":commit" = "TaggedBase64"
 DOC = """
 The endpoint offers two methods to query: by block height or by the tree's commitment.
@@ -30,15 +30,15 @@ The endpoint offers two methods to query: by block height or by the tree's commi
 GET /:height/:key 
 Retrieves the Merkle Path for the membership proof of a leaf based on the block height and entry index.
 Parameters:
-:height (Integer): The block height of the snapshot.
-:key (Integer): The index of the entry in the Merkle tree.
+:height : The block height of the snapshot.
+:key : The index of the entry in the Merkle tree.
 
 
 GET /commit/:commit/:key
 Retrieves the Merkle Path for the membership proof of a leaf based on the Merkle tree commitment.
 Parameters:
-:commit (TaggedBase64): The merkle tree commitment
-:key (Integer): The index of the entry in the Merkle tree.
+:commit : The merkle tree commitment
+:key : The index of the entry in the Merkle tree.
 """
 
  

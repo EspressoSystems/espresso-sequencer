@@ -21,22 +21,23 @@ use hotshot::traits::{
     implementations::{MemoryNetwork, MemoryStorage},
     NodeImplementation, ValidatedState,
 };
+use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestInstanceState,
 };
-use hotshot_types::data::{BlockError, Leaf};
-use hotshot_types::traits::states::StateDelta;
+use hotshot_types::data::Leaf;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     message::Message,
     signature_key::BLSPubKey,
     traits::node_implementation::NodeType,
 };
-use jf_primitives::merkle_tree::prelude::{Sha3Digest, Sha3Node};
-use jf_primitives::merkle_tree::universal_merkle_tree::UniversalMerkleTree;
-use jf_primitives::merkle_tree::ToTraversalPath;
-use jf_primitives::merkle_tree::{MerkleTreeScheme, UniversalMerkleTreeScheme};
+
+use jf_primitives::merkle_tree::{
+    prelude::{Sha3Digest, Sha3Node},
+    universal_merkle_tree::UniversalMerkleTree,
+};
 use serde::{Deserialize, Serialize};
 use std::{ops::Range, sync::Arc};
 
@@ -95,28 +96,40 @@ impl NodeType for MockTypes {
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type InstanceState = TestInstanceState;
-    type ValidatedState = MockValidatedState;
+    type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
 }
 
-pub type TestMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum::U8, Sha3Node>;
-
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct MockValidatedState {
-    pub tree: TestMerkleTree,
-    pub block_height: u64,
-}
-
-impl Default for MockValidatedState {
-    fn default() -> Self {
-        Self {
-            tree: TestMerkleTree::new(20),
-            block_height: 0,
-        }
+#[async_trait]
+impl<D> UpdateStateStorage<MockTypes, D> for TestValidatedState {
+    async fn update_storage(
+        &self,
+        _storage: &mut D,
+        _leaf: &Leaf<MockTypes>,
+        _delta: Arc<<<MockTypes as NodeType>::ValidatedState as ValidatedState<MockTypes>>::Delta>,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
-impl MerklizedState<MockTypes> for TestMerkleTree {
+pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
+pub type MockQuorumProposal = QuorumProposal<MockTypes>;
+pub type MockNetwork = MemoryNetwork<Message<MockTypes>, BLSPubKey>;
+
+#[derive(
+    Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
+pub struct MockNodeImpl;
+
+impl NodeImplementation<MockTypes> for MockNodeImpl {
+    type Storage = MemoryStorage<MockTypes>;
+    type QuorumNetwork = MockNetwork;
+    type CommitteeNetwork = MockNetwork;
+}
+
+pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum::U8, Sha3Node>;
+
+impl MerklizedState<MockTypes> for MockMerkleTree {
     type Arity = typenum::U8;
     type Key = usize;
 
@@ -131,97 +144,4 @@ impl MerklizedState<MockTypes> for TestMerkleTree {
     fn header_state_commitment_field(&self) -> &'static str {
         "test_merkle_tree_root"
     }
-}
-
-#[async_trait]
-impl UpdateStateStorage<MockTypes> for MockValidatedState {
-    async fn update_storage(
-        &self,
-        storage: &mut impl crate::merklized_state::UpdateStateData,
-        leaf: &Leaf<MockTypes>,
-        delta: Arc<<<MockTypes as NodeType>::ValidatedState as ValidatedState<MockTypes>>::Delta>,
-    ) -> anyhow::Result<()> {
-        let tree = &self.tree;
-        let block_number = &leaf.block_header.block_number;
-
-        for key in delta.0.iter() {
-            let (_, proof) = self.tree.lookup(key).expect_ok().unwrap();
-
-            let traversal_path =
-                <usize as ToTraversalPath<typenum::U8>>::to_traversal_path(key, tree.height());
-
-            storage
-                .insert_merkle_nodes(tree.state_type(), proof, traversal_path, *block_number)
-                .await
-                .unwrap()
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct MockStateDelta(pub Vec<usize>);
-impl StateDelta for MockStateDelta {}
-
-impl ValidatedState<MockTypes> for MockValidatedState {
-    type Error = BlockError;
-
-    type Instance = TestInstanceState;
-
-    type Delta = MockStateDelta;
-
-    type Time = ViewNumber;
-
-    async fn validate_and_apply_header(
-        &self,
-        _instance: &Self::Instance,
-        _parent_leaf: &Leaf<MockTypes>,
-        _proposed_header: &<MockTypes as NodeType>::BlockHeader,
-    ) -> Result<(Self, Self::Delta), Self::Error> {
-        let mut tree = self.tree.clone();
-
-        tree.update(
-            self.block_height as usize,
-            self.block_height as usize + 1000,
-        )
-        .unwrap();
-
-        Ok((
-            Self {
-                tree,
-                block_height: self.block_height + 1,
-            },
-            MockStateDelta(vec![(self.block_height).try_into().unwrap()]),
-        ))
-    }
-
-    fn from_header(_block_header: &<MockTypes as NodeType>::BlockHeader) -> Self {
-        Self {
-            tree: TestMerkleTree::new(20),
-            block_height: 0,
-        }
-    }
-
-    fn on_commit(&self) {}
-
-    fn genesis(_instance: &Self::Instance) -> (Self, Self::Delta) {
-        (Self::default(), MockStateDelta(vec![]))
-    }
-}
-
-pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
-
-pub type MockQuorumProposal = QuorumProposal<MockTypes>;
-pub type MockNetwork = MemoryNetwork<Message<MockTypes>, BLSPubKey>;
-
-#[derive(
-    Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
-pub struct MockNodeImpl;
-
-impl NodeImplementation<MockTypes> for MockNodeImpl {
-    type Storage = MemoryStorage<MockTypes>;
-    type QuorumNetwork = MockNetwork;
-    type CommitteeNetwork = MockNetwork;
 }
