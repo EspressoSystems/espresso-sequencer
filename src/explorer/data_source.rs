@@ -447,20 +447,40 @@ pub trait ExplorerDataSource<Types: NodeType> {
     async fn get_block_detail(
         &self,
         request: BlockIdentifier<Types>,
-    ) -> Result<BlockDetail, GetBlockDetailError>;
+    ) -> Result<BlockDetail, GetBlockDetailError> {
+        let _ = request;
+        Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
+    }
+
     async fn get_block_summaries(
         &self,
         request: GetBlockSummariesRequest<Types>,
-    ) -> Result<Vec<BlockSummary>, GetBlockSummariesError>;
+    ) -> Result<Vec<BlockSummary>, GetBlockSummariesError> {
+        let _ = request;
+        Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
+    }
+
     async fn get_transaction_detail(
         &self,
         request: TransactionIdentifier<Types>,
-    ) -> Result<TransactionDetail, GetTransactionDetailError>;
+    ) -> Result<TransactionDetail, GetTransactionDetailError> {
+        let _ = request;
+        Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
+    }
+
     async fn get_transaction_summaries(
         &self,
         request: GetTransactionSummariesRequest<Types>,
-    ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError>;
-    async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError>;
+    ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError> {
+        let _ = request;
+        Err(GetTransactionSummariesError::Unimplemented(
+            Unimplemented {},
+        ))
+    }
+
+    async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError> {
+        Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
+    }
 }
 
 #[async_trait]

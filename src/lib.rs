@@ -550,16 +550,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use self::explorer::{
-        data_source::{
-            BlockDetail, BlockIdentifier, BlockSummary, ExplorerDataSource, GetBlockDetailError,
-            GetBlockSummariesError, GetBlockSummariesRequest, GetExplorerSummaryError,
-            GetTransactionDetailError, GetTransactionSummariesError,
-            GetTransactionSummariesRequest, TransactionDetail, TransactionIdentifier,
-            TransactionSummary,
-        },
-        errors::Unimplemented,
-    };
+    use self::explorer::data_source::ExplorerDataSource;
     use super::*;
     use crate::{
         availability::{
@@ -720,41 +711,7 @@ mod test {
     }
 
     #[async_trait]
-    impl ExplorerDataSource<MockTypes> for CompositeState {
-        async fn get_block_detail(
-            &self,
-            _request: BlockIdentifier<MockTypes>,
-        ) -> Result<BlockDetail, GetBlockDetailError> {
-            Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
-        }
-
-        async fn get_block_summaries(
-            &self,
-            _request: GetBlockSummariesRequest<MockTypes>,
-        ) -> Result<Vec<BlockSummary>, GetBlockSummariesError> {
-            Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
-        }
-
-        async fn get_transaction_detail(
-            &self,
-            _request: TransactionIdentifier<MockTypes>,
-        ) -> Result<TransactionDetail, GetTransactionDetailError> {
-            Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
-        }
-
-        async fn get_transaction_summaries(
-            &self,
-            _request: GetTransactionSummariesRequest<MockTypes>,
-        ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError> {
-            Err(GetTransactionSummariesError::Unimplemented(
-                Unimplemented {},
-            ))
-        }
-
-        async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError> {
-            Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
-        }
-    }
+    impl ExplorerDataSource<MockTypes> for CompositeState {}
 
     #[async_std::test]
     async fn test_composition() {
