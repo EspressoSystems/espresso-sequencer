@@ -1033,8 +1033,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.current_proposal = None;
                 }
             }
-            HotShotEvent::VidDisperseRecv(disperse, sender) => {
-                let sender = sender.clone();
+            HotShotEvent::VidDisperseRecv(disperse) => {
                 let view = disperse.data.get_view_number();
 
                 debug!(
@@ -1054,16 +1053,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
-                // Check whether the sender is the right leader for this view
+                // Check whether the data comes from the right leader for this view
                 let view_leader_key = self.quorum_membership.get_leader(view);
-                if view_leader_key != sender {
-                    warn!(
-                        "VID dispersal/share is not from expected leader key for view {} \n",
-                        *view
-                    );
-                    return;
-                }
-
                 if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
                     warn!("Could not verify VID dispersal/share sig.");
                     return;

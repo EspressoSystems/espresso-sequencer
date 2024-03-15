@@ -25,6 +25,7 @@ sha2 = { workspace = true }
 hotshot-task = { path = "../task" }
 async-broadcast = { workspace = true }
 chrono = "0.4"
+rand = { workspace = true }
 surf-disco = { workspace = true }
 serde = { workspace = true }
 tagged-base64 = { workspace = true }

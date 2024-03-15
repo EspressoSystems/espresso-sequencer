@@ -132,7 +132,7 @@ async fn test_network_task() {
         HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),
         1,
     );
-    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
+    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal), 1);
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
 
     // let build_fn = |task_runner, _| async { task_runner };

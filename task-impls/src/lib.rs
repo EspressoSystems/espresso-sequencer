@@ -40,3 +40,6 @@ pub mod helpers;
 
 /// Task which responsds to requests from the network
 pub mod response;
+
+/// Task for requesting the network for things
+pub mod request;

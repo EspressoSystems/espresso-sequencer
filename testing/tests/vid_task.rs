@@ -77,7 +77,7 @@ async fn test_vid_task() {
         ViewNumber::new(2),
     ));
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
+    input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone()));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(
