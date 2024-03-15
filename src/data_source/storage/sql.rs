@@ -1205,34 +1205,22 @@ where
         let block_number = block_number as i64;
 
         let mut traversal_path = traversal_path.iter();
-        let mut txn = self.transaction().await?;
+        let txn = self.transaction().await?;
+
+        // all the node hashes are collected here for batch insert at the end
+        let mut hashes = Vec::new();
+        // All the nodes are also collected here, They depend on the hash ids which are returned after hashes are upserted in the db
+        let mut nodes = Vec::new();
 
         for node in path.iter() {
             match node {
                 MerkleNode::Empty => {
                     let ltree_path = LTree::from(traversal_path.clone());
-                    // Can make the hash_id nullable but this case is only reached when an element is deleted
-                    let insert_hash = txn
-                        .query_one(
-                            "INSERT INTO hash(value) VALUES ($1)
-                            ON CONFLICT (value) DO UPDATE SET value = excluded.value
-                            RETURNING id",
-                            &[&[0_u8; 32].to_vec()],
-                        )
-                        .await?;
-                    let hash_id: i32 = insert_hash.get(0);
-
-                    txn.upsert(
-                        name,
-                        ["pos", "created", "hash_id"],
-                        ["pos", "created"],
-                        [[
-                            sql_param(&ltree_path),
-                            sql_param(&block_number),
-                            sql_param(&hash_id),
-                        ]],
-                    )
-                    .await?;
+                    hashes.push([0_u8; 32].to_vec());
+                    nodes.push(Node {
+                        pos: ltree_path,
+                        ..Default::default()
+                    });
                 }
                 MerkleNode::ForgettenSubtree { .. } => {
                     return Err(QueryError::Error {
@@ -1249,55 +1237,27 @@ where
                     // Define the LTREE path to be inserted for the leaf node.
                     // Note:
                     // The traversal path is from the leaf to the root.
-                    // The LTREE path is created by appending 'R' for the Root node to this path and then reversing it.
-                    // The LTREE data type is treated as a string and the hierarchy of the nodes is represented by a '.' separation.
-                    // For example: A traversal path [2,0,0,1] would be represented as LTREE("R.1.0.0.2").
+                    // The LTREE path is created by reversing the traversal path. Root node is represented as an empty LTree
                     let ltree_path = LTree::from(traversal_path.clone());
 
-                    // Insert the leaf hash into a separate table and use the id referenced by the state table
-                    // This avoids redundancy of hashes in the state table to save space
-                    let insert_hash = txn
-                        .query_one(
-                            "INSERT INTO hash(value) VALUES ($1)
-                            ON CONFLICT (value) DO UPDATE SET value = excluded.value
-                            RETURNING id",
-                            &[&leaf_commit],
-                        )
-                        .await?;
-                    let hash_id: i32 = insert_hash.get(0);
-                    txn.upsert(
-                        name,
-                        ["pos", "created", "hash_id", "index", "entry"],
-                        ["pos", "created"],
-                        [[
-                            sql_param(&ltree_path),
-                            sql_param(&block_number),
-                            sql_param(&hash_id),
-                            sql_param(&serde_json::to_value(pos).map_err(ParseError::Serde)?),
-                            sql_param(&serde_json::to_value(elem).map_err(ParseError::Serde)?),
-                        ]],
-                    )
-                    .await?;
+                    let index = serde_json::to_value(pos).map_err(ParseError::Serde)?;
+                    let entry = serde_json::to_value(elem).map_err(ParseError::Serde)?;
+                    hashes.push(leaf_commit);
+                    nodes.push(Node {
+                        pos: ltree_path,
+                        index,
+                        entry,
+                        ..Default::default()
+                    });
                 }
                 MerkleNode::Branch { value, children } => {
                     // Get hash
-                    let mut writer = [0_u8; 32];
+                    let mut branch_hash = Vec::new();
                     value
-                        .serialize_compressed(&mut writer[..])
+                        .serialize_compressed(&mut branch_hash)
                         .map_err(ParseError::Serialize)?;
 
-                    // Insert the internal node hash value
-                    let row = txn
-                        .query_one(
-                            "INSERT INTO hash(value) VALUES ($1) 
-                            ON CONFLICT (value) DO UPDATE SET value = excluded.value
-                            RETURNING id",
-                            &[&writer.to_vec()],
-                        )
-                        .await?;
-
-                    let hash_id: i32 = row.get(0);
-
+                    hashes.push(branch_hash);
                     // We only insert the non-empty children in the children field of the table
                     // BitVec is used to separate out Empty children positions
                     let mut children_bitvec = BitVec::new();
@@ -1311,47 +1271,92 @@ where
                             MerkleNode::Branch { value, .. }
                             | MerkleNode::Leaf { value, .. }
                             | MerkleNode::ForgettenSubtree { value } => {
-                                let mut writer = [0_u8; 32];
+                                let mut hash = Vec::new();
                                 value
-                                    .serialize_compressed(&mut writer[..])
+                                    .serialize_compressed(&mut hash[..])
                                     .map_err(ParseError::Serialize)?;
-                                // Insert hash value of each forgotten tree
-                                let r = txn
-                                    .query_one(
-                                        "INSERT INTO hash(value) VALUES ($1)
-                                        ON CONFLICT (value) DO UPDATE SET value = excluded.value
-                                        RETURNING id",
-                                        &[&writer.to_vec()],
-                                    )
-                                    .await?;
 
-                                children_values.push(r.get::<_, i32>(0));
+                                children_values.push(hash);
                                 // Mark the entry as 1 in bitvec to indiciate a non-empty child
                                 children_bitvec.push(true);
                             }
                         }
                     }
 
+                    let (params, batch_hash_insert_stmt) =
+                        HashTableRow::build_batch_insert(&children_values);
+
+                    // Batch insert all the child hashes
+                    let children_hash_ids = txn
+                        .client
+                        .query(&batch_hash_insert_stmt, &params[..])
+                        .await
+                        .map_err(|_| QueryError::Error {
+                            message: "failed to batch insert children hashes".to_owned(),
+                        })?
+                        .iter()
+                        .map(|r| r.get(0))
+                        .collect();
+
                     // insert internal node
-                    txn.upsert(
-                        name,
-                        ["pos", "created", "hash_id", "children", "children_bitvec"],
-                        ["pos", "created"],
-                        [[
-                            sql_param(&LTree::from(traversal_path.clone())),
-                            sql_param(&block_number),
-                            sql_param(&hash_id),
-                            sql_param(&children_values),
-                            sql_param(&children_bitvec),
-                        ]],
-                    )
-                    .await?;
+                    nodes.push(Node {
+                        pos: LTree::from(traversal_path.clone()),
+                        children: Some(children_hash_ids),
+                        children_bitvec: Some(children_bitvec),
+                        ..Default::default()
+                    });
                 }
             }
 
             // advance the traversal path for the internal nodes at each iteration
             // The final node would be the Root node where this iterator is exhausted
             traversal_path.next();
+        }
+
+        // insert all the hashes into database
+        // It returns all the ids inserted in the order they were inserted
+        // We use the hash ids to insert all the nodes
+        let (params, batch_hash_insert_stmt) = HashTableRow::build_batch_insert(&hashes);
+
+        // Batch insert all the child hashes
+        let nodes_hash_ids: Vec<i32> = txn
+            .client
+            .query(&batch_hash_insert_stmt, &params)
+            .await
+            .map_err(|_| QueryError::Error {
+                message: "failed to batch insert children hashes".to_owned(),
+            })?
+            .iter()
+            .map(|r| r.get(0))
+            .collect();
+
+        if nodes_hash_ids.len() != nodes.len() {
+            // This should not happen if the upsert was successful
+            return Err(QueryError::Error {
+                message: "number of hash ids do not match the number of nodes".to_owned(),
+            });
+        }
+
+        for (h, n) in nodes_hash_ids.into_iter().zip(nodes.iter_mut()) {
+            n.created = block_number;
+            n.hash_id = h;
+        }
+
+        let (params, batch_stmt) = Node::build_batch_insert(name, &nodes);
+
+        // Batch insert all the child hashes
+        let rows_inserted =
+            txn.client
+                .query(&batch_stmt, &params)
+                .await
+                .map_err(|_| QueryError::Error {
+                    message: "failed to batch insert children hashes".to_owned(),
+                })?;
+
+        if rows_inserted.len() != path.len() {
+            return Err(QueryError::Error {
+                message: "failed to insert all merkle nodes".to_string(),
+            });
         }
 
         Ok(())
@@ -1540,6 +1545,24 @@ pub struct HashTableRow {
     pub value: Vec<u8>,
 }
 
+impl HashTableRow {
+    // TODO: create a generic upsert function with retries that returns the column
+    fn build_batch_insert(hashes: &[Vec<u8>]) -> (Vec<&(dyn ToSql + Sync)>, String) {
+        let len = hashes.len();
+        let params: Vec<_> = hashes
+            .iter()
+            .flat_map(|c| [c as &(dyn ToSql + Sync)])
+            .collect();
+        let stmt = format!(
+        "INSERT INTO hash(value) values {} ON CONFLICT (value) DO UPDATE SET value = exluded.value returning id",
+        (0..len)
+            .format_with(", ", |v, f| { f(&format_args!("(${v})")) }),
+    );
+
+        (params, stmt)
+    }
+}
+
 // Parse a row to a HashTableRow
 impl TryFrom<Row> for HashTableRow {
     type Error = QueryError;
@@ -1588,6 +1611,40 @@ pub struct Node {
     pub children_bitvec: Option<BitVec>,
     pub index: serde_json::Value,
     pub entry: serde_json::Value,
+}
+
+impl Node {
+    fn build_batch_insert<'a>(
+        name: &'a str,
+        nodes: &'a [Self],
+    ) -> (Vec<&'a (dyn ToSql + Sync)>, String) {
+        let params: Vec<&(dyn ToSql + Sync)> = nodes
+            .iter()
+            .flat_map(|n| {
+                [
+                    &n.pos as &(dyn ToSql + Sync),
+                    &n.created as &(dyn ToSql + Sync),
+                    &n.hash_id as &(dyn ToSql + Sync),
+                    &n.children as &(dyn ToSql + Sync),
+                    &n.children_bitvec as &(dyn ToSql + Sync),
+                    &n.index as &(dyn ToSql + Sync),
+                    &n.entry as &(dyn ToSql + Sync),
+                ]
+            })
+            .collect();
+
+        let stmt = format!(
+                "INSERT INTO {name} (pos, created, hash_id, children, children_bitvec, index, entry) values {} 
+                ON CONFLICT (pos, created) 
+                DO UPDATE SET pos = exluded.pos RETURNING pos",
+                (0..nodes.len())
+                .tuples()
+                    .format_with(", ", |(pos, created, id, children, bitmap, i, e), f| 
+                    { f(&format_args!("(${pos}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
+            );
+
+        (params, stmt)
+    }
 }
 
 // Parse a Row to a Node
@@ -2786,7 +2843,7 @@ mod test {
             // Query the path for the index
             let merkle_path =
                 <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
-                    &mut storage,
+                    &storage,
                     test_tree.state_type(),
                     test_tree.height(),
                     "header",
@@ -2849,7 +2906,7 @@ mod test {
         // Query snapshot with created = 2
 
         let path_2 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
-            &mut storage,
+            &storage,
             test_tree.state_type(),
             test_tree.height(),
             "header",
