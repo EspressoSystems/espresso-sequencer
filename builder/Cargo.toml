@@ -25,10 +25,10 @@ hotshot-types = { workspace = true }
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.21" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.24" }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
-#hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
-#hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "main" }
+hs-builder-api = { path = "../../hs-builder-api" }
+hs-builder-core = { path = "../../hs-builder-core" }
 sequencer = { path = "../sequencer", features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"
