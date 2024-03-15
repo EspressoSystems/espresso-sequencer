@@ -1,12 +1,15 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
+use crate::{
+    bytes::{bytes, Bytes},
+    BlockBuildingSnafu, Error, NamespaceId, Transaction,
+};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
-    vid_scheme, LargeRangeProofType, SmallRangeProofType, VidCommitment, VidCommon, VidSchemeType,
+    vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
 use jf_primitives::vid::{
     payload_prover::{PayloadProver, Statement},
@@ -16,7 +19,6 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::sync::OnceLock;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use crate::block::tables::NameSpaceTable;
@@ -69,18 +71,18 @@ pub(super) struct NamespaceInfo {
 // TODO remove the generic type param, use local constants instead
 pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
-    pub(super) raw_payload: Vec<u8>,
+    pub(super) raw_payload: Bytes,
 
     // Sequence of bytes representing the namespace table
     pub(super) ns_table: NameSpaceTable<TableWord>,
-
-    // cache frequently used items
+    // TODO(X) Revisit caching of frequently used items
     //
-    // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
-    #[derivative(Hash = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[serde(skip)]
-    pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
+    // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`.
+    // We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
+    // #[derivative(Hash = "ignore")]
+    // #[derivative(PartialEq = "ignore")]
+    // #[serde(skip)]
+    // pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
 }
 
 impl<TableWord: TableWordTraits> Payload<TableWord> {
@@ -125,39 +127,12 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         // fix this when we settle on an error handling pattern
         Some(NamespaceProof::Existence {
             ns_id,
-            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.to_vec(),
+            ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.into(),
             ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
             vid_common,
         })
-    }
-
-    /// Return length of the tx table, read from the payload bytes.
-    ///
-    /// This quantity equals number of txs in the payload.
-    pub fn get_tx_table_len(&self) -> TxTableEntry {
-        let tx_table_len_range = self.tx_table_len_range();
-        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
-        entry_bytes[..tx_table_len_range.len()]
-            .copy_from_slice(&self.raw_payload[tx_table_len_range]);
-
-        TxTableEntry::from_bytes_array(entry_bytes)
-    }
-
-    // Fetch the tx table length range proof from cache.
-    // Build the proof if missing from cache.
-    // Returns `None` if an error occurred.
-    pub fn get_tx_table_len_proof(
-        &self,
-        vid: &impl PayloadProver<SmallRangeProofType>,
-    ) -> Option<&SmallRangeProofType> {
-        self.tx_table_len_proof
-            .get_or_init(|| {
-                vid.payload_proof(&self.raw_payload, self.tx_table_len_range())
-                    .ok()
-            })
-            .as_ref()
     }
 
     pub fn get_ns_table(&self) -> &NameSpaceTable<TableWord> {
@@ -169,12 +144,8 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
-            raw_payload: vec![],
-            ns_table: NameSpaceTable {
-                bytes: vec![],
-                phantom: Default::default(),
-            },
-            tx_table_len_proof: Default::default(),
+            raw_payload: bytes![],
+            ns_table: NameSpaceTable::default(),
         };
         for tx in txs.into_iter() {
             Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
@@ -215,9 +186,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         namespaces: HashMap<NamespaceId, NamespaceInfo>,
     ) -> Result<(), Error> {
         // fill payload and namespace table
-        let mut payload = Vec::new();
+        let mut payload = bytes![];
 
-        self.ns_table = NameSpaceTable::from_vec(Vec::from(
+        self.ns_table = NameSpaceTable::from_bytes(Vec::from(
             TxTableEntry::try_from(namespaces.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
@@ -235,14 +206,6 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
         self.raw_payload = payload;
         Ok(())
-    }
-
-    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
-    ///
-    /// Typically `r` is `0..TxTableEntry::byte_len()`.
-    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
-    fn tx_table_len_range(&self) -> Range<usize> {
-        0..std::cmp::min(TxTableEntry::byte_len(), self.raw_payload.len())
     }
 }
 
@@ -262,7 +225,7 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
     Existence {
-        ns_payload_flat: Vec<u8>,
+        ns_payload_flat: Bytes,
         ns_id: NamespaceId,
         ns_proof: LargeRangeProofType,
         vid_common: VidCommon,
@@ -374,7 +337,7 @@ mod test {
             entry::{TxTableEntry, TxTableEntryWord},
             payload::{Payload, TableWordTraits},
             queryable,
-            tables::{test::TxTableTest, NameSpaceTable, Table},
+            tables::{test::TxTableTest, NameSpaceTable, Table, TxTable},
             tx_iterator::TxIndex,
         },
         Transaction,
@@ -426,7 +389,6 @@ mod test {
         setup_logging();
         setup_backtrace();
         let mut rng = jf_utils::test_rng();
-
         struct NamespaceInfo {
             payload_flat: Vec<u8>,
             tx_table: Vec<TxTableEntry>, // TODO Philippe => change
@@ -634,16 +596,15 @@ mod test {
                     assert_eq!(ns_id, tx.namespace());
                     assert_eq!(tx_payload, tx.payload());
 
-                    // TODO(1010) transaction_with_proof for multiple namespaces
                     // test `transaction_with_proof()`
-                    // let (tx, proof) = block
-                    //     .transaction_with_proof(&actual_ns_table, &idx)
-                    //     .unwrap();
-                    // assert_eq!(tx_payload, tx.payload());
-                    // proof
-                    //     .verify(&tx, idx, &vid, &disperse_data.commit, &disperse_data.common)
-                    //     .unwrap()
-                    //     .unwrap();
+                    let (tx, proof) = block
+                        .transaction_with_proof(&actual_ns_table, &idx)
+                        .unwrap();
+                    assert_eq!(tx_payload, tx.payload());
+                    proof
+                        .verify(&tx, idx, &vid, &disperse_data.commit, &disperse_data.common)
+                        .unwrap()
+                        .unwrap();
                 }
 
                 prev_entry = entry;
@@ -729,7 +690,7 @@ mod test {
             // TODO don't initialize Payload with empty namespace table
             let block = Payload::from_bytes(
                 test_case.payload.iter().cloned(),
-                &NameSpaceTable::from_vec(Vec::new()),
+                &NameSpaceTable::default(),
             );
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
@@ -775,7 +736,7 @@ mod test {
         // TODO don't initialize Payload with empty namespace table
         let block = Payload::from_bytes(
             test_case.payload.iter().cloned(),
-            &NameSpaceTable::from_vec(Vec::new()),
+            &NameSpaceTable::default(),
         );
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
@@ -789,8 +750,13 @@ mod test {
         // make a fake proof for a nonexistent tx in the small block
         let tx = Transaction::new(Default::default(), Vec::new());
         let proof = queryable::gen_tx_proof_for_testing(
-            block.get_tx_table_len(),
-            block.get_tx_table_len_proof(&vid).unwrap().clone(),
+            0..block.raw_payload.len(),
+            TxTableEntry::from_usize(TxTable::get_tx_table_len(&block.raw_payload)),
+            vid.payload_proof(
+                &block.raw_payload,
+                0..std::cmp::min(TxTableEntry::byte_len(), block.raw_payload.len()),
+            )
+            .unwrap(),
             vid.payload_proof(&block.raw_payload, 0..3).unwrap(),
         );
 
@@ -840,7 +806,7 @@ mod test {
 
         /// Like `from_entries` except the tx bodies byte length is `body_len`.
         ///
-        /// Panics if `body_len` would not actually decrese the block size.
+        /// Panics if `body_len` would not actually decrease the block size.
         fn with_trimmed_body<R: RngCore>(entries: &[usize], body_len: usize, rng: &mut R) -> Self {
             assert!(
                 body_len < tx_bodies_byte_len(entries),
@@ -1006,7 +972,7 @@ mod test {
         pub fn ns_table_iter<TableWord: TableWordTraits>(
             ns_table_bytes: &[u8],
         ) -> impl Iterator<Item = (NamespaceId, TxTableEntry)> + '_ {
-            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table lengh, skip that
+            ns_table_bytes[NameSpaceTable::<TableWord>::byte_len()..] // first few bytes is the table length, skip that
                 .chunks(2 * TxTableEntry::byte_len())
                 .map(|bytes| {
                     // read (namespace id, entry) from the namespace table

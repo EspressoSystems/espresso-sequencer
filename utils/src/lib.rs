@@ -97,7 +97,7 @@ impl AnvilOptions {
     }
 }
 
-/// Convinient interfaces for using `anvil` command which runs a local blockchain
+/// Convenient interfaces for using `anvil` command which runs a local blockchain
 /// Similar to [`AnvilInstance`][https://docs.rs/ethers/latest/ethers/core/utils/struct.AnvilInstance.html], with more useful methods
 #[derive(Debug)]
 pub struct Anvil {
@@ -202,7 +202,7 @@ impl Anvil {
     /// Due to limitations in Anvil, the common ancestor of the reorg will always be the L1 genesis.
     /// However, after the reorg, the genesis state of the EVM will be the same as the state when
     /// this function was originally called. The recommended way to use this for testing reorg
-    /// handling, then, is to perform intialization (like deploying contracts) and then start some
+    /// handling, then, is to perform initialization (like deploying contracts) and then start some
     /// service in the background and immediately call this function. This function will let the L1
     /// chain run until it reaches block height at least `min_depth` and then reset it to block
     /// height 0. Then it will let the L1 chain run again until it reaches block height `min_depth`.

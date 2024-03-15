@@ -1,3 +1,4 @@
+use crate::bytes::Bytes;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::{Commitment, Committable};
 use derive_more::{Display, From, Into};
@@ -49,12 +50,15 @@ impl Namespace for NamespaceId {
 )]
 pub struct Transaction {
     namespace: NamespaceId,
-    payload: Vec<u8>,
+    payload: Bytes,
 }
 
 impl Transaction {
-    pub fn new(namespace: NamespaceId, payload: Vec<u8>) -> Self {
-        Self { namespace, payload }
+    pub fn new(namespace: NamespaceId, payload: impl Into<Bytes>) -> Self {
+        Self {
+            namespace,
+            payload: payload.into(),
+        }
     }
 
     pub fn namespace(&self) -> NamespaceId {
@@ -71,7 +75,7 @@ impl Transaction {
         let len = rng.gen_range(0..100);
         Self::new(
             NamespaceId(rng.gen_range(0..10)),
-            (0..len).map(|_| rand::random::<u8>()).collect(),
+            (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
     }
 }

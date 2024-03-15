@@ -190,8 +190,10 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
-    config.config.total_nodes = args.num_nodes;
+    config.config.num_nodes_with_stake = args.num_nodes;
+    config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
+    config.config.known_nodes_without_stake = vec![];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();
@@ -199,7 +201,8 @@ async fn main() {
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.propose_min_round_time = args.min_propose_time;
     config.config.propose_max_round_time = args.max_propose_time;
-    config.config.da_committee_size = args.num_nodes.get();
+    config.config.da_staked_committee_size = args.num_nodes.get();
+    config.config.da_non_staked_committee_size = 0;
     config.config.min_transactions = args.min_transactions;
 
     run_orchestrator(

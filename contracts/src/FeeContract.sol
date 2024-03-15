@@ -39,7 +39,7 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice store user balances in a mapping
     mapping(address user => uint256 amount) public balances;
 
-    /// @notice since the constuctor initializes storage on this contract we disable it
+    /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {

@@ -18,7 +18,7 @@ use hotshot::{
     types::{Event, EventType},
     HotShotInitializer,
 };
-use hotshot_types::traits::node_implementation::ConsensusTime;
+use hotshot_types::{event::LeafInfo, traits::node_implementation::ConsensusTime};
 use std::cmp::max;
 
 pub mod fs;
@@ -110,12 +110,12 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&state),
-                    Some(Arc::new(ValidatedState::genesis(&state))),
+                    Some(Arc::new(ValidatedState::genesis(&state).0)),
                 )
             }
         };
 
-        // We start from the maximum view betwen `highest_voted_view` and `leaf.view_number`. This
+        // We start from the maximum view between `highest_voted_view` and `leaf.view_number`. This
         // prevents double votes from starting in a view in which we had already voted before the
         // restart, and prevents unnecessary catchup from starting in a view earlier than the anchor
         // leaf.
@@ -134,7 +134,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     async fn handle_event(&mut self, event: &Event<SeqTypes>) {
         match &event.event {
             EventType::Decide { leaf_chain, .. } => {
-                if let Some((leaf, _)) = leaf_chain.first() {
+                if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
                     if let Err(err) = self.save_anchor_leaf(leaf).await {
                         tracing::error!(
                             ?leaf,
@@ -190,7 +190,7 @@ mod persistence_tests {
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
 
         // Store a leaf.
-        let leaf1 = Leaf::genesis(&NodeState::default());
+        let leaf1 = Leaf::genesis(&NodeState::mock());
         storage.save_anchor_leaf(&leaf1).await.unwrap();
         assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf1);
 

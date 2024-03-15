@@ -9,7 +9,7 @@
 // (i.e. valid group or field elements) and don't need to be from a correct proof/public input.
 // Only the last step `_batchVerifyOpeningProof` will test *correctness* of these parameters.
 // Therefore, we employ more randomly generated dummy inputs for most tests for robustness,
-// and only relie on Rust-code to generate correct inputs for the `_batchVerifyOpeningProof`.
+// and only rely on Rust-code to generate correct inputs for the `_batchVerifyOpeningProof`.
 
 pragma solidity ^0.8.0;
 

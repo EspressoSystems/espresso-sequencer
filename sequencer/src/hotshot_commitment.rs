@@ -8,7 +8,7 @@ use futures::{
     future,
     stream::{self, StreamExt},
 };
-use hotshot_query_service::availability::LeafQueryData;
+use hotshot_query_service::{availability::LeafQueryData, types::HeightIndexed};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
@@ -23,7 +23,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-// TODO: (alex) remove clap related info on tihs struct, as the CLI is in ./bin/hotshot-commitment.rs
+// TODO: (alex) remove clap related info on this struct, as the CLI is in ./bin/hotshot-commitment.rs
 #[derive(Parser, Clone, Debug)]
 pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
@@ -378,10 +378,10 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
 
         for i in 0..num_batches {
             data.leaves.push(Some(mock_leaf(i as u64, &node_state)));
@@ -450,10 +450,10 @@ mod test {
         // Create a test batch.
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
         data.leaves.push(Some(mock_leaf(0, &node_state)));
 
         // Connect to the HotShot contract with the expected L1 client.
@@ -514,10 +514,10 @@ mod test {
                 .unwrap(),
         );
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
 
         // Create a sequence of leaves, some of which are missing.
         let mut data = MockDataSource::default();

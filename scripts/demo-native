@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PATH=$PATH:./target/release
+
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)
 export ESPRESSO_BASE_STORAGE_PATH
 echo "Using sequencer storage path: $ESPRESSO_BASE_STORAGE_PATH"
