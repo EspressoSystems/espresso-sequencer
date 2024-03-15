@@ -14,7 +14,6 @@ use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
     sync::Arc,
-    time::Duration,
 };
 
 /// Trait for creating task states.
@@ -118,7 +117,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             pre_commit_relay_map: HashMap::default().into(),
             commit_relay_map: HashMap::default().into(),
             finalize_relay_map: HashMap::default().into(),
-            view_sync_timeout: Duration::new(10, 0),
+            view_sync_timeout: handle.hotshot.config.view_sync_timeout,
             id: handle.hotshot.id,
             last_garbage_collected_view: TYPES::Time::new(0),
         }

@@ -36,6 +36,8 @@ pub struct TimingData {
     pub propose_max_round_time: Duration,
     /// Delay before sending through the secondary network in CombinedNetworks
     pub secondary_network_delay: Duration,
+    /// view sync timeout
+    pub view_sync_timeout: Duration,
 }
 
 /// metadata describing a test
@@ -84,6 +86,7 @@ impl Default for TimingData {
             propose_min_round_time: Duration::new(0, 0),
             propose_max_round_time: Duration::from_millis(100),
             secondary_network_delay: Duration::from_millis(1000),
+            view_sync_timeout: Duration::from_millis(2000),
         }
     }
 }
@@ -281,6 +284,7 @@ impl TestMetadata {
             da_staked_committee_size,
             da_non_staked_committee_size,
             next_view_timeout: 500,
+            view_sync_timeout: Duration::from_millis(250),
             timeout_ratio: (11, 10),
             round_start_delay: 1,
             start_delay: 1,
@@ -302,6 +306,7 @@ impl TestMetadata {
             propose_min_round_time,
             propose_max_round_time,
             secondary_network_delay,
+            view_sync_timeout,
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
@@ -312,6 +317,7 @@ impl TestMetadata {
                 a.start_delay = start_delay;
                 a.propose_min_round_time = propose_min_round_time;
                 a.propose_max_round_time = propose_max_round_time;
+                a.view_sync_timeout = view_sync_timeout;
             };
 
         TestLauncher {

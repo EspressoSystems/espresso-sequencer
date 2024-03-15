@@ -137,6 +137,8 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub num_bootrap: usize,
     /// timeout before starting the next view
     pub next_view_timeout: u64,
+    /// timeout before starting next view sync round
+    pub view_sync_timeout: Duration,
     /// minimum time to wait for a view
     pub propose_min_round_time: Duration,
     /// maximum time to wait for a view
@@ -402,6 +404,7 @@ impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
             cdn_marshal_address: None,
             combined_network_config: None,
             next_view_timeout: 10,
+            view_sync_timeout: Duration::from_secs(2),
             num_bootrap: 5,
             propose_min_round_time: Duration::from_secs(0),
             propose_max_round_time: Duration::from_secs(10),
@@ -461,6 +464,7 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkC
             node_index: 0,
             num_bootrap: val.config.num_bootstrap,
             next_view_timeout: val.config.next_view_timeout,
+            view_sync_timeout: val.config.view_sync_timeout,
             propose_max_round_time: val.config.propose_max_round_time,
             propose_min_round_time: val.config.propose_min_round_time,
             seed: val.seed,
@@ -526,6 +530,8 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub min_transactions: usize,
     /// Base duration for next-view timeout, in milliseconds
     pub next_view_timeout: u64,
+    /// Duration for view sync round timeout
+    pub view_sync_timeout: Duration,
     /// The exponential backoff ration for the next-view timeout
     pub timeout_ratio: (u64, u64),
     /// The delay a leader inserts before starting pre-commit, in milliseconds
@@ -606,6 +612,7 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
             da_staked_committee_size: val.staked_committee_nodes,
             da_non_staked_committee_size: val.non_staked_committee_nodes,
             next_view_timeout: val.next_view_timeout,
+            view_sync_timeout: val.view_sync_timeout,
             timeout_ratio: val.timeout_ratio,
             round_start_delay: val.round_start_delay,
             start_delay: val.start_delay,
@@ -660,6 +667,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             max_transactions: NonZeroUsize::new(100).unwrap(),
             min_transactions: 1,
             next_view_timeout: 10000,
+            view_sync_timeout: Duration::from_millis(1000),
             timeout_ratio: (11, 10),
             round_start_delay: 1,
             start_delay: 1,

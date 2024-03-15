@@ -80,9 +80,9 @@ where
     #[cfg(feature = "randomized-leader-election")]
     /// Index the vector of public keys with a random number generated using the current view number as a seed
     fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
-        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number as u64);
-        let randomized_view_number: u64 = rng.gen();
-        let index = (randomized_view_number % self.nodes_with_stake.len() as u64) as usize;
+        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
+        let randomized_view_number: usize = rng.gen();
+        let index = randomized_view_number % self.nodes_with_stake.len();
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
