@@ -2,12 +2,7 @@ name: Install Capn Proto
 runs:
   using: composite
   steps:
-    - if: runner.os == 'Linux'
-      run: |
+    - run: |
         sudo apt-get update
         sudo apt-get install -y capnproto
-      shell: bash
-    - if: runner.os == 'Windows'
-      run: |
-        yes | winget install --id=capnproto.capnproto --accept-package-agreements --exact || true
       shell: bash
