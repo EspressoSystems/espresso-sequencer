@@ -32,7 +32,7 @@ test:
 
 # Helpful shortcuts for local development
 dev-orchestrator:
-    target/release/orchestrator -p 8080 -n 1 
+    target/release/orchestrator -p 8080 -n 1
 
 dev-da-server:
     target/release/web-server -p 8081
@@ -82,3 +82,12 @@ dev-deploy url="http://localhost:8545" mnemonics="test test test test test test 
     MNEMONICS="{{mnemonics}}" forge script contracts/test/LightClientTest.s.sol:DeployLightClientTestScript \
     --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
     --fork-url {{url}} --broadcast
+
+# This is meant for local development and produces HTML output. In CI
+# the lcov output is pushed to coveralls.
+code-coverage:
+  @echo "Running code coverage"
+  nix develop .#coverage -c cargo test --all-features --no-fail-fast --release --workspace -- --skip service::test::test_
+  grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
+      --ignore 'contract-bindings/*' --ignore 'contracts/*'
+  @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
