@@ -27,18 +27,8 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout Repository
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - name: Install capnproto
-        uses: mstksg/get-package@v1
-        with:
-          brew: capnp
-          apt-get: capnproto libcapnp-dev
-
-      - name: Configure Git
-        run: |
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
+        uses: ./.github/actions/install-capnp
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
