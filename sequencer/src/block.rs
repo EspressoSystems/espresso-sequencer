@@ -61,7 +61,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     {
         Self {
             raw_payload: encoded_transactions.into_iter().collect(),
-            tx_table_len_proof: Default::default(),
             ns_table: metadata.clone(), // TODO don't clone ns_table
         }
     }

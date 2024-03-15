@@ -131,16 +131,28 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         Some(Transaction::new(ns_id, tx_payload))
     }
 
-    // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
     fn transaction_with_proof(
         &self,
         meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        let index_usize = index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-        if index_usize >= self.len(meta) {
+        let (ns_idx, tx_idx) = (index.ns_idx, index.tx_idx);
+        if ns_idx >= meta.len() {
             return None; // error: index out of bounds
         }
+        let (ns_id, _offset) = meta.get_table_entry(ns_idx);
+        let ns_range = meta.get_payload_range(ns_idx, self.raw_payload.len());
+        let ns_start_offset = ns_range.start;
+
+        let tx_table_len = TxTable::get_tx_table_len(&self.raw_payload[ns_range.clone()]);
+        if tx_idx >= tx_table_len {
+            return None; // error: index out of bounds
+        }
+
+        let tx_payloads_offset = tx_table_len
+            .checked_add(1)?
+            .checked_mul(TxTableEntry::byte_len())?
+            .checked_add(ns_start_offset)?;
 
         // TODO temporary VID construction. We need to get the number of storage nodes from the VID
         // common data. May need the query service to pass common into this function along with
@@ -156,10 +168,12 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         // TODO why isn't cargo fmt wrapping these comments?
 
         // start
-        let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
-            (TxTableEntry::byte_len(), None)
+        let (tx_table_range_proof_start, tx_table_range_start) = if tx_idx == 0 {
+            (TxTableEntry::byte_len().checked_add(ns_start_offset)?, None)
         } else {
-            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
+            let range_proof_start = tx_idx
+                .checked_mul(TxTableEntry::byte_len())?
+                .checked_add(ns_start_offset)?;
             (
                 range_proof_start,
                 Some(TxTableEntry::from_bytes(self.raw_payload.get(
@@ -169,13 +183,28 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
         };
 
         // end
-        let tx_table_range_proof_end = index_usize
+        let tx_table_range_proof_end = tx_idx
             .checked_add(2)?
-            .checked_mul(TxTableEntry::byte_len())?;
+            .checked_mul(TxTableEntry::byte_len())?
+            .checked_add(ns_start_offset)?;
+
         let tx_table_range_end = TxTableEntry::from_bytes(self.raw_payload.get(
             tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
                 ..tx_table_range_proof_end,
         )?)?;
+
+        let tx_payload_range = {
+            let start =
+                usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+                    .ok()?
+                    .checked_add(tx_payloads_offset)?;
+            let end = usize::try_from(tx_table_range_end.clone())
+                .ok()?
+                .checked_add(tx_payloads_offset)?;
+            let end = std::cmp::min(end, ns_range.end);
+            let start = std::cmp::min(start, end);
+            start..end
+        };
 
         // correctness proof for the tx payload range
         let tx_table_range_proof = vid
@@ -184,23 +213,24 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
                 tx_table_range_proof_start..tx_table_range_proof_end,
             )
             .ok()?;
-
-        let tx_payload_range = tx_payload_range(
-            &tx_table_range_start,
-            &tx_table_range_end,
-            &self.get_tx_table_len(),
-            self.raw_payload.len(),
-        )?;
+        let tx_table_len_range = ns_range.start
+            ..std::cmp::min(
+                ns_range.end,
+                ns_range.start.checked_add(TxTableEntry::byte_len())?,
+            );
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(
-                Default::default(),
+                ns_id,
                 self.raw_payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
-                tx_table_len: self.get_tx_table_len(),
-                tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
+                ns_range: ns_range.clone(),
+                tx_table_len: TxTableEntry::from_usize(tx_table_len),
+                tx_table_len_proof: vid
+                    .payload_proof(&self.raw_payload, tx_table_len_range)
+                    .unwrap(),
                 tx_table_range_start,
                 tx_table_range_end,
                 tx_table_range_proof,
@@ -214,36 +244,9 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
     }
 }
 
-/// Returns the byte range for a tx in the block payload bytes.
-///
-/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
-/// Lots of ugly type conversion and checked arithmetic.
-fn tx_payload_range(
-    tx_table_range_start: &Option<TxTableEntry>,
-    tx_table_range_end: &TxTableEntry,
-    tx_table_len: &TxTableEntry,
-    block_payload_byte_len: usize,
-) -> Option<Range<usize>> {
-    // TODO(817) allow arbitrary tx_table_len
-    // eg: if overflow then just return a 0-length tx
-    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
-        .ok()?
-        .checked_add(1)?
-        .checked_mul(TxTableEntry::byte_len())?;
-    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
-        .ok()?
-        .checked_add(tx_bodies_offset)?;
-    let end = usize::try_from(tx_table_range_end.clone())
-        .ok()?
-        .checked_add(tx_bodies_offset)?;
-    let end = std::cmp::max(start, end);
-    let start = std::cmp::min(start, block_payload_byte_len);
-    let end = std::cmp::min(end, block_payload_byte_len);
-    Some(start..end)
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
+    ns_range: Range<usize>,
     tx_table_len: TxTableEntry,
     tx_table_len_proof: SmallRangeProofType,
 
@@ -277,12 +280,26 @@ impl TxInclusionProof {
 
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
-        let tx_payload_range = tx_payload_range(
-            &self.tx_table_range_start,
-            &self.tx_table_range_end,
-            &self.tx_table_len,
-            V::get_payload_byte_len(vid_common),
-        )?;
+        let tx_payloads_offset = usize::try_from(self.tx_table_len.clone())
+            .ok()?
+            .checked_add(1)?
+            .checked_mul(TxTableEntry::byte_len())?
+            .checked_add(self.ns_range.start)?;
+        let tx_payload_range = {
+            let start = usize::try_from(
+                self.tx_table_range_start
+                    .clone()
+                    .unwrap_or(TxTableEntry::zero()),
+            )
+            .ok()?
+            .checked_add(tx_payloads_offset)?;
+            let end = usize::try_from(self.tx_table_range_end.clone())
+                .ok()?
+                .checked_add(tx_payloads_offset)?;
+            let end = std::cmp::min(end, self.ns_range.end);
+            let start = std::cmp::min(start, end);
+            start..end
+        };
         match &self.tx_payload_proof {
             Some(tx_payload_proof) => {
                 if vid
@@ -313,7 +330,8 @@ impl TxInclusionProof {
             .payload_verify(
                 Statement {
                     payload_subslice: &self.tx_table_len.to_bytes(),
-                    range: 0..TxTableEntry::byte_len(),
+                    range: self.ns_range.start
+                        ..self.ns_range.start.checked_add(TxTableEntry::byte_len())?,
                     commit: vid_commit,
                     common: vid_common,
                 },
@@ -327,7 +345,7 @@ impl TxInclusionProof {
 
         // Verify proof for tx table entries.
         // Start index missing for the 0th tx
-        let index: usize = tx_index.tx_idx; // TODO fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
+        let index: usize = tx_index.tx_idx;
         let mut tx_table_range_bytes =
             Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
@@ -335,18 +353,21 @@ impl TxInclusionProof {
                 return None; // error: first tx should have empty start index
             }
             tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
-            index * TxTableEntry::byte_len()
+            index
+                .checked_mul(TxTableEntry::byte_len())?
+                .checked_add(self.ns_range.start)?
         } else {
             if index != 0 {
                 return None; // error: only the first tx should have empty start index
             }
-            TxTableEntry::byte_len()
+            TxTableEntry::byte_len().checked_add(self.ns_range.start)?
         };
         tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
         let range = start
             ..index
                 .checked_add(2)?
-                .checked_mul(TxTableEntry::byte_len())?;
+                .checked_mul(TxTableEntry::byte_len())?
+                .checked_add(self.ns_range.start)?;
 
         if vid
             .payload_verify(
@@ -370,11 +391,13 @@ impl TxInclusionProof {
 
 #[cfg(test)]
 pub(crate) fn gen_tx_proof_for_testing(
+    ns_range: Range<usize>,
     tx_table_len: TxTableEntry,
     tx_table_len_proof: SmallRangeProofType,
     payload_proof: SmallRangeProofType,
 ) -> TxInclusionProof {
     TxInclusionProof {
+        ns_range,
         tx_table_len,
         tx_table_len_proof,
         tx_table_range_start: None,
