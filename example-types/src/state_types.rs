@@ -24,7 +24,7 @@ pub struct TestInstanceState {}
 impl InstanceState for TestInstanceState {}
 
 /// Application-specific state delta implementation for testing purposes.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct TestStateDelta {}
 
 impl StateDelta for TestStateDelta {}
