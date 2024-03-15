@@ -27,11 +27,11 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
-use hs_builder_api::builder::Options as BuilderApiOptions;
-use hs_builder_core::{
-    builder_state::{BuilderProgress, BuilderState, MessageType},
-    service::GlobalState,
-};
+// use hs_builder_api::builder::Options as BuilderApiOptions;
+// use hs_builder_core::{
+//     builder_state::{BuilderProgress, BuilderState, MessageType},
+//     service::GlobalState,
+// };
 use sequencer::{
     api, network,
     options::{Modules, Options as SeqOptions},
@@ -72,6 +72,8 @@ use tide_disco::{app, method::ReadState, App, Url};
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
+    unimplemented!("TODO: main.rs");
+    /*
     // setup logging and backtrace
     setup_logging();
     setup_backtrace();
@@ -186,4 +188,6 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     Ok(())
+
+    */
 }

@@ -48,8 +48,6 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag =
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.16" }
-hs-builder-api = { git = "https://github.com/EspressoSystems/hs-builder-api", branch = "main" }
-hs-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "main" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1", features = [
   "test-apis",
   "test-srs",
