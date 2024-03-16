@@ -712,9 +712,12 @@ mod test {
             Arc::new(RwLock::new(global_state));
 
         // clone the global state for the builder state
-        let arc_rwlock_global_state_clone: Arc<RwLock<GlobalState<SeqTypes>>> =
+        let arc_rwlock_global_state_clone_1: Arc<RwLock<GlobalState<SeqTypes>>> =
             arc_rwlock_global_state.clone();
-
+        let arc_rwlock_global_state_clone_2: Arc<RwLock<GlobalState<SeqTypes>>> =
+            arc_rwlock_global_state.clone();
+        let arc_rwlock_global_state_clone_3: Arc<RwLock<GlobalState<SeqTypes>>> =
+            arc_rwlock_global_state.clone();
         let builder_context_handle = handles[0].clone();
         let hotshot_req_handle = handles[0].clone();
         // spawn the builder service
@@ -742,7 +745,7 @@ mod test {
                 da_receiver,
                 qc_receiver,
                 req_receiver,
-                arc_rwlock_global_state_clone,
+                arc_rwlock_global_state_clone_1,
                 res_sender,
                 NonZeroUsize::new(1).unwrap(),
             );
@@ -759,9 +762,6 @@ mod test {
             loop {
                 let event = events.next().await.unwrap();
                 tracing::debug!("Received event from handle: {event:?}");
-                // let Decide { leaf_chain, .. } = event.event else {
-                //     continue;
-                // };
                 if let EventType::QuorumProposal { proposal, sender } = event.event {
                     //let qc_proposal = event.event;
                     //let qc_certificate = event.event;
@@ -772,7 +772,7 @@ mod test {
                     let request_message = MessageType::<SeqTypes>::RequestMessage(RequestMessage {
                         requested_vid_commitment: requested_vid_commitment,
                     });
-                    arc_rwlock_global_state
+                    arc_rwlock_global_state_clone_2
                         .read_arc()
                         .await
                         .request_sender
@@ -783,6 +783,22 @@ mod test {
                 }
             }
         });
+        let mut rres_msgs: Vec<ResponseMessage> = Vec::new();
+
+        loop {
+            if let Ok(res_msg) = arc_rwlock_global_state_clone_3
+                .read_arc()
+                .await
+                .response_receiver
+                .try_recv()
+            {
+                tracing::info!("Received response message from handle: {res_msg:?}");
+                rres_msgs.push(res_msg);
+            };
+        }
+        //assert_eq!(rres_msgs.len(), 4);
+        // Now wait for the responses from the builder
+
         //.await;
 
         // let port = portpicker::pick_unused_port().expect("Could not find an open port");
