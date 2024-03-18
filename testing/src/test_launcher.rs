@@ -22,8 +22,6 @@ pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generate channels
     pub channel_generator: Generator<Networks<TYPES, I>>,
-    /// generate a new storage for each node
-    pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 }

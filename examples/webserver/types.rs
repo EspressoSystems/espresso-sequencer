@@ -1,5 +1,5 @@
 use crate::infra::WebServerDARun;
-use hotshot::traits::implementations::{MemoryStorage, WebServerNetwork};
+use hotshot::traits::implementations::WebServerNetwork;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,6 @@ pub type QuorumNetwork = WebServerNetwork<TestTypes>;
 pub type ViewSyncNetwork = WebServerNetwork<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type CommitteeNetwork = DANetwork;
     type QuorumNetwork = QuorumNetwork;
 }

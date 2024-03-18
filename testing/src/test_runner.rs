@@ -58,7 +58,6 @@ pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 pub type LateNodeContext<TYPES, I> = Either<
     Arc<SystemContext<TYPES, I>>,
     (
-        <I as NodeImplementation<TYPES>>::Storage,
         Memberships<TYPES>,
         HotShotConfig<<TYPES as NodeType>::SignatureKey, <TYPES as NodeType>::ElectionConfigType>,
     ),
@@ -327,7 +326,6 @@ where
             let node_id = self.next_node_id;
             self.next_node_id += 1;
             tracing::debug!("launch node {}", i);
-            let storage = (self.launcher.resource_generator.storage)(node_id);
             let config = self.launcher.resource_generator.config.clone();
             let known_nodes_with_stake = config.known_nodes_with_stake.clone();
             let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
@@ -365,7 +363,7 @@ where
                     node_id,
                     LateStartNode {
                         networks,
-                        context: Right((storage, memberships, config)),
+                        context: Right((memberships, config)),
                     },
                 );
             } else {
@@ -377,7 +375,6 @@ where
                 let hotshot = Self::add_node_with_config(
                     node_id,
                     networks.clone(),
-                    storage,
                     memberships,
                     initializer,
                     config,
@@ -412,7 +409,6 @@ where
     pub async fn add_node_with_config(
         node_id: u64,
         networks: Networks<TYPES, I>,
-        storage: I::Storage,
         memberships: Memberships<TYPES>,
         initializer: HotShotInitializer<TYPES>,
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
@@ -433,7 +429,6 @@ where
             private_key,
             node_id,
             config,
-            storage,
             memberships,
             network_bundle,
             initializer,

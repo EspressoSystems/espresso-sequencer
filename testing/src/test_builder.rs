@@ -329,7 +329,6 @@ impl TestMetadata {
                     unreliable_network,
                     secondary_network_delay,
                 ),
-                storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
                 config,
             },
             metadata: self,

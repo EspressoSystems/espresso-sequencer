@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
 use hotshot::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
-use hotshot::traits::implementations::{
-    MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
-};
+use hotshot::traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue};
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
 use hotshot_example_types::state_types::TestInstanceState;
@@ -67,7 +65,6 @@ pub type ViewSyncNetwork = MemoryNetwork<Message<Test>, <Test as NodeType>::Sign
 pub type VIDNetwork = MemoryNetwork<Message<Test>, <Test as NodeType>::SignatureKey>;
 
 impl NodeImplementation<Test> for TestImpl {
-    type Storage = MemoryStorage<Test>;
     type QuorumNetwork = QuorumNetwork;
     type CommitteeNetwork = DANetwork;
 }

@@ -1,5 +1,5 @@
 use crate::infra::PushCdnDaRun;
-use hotshot::traits::implementations::{MemoryStorage, PushCdnNetwork};
+use hotshot::traits::implementations::PushCdnNetwork;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,6 @@ pub type QuorumNetwork = PushCdnNetwork<TestTypes>;
 pub type ViewSyncNetwork = PushCdnNetwork<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type CommitteeNetwork = DANetwork;
     type QuorumNetwork = QuorumNetwork;
 }

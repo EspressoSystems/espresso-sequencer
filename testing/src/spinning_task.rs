@@ -99,7 +99,7 @@ where
                                     Left(context) => context,
                                     // Node not initialized. Initialize it
                                     // based on the received leaf.
-                                    Right((storage, memberships, config)) => {
+                                    Right((memberships, config)) => {
                                         let initializer = HotShotInitializer::<TYPES>::from_reload(
                                             state.last_decided_leaf.clone(),
                                             TestInstanceState {},
@@ -114,7 +114,6 @@ where
                                         TestRunner::add_node_with_config(
                                             node_id,
                                             node.networks.clone(),
-                                            storage,
                                             memberships,
                                             initializer,
                                             config,

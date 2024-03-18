@@ -9,9 +9,7 @@ use crate::{
 
 use hotshot::traits::{
     election::static_committee::{StaticCommittee, StaticElectionConfig},
-    implementations::{
-        CombinedNetworks, Libp2pNetwork, MemoryNetwork, MemoryStorage, WebServerNetwork,
-    },
+    implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, WebServerNetwork},
     NodeImplementation,
 };
 use hotshot_types::{
@@ -103,31 +101,26 @@ type StaticWebQuorumComm = WebServerNetwork<TestTypes>;
 type StaticCombinedQuorumComm = CombinedNetworks<TestTypes>;
 
 impl NodeImplementation<TestTypes> for PushCdnImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticPushCdnQuorumComm;
     type CommitteeNetwork = StaticPushCdnDAComm;
 }
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticLibp2pQuorumComm;
     type CommitteeNetwork = StaticLibp2pDAComm;
 }
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticMemoryQuorumComm;
     type CommitteeNetwork = StaticMemoryDAComm;
 }
 
 impl NodeImplementation<TestTypes> for WebImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticWebQuorumComm;
     type CommitteeNetwork = StaticWebDAComm;
 }
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
-    type Storage = MemoryStorage<TestTypes>;
     type QuorumNetwork = StaticCombinedQuorumComm;
     type CommitteeNetwork = StaticCombinedDAComm;
 }

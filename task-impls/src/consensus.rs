@@ -818,11 +818,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .number_of_views_per_decide_event
                         .add_point(cur_number_of_views_per_decide_event as f64);
 
-                    // We're only storing the last QC. We could store more but we're realistically only going to retrieve the last one.
-                    if let Err(e) = self.api.store_leaf(old_anchor_view, leaf).await {
-                        error!("Could not insert new anchor into the storage API: {:?}", e);
-                    }
-
                     debug!("Sending Decide for view {:?}", consensus.last_decided_view);
                     debug!("Decided txns len {:?}", included_txns_set.len());
                     decide_sent.await;
