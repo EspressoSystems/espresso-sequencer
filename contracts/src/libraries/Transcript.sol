@@ -59,9 +59,44 @@ library Transcript {
         appendGroupElement(self, comm);
     }
 
+    function computeHash(bytes32 input0, bytes32 input1, bytes memory input2, uint8 input3)
+        private
+        pure
+        returns (bytes32 x)
+    {
+        uint256 input2Length = input2.length;
+        assembly {
+            // Assuming input0 and input1 are bytes32, input2 is the dynamic bytes, input2Length is
+            // its length, and input3 is uint8
+            // The strategy is to directly concatenate these values in memory
+
+            // Step 1: Calculate total size
+            let totalSize := add(add(64, input2Length), 1) // 64 bytes for two bytes32, dynamic
+                // length for bytes, 1 byte for uint8
+
+            // Step 2: Allocate memory
+            let packedData := mload(0x40) // Use free memory pointer
+            mstore(0x40, add(packedData, totalSize)) // Update free memory pointer
+
+            // Step 3: Concatenate data
+            // Store first bytes32
+            mstore(packedData, input0)
+            // Store second bytes32
+            mstore(add(packedData, 32), input1)
+            // Copy bytes array
+            for { let i := 0 } lt(i, input2Length) { i := add(i, 1) } {
+                mstore8(add(add(packedData, 64), i), mload(add(input2, i)))
+            }
+            // Store uint8 at the end
+            mstore8(add(add(packedData, 64), input2Length), input3)
+
+            // Now, `packedData` points to the start of the packed data, and `totalSize` is its size
+            x := keccak256(packedData, totalSize)
+        }
+    }
+
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 h1 =
-            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(0)));
+        bytes32 h1 = computeHash(self.state[0], self.state[1], self.transcript, uint8(0));
         bytes32 h2 =
             keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(1)));
 
