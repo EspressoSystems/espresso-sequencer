@@ -9,6 +9,9 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
+gpu-vid = [
+    "hotshot-task-impls/gpu-vid",
+]
 
 [dependencies]
 async-broadcast = { workspace = true }

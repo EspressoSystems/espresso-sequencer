@@ -37,7 +37,7 @@ async fn test_network_task() {
             &encoded_transactions_hash,
         )
         .expect("Failed to sign block payload");
-    let vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(2));
+    let mut vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(2));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let vid_signature =

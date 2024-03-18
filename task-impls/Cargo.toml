@@ -30,6 +30,11 @@ surf-disco = { workspace = true }
 serde = { workspace = true }
 tagged-base64 = { workspace = true }
 
+[features]
+gpu-vid = [
+    "hotshot-types/gpu-vid"
+]
+
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]

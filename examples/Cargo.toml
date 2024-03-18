@@ -9,6 +9,9 @@ rust-version = "1.65.0"
 
 [features]
 default = ["docs", "doc-images"]
+gpu-vid = [
+    "hotshot-task-impls/gpu-vid",
+]
 
 # Features required for binaries
 bin-orchestrator = ["clap"]
