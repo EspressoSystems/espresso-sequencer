@@ -32,8 +32,8 @@ contract Transcript_appendMessage_Test is Test {
 
         transcript.appendMessage(message);
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
+        assertEq(updated.state0, transcript.state0);
+        assertEq(updated.state1, transcript.state1);
     }
 }
 
@@ -59,8 +59,8 @@ contract Transcript_appendFieldElement_Test is Test {
 
         transcript.appendFieldElement(BN254.ScalarField.wrap(fieldElement));
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
+        assertEq(updated.state0, transcript.state0);
+        assertEq(updated.state1, transcript.state1);
     }
 }
 
@@ -88,8 +88,8 @@ contract Transcript_appendGroupElement_Test is Test {
 
         transcript.appendGroupElement(randPoint);
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
+        assertEq(updated.state0, transcript.state0);
+        assertEq(updated.state1, transcript.state1);
     }
 
     /// @dev Test special case where the identity point (or infinity) is appended.
@@ -108,8 +108,8 @@ contract Transcript_appendGroupElement_Test is Test {
 
         transcript.appendGroupElement(infinity);
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
+        assertEq(updated.state0, transcript.state0);
+        assertEq(updated.state1, transcript.state1);
     }
 }
 
@@ -130,8 +130,8 @@ contract Transcript_getAndAppendChallenge_Test is Test {
         uint256 challenge = transcript.getAndAppendChallenge();
 
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
+        assertEq(updated.state0, transcript.state0);
+        assertEq(updated.state1, transcript.state1);
         assertEq(chal, challenge);
     }
 }
@@ -163,8 +163,8 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         transcript.appendVkAndPubInput(vk, publicInput);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
-        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
-        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
+        assertEq(updated.state0, transcript.state0, "state[0] field mismatch");
+        assertEq(updated.state1, transcript.state1, "state[1] field mismatch");
     }
 }
 
@@ -185,7 +185,7 @@ contract Transcript_appendProofEvaluations_Test is Test {
         transcript.appendProofEvaluations(proof);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
-        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
-        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
+        assertEq(updated.state0, transcript.state0, "state[0] field mismatch");
+        assertEq(updated.state1, transcript.state1, "state[1] field mismatch");
     }
 }
