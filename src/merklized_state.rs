@@ -61,6 +61,10 @@ pub enum Error {
     Query {
         source: QueryError,
     },
+    Custom {
+        message: String,
+        status: StatusCode,
+    },
 }
 
 impl Error {
@@ -68,6 +72,7 @@ impl Error {
         match self {
             Self::Request { .. } => StatusCode::BadRequest,
             Self::Query { source, .. } => source.status(),
+            Self::Custom { status, .. } => *status,
         }
     }
 }
@@ -101,7 +106,11 @@ where
                 };
 
                 let key = req.string_param("key")?;
-                let key = key.parse::<M::Key>().unwrap();
+                let key = key.parse::<M::Key>().map_err(|_| Error::Custom {
+                    message: "failed to parse Key param".to_string(),
+                    status: StatusCode::InternalServerError,
+                })?;
+
                 state
                     .get_path(&merkle_tree, snapshot, key)
                     .await
