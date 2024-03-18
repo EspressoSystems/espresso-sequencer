@@ -14,6 +14,15 @@ export FOUNDRY_PROFILE=defender
 The profile, `profile.default` is used by default. Setting the `FOUNDRY_PROFILE` variable overrides the `foundry.toml`
 settings.
 
+## Prerequisites
+
+1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
+   to.
+2. In OpenZeppelin Defender, create an Approval Process that requires the multisig wallet you created above.
+   `Manage > Approval Processes`
+3. In OpenZeppelin Defender, create a deployment environment and use the approval process created in Step 2. Be sure to
+   copy the Defender secret and key, that is shown at the end of this step, into the .env file.
+
 ## Deployments
 
 ### Deploying the Fee Contract
