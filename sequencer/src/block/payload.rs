@@ -1,9 +1,6 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{
-    bytes::{bytes, Bytes},
-    BlockBuildingSnafu, Error, NamespaceId, Transaction,
-};
+use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::Committable;
 use derivative::Derivative;
@@ -71,7 +68,8 @@ pub(super) struct NamespaceInfo {
 // TODO remove the generic type param, use local constants instead
 pub struct Payload<TableWord: TableWordTraits> {
     // Sequence of bytes representing the concatenated payloads for each namespace
-    pub(super) raw_payload: Bytes,
+    #[serde(with = "base64_bytes")]
+    pub(super) raw_payload: Vec<u8>,
 
     // Sequence of bytes representing the namespace table
     pub(super) ns_table: NameSpaceTable<TableWord>,
@@ -144,7 +142,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
-            raw_payload: bytes![],
+            raw_payload: vec![],
             ns_table: NameSpaceTable::default(),
         };
         for tx in txs.into_iter() {
@@ -186,7 +184,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         namespaces: HashMap<NamespaceId, NamespaceInfo>,
     ) -> Result<(), Error> {
         // fill payload and namespace table
-        let mut payload = bytes![];
+        let mut payload = vec![];
 
         self.ns_table = NameSpaceTable::from_bytes(Vec::from(
             TxTableEntry::try_from(namespaces.len())
@@ -225,7 +223,8 @@ impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
     Existence {
-        ns_payload_flat: Bytes,
+        #[serde(with = "base64_bytes")]
+        ns_payload_flat: Vec<u8>,
         ns_id: NamespaceId,
         ns_proof: LargeRangeProofType,
         vid_common: VidCommon,
