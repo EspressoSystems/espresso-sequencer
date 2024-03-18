@@ -93,27 +93,25 @@ library Transcript {
         bytes32 hash;
         assembly {
             // Allocate memory for the data to hash
-            let data := mload(0x40) // Find the current free memory location
-            mstore(data, a) // Store 'a' at the current free memory location
+            let data := mload(0x40) // Current free memory location
+            mstore(data, a) // Store 'a' at the current location
             mstore(add(data, 32), b) // Store 'b' immediately after 'a'
 
-            // Calculate the offset for 'c' (dynamic bytes)
-            // and store 'c' there. Since 'c' is dynamic, copy its data.
-            let cData := add(data, 64) // 'c' starts after 'a' and 'b'
-            let cLength := mload(c) // Load the length of 'c'
+            // Prepare to store 'c' after 'a' and 'b'
+            let cData := add(data, 64) // Location after 'a' and 'b'
+            let cLength := mload(c) // Length of 'c'
 
-            // Copy the contents of 'c'
+            // Copy the bytes of 'c' into memory
             for { let i := 0 } lt(i, cLength) { i := add(i, 32) } {
                 mstore(add(cData, i), mload(add(c, add(i, 32))))
             }
 
-            // Append uint8(1) at the end. Since it's a single byte, we don't need a full word.
-            // Be aware of potential issues with zero padding in other contexts.
+            // Append uint8(1) at the end
             let end := add(cData, cLength) // Calculate end of 'c' data
-            mstore(end, 1)
+            mstore8(end, 1)
 
-            // Compute the hash
-            // The total length is 64 bytes (for 'a' and 'b') + cLength + 1 (for uint8(1))
+            // Compute the keccak256 hash of the data
+            // The data length is 64 bytes ('a' and 'b') + cLength + 1 byte for the uint8
             hash := keccak256(data, add(add(64, cLength), 1))
         }
         return hash;
@@ -121,8 +119,7 @@ library Transcript {
 
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
         bytes32 h1 = computeHash0(self.state[0], self.state[1], self.transcript);
-        bytes32 h2 =
-            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(1)));
+        bytes32 h2 = computeHash1(self.state[0], self.state[1], self.transcript);
 
         self.state[0] = h1;
         self.state[1] = h2;
