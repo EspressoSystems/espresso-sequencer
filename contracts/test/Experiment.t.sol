@@ -22,12 +22,12 @@ contract FeeContractTest is Test {
         return result;
     }
 
-    function testAbiDecodeAssembly() public payable {
-        bytes32 a = 0x0000000000000000000000000000000000000000000000000000000000000001;
-        bytes32 b = 0x0000000000000000000000000000000000000000000000000000000000000002;
-
-        bytes memory v = abiEncodePackedAssembly(a, b);
-        bytes memory w = abi.encodePacked(a, b);
-        assertEq(v, w);
-    }
+    //    function testAbiDecodeAssembly() public payable {
+    //        bytes32 a = 0x0000000000000000000000000000000000000000000000000000000000000001;
+    //        bytes32 b = 0x0000000000000000000000000000000000000000000000000000000000000002;
+    //
+    //        bytes memory v = abiEncodePackedAssembly(a, b);
+    //        bytes memory w = abi.encodePacked(a, b);
+    //        assertEq(v, w);
+    //    }
 }

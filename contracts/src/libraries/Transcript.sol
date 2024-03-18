@@ -96,7 +96,8 @@ library Transcript {
     }
 
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 h1 = computeHash(self.state[0], self.state[1], self.transcript, uint8(0));
+        bytes32 h1 =
+            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(0)));
         bytes32 h2 =
             keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(1)));
 
