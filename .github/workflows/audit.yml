@@ -12,6 +12,7 @@ on:
     paths:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+  workflow_dispatch:
   # Run the audit job once a day on main.
   schedule:
     - cron: "0 0 * * *"
