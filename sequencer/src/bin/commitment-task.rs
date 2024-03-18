@@ -4,9 +4,13 @@ use clap::Parser;
 use contract_bindings::hot_shot::HotShot;
 use ethers::{prelude::*, providers::Provider, signers::coins_bip39::English};
 use futures::FutureExt;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    options::parse_duration,
+};
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 use tide_disco::error::ServerError;
 use tide_disco::Api;
 use url::Url;
@@ -65,6 +69,10 @@ pub struct Options {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     pub port: Option<u16>,
+
+    /// Client-side timeout for HTTP requests.
+    #[clap(long, env = "ESPRESSO_COMMITMENT_TASK_REQUEST_TIMEOUT", value_parser = parse_duration, default_value = "5s")]
+    pub request_timeout: Duration,
 }
 #[async_std::main]
 async fn main() {
@@ -122,6 +130,7 @@ async fn main() {
         l1_provider: opt.l1_provider.clone(),
         sequencer_mnemonic: opt.eth_mnemonic,
         sequencer_account_index: opt.hotshot_account_index,
+        request_timeout: opt.request_timeout,
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
