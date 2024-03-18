@@ -13,6 +13,7 @@ use cdn_client::{
 };
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
 use hotshot_utils::bincode::bincode_opts;
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::{error, warn};
 
 use async_compatibility_layer::art::{async_block_on, async_spawn};
@@ -32,7 +33,7 @@ use hotshot_types::{
     },
     BoxSyncFuture,
 };
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
 
 /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
 /// trait in order to sign and verify messages to/from the CDN.
@@ -162,13 +163,17 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         let (broker_public_key, broker_private_key) =
             TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], 1337);
 
-        // The broker (peer) discovery endpoint shall be a local SQLite file
-        let discovery_endpoint = "test.sqlite".to_string();
+        // Get the OS temporary directory
+        let temp_dir = std::env::temp_dir();
 
-        // Try to delete the file at the discovery endpoint to maintain consistency between tests
-        if let Err(err) = std::fs::remove_file(discovery_endpoint.clone()) {
-            warn!("failed to delete pre-existing database: {err}");
-        };
+        // Create an SQLite file inside of the temporary directory
+        let discovery_endpoint = temp_dir
+            .join(Path::new(&format!(
+                "test-{}.sqlite",
+                StdRng::from_entropy().next_u64()
+            )))
+            .to_string_lossy()
+            .into_owned();
 
         // 2 brokers
         for _ in 0..2 {
@@ -218,7 +223,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         let marshal_endpoint = format!("127.0.0.1:{marshal_port}");
         let marshal_config = MarshalConfigBuilder::default()
             .bind_address(marshal_endpoint.clone())
-            .discovery_endpoint("test.sqlite".to_string())
+            .discovery_endpoint(discovery_endpoint)
             .build()
             .expect("failed to build marshal config");
 
