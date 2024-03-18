@@ -59,7 +59,7 @@ library Transcript {
         appendGroupElement(self, comm);
     }
 
-    function computeHash0(bytes32 a, bytes32 b, bytes memory c) public pure returns (bytes32) {
+    function computeHash0(bytes32 a, bytes32 b, bytes memory c) private pure returns (bytes32) {
         bytes32 hash;
         assembly {
             // Allocate memory for the data to hash
@@ -89,7 +89,7 @@ library Transcript {
         return hash;
     }
 
-    function computeHash1(bytes32 a, bytes32 b, bytes memory c) public pure returns (bytes32) {
+    function computeHash1(bytes32 a, bytes32 b, bytes memory c) private pure returns (bytes32) {
         bytes32 hash;
         assembly {
             // Allocate memory for the data to hash
