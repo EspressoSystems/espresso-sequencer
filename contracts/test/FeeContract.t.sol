@@ -155,6 +155,48 @@ contract FeeContractUpgradabilityTest is Test {
         );
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
     }
+
+    //test deposits with a large amount reverts
+    function test_depositMaxAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.maxDepositAmount() + 1;
+
+        vm.expectRevert(FeeContract.DepositTooLarge.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    //test deposits with a less than the min amount reverts
+    function test_depositMinAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.minDepositAmount() - 0.0001 ether;
+
+        vm.expectRevert(FeeContract.DepositTooSmall.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    //test deposits with invalid user address reverts
+    function test_invalidUserAddress() public {
+        address user = address(0);
+        uint256 amount = 0.5 ether;
+
+        vm.expectRevert(FeeContract.InvalidUserAddress.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    // test that new users have a zero balance
+    function testFuzz_newUserHasZeroBalance(address user) public {
+        vm.assume(user != address(0));
+
+        uint256 balance = feeContractProxy.balances(user);
+
+        assertEq(balance, 0);
+    }
 }
 
 contract FeeContractV2Test is Initializable, OwnableUpgradeable, UUPSUpgradeable {
