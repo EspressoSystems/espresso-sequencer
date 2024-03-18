@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # See https://github.com/marketplace/actions/rust-audit-check for docs
-      - uses: actions-rs/audit-check@v1
+      # See https://github.com/rustsec/audit-check for docs
+      - uses: rust-sec/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

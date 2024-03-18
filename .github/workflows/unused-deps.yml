@@ -13,16 +13,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+      - uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo-udeps
         uses: aig787/cargo-udeps-action@v1
         with:
-          version: 'latest'
-          args: '--all-targets'
+          version: latest
+          args: --all-targets
