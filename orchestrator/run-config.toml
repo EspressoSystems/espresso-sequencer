@@ -87,6 +87,10 @@ nanos = 100000000 # 10 ms
 secs = 0
 nanos = 0
 
+[config.view_sync_timeout]
+secs = 2
+nanos = 0
+
 # TODO (Keyao) Clean up configuration parameters.
 # <https://github.com/EspressoSystems/HotShot/issues/1823>
 [config.propose_max_round_time]
