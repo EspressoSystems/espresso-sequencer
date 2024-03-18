@@ -59,45 +59,68 @@ library Transcript {
         appendGroupElement(self, comm);
     }
 
-    function computeHash(bytes32 input0, bytes32 input1, bytes memory input2, uint8 input3)
-        private
-        pure
-        returns (bytes32 x)
-    {
-        uint256 input2Length = input2.length;
+    function computeHash0(bytes32 a, bytes32 b, bytes memory c) public pure returns (bytes32) {
+        bytes32 hash;
         assembly {
-            // Assuming input0 and input1 are bytes32, input2 is the dynamic bytes, input2Length is
-            // its length, and input3 is uint8
-            // The strategy is to directly concatenate these values in memory
+            // Allocate memory for the data to hash
+            let data := mload(0x40) // Find the current free memory location
+            mstore(data, a) // Store 'a' at the current free memory location
+            mstore(add(data, 32), b) // Store 'b' immediately after 'a'
 
-            // Step 1: Calculate total size
-            let totalSize := add(add(64, input2Length), 1) // 64 bytes for two bytes32, dynamic
-                // length for bytes, 1 byte for uint8
+            // Calculate the offset for 'c' (dynamic bytes)
+            // and store 'c' there. Since 'c' is dynamic, copy its data.
+            let cData := add(data, 64) // 'c' starts after 'a' and 'b'
+            let cLength := mload(c) // Load the length of 'c'
 
-            // Step 2: Allocate memory
-            let packedData := mload(0x40) // Use free memory pointer
-            mstore(0x40, add(packedData, totalSize)) // Update free memory pointer
-
-            // Step 3: Concatenate data
-            // Store first bytes32
-            mstore(packedData, input0)
-            // Store second bytes32
-            mstore(add(packedData, 32), input1)
-            // Copy bytes array
-            for { let i := 0 } lt(i, input2Length) { i := add(i, 1) } {
-                mstore8(add(add(packedData, 64), i), mload(add(input2, i)))
+            // Copy the contents of 'c'
+            for { let i := 0 } lt(i, cLength) { i := add(i, 32) } {
+                mstore(add(cData, i), mload(add(c, add(i, 32))))
             }
-            // Store uint8 at the end
-            mstore8(add(add(packedData, 64), input2Length), input3)
 
-            // Now, `packedData` points to the start of the packed data, and `totalSize` is its size
-            x := keccak256(packedData, totalSize)
+            // Append uint8(0) at the end. Since it's a single byte, we don't need a full word.
+            // Be aware of potential issues with zero padding in other contexts.
+            let end := add(cData, cLength) // Calculate end of 'c' data
+            mstore(end, 0)
+
+            // Compute the hash
+            // The total length is 64 bytes (for 'a' and 'b') + cLength + 1 (for uint8(0))
+            hash := keccak256(data, add(add(64, cLength), 1))
         }
+        return hash;
+    }
+
+    function computeHash1(bytes32 a, bytes32 b, bytes memory c) public pure returns (bytes32) {
+        bytes32 hash;
+        assembly {
+            // Allocate memory for the data to hash
+            let data := mload(0x40) // Find the current free memory location
+            mstore(data, a) // Store 'a' at the current free memory location
+            mstore(add(data, 32), b) // Store 'b' immediately after 'a'
+
+            // Calculate the offset for 'c' (dynamic bytes)
+            // and store 'c' there. Since 'c' is dynamic, copy its data.
+            let cData := add(data, 64) // 'c' starts after 'a' and 'b'
+            let cLength := mload(c) // Load the length of 'c'
+
+            // Copy the contents of 'c'
+            for { let i := 0 } lt(i, cLength) { i := add(i, 32) } {
+                mstore(add(cData, i), mload(add(c, add(i, 32))))
+            }
+
+            // Append uint8(1) at the end. Since it's a single byte, we don't need a full word.
+            // Be aware of potential issues with zero padding in other contexts.
+            let end := add(cData, cLength) // Calculate end of 'c' data
+            mstore(end, 1)
+
+            // Compute the hash
+            // The total length is 64 bytes (for 'a' and 'b') + cLength + 1 (for uint8(1))
+            hash := keccak256(data, add(add(64, cLength), 1))
+        }
+        return hash;
     }
 
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 h1 =
-            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(0)));
+        bytes32 h1 = computeHash0(self.state[0], self.state[1], self.transcript);
         bytes32 h2 =
             keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(1)));
 
