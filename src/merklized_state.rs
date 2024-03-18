@@ -15,20 +15,19 @@
 //! The state API provides an interface for serving queries against arbitrarily old snapshots of the state.
 //! This allows a full Merkle tree to be reconstructed from storage.
 //! If any parent state is missing then the partial snapshot can not be queried.
-use std::{fmt::Display, path::PathBuf};
+use std::{fmt::Display, path::PathBuf, str::FromStr};
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::{Index, MerkleTreeScheme, ToTraversalPath};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use snafu::Snafu;
+use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, Snafu};
+use std::fmt::Debug;
 use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
-use crate::api::load_api;
+use crate::{api::load_api, QueryError};
 
 pub(crate) mod data_source;
 pub use data_source::*;
@@ -55,44 +54,34 @@ pub struct Options {
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 pub enum Error {
-    Request { source: RequestError },
-    Internal { reason: String },
+    Request {
+        source: RequestError,
+    },
+    #[snafu(display("{source}"))]
+    Query {
+        source: QueryError,
+    },
 }
 
 impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } => StatusCode::BadRequest,
-            Self::Internal { .. } => StatusCode::InternalServerError,
+            Self::Query { source, .. } => source.status(),
         }
-    }
-}
-
-fn internal<M: Display>(msg: M) -> Error {
-    Error::Internal {
-        reason: msg.to_string(),
     }
 }
 
 pub fn define_api<State, Types: NodeType, M: MerklizedState<Types>>(
     options: &Options,
-    state: M,
+    merkle_tree: M,
 ) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M>,
     Types: NodeType,
-    <M as MerkleTreeScheme>::Element:
-        Send + Sync + DeserializeOwned + CanonicalDeserialize + CanonicalSerialize,
-    <M as MerkleTreeScheme>::Index: Index
-        + Send
-        + ToTraversalPath<<M as MerklizedState<Types>>::Arity>
-        + DeserializeOwned
-        + CanonicalDeserialize
-        + CanonicalSerialize,
-    <M as MerkleTreeScheme>::NodeValue: Send + Sync,
-    M::Commitment: for<'a> TryFrom<&'a TaggedBase64> + Display,
-    for<'a> <M::Commitment as TryFrom<&'a TaggedBase64>>::Error: Display,
+    for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
+    <<M as MerklizedState<Types>>::Key as FromStr>::Err: Debug,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -100,15 +89,9 @@ where
         options.extensions.clone(),
     )?;
 
-    // Determine the type of state for which the api is initialized
-    let state_type = state.state_type();
-    let tree_height = state.height();
-    // Identify the specific field in the header storing the Merkle Tree root commitment
-    // Useful for accessing the correct commitment among multiple state roots
-    let header_state_commitment_field = state.header_state_commitment_field();
-
     api.with_version("0.0.1".parse().unwrap())
         .get("get_path", move |req, state| {
+            let merkle_tree = merkle_tree.clone();
             async move {
                 // Determine the snapshot type based on request parameters, either index or commit
                 let snapshot = if let Some(height) = req.opt_integer_param("height")? {
@@ -118,17 +101,11 @@ where
                 };
 
                 let key = req.string_param("key")?;
-
+                let key = key.parse::<M::Key>().unwrap();
                 state
-                    .get_path(
-                        state_type,
-                        tree_height,
-                        header_state_commitment_field,
-                        snapshot,
-                        key.to_string(),
-                    )
+                    .get_path(&merkle_tree, snapshot, key)
                     .await
-                    .map_err(internal)
+                    .context(QuerySnafu)
             }
             .boxed()
         })?;

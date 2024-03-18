@@ -26,7 +26,6 @@ use crate::{
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
-use serde::Serialize;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -285,29 +284,16 @@ where
     D: MerklizedStateDataSource<Types, State> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    State: MerklizedState<Types> + 'static,
-    State::Index: Send + Sync,
-    State::Element: Send + Sync,
-    State::NodeValue: Send,
+    State: MerklizedState<Types>,
     <State as MerkleTreeScheme>::Commitment: Send,
 {
     async fn get_path(
         &self,
-        state_type: &'static str,
-        tree_height: usize,
-        header_state_commitment_field: &'static str,
-        snapshot: Snapshot<State>,
-        key: String,
-    ) -> QueryResult<MerklePath<State::Element, State::Index, State::NodeValue>> {
-        self.data_source
-            .get_path(
-                state_type,
-                tree_height,
-                header_state_commitment_field,
-                snapshot,
-                key,
-            )
-            .await
+        state: &State,
+        snapshot: Snapshot<Types, State>,
+        key: State::Key,
+    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+        self.data_source.get_path(state, snapshot, key).await
     }
 }
 
@@ -318,19 +304,16 @@ where
     U: Send + Sync,
     State: MerklizedState<Types>,
     Types: NodeType,
-    State::Element: Serialize + Send + Sync + 'static,
-    State::Index: Serialize + Send + Sync + 'static,
-    State::NodeValue: Send + 'static,
 {
     async fn insert_merkle_nodes(
         &mut self,
-        name: &'static str,
-        path: MerklePath<State::Element, State::Index, State::NodeValue>,
+        state: &State,
+        path: MerklePath<State::Entry, State::Key, State::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
         self.data_source
-            .insert_merkle_nodes(name, path, traversal_path, block_number)
+            .insert_merkle_nodes(state, path, traversal_path, block_number)
             .await
     }
 }

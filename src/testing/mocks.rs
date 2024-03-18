@@ -132,6 +132,10 @@ pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum:
 impl MerklizedState<MockTypes> for MockMerkleTree {
     type Arity = typenum::U8;
     type Key = usize;
+    type Entry = usize;
+    type T = Sha3Node;
+    type Commit = Self::Commitment;
+    type Digest = Sha3Digest;
 
     fn state_type(&self) -> &'static str {
         "test_tree"

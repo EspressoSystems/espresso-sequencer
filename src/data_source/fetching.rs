@@ -85,7 +85,7 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot},
+    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -546,6 +546,31 @@ where
 }
 
 #[async_trait]
+impl<Types, State, S, P> UpdateStateData<Types, State> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    State: MerklizedState<Types>,
+    S: UpdateStateData<Types, State> + Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    async fn insert_merkle_nodes(
+        &mut self,
+        state: &State,
+        path: MerklePath<State::Entry, State::Key, State::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> QueryResult<()> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .storage
+            .insert_merkle_nodes(state, path, traversal_path, block_number)
+            .await
+    }
+}
+
+#[async_trait]
 impl<Types, S, State, P> MerklizedStateDataSource<Types, State> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
@@ -556,24 +581,16 @@ where
 {
     async fn get_path(
         &self,
-        state_type: &'static str,
-        tree_height: usize,
-        header_state_commitment_field: &'static str,
-        snapshot: Snapshot<State>,
-        key: String,
-    ) -> QueryResult<MerklePath<State::Element, State::Index, State::NodeValue>> {
+        state: &State,
+        snapshot: Snapshot<Types, State>,
+        key: State::Key,
+    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
         self.fetcher
             .storage
-            .write()
+            .read()
             .await
             .storage
-            .get_path(
-                state_type,
-                tree_height,
-                header_state_commitment_field,
-                snapshot,
-                key,
-            )
+            .get_path(state, snapshot, key)
             .await
     }
 }

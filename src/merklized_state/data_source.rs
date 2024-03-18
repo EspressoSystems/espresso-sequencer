@@ -16,14 +16,22 @@
 //! and provides methods for querying and reconstructing the snapshot.
 //!
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::Display;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
-use jf_primitives::merkle_tree::{prelude::MerklePath, Index, MerkleTreeScheme};
-use serde::Serialize;
-use std::fmt::Debug;
+
+use jf_primitives::merkle_tree::DigestAlgorithm;
+use jf_primitives::merkle_tree::{
+    prelude::MerklePath, Element, Index, MerkleCommitment, MerkleTreeScheme, NodeValue,
+    ToTraversalPath,
+};
+use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::Display;
+use std::{fmt::Debug, str::FromStr};
+use tagged_base64::TaggedBase64;
 
 use typenum::Unsigned;
 
@@ -31,8 +39,8 @@ use std::{cmp::Ordering, sync::Arc};
 
 use crate::QueryResult;
 
-// This trait defines methods that a data source should implement
-// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
+/// This trait defines methods that a data source should implement
+/// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
 #[async_trait]
 pub trait MerklizedStateDataSource<Types, State>
 where
@@ -41,36 +49,30 @@ where
 {
     async fn get_path(
         &self,
-        _state_type: &'static str,
-        _tree_height: usize,
-        _header_state_commitment_field: &'static str,
-        _snapshot: Snapshot<State>,
-        _key: String,
-    ) -> QueryResult<MerklePath<State::Element, State::Index, State::NodeValue>>;
+        state: &State,
+        snapshot: Snapshot<Types, State>,
+        key: State::Key,
+    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
 }
 
-// This trait defines methods for updating the storage with the merkle tree state.
+/// This trait defines methods for updating the storage with the merkle tree state.
 #[async_trait]
-pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types>>: Send + Sync
-where
-    State::Element: Serialize,
-    State::Index: Serialize,
-{
+pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types>>: Send + Sync {
     async fn insert_merkle_nodes(
         &mut self,
-        _name: &'static str,
-        _path: MerklePath<State::Element, State::Index, State::NodeValue>,
-        _traversal_path: Vec<usize>,
-        _block_number: u64,
+        state: &State,
+        path: MerklePath<State::Entry, State::Key, State::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
     ) -> QueryResult<()>;
 }
 
-// This trait should be implemented by types that represent validated states.
-// It enables services using the module to implement update functionality.
-// Some services may manage multiple Merkle trees within their validated state,
-// requiring updates for all state types with each event.
-// Therefore, the `insert_merkle_nodes` method of `UpdateStateData` should be called
-// for all state types within the validated state.
+/// This trait should be implemented by types that represent validated states.
+/// It enables services using the module to implement update functionality.
+/// Some services may manage multiple Merkle trees within their validated state,
+/// requiring updates for all state types with each event.
+/// Therefore, the `insert_merkle_nodes` method of `UpdateStateData` should be called
+/// for all state types within the validated state.
 #[async_trait]
 pub trait UpdateStateStorage<Types: NodeType, D> {
     async fn update_storage(
@@ -81,38 +83,62 @@ pub trait UpdateStateStorage<Types: NodeType, D> {
     ) -> anyhow::Result<()>;
 }
 
-type MerkleCommitment<T> = <T as MerkleTreeScheme>::Commitment;
+type StateCommitment<Types, T> = <T as MerklizedState<Types>>::Commit;
 #[derive(Derivative, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
 #[derivative(
-    Debug(bound = "T::Commitment: Debug"),
+    Debug(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     Ord(bound = ""),
     Hash(bound = "")
 )]
 // Snapshot can be queried by block height (index) or merkle tree commitment
-pub enum Snapshot<T: MerkleTreeScheme> {
-    #[display(bound = "T::Commitment: Display ", fmt = "{_0}")]
-    Commit(MerkleCommitment<T>),
+pub enum Snapshot<Types: NodeType, T: MerklizedState<Types>> {
+    #[display(fmt = "{_0}")]
+    Commit(StateCommitment<Types, T>),
     #[display(fmt = "{_0}")]
     Index(u64),
 }
 
-impl<T: MerkleTreeScheme> PartialOrd for Snapshot<T> {
+impl<T: MerklizedState<Types>, Types: NodeType> PartialOrd for Snapshot<Types, T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-// This trait should be implemented by the MerkleTree that the module is initialized for.
-// It defines methods utilized by the module.
-pub trait MerklizedState<Types>: MerkleTreeScheme
+/// This trait should be implemented by the MerkleTree that the module is initialized for.
+/// It defines methods utilized by the module.
+pub trait MerklizedState<Types>: MerkleTreeScheme + Send + Sync + Clone + 'static
 where
     Types: NodeType,
 {
     type Arity: Unsigned;
-    type Key: Index;
+    type Key: Index
+        + Send
+        + Sync
+        + Serialize
+        + ToTraversalPath<Self::Arity>
+        + FromStr
+        + DeserializeOwned
+        + Display
+        + CanonicalSerialize
+        + CanonicalDeserialize;
+    type Entry: Element
+        + Send
+        + Sync
+        + Serialize
+        + DeserializeOwned
+        + CanonicalSerialize
+        + CanonicalDeserialize;
+    type T: NodeValue + Send;
+    type Commit: MerkleCommitment<Self::T>
+        + Send
+        + for<'a> TryFrom<&'a TaggedBase64>
+        + Display
+        + Debug
+        + Into<TaggedBase64>;
+    type Digest: DigestAlgorithm<Self::Entry, Self::Key, Self::T>;
 
     /// Retrieves the name of the state being queried.
     fn state_type(&self) -> &'static str;
