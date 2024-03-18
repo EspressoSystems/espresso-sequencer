@@ -3,6 +3,9 @@
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
 [![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
 [![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
+[![Audit](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml)
+[![Ubuntu](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml)
+[![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
 The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
 Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2

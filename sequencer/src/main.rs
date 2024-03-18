@@ -5,17 +5,15 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
-    init_node, init_static, network,
+    init_node, network,
     options::{Modules, Options},
-    persistence, BuilderParams, NetworkParams,
+    persistence, BuilderParams, L1Params, NetworkParams,
 };
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
-
-    init_static();
 
     tracing::info!("sequencer starting up");
     let opt = Options::parse();
@@ -45,6 +43,10 @@ async fn init_with_storage<S>(
 where
     S: DataSourceOptions,
 {
+    let l1_params = L1Params {
+        url: opt.l1_provider_url,
+    };
+
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
@@ -58,6 +60,7 @@ where
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: opt.private_staking_key,
         private_state_key: opt.private_state_key,
+        state_peers: opt.state_peers,
     };
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
@@ -79,9 +82,15 @@ where
             let storage = storage_opt.create().await?;
             opt.serve(move |metrics| {
                 async move {
-                    init_node(network_params, &*metrics, storage, builder_params)
-                        .await
-                        .unwrap()
+                    init_node(
+                        network_params,
+                        &*metrics,
+                        storage,
+                        builder_params,
+                        l1_params,
+                    )
+                    .await
+                    .unwrap()
                 }
                 .boxed()
             })
@@ -93,6 +102,7 @@ where
                 &NoMetrics,
                 storage_opt.create().await?,
                 builder_params,
+                l1_params,
             )
             .await
         }

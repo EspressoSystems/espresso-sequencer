@@ -146,7 +146,7 @@ contract DemoBoxTest is Test {
         assertEq(boxV2Proxy.getBox().balance, amount);
     }
 
-    // test upgrading a struct works post ugprade
+    // test upgrading a struct works post upgrade
     function testUpgradeNewStructElement() public {
         //add Box of size 1
         uint256 boxSize = 1;
@@ -167,7 +167,7 @@ contract DemoBoxTest is Test {
         assertEq(boxV2Proxy.getBox().maxItems, newCapacity);
     }
 
-    // test upgrading a new enum works post ugprade
+    // test upgrading a new enum works post upgrade
     function testUpgradeNewEnumType() public {
         //add Box of size 1
         uint256 boxSize = 1;
@@ -206,7 +206,7 @@ contract DemoBoxTest is Test {
     }
 
     //test that the function still works as expected when the logic changes
-    function testSameFunctionSigntureDifferentLogic() public {
+    function testSameFunctionSignatureDifferentLogic() public {
         //add Box of size 1
         uint256 boxSize = 1;
         boxV1Proxy.addBox(boxSize);

@@ -12,6 +12,7 @@ ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
+ark-srs = { git = "https://github.com/alxiong/ark-srs", tag = "v0.1.0" }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
@@ -20,12 +21,13 @@ blake3 = "1.5"
 clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
-crs = { git = "https://github.com/alxiong/crs" }
 derive_more = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 ethers = { workspace = true }
 futures = { workspace = true }
+hotshot = { workspace = true }
 hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
+hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }

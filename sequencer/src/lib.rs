@@ -1,30 +1,33 @@
 pub mod api;
 pub mod block;
+pub mod catchup;
 mod chain_variables;
 pub mod context;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+
 use block::entry::TxTableEntryWord;
+use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
-use state::FeeAccount;
+
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+
+use l1_client::L1Client;
+
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
 pub mod persistence;
 mod state;
 pub mod transaction;
-mod vm;
 
-use ark_ec::models::CurveConfig;
-use ark_ed_on_bn254::EdwardsConfig;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -34,10 +37,9 @@ use hotshot::{
     types::SignatureKey,
     Networks,
 };
-use hotshot_types::{traits::network::ConnectedNetwork, ValidatorConfig};
-use jf_primitives::signatures::schnorr;
-use tagged_base64::tagged;
-use zeroize::Zeroize;
+use hotshot_types::{
+    light_client::StateSignKey, traits::network::ConnectedNetwork, ValidatorConfig,
+};
 
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -65,19 +67,11 @@ use persistence::SequencerPersistence;
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
 pub use header::Header;
+use hotshot_types::traits::states::StateDelta;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
-pub use transaction::Transaction;
-pub use vm::{Vm, VmId, VmTransaction};
-
-/// Initialize the static variables for the sequencer
-///
-/// Calling it early on startup makes it easier to catch errors.
-pub fn init_static() {
-    lazy_static::initialize(&header::L1_CLIENT);
-}
-
+pub use transaction::{NamespaceId, Transaction};
 pub mod network {
     use hotshot_types::message::Message;
 
@@ -137,36 +131,6 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-/// A private signing key for the Schnorr signature scheme.
-///
-/// This key is used to sign state commitments for use with the light client.
-// Note: defining this type here, rather than using `SignKey` from jf-primitives, is a workaround to
-// allow us to extract the inner field element and thus generate a `KeyPair`.
-// See https://github.com/EspressoSystems/jellyfish/issues/497.
-#[tagged("STATEKEY")]
-#[derive(Clone, Copy, Debug, Default, CanonicalSerialize, CanonicalDeserialize, Zeroize)]
-pub struct SchnorrPrivKey(<EdwardsConfig as CurveConfig>::ScalarField);
-
-pub type SchnorrPubKey = schnorr::VerKey<EdwardsConfig>;
-
-impl SchnorrPrivKey {
-    pub fn generate_from_seed_indexed(seed: [u8; 32], index: u64) -> Self {
-        Self(
-            *StateKeyPair::generate_from_seed_indexed(seed, index)
-                .0
-                .sign_key_internal(),
-        )
-    }
-
-    pub fn key_pair(self) -> StateKeyPair {
-        StateKeyPair(schnorr::KeyPair::generate_with_sign_key(self.0))
-    }
-
-    pub fn pub_key(self) -> SchnorrPubKey {
-        self.key_pair().0.ver_key()
-    }
-}
-
 type ElectionConfig = StaticElectionConfig;
 
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
@@ -175,20 +139,59 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type CommitteeNetwork = N::DAChannel;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Delta {}
+
+impl StateDelta for Delta {}
+
+#[derive(Debug, Clone)]
 pub struct NodeState {
+    l1_client: L1Client,
+    peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
     builder_address: Wallet<SigningKey>,
 }
 
-impl Default for NodeState {
-    fn default() -> Self {
-        let wallet = FeeAccount::test_wallet();
-
+impl NodeState {
+    pub fn new(
+        l1_client: L1Client,
+        builder_address: Wallet<SigningKey>,
+        catchup: impl StateCatchup + 'static,
+    ) -> Self {
         Self {
-            genesis_state: ValidatedState::default(),
-            builder_address: wallet,
+            l1_client,
+            peers: Arc::new(catchup),
+            genesis_state: Default::default(),
+            builder_address,
         }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock() -> Self {
+        Self::new(
+            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            state::FeeAccount::test_wallet(),
+            catchup::mock::MockStateCatchup::default(),
+        )
+    }
+
+    pub fn with_l1(mut self, l1_client: L1Client) -> Self {
+        self.l1_client = l1_client;
+        self
+    }
+
+    pub fn with_builder(mut self, wallet: Wallet<SigningKey>) -> Self {
+        self.builder_address = wallet;
+        self
+    }
+
+    pub fn with_genesis(mut self, state: ValidatedState) -> Self {
+        self.genesis_state = state;
+        self
+    }
+
+    fn l1_client(&self) -> &L1Client {
+        &self.l1_client
     }
 }
 
@@ -239,7 +242,8 @@ pub struct NetworkParams {
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
-    pub private_state_key: SchnorrPrivKey,
+    pub private_state_key: StateSignKey,
+    pub state_peers: Vec<Url>,
 }
 
 #[derive(Clone, Debug)]
@@ -249,11 +253,17 @@ pub struct BuilderParams {
     pub prefunded_accounts: Vec<Address>,
 }
 
+#[derive(Clone, Debug)]
+pub struct L1Params {
+    pub url: Url,
+}
+
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     mut persistence: impl SequencerPersistence,
     builder_params: BuilderParams,
+    l1_params: L1Params,
 ) -> anyhow::Result<SequencerContext<network::Web>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -264,11 +274,12 @@ pub async fn init_node(
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+    let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
         private_key: network_params.private_staking_key,
         stake_value: 1,
-        state_key_pair: network_params.private_state_key.key_pair(),
+        state_key_pair,
     };
 
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
@@ -328,9 +339,13 @@ pub async fn init_node(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
+    let l1_client = L1Client::new(l1_params.url, Address::default());
+
     let instance_state = NodeState {
+        l1_client,
         builder_address: wallet,
         genesis_state,
+        peers: Arc::new(StatePeers::from_urls(network_params.state_peers)),
     };
 
     let mut ctx = SequencerContext::init(
@@ -352,8 +367,9 @@ pub async fn init_node(
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::persistence::no_storage::NoStorage;
+    use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
     use commit::Committable;
+    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -364,18 +380,20 @@ pub mod testing {
     };
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_types::{
+        event::LeafInfo,
         light_client::StateKeyPair,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use std::time::Duration;
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey, ElectionConfig>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        anvil: Arc<AnvilInstance>,
     }
 
     impl Default for TestConfig {
@@ -406,10 +424,12 @@ pub mod testing {
 
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
-                total_nodes: num_nodes.try_into().unwrap(),
+                num_nodes_with_stake: num_nodes.try_into().unwrap(),
+                num_nodes_without_stake: 0,
                 min_transactions: 1,
                 max_transactions: 10000.try_into().unwrap(),
                 known_nodes_with_stake,
+                known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
@@ -418,7 +438,8 @@ pub mod testing {
                 propose_min_round_time: Duration::from_secs(0),
                 propose_max_round_time: Duration::from_secs(1),
                 election_config: None,
-                da_committee_size: num_nodes,
+                da_staked_committee_size: num_nodes,
+                da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
             };
 
@@ -427,6 +448,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
+                anvil: Arc::new(Anvil::new().spawn()),
             }
         }
     }
@@ -439,17 +461,25 @@ pub mod testing {
         }
 
         pub async fn init_nodes(&self) -> Vec<SequencerContext<network::Memory>> {
-            join_all(
-                (0..self.num_nodes())
-                    .map(|i| async move { self.init_node(i, NoStorage, &NoMetrics).await }),
-            )
+            join_all((0..self.num_nodes()).map(|i| async move {
+                self.init_node(
+                    i,
+                    ValidatedState::default(),
+                    NoStorage,
+                    MockStateCatchup::default(),
+                    &NoMetrics,
+                )
+                .await
+            }))
             .await
         }
 
         pub async fn init_node(
             &self,
             i: usize,
+            state: ValidatedState,
             persistence: impl SequencerPersistence,
+            catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
         ) -> SequencerContext<network::Memory> {
             let mut config = self.config.clone();
@@ -474,9 +504,19 @@ pub mod testing {
                 quorum_network: network,
                 _pd: Default::default(),
             };
+
+            let wallet = Self::builder_wallet(i);
+            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let node_state = NodeState::new(
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                wallet,
+                catchup,
+            )
+            .with_genesis(state);
+
             SequencerContext::init(
                 config,
-                NodeState::default(),
+                node_state,
                 persistence,
                 networks,
                 None,
@@ -485,6 +525,15 @@ pub mod testing {
             )
             .await
             .unwrap()
+        }
+
+        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
+            MnemonicBuilder::<English>::default()
+                .phrase("test test test test test test test test test test test junk")
+                .index(i as u32)
+                .unwrap()
+                .build()
+                .unwrap()
         }
     }
 
@@ -502,7 +551,7 @@ pub mod testing {
             tracing::info!("Received event from handle: {event:?}");
 
             if let Decide { leaf_chain, .. } = event.event {
-                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
                         .block_payload
                         .as_ref()?
@@ -526,13 +575,17 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use super::{transaction::ApplicationTransaction, vm::TestVm, *};
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
-    use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+    use hotshot_types::{
+        event::LeafInfo,
+        traits::block_contents::{
+            vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+        },
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
 
@@ -541,22 +594,24 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let handles = TestConfig::default().init_nodes().await;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
+
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
         }
 
         // Submit target transaction to handle
-        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
         handles[0]
-            .submit_transaction(submitted_txn.clone())
+            .submit_transaction(txn.clone())
             .await
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, &submitted_txn).await;
+        wait_for_decide_on_handle(&mut events, &txn).await;
     }
 
     #[async_std::test]
@@ -565,8 +620,10 @@ mod test {
         setup_backtrace();
 
         let success_height = 30;
+        // Assign `config` so it isn't dropped early.
+        let config = TestConfig::default();
+        let handles = config.init_nodes().await;
 
-        let handles = TestConfig::default().init_nodes().await;
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -583,7 +640,7 @@ mod test {
                     .collect();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = NodeState::default();
+            let genesis_state = NodeState::mock();
             Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
         };
 
@@ -596,13 +653,12 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for (leaf, _) in leaf_chain.iter().rev() {
+            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
                 if header.height == 0 {
                     parent = header;
                     continue;
                 }
-                dbg!(header.height, parent.height);
                 assert_eq!(header.height, parent.height + 1);
                 assert!(header.timestamp >= parent.timestamp);
                 assert!(header.l1_head >= parent.l1_head);

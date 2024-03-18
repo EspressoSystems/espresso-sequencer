@@ -61,6 +61,7 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
+            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -82,7 +83,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -100,6 +101,7 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
+            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
@@ -120,6 +122,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download executables AMD
         uses: actions/download-artifact@v3
