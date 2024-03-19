@@ -96,6 +96,16 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         0..self.ns_table.len()
     }
 
+    /// Returns the flat bytes for namespace `ns_id`.
+    pub fn namespace(&self, ns_id: NamespaceId) -> Option<&[u8]> {
+        let ns_index = self.ns_table.lookup(ns_id)?;
+        let ns_payload_range = self
+            .ns_table
+            .get_payload_range(ns_index, self.raw_payload.len())
+            .1;
+        self.raw_payload.get(ns_payload_range)
+    }
+
     // TODO dead code even with `pub` because this module is private in lib.rs
     #[allow(dead_code)]
     /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
@@ -105,6 +115,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
     pub fn namespace_with_proof(
         &self,
+        // TODO don't need ns_table any more, it's part of self
         ns_table: &NameSpaceTable<TxTableEntryWord>,
         ns_id: NamespaceId,
         vid_common: VidCommon,
@@ -502,6 +513,13 @@ mod test {
                 assert_eq!(
                     actual_ns_payload_flat, derived_ns.payload_flat,
                     "namespace {ns_id} incorrect payload bytes",
+                );
+
+                // test ns without proof
+                let ns_payload_without_proof = block.namespace(ns_id).unwrap();
+                assert_eq!(
+                    ns_payload_without_proof, &derived_ns.payload_flat,
+                    "namespace {ns_id} incorrect payload bytes returned from `namespace`",
                 );
 
                 // test ns proof
