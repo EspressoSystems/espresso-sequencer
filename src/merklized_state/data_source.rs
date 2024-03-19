@@ -49,7 +49,6 @@ where
 {
     async fn get_path(
         &self,
-        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
@@ -145,4 +144,7 @@ where
     /// Retrieves the field in the header containing the Merkle tree commitment
     /// for the state implementing this trait.
     fn header_state_commitment_field() -> &'static str;
+
+    /// Get the height of the tree
+    fn tree_height() -> usize;
 }

@@ -15,7 +15,7 @@
 //! The state API provides an interface for serving queries against arbitrarily old snapshots of the state.
 //! This allows a full Merkle tree to be reconstructed from storage.
 //! If any parent state is missing then the partial snapshot can not be queried.
-use std::{fmt::Display, path::PathBuf, str::FromStr};
+use std::{fmt::Display, path::PathBuf};
 
 use clap::Args;
 use derive_more::From;
@@ -79,14 +79,12 @@ impl Error {
 
 pub fn define_api<State, Types: NodeType, M: MerklizedState<Types>>(
     options: &Options,
-    merkle_tree: M,
 ) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M>,
     Types: NodeType,
     for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
-    <<M as MerklizedState<Types>>::Key as FromStr>::Err: Debug,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -96,7 +94,6 @@ where
 
     api.with_version("0.0.1".parse().unwrap())
         .get("get_path", move |req, state| {
-            let merkle_tree = merkle_tree.clone();
             async move {
                 // Determine the snapshot type based on request parameters, either index or commit
                 let snapshot = if let Some(height) = req.opt_integer_param("height")? {
@@ -111,10 +108,7 @@ where
                     status: StatusCode::InternalServerError,
                 })?;
 
-                state
-                    .get_path(merkle_tree.height(), snapshot, key)
-                    .await
-                    .context(QuerySnafu)
+                state.get_path(snapshot, key).await.context(QuerySnafu)
             }
             .boxed()
         })?;

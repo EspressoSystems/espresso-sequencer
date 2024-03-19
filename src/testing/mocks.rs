@@ -144,4 +144,8 @@ impl MerklizedState<MockTypes> for MockMerkleTree {
     fn header_state_commitment_field() -> &'static str {
         "test_merkle_tree_root"
     }
+
+    fn tree_height() -> usize {
+        8
+    }
 }

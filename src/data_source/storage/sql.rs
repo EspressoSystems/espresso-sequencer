@@ -1367,12 +1367,11 @@ where
     /// Retreives a Merkle path from the database
     async fn get_path(
         &self,
-        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
         let state_type = State::state_type();
-
+        let tree_height = State::tree_height();
         let header_state_commitment_field = State::header_state_commitment_field();
 
         // Get the traversal path of the index
@@ -2893,7 +2892,6 @@ mod test {
             let merkle_path =
                 <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
                     &storage,
-                    test_tree.height(),
                     Snapshot::Index(block_height as u64),
                     i,
                 )
@@ -2970,7 +2968,6 @@ mod test {
 
         let path_with_bh_2 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(2),
             0,
         )
@@ -2980,7 +2977,6 @@ mod test {
         assert_eq!(path_with_bh_2, proof_bh_2.proof);
         let path_with_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(1),
             0,
         )
@@ -3038,7 +3034,6 @@ mod test {
         // the path from the db and and tree should match
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(block_height as u64),
             0,
         )
@@ -3083,7 +3078,6 @@ mod test {
         let non_membership_path =
             <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
                 &storage,
-                test_tree.height(),
                 Snapshot::Index(2_u64),
                 0,
             )
@@ -3101,7 +3095,6 @@ mod test {
 
         let proof_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(1_u64),
             0,
         )
@@ -3158,7 +3151,6 @@ mod test {
 
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Commit(commitment),
             0,
         )
@@ -3236,7 +3228,6 @@ mod test {
 
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(block_height as u64),
             1,
         )
@@ -3259,7 +3250,6 @@ mod test {
         // Querying the path again
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(block_height as u64),
             1,
         )
@@ -3311,7 +3301,6 @@ mod test {
 
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            test_tree.height(),
             Snapshot::Index(2_u64),
             1,
         )

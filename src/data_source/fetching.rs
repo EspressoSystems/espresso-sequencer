@@ -580,7 +580,6 @@ where
 {
     async fn get_path(
         &self,
-        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
@@ -589,7 +588,7 @@ where
             .read()
             .await
             .storage
-            .get_path(tree_height, snapshot, key)
+            .get_path(snapshot, key)
             .await
     }
 }
