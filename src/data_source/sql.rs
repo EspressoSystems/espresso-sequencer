@@ -17,9 +17,11 @@ use super::{
     storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
-use crate::availability::QueryableHeader;
 pub use crate::include_migrations;
-use crate::{availability::QueryablePayload, Header, Payload, QueryResult};
+use crate::{
+    availability::{QueryableHeader, QueryablePayload},
+    Header, Payload, QueryResult,
+};
 pub use anyhow::Error;
 use async_std::sync::Arc;
 use async_trait::async_trait;

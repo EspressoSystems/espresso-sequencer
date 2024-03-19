@@ -13,14 +13,15 @@
 #![cfg(feature = "no-storage")]
 
 use super::AvailabilityStorage;
-use crate::data_source::storage::pruning::PrunedHeightStorage;
-use crate::data_source::storage::pruning::{PruneStorage, PrunerConfig};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
-    data_source::VersionedDataSource,
+    data_source::{
+        storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
+        VersionedDataSource,
+    },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryError, QueryResult, VidShare,
 };
@@ -190,6 +191,7 @@ where
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
+    use crate::QueryError;
     use crate::{
         availability::{define_api, AvailabilityDataSource, Fetch},
         data_source::{

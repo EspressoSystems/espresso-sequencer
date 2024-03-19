@@ -73,8 +73,11 @@
 //! different request for the same object, one that permitted an active fetch. Or it may have been
 //! fetched [proactively](#proactive-fetching).
 
-use super::storage::pruning::PruneStorage;
-use super::{notifier::Notifier, storage::AvailabilityStorage, VersionedDataSource};
+use super::{
+    notifier::Notifier,
+    storage::{pruning::PruneStorage, AvailabilityStorage},
+    VersionedDataSource,
+};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -82,6 +85,7 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
+    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -90,6 +94,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
+
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::sleep,
@@ -102,6 +107,7 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
+use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
 
 use std::{
     cmp::min,
@@ -536,6 +542,54 @@ where
         hash: TransactionHash<Types>,
     ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
         self.fetcher.get(TransactionRequest::from(hash)).await
+    }
+}
+
+#[async_trait]
+impl<Types, State, S, P> UpdateStateData<Types, State> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    State: MerklizedState<Types>,
+    S: UpdateStateData<Types, State> + Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
+{
+    async fn insert_merkle_nodes(
+        &mut self,
+        path: MerklePath<State::Entry, State::Key, State::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> QueryResult<()> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .storage
+            .insert_merkle_nodes(path, traversal_path, block_number)
+            .await
+    }
+}
+
+#[async_trait]
+impl<Types, S, State, P> MerklizedStateDataSource<Types, State> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: MerklizedStateDataSource<Types, State> + Send + Sync + 'static,
+    P: AvailabilityProvider<Types>,
+    State: MerklizedState<Types> + 'static,
+    <State as MerkleTreeScheme>::Commitment: Send,
+{
+    async fn get_path(
+        &self,
+        snapshot: Snapshot<Types, State>,
+        key: State::Key,
+    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+        self.fetcher
+            .storage
+            .read()
+            .await
+            .storage
+            .get_path(snapshot, key)
+            .await
     }
 }
 

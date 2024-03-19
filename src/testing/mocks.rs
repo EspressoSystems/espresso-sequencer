@@ -10,27 +10,36 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::merklized_state::{MerklizedState, UpdateStateStorage};
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
     types::HeightIndexed,
 };
+use async_trait::async_trait;
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
     implementations::{MemoryNetwork, MemoryStorage},
-    NodeImplementation,
+    NodeImplementation, ValidatedState,
 };
+use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::{TestInstanceState, TestValidatedState},
+    state_types::TestInstanceState,
 };
+use hotshot_types::data::Leaf;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     message::Message,
     signature_key::BLSPubKey,
     traits::node_implementation::NodeType,
 };
+
+use jf_primitives::merkle_tree::{
+    prelude::{Sha3Digest, Sha3Node},
+    universal_merkle_tree::UniversalMerkleTree,
+};
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
@@ -91,8 +100,19 @@ impl NodeType for MockTypes {
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
 }
 
-pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
+#[async_trait]
+impl<D> UpdateStateStorage<MockTypes, D> for TestValidatedState {
+    async fn update_storage(
+        &self,
+        _storage: &mut D,
+        _leaf: &Leaf<MockTypes>,
+        _delta: Arc<<<MockTypes as NodeType>::ValidatedState as ValidatedState<MockTypes>>::Delta>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
 
+pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
 pub type MockNetwork = MemoryNetwork<Message<MockTypes>, BLSPubKey>;
 
@@ -105,4 +125,27 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes>;
     type QuorumNetwork = MockNetwork;
     type CommitteeNetwork = MockNetwork;
+}
+
+pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum::U8, Sha3Node>;
+
+impl MerklizedState<MockTypes> for MockMerkleTree {
+    type Arity = typenum::U8;
+    type Key = usize;
+    type Entry = usize;
+    type T = Sha3Node;
+    type Commit = Self::Commitment;
+    type Digest = Sha3Digest;
+
+    fn state_type() -> &'static str {
+        "test_tree"
+    }
+
+    fn header_state_commitment_field() -> &'static str {
+        "test_merkle_tree_root"
+    }
+
+    fn tree_height() -> usize {
+        3
+    }
 }

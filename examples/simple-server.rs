@@ -146,6 +146,7 @@ async fn init_consensus(
             state_ver_key: state_key_pair.ver_key(),
         })
         .collect::<Vec<_>>();
+
     let config = HotShotConfig {
         num_nodes_with_stake: NonZeroUsize::new(pub_keys.len()).unwrap(),
         num_nodes_without_stake: 0,

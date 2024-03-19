@@ -17,6 +17,7 @@ use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AvailabilityStorage,
 };
+
 use crate::{
     availability::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
@@ -34,6 +35,7 @@ use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::{
