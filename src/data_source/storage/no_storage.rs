@@ -22,6 +22,7 @@ use crate::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
         VersionedDataSource,
     },
+    explorer,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryError, QueryResult, VidShare,
 };
@@ -188,7 +189,28 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType> ExplorerStorage<Types> for NoStorage where Payload<Types>: QueryablePayload {}
+impl<Types: NodeType> ExplorerStorage<Types> for NoStorage
+where
+    Payload<Types>: QueryablePayload,
+{
+    async fn get_block_summaries(
+        &self,
+        _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+}
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]

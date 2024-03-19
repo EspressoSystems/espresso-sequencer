@@ -14,15 +14,18 @@ use super::{
     errors::{ExplorerAPIError, Unimplemented},
     monetary_value::MonetaryValue,
 };
-use crate::availability::TransactionHash;
-use crate::node::BlockHash;
+use crate::{
+    availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
+    Header, Payload, QueryError, Resolvable,
+};
+use crate::{node::BlockHash, types::HeightIndexed};
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    num::NonZeroUsize,
+    num::{NonZeroUsize, TryFromIntError},
 };
 use tide_disco::StatusCode;
 use time::format_description::well_known::Rfc3339;
@@ -142,13 +145,59 @@ impl<'de> Deserialize<'de> for Timestamp {
 /// for use in a Block Explorer.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockDetail {
-    pub height: usize,
+    pub height: u64,
     pub time: Timestamp,
-    pub num_transactions: usize,
-    pub proposer_id: usize,
-    pub fee_recipient: usize,
-    pub size: usize,
+    pub num_transactions: u64,
+    pub proposer_id: WalletAddress,
+    pub fee_recipient: WalletAddress,
+    pub size: u64,
     pub block_reward: Vec<MonetaryValue>,
+}
+
+impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockDetail
+where
+    BlockQueryData<Types>: HeightIndexed,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
+    type Error = TimestampConversionError;
+
+    fn try_from(value: BlockQueryData<Types>) -> Result<Self, Self::Error> {
+        let seconds = i64::try_from(value.header.timestamp())?;
+
+        Ok(Self {
+            height: value.height(),
+            time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
+            num_transactions: value.num_transactions,
+            proposer_id: value.header().fee_info_account().into(),
+            fee_recipient: value.header().fee_info_account().into(),
+            size: value.size,
+            block_reward: vec![value.header().fee_info_reward().into()],
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+pub struct WalletAddress([u8; 20]);
+
+impl WalletAddress {
+    pub fn zero() -> Self {
+        WalletAddress([0; 20])
+    }
+}
+
+impl From<[u8; 20]> for WalletAddress {
+    fn from(bytes: [u8; 20]) -> Self {
+        WalletAddress(bytes)
+    }
+}
+
+impl From<Vec<u8>> for WalletAddress {
+    fn from(bytes: Vec<u8>) -> Self {
+        let mut arr = [0; 20];
+        arr.copy_from_slice(&bytes);
+        WalletAddress(arr)
+    }
 }
 
 /// [BlockSummary] is a struct that represents a summary overview of a specific
@@ -156,11 +205,58 @@ pub struct BlockDetail {
 /// useful for displaying information in a list of Blocks.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockSummary {
-    pub height: usize,
-    pub proposer_id: usize,
-    pub num_transactions: usize,
-    pub size: usize,
+    pub height: u64,
+    pub proposer_id: WalletAddress,
+    pub num_transactions: u64,
+    pub size: u64,
     pub time: Timestamp,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TimestampConversionError {
+    TimeError(time::error::ComponentRange),
+    IntError(TryFromIntError),
+}
+
+impl From<time::error::ComponentRange> for TimestampConversionError {
+    fn from(value: time::error::ComponentRange) -> Self {
+        Self::TimeError(value)
+    }
+}
+
+impl From<TryFromIntError> for TimestampConversionError {
+    fn from(value: TryFromIntError) -> Self {
+        Self::IntError(value)
+    }
+}
+
+impl From<TimestampConversionError> for QueryError {
+    fn from(value: TimestampConversionError) -> Self {
+        Self::Error {
+            message: format!("{:?}", value),
+        }
+    }
+}
+
+impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockSummary
+where
+    BlockQueryData<Types>: HeightIndexed,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
+    type Error = TimestampConversionError;
+
+    fn try_from(value: BlockQueryData<Types>) -> Result<Self, Self::Error> {
+        let seconds = i64::try_from(value.header.timestamp())?;
+
+        Ok(Self {
+            height: value.height(),
+            proposer_id: value.header().fee_info_account().into(),
+            num_transactions: value.num_transactions,
+            size: value.size,
+            time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
+        })
+    }
 }
 
 /// [NamespaceId] is a specific type that represents an identified for a
@@ -191,7 +287,7 @@ pub struct TransactionDetail {
     pub index: usize,
     pub num_transactions: usize,
     pub size: usize,
-    // pub hash: TransactionHash,
+    pub hash: String,
     pub time: Timestamp,
     // pub sender: ProposerID,
     pub sequencing_fees: Vec<MonetaryValue>,
@@ -204,10 +300,41 @@ pub struct TransactionDetail {
 /// information in a list of Transactions.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TransactionSummary {
-    // pub hash: TransactionHash,
+    pub hash: String,
     pub rollups: Vec<NamespaceId>,
-    pub height: usize,
+    pub height: u64,
     pub time: Timestamp,
+}
+
+impl<Types: NodeType>
+    TryFrom<(
+        &BlockQueryData<Types>,
+        usize,
+        <Types as NodeType>::Transaction,
+    )> for TransactionSummary
+where
+    BlockQueryData<Types>: HeightIndexed,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
+    type Error = TimestampConversionError;
+
+    fn try_from(
+        (block, _index, transaction): (
+            &BlockQueryData<Types>,
+            usize,
+            <Types as NodeType>::Transaction,
+        ),
+    ) -> Result<Self, Self::Error> {
+        let seconds = i64::try_from(block.header.timestamp())?;
+
+        Ok(Self {
+            hash: transaction.commitment().to_string(),
+            height: block.height(),
+            time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
+            rollups: vec![],
+        })
+    }
 }
 
 /// GetBlockSummariesRequest is a struct that represents an incoming request

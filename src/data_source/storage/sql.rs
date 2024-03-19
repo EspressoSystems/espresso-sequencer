@@ -23,6 +23,7 @@ use crate::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
+    explorer::{self, data_source::BlockSummary},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
         UpdateStateData,
@@ -1928,6 +1929,186 @@ where
     Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
 {
+    async fn get_block_summaries(
+        &self,
+        request: &explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>> {
+        let request = &request.0;
+
+        let (query, params): (String, Vec<Box<dyn ToSql + Send + Sync>>) = match request.target {
+            explorer::data_source::BlockIdentifier::Latest => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        ORDER BY h.height DESC 
+                        LIMIT $1"
+                ),
+                vec![Box::new(request.num_blocks.get() as i64)],
+            ),
+            explorer::data_source::BlockIdentifier::Height(height) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        WHERE h.height = $1
+                        ORDER BY h.height DESC 
+                        LIMIT $2"
+                ),
+                vec![
+                    Box::new(height as i64),
+                    Box::new(request.num_blocks.get() as i64),
+                ],
+            ),
+            explorer::data_source::BlockIdentifier::Hash(hash) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        WHERE h.hash <= (SELECT h1.height FROM header AS h1 WHERE h1.hash = $1)
+                        ORDER BY h.height DESC 
+                        LIMIT $2"
+                ),
+                vec![
+                    Box::new(hash.to_string()),
+                    Box::new(request.num_blocks.get() as i64),
+                ],
+            ),
+        };
+
+        let result = self.query(&query, params).await.map(|row_stream| {
+            row_stream.map(|row| -> Result<BlockSummary, QueryError> {
+                let block = parse_block::<Types>(row?)?;
+                Ok(BlockSummary::try_from(block)?)
+            })
+        });
+
+        let results = result.map(|res| async move { res.try_collect::<Vec<BlockSummary>>().await });
+
+        results?.await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary>> {
+        let range = &request.range;
+        let target = &range.target;
+        // let filter = &request.filter;
+
+        let (query, params, offset): (String, Vec<Box<dyn ToSql + Send + Sync>>, Option<usize>) =
+            match target {
+                explorer::data_source::TransactionIdentifier::Latest => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                           FROM header AS h
+                           JOIN payload AS p ON h.height = p.height
+                           WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $1
+                            )
+                           ORDER BY h.height DESC"
+                    ),
+                    vec![Box::new(range.num_transactions.get() as i64)],
+                    Some(0),
+                ),
+                explorer::data_source::TransactionIdentifier::HeightAndOffset(height, offset) => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE (t1.block_height, t1.index) <= (
+                                        SELECT t2.block_height, t2.index
+                                            FROM transaction AS t2
+                                            WHERE t2.block_height = $1
+                                            ORDER BY (t2.block_height, t2.index) DESC
+                                            OFFSET $2
+                                            LIMIT 1
+                                    )
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $3
+                            )
+                            ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(*height as i64),
+                        Box::new(*offset as i64),
+                        Box::new(range.num_transactions.get() as i64),
+                    ],
+                    Some(*offset),
+                ),
+                explorer::data_source::TransactionIdentifier::Hash(hash) => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE (t1.block_height, t1.index) <= (
+                                        SELECT t2.block_height, t2.index
+                                            FROM transaction AS t2
+                                            WHERE t2.hash = $1
+                                            ORDER BY (t2.block_height, t2.index) DESC
+                                            OFFSET $2
+                                            LIMIT 1
+                                    )
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $2
+                            )
+                            ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(hash.to_string()),
+                        Box::new(range.num_transactions.get() as i64),
+                    ],
+                    // This should be some value... but we have no way of
+                    // telling what that should be at this point.
+                    None,
+                ),
+            };
+
+        let result = self.query(&query, params).await.map(|row_stream| {
+            row_stream.map(|row| -> Result<Vec<explorer::data_source::TransactionSummary>, QueryError> {
+                let block = parse_block::<Types>(row?)?;
+                let block_ref = &block;
+
+
+                block
+                    .enumerate()
+                    .enumerate()
+                    .map(move |(index, (_, txn))| {
+                        Ok(explorer::data_source::TransactionSummary::try_from((block_ref, index, txn))?)
+                    })
+                    .try_collect::<explorer::data_source::TransactionSummary, Vec<explorer::data_source::TransactionSummary>, QueryError>()
+            })
+        });
+
+        let non_flattened_results = result?
+            .try_collect::<Vec<Vec<explorer::data_source::TransactionSummary>>>()
+            .await?;
+
+        let flattened_results = non_flattened_results
+            .into_iter()
+            .flat_map(|v| v.into_iter().rev())
+            .skip(offset.unwrap_or(0))
+            .skip_while(|txn| {
+                if let explorer::data_source::TransactionIdentifier::Hash(hash) = target {
+                    txn.hash != *hash.to_string()
+                } else {
+                    false
+                }
+            })
+            .take(range.num_transactions.get())
+            .collect::<Vec<explorer::data_source::TransactionSummary>>();
+
+        Ok(flattened_results)
+    }
 }
 
 /// An atomic SQL transaction.

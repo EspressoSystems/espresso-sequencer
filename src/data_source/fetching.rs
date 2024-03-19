@@ -78,13 +78,14 @@ use super::{
     storage::{pruning::PruneStorage, AvailabilityStorage, ExplorerStorage},
     VersionedDataSource,
 };
+use crate::QueryError;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    explorer::data_source::ExplorerDataSource,
+    explorer::{self, data_source::ExplorerDataSource},
     fetching::{self, request, Provider},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
@@ -742,6 +743,53 @@ where
     S: ExplorerStorage<Types> + Send + Sync,
     P: Send + Sync,
 {
+    async fn get_block_summaries(
+        &self,
+        request: explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::BlockSummary>,
+        explorer::data_source::GetBlockSummariesError,
+    > {
+        self.storage()
+            .await
+            .get_block_summaries(&request)
+            .await
+            .map_err(|err| match err {
+                QueryError::NotFound => {
+                    explorer::data_source::GetBlockSummariesError::TargetNotFound(format!(
+                        "{:?}",
+                        request.0.target,
+                    ))
+                }
+                _ => explorer::data_source::GetBlockSummariesError::Unimplemented(
+                    explorer::errors::Unimplemented {},
+                ),
+            })
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::TransactionSummary>,
+        explorer::data_source::GetTransactionSummariesError,
+    > {
+        self.storage()
+            .await
+            .get_transaction_summaries(&request)
+            .await
+            .map_err(|err| match err {
+                QueryError::NotFound => {
+                    explorer::data_source::GetTransactionSummariesError::TargetNotFound(format!(
+                        "{:?}",
+                        request.range.target,
+                    ))
+                }
+                _ => explorer::data_source::GetTransactionSummariesError::Unimplemented(
+                    explorer::errors::Unimplemented {},
+                ),
+            })
+    }
 }
 
 /// Asynchronous retrieval and storage of [`Fetchable`] resources.

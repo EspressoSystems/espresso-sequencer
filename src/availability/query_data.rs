@@ -41,6 +41,15 @@ pub type Timestamp = time::OffsetDateTime;
 
 pub trait QueryableHeader<Types: NodeType>: BlockHeader<Types> {
     fn timestamp(&self) -> u64;
+
+    // Something that indicates the fee recipient / proposer in the block.
+    fn fee_info_account(&self) -> [u8; 20] {
+        [0; 20]
+    }
+
+    fn fee_info_reward(&self) -> i128 {
+        0
+    }
 }
 
 /// A block payload whose contents (e.g. individual transactions) can be examined.

@@ -27,9 +27,10 @@ use crate::{
         },
     },
     data_source::VersionedDataSource,
+    explorer,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidCommitment, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -464,6 +465,23 @@ where
     Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
 {
+    async fn get_block_summaries(
+        &self,
+        _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
 }
 
 /// Update an index mapping hashes of objects to their positions in the ledger.

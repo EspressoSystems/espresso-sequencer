@@ -50,6 +50,15 @@ impl MonetaryValue {
     pub fn eth(value: i128) -> Self {
         Self::new(CurrencyCode::Eth, value)
     }
+
+    /// esp is a convenience function to create a [MonetaryValue] with the
+    /// ESP currency code.
+    ///
+    /// This is used to represents Espresso Tokens, and is the default that
+    /// is used for Espresso Fees and Rewards
+    pub fn esp(value: i128) -> Self {
+        Self::new(CurrencyCode::Esp, value)
+    }
 }
 
 impl Display for MonetaryValue {
@@ -362,6 +371,14 @@ impl<'de> Deserialize<'de> for MonetaryValue {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_str(MonetaryValueVisitor)
+    }
+}
+
+impl From<i128> for MonetaryValue {
+    /// from converts an [i128] into a [MonetaryValue] with the USD currency
+    /// code.
+    fn from(value: i128) -> Self {
+        Self::esp(value)
     }
 }
 

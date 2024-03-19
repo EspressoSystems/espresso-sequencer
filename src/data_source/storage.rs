@@ -30,6 +30,9 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
+    explorer::data_source::{
+        BlockSummary, GetBlockSummariesRequest, GetTransactionSummariesRequest, TransactionSummary,
+    },
     Header, Payload, QueryResult,
 };
 use async_trait::async_trait;
@@ -115,4 +118,13 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
+    async fn get_block_summaries(
+        &self,
+        request: &GetBlockSummariesRequest<Types>,
+    ) -> QueryResult<Vec<BlockSummary>>;
+
+    async fn get_transaction_summaries(
+        &self,
+        request: &GetTransactionSummariesRequest<Types>,
+    ) -> QueryResult<Vec<TransactionSummary>>;
 }
