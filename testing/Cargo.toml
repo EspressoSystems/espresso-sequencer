@@ -9,9 +9,7 @@ authors = { workspace = true }
 default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
-gpu-vid = [
-    "hotshot-types/gpu-vid"
-]
+gpu-vid = ["hotshot-types/gpu-vid"]
 
 [dependencies]
 async-broadcast = { workspace = true }
@@ -29,8 +27,8 @@ hotshot-macros = { path = "../macros" }
 hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
-hotshot-types = { workspace = true }
-hs-builder-api = { workspace = true }
+hotshot-types = { path = "../types" }
+hotshot-builder-api = { path = "../builder-api" }
 jf-primitives = { workspace = true }
 portpicker = { workspace = true }
 rand = { workspace = true }

@@ -1,0 +1,65 @@
+[package]
+authors = ["Espresso Systems <hello@espressosys.com>"]
+description = "Types and traits for the HotShot consesus module"
+edition = "2021"
+name = "hotshot-types"
+version = "0.1.11"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+ark-bls12-381 = { workspace = true }
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ed-on-bn254 = { workspace = true }
+ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+bitvec = { workspace = true }
+blake3 = { workspace = true }
+commit = { workspace = true }
+custom_debug = { workspace = true }
+digest = { workspace = true }
+either = { workspace = true }
+espresso-systems-common = { workspace = true }
+ethereum-types = { workspace = true }
+futures = { workspace = true }
+
+generic-array = { workspace = true }
+
+# TODO generic-array should not be a direct dependency
+# https://github.com/EspressoSystems/HotShot/issues/1850
+lazy_static = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+snafu = { workspace = true }
+time = { workspace = true }
+tracing = { workspace = true }
+typenum = { workspace = true }
+derivative = "2.2.0"
+jf-primitives = { workspace = true }
+jf-plonk = { workspace = true }
+jf-utils = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+tagged-base64 = { workspace = true }
+versioned-binary-serialization = { workspace = true }
+displaydoc = { version = "0.2.3", default-features = false }
+dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+gpu-vid = ["jf-primitives/gpu-vid"]
+
+[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
+async-std = { workspace = true }
+
+[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
+tokio = { workspace = true }

@@ -40,7 +40,7 @@ futures = { workspace = true }
 hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
-hotshot-types = { workspace = true }
+hotshot-types = { path = "../types" }
 hotshot-web-server = { version = "0.5.26", path = "../web_server", default-features = false }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
@@ -58,10 +58,10 @@ versioned-binary-serialization = { workspace = true }
 tokio = { workspace = true }
 cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
 cdn-broker = { workspace = true, features = [
-    "insecure",
-    "runtime-tokio",
-    "strong_consistency",
-    "local_discovery",
+  "insecure",
+  "runtime-tokio",
+  "strong_consistency",
+  "local_discovery",
 ] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
 
@@ -69,10 +69,10 @@ cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
 async-std = { workspace = true }
 cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
 cdn-broker = { workspace = true, features = [
-    "insecure",
-    "runtime-async-std",
-    "strong_consistency",
-    "local_discovery",
+  "insecure",
+  "runtime-async-std",
+  "strong_consistency",
+  "local_discovery",
 ] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
 

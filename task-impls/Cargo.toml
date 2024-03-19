@@ -17,8 +17,8 @@ commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot-task = { path = "../task" }
-hotshot-types = { workspace = true }
-hs-builder-api = { workspace = true }
+hotshot-types = { path = "../types" }
+hotshot-builder-api = { path = "../builder-api" }
 jf-primitives = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -31,9 +31,7 @@ tracing = { workspace = true }
 versioned-binary-serialization = { workspace = true }
 
 [features]
-gpu-vid = [
-    "hotshot-types/gpu-vid"
-]
+gpu-vid = ["hotshot-types/gpu-vid"]
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

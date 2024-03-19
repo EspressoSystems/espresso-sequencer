@@ -1,12 +1,12 @@
 use async_compatibility_layer::art::async_sleep;
 use std::time::{Duration, Instant};
 
+use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
-use hs_builder_api::builder::{BuildError, Error as BuilderApiError};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use surf_disco::{client::HealthStatus, Client, Url};

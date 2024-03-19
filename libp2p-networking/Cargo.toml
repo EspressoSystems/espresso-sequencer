@@ -21,7 +21,7 @@ custom_debug = { workspace = true }
 derive_builder = "0.20.0"
 either = { workspace = true }
 futures = { workspace = true }
-hotshot-types = { workspace = true }
+hotshot-types = { path = "../types" }
 libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = { workspace = true }
@@ -30,7 +30,7 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
-    "h1-server",
+  "h1-server",
 ] }
 tracing = { workspace = true }
 versioned-binary-serialization = { workspace = true }
