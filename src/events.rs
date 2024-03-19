@@ -10,7 +10,7 @@ use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode
 
 use crate::{api::load_api, events_source::EventsSource};
 
-#[derive(Args, Default)]
+#[derive(Args, Default, Debug)]
 pub struct Options {
     #[arg(
         long = "hotshot-events-service-api-path",
@@ -102,13 +102,7 @@ where
                 let view_number = req.integer_param("view_number")?;
                 Ok(state
                     .read(|state| {
-                        async move {
-                            state
-                                .get_available_hotshot_events(view_number)
-                                .await
-                                .map(Ok)
-                        }
-                        .boxed()
+                        async move { state.subscribe_events(view_number).await.map(Ok) }.boxed()
                     })
                     .await)
             }

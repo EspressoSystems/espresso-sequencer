@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.15" }
-async-trait = "0.1"
 clap = { version = "4.4", features = ["derive", "env"] }
+async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
+async-trait = "0.1"
 derive_more = "0.99"
 futures = "0.3"
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot-types", tag = "0.1.5" }
@@ -17,3 +17,16 @@ snafu = { version = "0.7", features = ["backtraces"] }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.6" }
 toml = "0.8"
+
+[dev-dependencies]
+# hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "tag_0.0.16" }
+
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "tag_0.0.16", features = [
+    "testing",
+] }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
+    "logging-utils",
+] }
+portpicker = "0.1.1"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "tag_0.5.25" }

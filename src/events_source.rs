@@ -1,7 +1,8 @@
 use crate::events_info::EventInfo;
+use crate::fetch::Fetch;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, Stream, StreamExt};
-use hotshot_query_service::availability::Fetch;
+//use hotshot_query_service::availability::Fetch;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use std::ops::RangeBounds;
 use tagged_base64::TaggedBase64;
@@ -20,10 +21,7 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_available_hotshot_events(
-        &self,
-        view_number: usize,
-    ) -> BoxStream<'static, EventInfo<I>> {
+    async fn subscribe_events(&self, view_number: usize) -> BoxStream<'static, EventInfo<I>> {
         self.get_events_range(view_number..)
             .await
             .then(Fetch::resolve)
