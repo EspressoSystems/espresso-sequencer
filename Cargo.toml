@@ -8,8 +8,13 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.4", features = ["derive", "env"] }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
+    "logging-utils",
+] }
+async-lock = "2.8"
 async-trait = "0.1"
 derive_more = "0.99"
+derivative = "2.2"
 futures = "0.3"
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot-types", tag = "0.1.5" }
 serde = { version = "1.0", features = ["derive"] }
@@ -20,12 +25,8 @@ toml = "0.8"
 
 [dev-dependencies]
 # hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "tag_0.0.16" }
-
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "tag_0.0.16", features = [
     "testing",
-] }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
-    "logging-utils",
 ] }
 portpicker = "0.1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }

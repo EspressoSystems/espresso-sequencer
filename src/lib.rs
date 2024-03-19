@@ -3,6 +3,7 @@ pub mod events;
 pub mod events_info;
 pub mod events_source;
 pub mod fetch;
+pub mod notifier;
 #[cfg(test)]
 mod tests {
     use crate::fetch::Fetch;
@@ -59,10 +60,8 @@ mod tests {
             let mut hotshot_handle = hotshot_handle;
             let mut events = Vec::new();
             for i in 0..10 {
-                events.push(EventInfo {
-                    view_number: i,
-                    event: TaggedBase64::from("test"),
-                });
+
+                // TODO
             }
             futures::stream::iter(events.into_iter().map(Fetch::Resolve)).boxed()
         }

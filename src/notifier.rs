@@ -276,9 +276,9 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use async_std::future::timeout;
-    use std::time:Duration;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::future::timeout;
+    use std::time::Duration;
     pub fn setup_test() {
         setup_logging();
         setup_backtrace();

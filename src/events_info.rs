@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound(deserialize = ""))]
-pub struct EventInfo<I: NodeType> {
-    pub event: Event<I>,
-    pub signature: <<I as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    pub sender: <I as NodeType>::SignatureKey,
-    pub _phantom: PhantomData<I>,
+pub struct EventInfo<Types: NodeType> {
+    pub event: Event<Types>,
+    pub signature: <<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    pub sender: <Types as NodeType>::SignatureKey,
+    pub _phantom: PhantomData<Types>,
 }
