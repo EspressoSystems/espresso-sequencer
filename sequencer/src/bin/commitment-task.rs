@@ -14,19 +14,6 @@ use tide_disco::Api;
 use url::Url;
 
 /// Commitment Task Command
-///
-/// There is an additional env var `ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG`
-/// that is not handled by clap because it must be set via env var (and not via
-/// CLI arguments).
-///
-/// Used testing with a pre-merge geth node that does not support the finalized
-/// block tag.
-///
-/// Do not use in production.
-///
-/// When set to a truthy value ("y", "yes", "t", "true", "on", "1") the
-/// commitment task will fetch "latest" block timestamps instead of
-/// "finalized" ones.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// URL of a HotShot sequencer node.
