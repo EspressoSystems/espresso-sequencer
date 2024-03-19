@@ -33,20 +33,21 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 async-std = "1.12.0"
 async-trait = "0.1.77"
 base64 = "0.22"
+base64-bytes = "0.1"
 clap = { version = "4.4", features = ["derive", "env"] }
 cld = "0.5"
 derive_more = "0.99.17"
 ethers = { version = "2.0" }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.23" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot-types", tag = "0.1.1" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.15" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.0.16" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.1", features = [
   "test-apis",
   "test-srs",

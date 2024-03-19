@@ -23,7 +23,6 @@ use l1_client::L1Client;
 
 use state_signature::static_stake_table_commitment;
 use url::Url;
-pub mod bytes;
 mod l1_client;
 pub mod persistence;
 mod state;
@@ -68,11 +67,11 @@ use persistence::SequencerPersistence;
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
 pub use header::Header;
+use hotshot_types::traits::states::StateDelta;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
-
 pub mod network {
     use hotshot_types::message::Message;
 
@@ -139,6 +138,11 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
 }
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Delta {}
+
+impl StateDelta for Delta {}
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
@@ -376,6 +380,7 @@ pub mod testing {
     };
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_types::{
+        event::LeafInfo,
         light_client::StateKeyPair,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
@@ -419,10 +424,12 @@ pub mod testing {
 
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
-                total_nodes: num_nodes.try_into().unwrap(),
+                num_nodes_with_stake: num_nodes.try_into().unwrap(),
+                num_nodes_without_stake: 0,
                 min_transactions: 1,
                 max_transactions: 10000.try_into().unwrap(),
                 known_nodes_with_stake,
+                known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
@@ -431,7 +438,8 @@ pub mod testing {
                 propose_min_round_time: Duration::from_secs(0),
                 propose_max_round_time: Duration::from_secs(1),
                 election_config: None,
-                da_committee_size: num_nodes,
+                da_staked_committee_size: num_nodes,
+                da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
             };
 
@@ -543,7 +551,7 @@ pub mod testing {
             tracing::info!("Received event from handle: {event:?}");
 
             if let Decide { leaf_chain, .. } = event.event {
-                if let Some(height) = leaf_chain.iter().find_map(|(leaf, _)| {
+                if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
                         .block_payload
                         .as_ref()?
@@ -573,8 +581,11 @@ mod test {
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
-    use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+    use hotshot_types::{
+        event::LeafInfo,
+        traits::block_contents::{
+            vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+        },
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
 
@@ -642,7 +653,7 @@ mod test {
 
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
-            for (leaf, _) in leaf_chain.iter().rev() {
+            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header.clone();
                 if header.height == 0 {
                     parent = header;

@@ -1,6 +1,6 @@
 use crate::block::entry::TxTableEntry;
 use crate::block::payload::TableWordTraits;
-use crate::{bytes::Bytes, BlockBuildingSnafu, Error, NamespaceId};
+use crate::{BlockBuildingSnafu, Error, NamespaceId};
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
@@ -38,13 +38,14 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
 pub struct NameSpaceTable<TableWord: TableWordTraits> {
-    pub(super) bytes: Bytes,
+    #[serde(with = "base64_bytes")]
+    pub(super) bytes: Vec<u8>,
     #[serde(skip)]
     pub(super) phantom: PhantomData<TableWord>,
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
-    pub fn from_bytes(bytes: impl Into<Bytes>) -> Self {
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
         Self {
             bytes: bytes.into(),
             phantom: Default::default(),

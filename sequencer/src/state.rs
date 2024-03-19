@@ -1,4 +1,4 @@
-use crate::{Header, Leaf, NodeState, SeqTypes};
+use crate::{Delta, Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -280,6 +280,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
     type Time = ViewNumber;
 
+    type Delta = Delta;
     fn on_commit(&self) {}
     /// Validate parent against known values (from state) and validate
     /// proposal descends from parent. Returns updated `ValidatedState`.
@@ -292,7 +293,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         instance: &Self::Instance,
         parent_leaf: &Leaf,
         proposed_header: &Header,
-    ) -> Result<Self, Self::Error> {
+    ) -> Result<(Self, Self::Delta), Self::Error> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
@@ -366,7 +367,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             l1_deposits,
         )?;
 
-        Ok(validated_state)
+        Ok((validated_state, Delta {}))
     }
     /// Construct the state with the given block header.
     ///
@@ -381,8 +382,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
     }
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis(instance: &Self::Instance) -> Self {
-        instance.genesis_state.clone()
+    fn genesis(instance: &Self::Instance) -> (Self, Self::Delta) {
+        (instance.genesis_state.clone(), Delta {})
     }
 }
 
@@ -426,6 +427,12 @@ pub struct FeeInfo {
     amount: FeeAmount,
 }
 impl FeeInfo {
+    pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
+        Self {
+            account: account.into(),
+            amount: amount.into(),
+        }
+    }
     /// The minimum fee paid by the given builder account for a proposed block.
     // TODO this function should take the block size as an input, we need to get this information
     // from HotShot.

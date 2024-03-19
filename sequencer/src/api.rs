@@ -101,7 +101,10 @@ mod test_helpers {
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-    use hotshot_types::traits::{metrics::NoMetrics, node_implementation::ConsensusTime};
+    use hotshot_types::{
+        event::LeafInfo,
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+    };
     use itertools::izip;
     use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
@@ -321,7 +324,7 @@ mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|(leaf, _)| leaf.block_header.height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header.height > 2)
                 {
                     break;
                 }
@@ -687,7 +690,7 @@ mod test {
     use ethers::prelude::Signer;
     use futures::stream::StreamExt;
     use hotshot::types::EventType;
-    use hotshot_types::traits::block_contents::BlockHeader;
+    use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
     use jf_primitives::merkle_tree::AppendableMerkleTreeScheme;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
@@ -782,7 +785,7 @@ mod test {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            for (leaf, _) in leaf_chain.iter().rev() {
+            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let height = leaf.block_header.height;
                 let leaf_builder = leaf.block_header.fee_info.account();
                 tracing::info!(
