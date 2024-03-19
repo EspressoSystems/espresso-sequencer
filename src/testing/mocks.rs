@@ -137,15 +137,11 @@ impl MerklizedState<MockTypes> for MockMerkleTree {
     type Commit = Self::Commitment;
     type Digest = Sha3Digest;
 
-    fn state_type(&self) -> &'static str {
+    fn state_type() -> &'static str {
         "test_tree"
     }
 
-    fn deltas(&self, _header: TestBlockHeader) -> Vec<Self::Key> {
-        Vec::new()
-    }
-
-    fn header_state_commitment_field(&self) -> &'static str {
+    fn header_state_commitment_field() -> &'static str {
         "test_merkle_tree_root"
     }
 }

@@ -1192,12 +1192,12 @@ where
 impl<Types: NodeType, State: MerklizedState<Types>> UpdateStateData<Types, State> for SqlStorage {
     async fn insert_merkle_nodes(
         &mut self,
-        state: &State,
+
         path: MerklePath<State::Entry, State::Key, State::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
-        let name = state.state_type();
+        let name = State::state_type();
         let block_number = block_number as i64;
 
         let mut traversal_path = traversal_path.iter();
@@ -1367,16 +1367,16 @@ where
     /// Retreives a Merkle path from the database
     async fn get_path(
         &self,
-        state: &State,
+        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
-        let state_type = state.state_type();
-        let tree_height = state.height();
-        let header_state_commitment_field = state.header_state_commitment_field();
+        let state_type = State::state_type();
+
+        let header_state_commitment_field = State::header_state_commitment_field();
 
         // Get the traversal path of the index
-        let path = State::Key::to_traversal_path(&key, tree_height)
+        let traversal_path = State::Key::to_traversal_path(&key, tree_height)
             .into_iter()
             .map(|x| x as i64)
             .collect::<Vec<_>>();
@@ -1422,11 +1422,15 @@ where
                     WHERE pos @> $1 and created <= $2
                     ORDER BY pos DESC , created DESC;"
                 ),
-                [sql_param(&LTree::from(path.iter())), sql_param(&created)],
+                [
+                    sql_param(&LTree::from(traversal_path.iter())),
+                    sql_param(&created),
+                ],
             )
             .await?;
 
         let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
+
         // insert all the hash ids to a hashset which is used to query later
         // HashSet is used to avoid duplicates
         let mut hash_ids = HashSet::new();
@@ -1449,48 +1453,6 @@ where
             .map(|row| HashTableRow::try_from(row?).map(|h| (h.id, h.value)))
             .try_collect()
             .await?;
-
-        // The merkle tree commitment from the header for the snapshot should match the root node hash in the table
-        // The last node in nodes vector is the root node
-        // Merkle tree commitment is calculated using the children
-        let root_node = nodes.last().ok_or(QueryError::Error {
-            message: "No node found in the db".to_owned(),
-        })?;
-        let digest = if let (Some(children), Some(bitvec)) =
-            (&root_node.children, &root_node.children_bitvec)
-        {
-            let mut next_child = 0;
-            let root_children_values = bitvec
-                .iter()
-                .map(|b| {
-                    if b {
-                        let child = children[next_child];
-                        next_child += 1;
-                        let hash = hashes.get(&child).ok_or(QueryError::NotFound)?;
-                        State::T::deserialize_compressed(hash.as_slice()).map_err(|e| {
-                            QueryError::Error {
-                                message: format!("failed to deserialize hash to Nodevalue err {e}"),
-                            }
-                        })
-                    } else {
-                        Ok(State::T::default())
-                    }
-                })
-                .collect::<QueryResult<Vec<_>>>()?;
-
-            State::Digest::digest(&root_children_values).map_err(|e| QueryError::Error {
-                message: format!("failed to create hash digest for root node {e}"),
-            })?
-        } else {
-            // if the root node has no children then its an empty tree.
-            // The merkle commitment in this case should the T::default()
-
-            State::T::default()
-        };
-
-        if digest != merkle_commitment {
-            return Err(QueryError::Error { message: "Merkle root commitment in header does not matches the snapshot commitment. Some earlier state is missing".to_owned() });
-        }
 
         let mut proof_path = Vec::new();
         for Node {
@@ -1523,9 +1485,7 @@ where
                                             .map_err(ParseError::Deserialize)?,
                                     }))
                                 } else {
-                                    Ok(Arc::new(
-                                        MerkleNode::<State::Entry, State::Key, State::T>::Empty,
-                                    ))
+                                    Ok(Arc::new(MerkleNode::Empty))
                                 }
                             })
                             .collect::<QueryResult<Vec<_>>>()?;
@@ -1536,7 +1496,7 @@ where
                             children: child_nodes,
                         });
                     }
-                    // No children but there is an index then its a leaf
+                    // No children but if there is an index then its a leaf
                     (None, None, false) => {
                         proof_path.push(MerkleNode::Leaf {
                             value: State::T::deserialize_compressed(value.as_slice())
@@ -1558,6 +1518,58 @@ where
                     }
                 }
             }
+        }
+
+        // Reconstruct the merkle commitment from the path
+        let init = match proof_path.first() {
+            Some(MerkleNode::Leaf { value, .. }) => *value,
+            Some(MerkleNode::Empty) => State::T::default(),
+            Some(_) => {
+                return Err(QueryError::Error {
+                    message: "First node in the proof should be leaf or empty".to_string(),
+                })
+            }
+            None => return Err(QueryError::Missing),
+        };
+        let commitment_from_path = traversal_path
+            .iter()
+            .zip(proof_path.iter().skip(1))
+            .try_fold(init, |val, (branch, node)| -> QueryResult<State::T> {
+                match node {
+                    MerkleNode::Branch { value: _, children } => {
+                        let data = children
+                            .iter()
+                            .map(|node| match node.as_ref() {
+                                MerkleNode::ForgettenSubtree { value } => Ok(*value),
+                                MerkleNode::Empty => Ok(State::T::default()),
+                                _ => Err(QueryError::Error {
+                                    message: "Invalid child node".to_string(),
+                                }),
+                            })
+                            .collect::<QueryResult<Vec<_>>>()?;
+
+                        if data[*branch as usize] != val {
+                            return Err(QueryError::Error {
+                                message: "Some earlier state was used to calculate root commitment"
+                                    .to_string(),
+                            });
+                        }
+
+                        State::Digest::digest(&data).map_err(|_| QueryError::Missing)
+                    }
+                    MerkleNode::Empty => Ok(init),
+                    _ => Err(QueryError::Error {
+                        message: "Invalid type of Node in the proof".to_string(),
+                    }),
+                }
+            })?;
+
+        if commitment_from_path != merkle_commitment {
+            return Err(QueryError::Error {
+                message:
+                    "Commitment calcuated from merkle path does not match the commitment in the header"
+                        .to_string(),
+            });
         }
 
         Ok(proof_path)
@@ -2845,9 +2857,9 @@ mod test {
         // Header table is used the get_path query to check if the header exists for the block height.
         for i in 0..27 {
             test_tree.update(i, i).unwrap();
-            let commitment = test_tree.commitment();
+
             // data field of the header
-            let test_data = serde_json::json!({ test_tree.header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
+            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
             storage
                 .query_opt(
                     "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
@@ -2867,7 +2879,6 @@ mod test {
 
             <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
                 &mut storage,
-                &test_tree,
                 proof.proof.clone(),
                 traversal_path.clone(),
                 block_height as u64,
@@ -2882,7 +2893,7 @@ mod test {
             let merkle_path =
                 <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
                     &storage,
-                    &test_tree,
+                    test_tree.height(),
                     Snapshot::Index(block_height as u64),
                     i,
                 )
@@ -2897,14 +2908,16 @@ mod test {
             assert_eq!(merkle_path, proof.proof.clone(), "merkle paths mismatch");
         }
 
-        // Lets insert some index again with different block height e.g 0
+        // Get the proof of index 0 with bh = 1
+        let (_, proof_bh_1) = test_tree.lookup(0).expect_ok().unwrap();
+        // Inserting Index 0 again with created (bh) = 2
         // Our database should then have 2 versions of this leaf node
         // Update the node so that proof is also updated
         test_tree.update(0, 99).unwrap();
         // Also update the merkle commitment in the header
 
         // data field of the header
-        let test_data = serde_json::json!({ test_tree.header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
         storage
             .query_opt(
                 "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
@@ -2924,7 +2937,6 @@ mod test {
 
         <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
             &mut storage,
-            &test_tree,
             proof_bh_2.proof.clone(),
             traversal_path.clone(),
             2,
@@ -2956,16 +2968,25 @@ mod test {
         // One with created = 1 and other with 2
         // Query snapshot with created = 2
 
-        let path_2 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let path_with_bh_2 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            &test_tree,
+            test_tree.height(),
             Snapshot::Index(2),
             0,
         )
         .await
         .unwrap();
 
-        assert_eq!(path_2, proof_bh_2.proof);
+        assert_eq!(path_with_bh_2, proof_bh_2.proof);
+        let path_with_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            &storage,
+            test_tree.height(),
+            Snapshot::Index(1),
+            0,
+        )
+        .await
+        .unwrap();
+        assert_eq!(path_with_bh_1, proof_bh_1.proof);
     }
 
     #[async_std::test]
@@ -2987,7 +3008,7 @@ mod test {
         test_tree.update(0, 0).unwrap();
         let commitment = test_tree.commitment();
 
-        let test_data = serde_json::json!({ test_tree.header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
         // insert the header with merkle commitment
         storage
                 .query_opt(
@@ -3001,15 +3022,14 @@ mod test {
                 .await
                 .unwrap();
         // proof for the index from the tree
-        let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
+        let (_, proof_before_remove) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
             <usize as ToTraversalPath<U8>>::to_traversal_path(&0, test_tree.height());
         // insert merkle nodes
         <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
             &mut storage,
-            &test_tree,
-            proof.proof.clone(),
+            proof_before_remove.proof.clone(),
             traversal_path.clone(),
             block_height as u64,
         )
@@ -3018,31 +3038,30 @@ mod test {
         // the path from the db and and tree should match
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            &test_tree,
+            test_tree.height(),
             Snapshot::Index(block_height as u64),
             0,
         )
         .await
         .unwrap();
 
-        let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
-
-        tracing::info!("merkle path {:?}", merkle_path);
-
         // merkle path from the storage should match the path from test tree
-        assert_eq!(merkle_path, proof.proof.clone(), "merkle paths mismatch");
+        assert_eq!(
+            merkle_path,
+            proof_before_remove.proof.clone(),
+            "merkle paths mismatch"
+        );
 
         //Deleting the index 0
         test_tree.remove(0).expect("failed to delete index 0 ");
 
         // Update the database with the proof
         // Created = 2 in this case
-        let proof = test_tree.universal_lookup(0).expect_not_found().unwrap();
+        let proof_after_remove = test_tree.universal_lookup(0).expect_not_found().unwrap();
 
         <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
             &mut storage,
-            &test_tree,
-            proof.proof.clone(),
+            proof_after_remove.proof.clone(),
             traversal_path.clone(),
             2_u64,
         )
@@ -3055,7 +3074,7 @@ mod test {
             [
                 sql_param(&2_i64),
                 sql_param(&"randomString2"),
-                sql_param(&serde_json::json!({ test_tree.header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()})),
+                sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()})),
             ],
         )
         .await
@@ -3064,14 +3083,34 @@ mod test {
         let non_membership_path =
             <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
                 &storage,
-                &test_tree,
+                test_tree.height(),
                 Snapshot::Index(2_u64),
                 0,
             )
             .await
             .unwrap();
         // Assert that the paths from the db and the tree are equal
-        assert_eq!(non_membership_path, proof.proof, "paths dont match");
+        assert_eq!(
+            non_membership_path, proof_after_remove.proof,
+            "merkle paths dont match"
+        );
+
+        // Query the membership proof i.e proof with created = 1
+        // This proof should be equal to the proof before deletion
+        // Assert that the paths from the db and the tree are equal
+
+        let proof_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            &storage,
+            test_tree.height(),
+            Snapshot::Index(1_u64),
+            0,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            proof_bh_1, proof_before_remove.proof,
+            "merkle paths dont match"
+        );
     }
 
     #[async_std::test]
@@ -3089,7 +3128,7 @@ mod test {
         test_tree.update(0, 0).unwrap();
         let commitment = test_tree.commitment();
 
-        let test_data = serde_json::json!({ test_tree.header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
         // insert the header with merkle commitment
         storage
                 .query_opt(
@@ -3110,7 +3149,6 @@ mod test {
         // insert merkle nodes
         <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
             &mut storage,
-            &test_tree,
             proof.proof.clone(),
             traversal_path.clone(),
             block_height as u64,
@@ -3120,7 +3158,7 @@ mod test {
 
         let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
             &storage,
-            &test_tree,
+            test_tree.height(),
             Snapshot::Commit(commitment),
             0,
         )
@@ -3130,5 +3168,155 @@ mod test {
         let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
 
         assert_eq!(merkle_path, proof.proof.clone(), "merkle paths mismatch");
+    }
+    #[async_std::test]
+    async fn test_merklized_state_missing_state() {
+        // This test checks that header commitment matches the root hash.
+        // For this, the header merkle root commitment field is not updated, which should result in an error
+        // The full merkle path verification is also done by recomputing the root hash
+        // An index and its corresponding merkle nodes with created (bh) = 1 are inserted.
+        // The entry of the index is updated, and the updated nodes are inserted with created (bh) = 2.
+        // A node which is in the traversal path with bh = 2 is deleted, so the get_path should return an error as an older version of one of the nodes is used.
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let mut storage = SqlStorage::connect(db.config()).await.unwrap();
+
+        // define a test tree
+        let mut test_tree = MockMerkleTree::new(2);
+        let block_height = 1;
+        //insert an entry into the tree
+
+        for i in 0..27 {
+            test_tree.update(i, i).unwrap();
+            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+            // insert the header with merkle commitment
+            storage
+                    .query_opt(
+                        "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                        [
+                            sql_param(&(block_height as i64)),
+                            sql_param(&format!("randomString{i}")),
+                            sql_param(&test_data),
+                        ],
+                    )
+                    .await
+                    .unwrap();
+            // proof for the index from the tree
+            let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
+            // traversal path for the index.
+            let traversal_path =
+                <usize as ToTraversalPath<U8>>::to_traversal_path(&i, test_tree.height());
+            // insert merkle nodes
+            <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+                &mut storage,
+                proof.proof.clone(),
+                traversal_path.clone(),
+                block_height as u64,
+            )
+            .await
+            .expect("failed to insert nodes");
+        }
+
+        test_tree.update(1, 100).unwrap();
+        //insert updated merkle path without updating the header
+        let traversal_path =
+            <usize as ToTraversalPath<U8>>::to_traversal_path(&1, test_tree.height());
+        let (_, proof) = test_tree.lookup(1).expect_ok().unwrap();
+
+        // insert merkle nodes
+        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+            &mut storage,
+            proof.proof.clone(),
+            traversal_path.clone(),
+            block_height as u64,
+        )
+        .await
+        .expect("failed to insert nodes");
+
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            &storage,
+            test_tree.height(),
+            Snapshot::Index(block_height as u64),
+            1,
+        )
+        .await;
+        assert!(merkle_path.is_err());
+
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+        // insert the header with merkle commitment
+        storage
+                .query_opt(
+                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    [
+                        sql_param(&(block_height as i64)),
+                        sql_param(&"randomStringgg"),
+                        sql_param(&test_data),
+                    ],
+                )
+                .await
+                .unwrap();
+        // Querying the path again
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            &storage,
+            test_tree.height(),
+            Snapshot::Index(block_height as u64),
+            1,
+        )
+        .await
+        .unwrap();
+        assert_eq!(merkle_path, proof.proof, "path dont match");
+
+        // Update the tree again for index 0 with created (bh) = 2
+        // Delete one of the node in the traversal path
+        test_tree.update(1, 200).unwrap();
+
+        let (_, proof) = test_tree.lookup(1).expect_ok().unwrap();
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+
+        // insert the header with merkle commitment
+        storage
+                .query_opt(
+                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    [
+                        sql_param(&(2_i64)),
+                        sql_param(&"randomHashString"),
+                        sql_param(&test_data),
+                    ],
+                )
+                .await
+                .unwrap();
+        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+            &mut storage,
+            proof.proof.clone(),
+            traversal_path.clone(),
+            2_u64,
+        )
+        .await
+        .expect("failed to insert nodes");
+
+        // Deleting one internal node
+        let rows = storage
+            .client
+            .execute_raw(
+                &format!(
+                    "DELETE FROM {} WHERE created = 2 and pos = $1",
+                    MockMerkleTree::state_type()
+                ),
+                [sql_param(&(LTree::from(traversal_path[1..].iter())))],
+            )
+            .await
+            .expect("failed to delete internal node");
+        assert_eq!(rows, 1);
+
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            &storage,
+            test_tree.height(),
+            Snapshot::Index(2_u64),
+            1,
+        )
+        .await;
+
+        assert!(merkle_path.is_err());
     }
 }

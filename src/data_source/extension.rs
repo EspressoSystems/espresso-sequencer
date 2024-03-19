@@ -289,11 +289,11 @@ where
 {
     async fn get_path(
         &self,
-        state: &State,
+        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
-        self.data_source.get_path(state, snapshot, key).await
+        self.data_source.get_path(tree_height, snapshot, key).await
     }
 }
 
@@ -307,13 +307,12 @@ where
 {
     async fn insert_merkle_nodes(
         &mut self,
-        state: &State,
         path: MerklePath<State::Entry, State::Key, State::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
         self.data_source
-            .insert_merkle_nodes(state, path, traversal_path, block_number)
+            .insert_merkle_nodes(path, traversal_path, block_number)
             .await
     }
 }

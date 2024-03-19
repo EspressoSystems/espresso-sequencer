@@ -112,7 +112,7 @@ where
                 })?;
 
                 state
-                    .get_path(&merkle_tree, snapshot, key)
+                    .get_path(merkle_tree.height(), snapshot, key)
                     .await
                     .context(QuerySnafu)
             }

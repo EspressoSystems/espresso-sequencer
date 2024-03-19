@@ -49,7 +49,7 @@ where
 {
     async fn get_path(
         &self,
-        state: &State,
+        tree_height: usize,
         snapshot: Snapshot<Types, State>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
@@ -60,7 +60,6 @@ where
 pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types>>: Send + Sync {
     async fn insert_merkle_nodes(
         &mut self,
-        state: &State,
         path: MerklePath<State::Entry, State::Key, State::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
@@ -141,12 +140,9 @@ where
     type Digest: DigestAlgorithm<Self::Entry, Self::Key, Self::T>;
 
     /// Retrieves the name of the state being queried.
-    fn state_type(&self) -> &'static str;
-
-    /// Determines the entries in the Merkle tree affected by the provided header.
-    fn deltas(&self, header: <Types as NodeType>::BlockHeader) -> Vec<Self::Key>;
+    fn state_type() -> &'static str;
 
     /// Retrieves the field in the header containing the Merkle tree commitment
     /// for the state implementing this trait.
-    fn header_state_commitment_field(&self) -> &'static str;
+    fn header_state_commitment_field() -> &'static str;
 }
