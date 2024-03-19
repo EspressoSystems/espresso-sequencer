@@ -1192,7 +1192,6 @@ where
 impl<Types: NodeType, State: MerklizedState<Types>> UpdateStateData<Types, State> for SqlStorage {
     async fn insert_merkle_nodes(
         &mut self,
-
         path: MerklePath<State::Entry, State::Key, State::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
@@ -3175,7 +3174,7 @@ mod test {
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
 
         // define a test tree
-        let mut test_tree = MockMerkleTree::new(2);
+        let mut test_tree = MockMerkleTree::new(3);
         let block_height = 1;
         //insert an entry into the tree
 

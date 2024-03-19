@@ -146,6 +146,6 @@ impl MerklizedState<MockTypes> for MockMerkleTree {
     }
 
     fn tree_height() -> usize {
-        8
+        3
     }
 }
