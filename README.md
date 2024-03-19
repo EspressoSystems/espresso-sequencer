@@ -138,6 +138,25 @@ Running the script will save a file with details about the deployment in `contra
 - code for demo purposes goes into the `contracts/demo` folder
 - code that eventually ends up in production goes into the `contracts/src` folder
 
+#### Benchmarking and profiling
+
+1. Deploy the light client contract on Sepolia 2. Set `SEPOLIA_RPC_URL`, `MNEMONIC` `ETHERSCAN_API_KEY` env vars run
+   ```
+   forge script contracts/script/LightClient.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" 3 5  --fork-url $SEPOLIA_RPC_URL --broadcast --verify  --chain-id sepolia
+   ```
+1. Create an account on [sentio.xyz](https://app.sentio.xyz/).
+1. Create a new project and add a contract with the address displayed by the following command:
+
+```
+export LC_CONTRACT_ADDRESS=`cat contracts/broadcast/LightClient.s.sol/11155111/run-latest.json | jq -r .receipts[-1].contractAddress`
+```
+
+1. Call the light client contract
+
+```
+forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" 3 5 $LC_CONTRACT_ADDRESS --fork-url $SEPOLIA_RPC_URL  --broadcast  --chain-id sepolia
+```
+
 ## Misc
 
 ### Authenticate with GitHub container registry
