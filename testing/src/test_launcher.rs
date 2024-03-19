@@ -1,6 +1,7 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
+use hotshot_example_types::storage_types::TestStorage;
 use hotshot_types::{
     message::Message,
     traits::{network::ConnectedNetwork, node_implementation::NodeType},
@@ -22,6 +23,8 @@ pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generate channels
     pub channel_generator: Generator<Networks<TYPES, I>>,
+    /// generate new storage for each node
+    pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 }

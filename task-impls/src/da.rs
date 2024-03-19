@@ -23,6 +23,7 @@ use hotshot_types::{
         network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
+        storage::Storage,
     },
     utils::ViewInner,
     vote::HasViewNumber,
@@ -75,6 +76,9 @@ pub struct DATaskState<
 
     /// This state's ID
     pub id: u64,
+
+    /// This node's storage ref
+    pub storage: Arc<RwLock<I::Storage>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
@@ -155,6 +159,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
                     return None;
                 }
+
+                if let Err(e) = self.storage.write().await.append_da(proposal).await {
+                    error!(
+                        "Failed to store DA Proposal with error {:?}, aborting vote",
+                        e
+                    );
+                    return None;
+                }
+
                 // Generate and send vote
                 let Ok(vote) = DAVote::create_signed_vote(
                     DAData {

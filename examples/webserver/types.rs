@@ -1,6 +1,6 @@
 use crate::infra::WebServerDARun;
 use hotshot::traits::implementations::WebServerNetwork;
-use hotshot_example_types::state_types::TestTypes;
+use hotshot_example_types::{state_types::TestTypes, storage_types::TestStorage};
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -21,6 +21,7 @@ pub type ViewSyncNetwork = WebServerNetwork<TestTypes>;
 impl NodeImplementation<TestTypes> for NodeImpl {
     type CommitteeNetwork = DANetwork;
     type QuorumNetwork = QuorumNetwork;
+    type Storage = TestStorage<TestTypes>;
 }
 /// convenience type alias
 pub type ThisRun = WebServerDARun<TestTypes>;

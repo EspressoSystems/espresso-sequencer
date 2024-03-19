@@ -31,6 +31,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
+        storage::Storage,
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
@@ -137,6 +138,9 @@ pub struct ConsensusTaskState<
     // ED Should replace this with config information since we need it anyway
     /// The node's id
     pub id: u64,
+
+    /// This node's storage ref
+    pub storage: Arc<RwLock<I::Storage>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
@@ -1063,11 +1067,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
+                if let Err(e) = self.storage.write().await.append_vid(disperse).await {
+                    error!(
+                        "Failed to store VID Disperse Proposal with error {:?}, aborting vote",
+                        e
+                    );
+                    return;
+                }
+
                 self.consensus
                     .write()
                     .await
                     .vid_shares
                     .insert(view, disperse.clone());
+
                 if self.vote_if_able(&event_stream).await {
                     self.current_proposal = None;
                 }

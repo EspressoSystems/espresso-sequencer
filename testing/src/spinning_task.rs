@@ -5,6 +5,7 @@ use crate::test_runner::{LateStartNode, Node, TestRunner};
 use either::{Left, Right};
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer};
 use hotshot_example_types::state_types::TestInstanceState;
+use hotshot_example_types::storage_types::TestStorage;
 use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{data::Leaf, ValidatorConfig};
 use hotshot_types::{
@@ -64,7 +65,12 @@ impl<
     > TestTaskState for SpinningTask<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
-    I: NodeImplementation<TYPES, QuorumNetwork = N, CommitteeNetwork = N>,
+    I: NodeImplementation<
+        TYPES,
+        QuorumNetwork = N,
+        CommitteeNetwork = N,
+        Storage = TestStorage<TYPES>,
+    >,
 {
     type Message = Event<TYPES>;
 
@@ -99,7 +105,7 @@ where
                                     Left(context) => context,
                                     // Node not initialized. Initialize it
                                     // based on the received leaf.
-                                    Right((memberships, config)) => {
+                                    Right((storage, memberships, config)) => {
                                         let initializer = HotShotInitializer::<TYPES>::from_reload(
                                             state.last_decided_leaf.clone(),
                                             TestInstanceState {},
@@ -118,6 +124,7 @@ where
                                             initializer,
                                             config,
                                             validator_config,
+                                            storage,
                                         )
                                         .await
                                     }

@@ -54,7 +54,7 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
-anyhow = "1.0.81"
+anyhow = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

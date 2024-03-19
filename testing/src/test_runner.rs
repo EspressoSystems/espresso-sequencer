@@ -15,7 +15,7 @@ use async_broadcast::broadcast;
 use either::Either::{self, Left, Right};
 use futures::future::join_all;
 use hotshot::{types::SystemContextHandle, Memberships};
-use hotshot_example_types::state_types::TestInstanceState;
+use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 
@@ -58,6 +58,7 @@ pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 pub type LateNodeContext<TYPES, I> = Either<
     Arc<SystemContext<TYPES, I>>,
     (
+        <I as NodeImplementation<TYPES>>::Storage,
         Memberships<TYPES>,
         HotShotConfig<<TYPES as NodeType>::SignatureKey, <TYPES as NodeType>::ElectionConfigType>,
     ),
@@ -119,7 +120,12 @@ impl<
     > TestRunner<TYPES, I, N>
 where
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
-    I: NodeImplementation<TYPES, QuorumNetwork = N, CommitteeNetwork = N>,
+    I: NodeImplementation<
+        TYPES,
+        QuorumNetwork = N,
+        CommitteeNetwork = N,
+        Storage = TestStorage<TYPES>,
+    >,
 {
     /// excecute test
     ///
@@ -357,13 +363,14 @@ where
                 ),
             };
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
+            let storage = (self.launcher.resource_generator.storage)(node_id);
 
             if self.launcher.metadata.skip_late && late_start.contains(&node_id) {
                 self.late_start.insert(
                     node_id,
                     LateStartNode {
                         networks,
-                        context: Right((memberships, config)),
+                        context: Right((storage, memberships, config)),
                     },
                 );
             } else {
@@ -379,6 +386,7 @@ where
                     initializer,
                     config,
                     validator_config,
+                    storage,
                 )
                 .await;
                 if late_start.contains(&node_id) {
@@ -413,6 +421,7 @@ where
         initializer: HotShotInitializer<TYPES>,
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
+        storage: I::Storage,
     ) -> Arc<SystemContext<TYPES, I>> {
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
@@ -433,6 +442,7 @@ where
             network_bundle,
             initializer,
             ConsensusMetricsValue::default(),
+            storage,
         )
         .await
         .expect("Could not init hotshot")

@@ -5,6 +5,7 @@ use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
+use sha2::{Digest, Sha256};
 
 use crate::task_helpers::{
     build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
@@ -14,15 +15,15 @@ use commit::Committable;
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 
 use hotshot_types::{
-    data::{Leaf, QuorumProposal, VidDisperse, ViewNumber},
+    data::{DAProposal, Leaf, QuorumProposal, VidDisperse, ViewNumber},
     message::Proposal,
     simple_certificate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncFinalizeCertificate2,
     },
     simple_vote::{
-        TimeoutData, TimeoutVote, UpgradeProposalData, UpgradeVote, ViewSyncFinalizeData,
-        ViewSyncFinalizeVote,
+        DAData, DAVote, TimeoutData, TimeoutVote, UpgradeProposalData, UpgradeVote,
+        ViewSyncFinalizeData, ViewSyncFinalizeVote,
     },
     traits::{
         consensus_api::ConsensusApi,
@@ -35,6 +36,7 @@ use hotshot_types::simple_vote::QuorumVote;
 
 #[derive(Clone)]
 pub struct TestView {
+    pub da_proposal: Proposal<TestTypes, DAProposal<TestTypes>>,
     pub quorum_proposal: Proposal<TestTypes, QuorumProposal<TestTypes>>,
     pub leaf: Leaf<TestTypes>,
     pub view_number: ViewNumber,
@@ -84,7 +86,7 @@ impl TestView {
             payload_commitment,
         };
 
-        let proposal = QuorumProposal::<TestTypes> {
+        let quorum_proposal_inner = QuorumProposal::<TestTypes> {
             block_header: block_header.clone(),
             view_number: genesis_view,
             justify_qc: QuorumCertificate::genesis(),
@@ -92,6 +94,25 @@ impl TestView {
             upgrade_certificate: None,
             view_sync_certificate: None,
             proposer_id: public_key,
+        };
+
+        let transactions = vec![TestTransaction(vec![0])];
+        let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+        let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
+        let block_payload_signature =
+            <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
+                .expect("Failed to sign block payload");
+
+        let da_proposal_inner = DAProposal::<TestTypes> {
+            encoded_transactions: encoded_transactions.clone(),
+            metadata: (),
+            view_number: genesis_view,
+        };
+
+        let da_proposal = Proposal {
+            data: da_proposal_inner,
+            signature: block_payload_signature,
+            _pd: PhantomData,
         };
 
         let leaf = Leaf {
@@ -111,7 +132,7 @@ impl TestView {
             .expect("Failed to sign leaf commitment!");
 
         let quorum_proposal = Proposal {
-            data: proposal,
+            data: quorum_proposal_inner,
             signature,
             _pd: PhantomData,
         };
@@ -128,6 +149,7 @@ impl TestView {
             upgrade_data: None,
             view_sync_finalize_data: None,
             timeout_cert_data: None,
+            da_proposal,
         }
     }
 
@@ -282,6 +304,25 @@ impl TestView {
             _pd: PhantomData,
         };
 
+        let transactions = vec![TestTransaction(vec![0])];
+        let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+        let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
+        let block_payload_signature =
+            <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
+                .expect("Failed to sign block payload");
+
+        let da_proposal_inner = DAProposal::<TestTypes> {
+            encoded_transactions: encoded_transactions.clone(),
+            metadata: (),
+            view_number: next_view,
+        };
+
+        let da_proposal = Proposal {
+            data: da_proposal_inner,
+            signature: block_payload_signature,
+            _pd: PhantomData,
+        };
+
         TestView {
             quorum_proposal,
             leaf,
@@ -296,6 +337,7 @@ impl TestView {
             upgrade_data: None,
             view_sync_finalize_data: None,
             timeout_cert_data: None,
+            da_proposal,
         }
     }
 
@@ -330,6 +372,20 @@ impl TestView {
             handle.private_key(),
         )
         .expect("Failed to generate a signature on UpgradVote")
+    }
+
+    pub fn create_da_vote(
+        &self,
+        data: DAData,
+        handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    ) -> DAVote<TestTypes> {
+        DAVote::create_signed_vote(
+            data,
+            self.view_number,
+            handle.public_key(),
+            handle.private_key(),
+        )
+        .expect("Failed to sign DAData")
     }
 }
 

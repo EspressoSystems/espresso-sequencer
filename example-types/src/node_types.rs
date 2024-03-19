@@ -5,6 +5,7 @@ use hotshot::traits::{
 use crate::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
 };
 
 use hotshot::traits::{
@@ -103,24 +104,29 @@ type StaticCombinedQuorumComm = CombinedNetworks<TestTypes>;
 impl NodeImplementation<TestTypes> for PushCdnImpl {
     type QuorumNetwork = StaticPushCdnQuorumComm;
     type CommitteeNetwork = StaticPushCdnDAComm;
+    type Storage = TestStorage<TestTypes>;
 }
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
     type QuorumNetwork = StaticLibp2pQuorumComm;
     type CommitteeNetwork = StaticLibp2pDAComm;
+    type Storage = TestStorage<TestTypes>;
 }
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
     type QuorumNetwork = StaticMemoryQuorumComm;
     type CommitteeNetwork = StaticMemoryDAComm;
+    type Storage = TestStorage<TestTypes>;
 }
 
 impl NodeImplementation<TestTypes> for WebImpl {
     type QuorumNetwork = StaticWebQuorumComm;
     type CommitteeNetwork = StaticWebDAComm;
+    type Storage = TestStorage<TestTypes>;
 }
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
     type QuorumNetwork = StaticCombinedQuorumComm;
     type CommitteeNetwork = StaticCombinedDAComm;
+    type Storage = TestStorage<TestTypes>;
 }

@@ -8,6 +8,7 @@ use hotshot::traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetri
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
 use hotshot_example_types::state_types::TestInstanceState;
+use hotshot_example_types::storage_types::TestStorage;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::TestValidatedState,
@@ -67,6 +68,7 @@ pub type VIDNetwork = MemoryNetwork<Message<Test>, <Test as NodeType>::Signature
 impl NodeImplementation<Test> for TestImpl {
     type QuorumNetwork = QuorumNetwork;
     type CommitteeNetwork = DANetwork;
+    type Storage = TestStorage<Test>;
 }
 
 /// fake Eq
