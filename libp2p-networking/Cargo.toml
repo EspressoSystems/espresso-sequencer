@@ -1,9 +1,9 @@
 [package]
 description = "Libp2p Networking Layer"
 name = "libp2p-networking"
-version = "0.1.0"
-edition = "2021"
-authors = ["Espresso Systems <hello@espressosys.com>"]
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 
@@ -12,17 +12,16 @@ default = ["webui"]
 webui = []
 
 [dependencies]
+anyhow = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
-bincode = { workspace = true }
 blake3 = { workspace = true }
 custom_debug = { workspace = true }
 derive_builder = "0.20.0"
 either = { workspace = true }
 futures = { workspace = true }
 hotshot-types = { workspace = true }
-hotshot-utils = { path = "../utils" }
 libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = { workspace = true }
@@ -34,6 +33,7 @@ tide = { version = "0.16", optional = true, default-features = false, features =
     "h1-server",
 ] }
 tracing = { workspace = true }
+versioned-binary-serialization = { workspace = true }
 void = "1.0.2"
 dashmap = "5.5.3"
 lazy_static = { workspace = true }

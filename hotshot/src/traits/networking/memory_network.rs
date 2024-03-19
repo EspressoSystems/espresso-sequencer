@@ -10,12 +10,12 @@ use async_compatibility_layer::{
 };
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
-use bincode::Options;
 use core::time::Duration;
 use dashmap::DashMap;
 use futures::StreamExt;
 use hotshot_types::{
     boxed_sync,
+    constants::Version01,
     message::Message,
     traits::{
         network::{ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation},
@@ -24,7 +24,6 @@ use hotshot_types::{
     },
     BoxSyncFuture,
 };
-use hotshot_utils::bincode::bincode_opts;
 use rand::Rng;
 use snafu::ResultExt;
 use std::{
@@ -36,6 +35,7 @@ use std::{
     },
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
 
 /// Shared state for in-memory mock networking.
 ///
@@ -125,7 +125,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                 while let Some(vec) = task_stream.next().await {
                     trace!(?vec, "Incoming message");
                     // Attempt to decode message
-                    let x = bincode_opts().deserialize(&vec);
+                    let x = Serializer::<Version01>::deserialize(&vec);
                     match x {
                         Ok(x) => {
                             let ts = task_send.clone();
@@ -242,16 +242,15 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
     }
 
     #[instrument(name = "MemoryNetwork::broadcast_message")]
-    async fn broadcast_message(
+    async fn broadcast_message<VER: 'static + StaticVersionType>(
         &self,
         message: M,
         recipients: BTreeSet<K>,
+        _: VER,
     ) -> Result<(), NetworkError> {
         trace!(?message, "Broadcasting message");
         // Bincode the message
-        let vec = bincode_opts()
-            .serialize(&message)
-            .context(FailedToSerializeSnafu)?;
+        let vec = Serializer::<VER>::serialize(&message).context(FailedToSerializeSnafu)?;
         trace!("Message bincoded, sending");
         for node in &self.inner.master_map.map {
             // TODO delay/drop etc here
@@ -294,21 +293,26 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
     }
 
     #[instrument(name = "MemoryNetwork::da_broadcast_message")]
-    async fn da_broadcast_message(
+    async fn da_broadcast_message<VER: 'static + StaticVersionType>(
         &self,
         message: M,
         recipients: BTreeSet<K>,
+        bind_version: VER,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, recipients).await
+        self.broadcast_message(message, recipients, bind_version)
+            .await
     }
 
     #[instrument(name = "MemoryNetwork::direct_message")]
-    async fn direct_message(&self, message: M, recipient: K) -> Result<(), NetworkError> {
+    async fn direct_message<VER: 'static + StaticVersionType>(
+        &self,
+        message: M,
+        recipient: K,
+        _: VER,
+    ) -> Result<(), NetworkError> {
         // debug!(?message, ?recipient, "Sending direct message");
         // Bincode the message
-        let vec = bincode_opts()
-            .serialize(&message)
-            .context(FailedToSerializeSnafu)?;
+        let vec = Serializer::<VER>::serialize(&message).context(FailedToSerializeSnafu)?;
         trace!("Message bincoded, finding recipient");
         if let Some(node) = self.inner.master_map.map.get(&recipient) {
             let node = node.value().clone();

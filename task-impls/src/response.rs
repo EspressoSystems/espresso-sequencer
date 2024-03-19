@@ -3,11 +3,10 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_broadcast::Receiver;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-use bincode::Options;
+use bincode::config::Options;
 use either::Either::Right;
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
-use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::{
     consensus::Consensus,
     data::VidDisperse,
@@ -20,8 +19,8 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
+    utils::bincode_opts,
 };
-use hotshot_utils::bincode::bincode_opts;
 use sha2::{Digest, Sha256};
 
 use crate::events::HotShotEvent;
@@ -142,7 +141,6 @@ impl<TYPES: NodeType> NetworkRequestState<TYPES> {
     /// in the surrounding feilds and creating the `MessageKind`
     fn make_msg(&self, msg: ResponseMessage<TYPES>) -> Message<TYPES> {
         Message {
-            version: VERSION_0_1,
             sender: self.pub_key.clone(),
             kind: MessageKind::Data(DataMessage::DataResponse(msg)),
         }

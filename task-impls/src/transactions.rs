@@ -23,8 +23,8 @@ use hotshot_types::{
         signature_key::SignatureKey,
         BlockPayload,
     },
+    utils::bincode_opts,
 };
-use hotshot_utils::bincode::bincode_opts;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,

@@ -4,15 +4,15 @@ mod common;
 use crate::common::print_connections;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
-use bincode::Options;
 use common::{test_bed, HandleSnafu, HandleWithState, TestError};
-use hotshot_utils::bincode::bincode_opts;
+use hotshot_types::constants::{Version01, STATIC_VER_0_1};
 use libp2p_networking::network::{NetworkEvent, NetworkNodeHandleError};
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::{debug, error, info, instrument, warn};
+use versioned_binary_serialization::{BinarySerializer, Serializer};
 
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;
@@ -74,7 +74,7 @@ pub async fn counter_handle_network_event(
     match event {
         IsBootstrapped | NetworkEvent::ResponseRequested(..) => {}
         GossipMsg(m) | DirectResponse(m, _) => {
-            if let Ok(msg) = bincode_opts().deserialize::<CounterMessage>(&m) {
+            if let Ok(msg) = Serializer::<Version01>::deserialize::<CounterMessage>(&m) {
                 match msg {
                     // direct message only
                     MyCounterIs(c) => {
@@ -99,7 +99,7 @@ pub async fn counter_handle_network_event(
             }
         }
         DirectRequest(m, _, chan) => {
-            if let Ok(msg) = bincode_opts().deserialize::<CounterMessage>(&m) {
+            if let Ok(msg) = Serializer::<Version01>::deserialize::<CounterMessage>(&m) {
                 match msg {
                     // direct message request
                     IncrementCounter { from, to, .. } => {
@@ -113,24 +113,27 @@ pub async fn counter_handle_network_event(
                             .await;
                         handle
                             .handle
-                            .direct_response(chan, &CounterMessage::Noop)
+                            .direct_response(chan, &CounterMessage::Noop, STATIC_VER_0_1)
                             .await?;
                     }
                     // direct message response
                     AskForCounter => {
                         let response = MyCounterIs(handle.state.copied().await);
-                        handle.handle.direct_response(chan, &response).await?;
+                        handle
+                            .handle
+                            .direct_response(chan, &response, STATIC_VER_0_1)
+                            .await?;
                     }
                     MyCounterIs(_) => {
                         handle
                             .handle
-                            .direct_response(chan, &CounterMessage::Noop)
+                            .direct_response(chan, &CounterMessage::Noop, STATIC_VER_0_1)
                             .await?;
                     }
                     Noop => {
                         handle
                             .handle
-                            .direct_response(chan, &CounterMessage::Noop)
+                            .direct_response(chan, &CounterMessage::Noop, STATIC_VER_0_1)
                             .await?;
                     }
                 }
@@ -171,7 +174,7 @@ async fn run_request_response_increment<'a>(
             std::process::exit(-1)},
         }
         requester_handle.handle
-            .direct_request(requestee_pid, &CounterMessage::AskForCounter)
+            .direct_request(requestee_pid, &CounterMessage::AskForCounter, STATIC_VER_0_1)
             .await
             .context(HandleSnafu)?;
         match stream.next().await.unwrap() {
@@ -241,7 +244,7 @@ async fn run_gossip_round(
 
     msg_handle
         .handle
-        .gossip("global".to_string(), &msg)
+        .gossip("global".to_string(), &msg, STATIC_VER_0_1)
         .await
         .context(HandleSnafu)?;
 
@@ -355,12 +358,18 @@ async fn run_dht_rounds(
         value.push(inc_val);
 
         // put the key
-        msg_handle.handle.put_record(&key, &value).await.unwrap();
+        msg_handle
+            .handle
+            .put_record(&key, &value, STATIC_VER_0_1)
+            .await
+            .unwrap();
 
         // get the key from the other nodes
         for handle in handles {
-            let result: Result<Vec<u8>, NetworkNodeHandleError> =
-                handle.handle.get_record_timeout(&key, timeout).await;
+            let result: Result<Vec<u8>, NetworkNodeHandleError> = handle
+                .handle
+                .get_record_timeout(&key, timeout, STATIC_VER_0_1)
+                .await;
             match result {
                 Err(e) => {
                     error!("DHT error {e:?} during GET");

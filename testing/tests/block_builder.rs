@@ -18,12 +18,14 @@ use tide_disco::Url;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_block_builder() {
+    use hotshot_types::constants::Version01;
+
     let port = portpicker::pick_unused_port().expect("Could not find an open port");
     let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
     run_builder(api_url.clone());
 
-    let client: BuilderClient<TestTypes> = BuilderClient::new(api_url);
+    let client: BuilderClient<TestTypes, Version01> = BuilderClient::new(api_url);
     assert!(client.connect(Duration::from_millis(100)).await);
 
     // Test getting blocks

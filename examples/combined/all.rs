@@ -14,10 +14,12 @@ use async_compatibility_layer::channel::oneshot;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
+use hotshot_types::constants::WebServerVersion;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use surf_disco::Url;
 use tracing::{error, instrument};
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]
@@ -41,9 +43,11 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            WebServerVersion,
         >(
             Some(server_shutdown_cdn),
             Url::parse("http://localhost:9000").unwrap(),
+            WebServerVersion::instance(),
         )
         .await
         {
@@ -53,9 +57,11 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            WebServerVersion,
         >(
             Some(server_shutdown_da),
             Url::parse("http://localhost:9001").unwrap(),
+            WebServerVersion::instance(),
         )
         .await
         {

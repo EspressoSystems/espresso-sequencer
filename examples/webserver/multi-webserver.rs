@@ -8,8 +8,11 @@ use async_compatibility_layer::{
 };
 use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
+use hotshot_types::constants::WebServerVersion;
+use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::Url;
 use tracing::error;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Arguments to run multiple web servers
 #[derive(Parser, Debug)]
@@ -34,8 +37,13 @@ async fn main() {
 
     let consensus_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_cdn), args.consensus_url)
+            <TestTypes as NodeType>::SignatureKey,
+            WebServerVersion,
+        >(
+            Some(server_shutdown_cdn),
+            args.consensus_url,
+            WebServerVersion::instance(),
+        )
         .await
         {
             error!("Problem starting cdn web server: {:?}", e);
@@ -43,8 +51,13 @@ async fn main() {
     });
     let da_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_da), args.da_url)
+            <TestTypes as NodeType>::SignatureKey,
+            WebServerVersion,
+        >(
+            Some(server_shutdown_da),
+            args.da_url,
+            WebServerVersion::instance(),
+        )
         .await
         {
             error!("Problem starting da web server: {:?}", e);

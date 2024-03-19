@@ -1,6 +1,6 @@
 use std::{net::IpAddr, time::Duration};
 
-use crate::config::NetworkConfig;
+use crate::{config::NetworkConfig, OrchestratorVersion};
 use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
@@ -14,7 +14,7 @@ use tide_disco::Url;
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client
-    client: surf_disco::Client<ClientError>,
+    client: surf_disco::Client<ClientError, OrchestratorVersion>,
     /// the identity
     pub identity: String,
 }
@@ -180,7 +180,7 @@ impl OrchestratorClient {
     /// Creates the client that will connect to the orchestrator
     #[must_use]
     pub fn new(args: ValidatorArgs, identity: String) -> Self {
-        let client = surf_disco::Client::<ClientError>::new(args.url);
+        let client = surf_disco::Client::<ClientError, OrchestratorVersion>::new(args.url);
         // TODO ED: Add healthcheck wait here
         OrchestratorClient { client, identity }
     }
@@ -198,7 +198,7 @@ impl OrchestratorClient {
     ) -> NetworkConfig<K, E> {
         // get the node index
         let identity = identity.as_str();
-        let identity = |client: Client<ClientError>| {
+        let identity = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
                 let node_index: Result<u16, ClientError> = client
                     .post(&format!("api/identity/{identity}"))
@@ -211,7 +211,7 @@ impl OrchestratorClient {
         let node_index = self.wait_for_fn_from_orchestrator(identity).await;
 
         // get the corresponding config
-        let f = |client: Client<ClientError>| {
+        let f = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
                 let config: Result<NetworkConfig<K, E>, ClientError> = client
                     .post(&format!("api/config/{node_index}"))
@@ -233,7 +233,7 @@ impl OrchestratorClient {
     /// # Panics
     /// if unable to post
     pub async fn get_node_index_for_init_validator_config(&self) -> u16 {
-        let cur_node_index = |client: Client<ClientError>| {
+        let cur_node_index = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
                 let cur_node_index: Result<u16, ClientError> =
                     client.post("api/get_tmp_node_index").send().await;
@@ -264,7 +264,7 @@ impl OrchestratorClient {
             .await;
 
         // wait for all nodes' public keys
-        let wait_for_all_nodes_pub_key = |client: Client<ClientError>| {
+        let wait_for_all_nodes_pub_key = |client: Client<ClientError, OrchestratorVersion>| {
             async move { client.get("api/peer_pub_ready").send().await }.boxed()
         };
         self.wait_for_fn_from_orchestrator::<_, _, ()>(wait_for_all_nodes_pub_key)
@@ -283,7 +283,7 @@ impl OrchestratorClient {
     /// # Panics
     /// Panics if unable to post.
     pub async fn wait_for_all_nodes_ready(&self, node_index: u64) -> bool {
-        let send_ready_f = |client: Client<ClientError>| {
+        let send_ready_f = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
                 let result: Result<_, ClientError> = client
                     .post("api/ready")
@@ -298,7 +298,7 @@ impl OrchestratorClient {
         self.wait_for_fn_from_orchestrator::<_, _, ()>(send_ready_f)
             .await;
 
-        let wait_for_all_nodes_ready_f = |client: Client<ClientError>| {
+        let wait_for_all_nodes_ready_f = |client: Client<ClientError, OrchestratorVersion>| {
             async move { client.get("api/start").send().await }.boxed()
         };
         self.wait_for_fn_from_orchestrator(wait_for_all_nodes_ready_f)
@@ -322,7 +322,7 @@ impl OrchestratorClient {
     /// Returns whatever type the given function returns
     async fn wait_for_fn_from_orchestrator<F, Fut, GEN>(&self, f: F) -> GEN
     where
-        F: Fn(Client<ClientError>) -> Fut,
+        F: Fn(Client<ClientError, OrchestratorVersion>) -> Fut,
         Fut: Future<Output = Result<GEN, ClientError>>,
     {
         loop {

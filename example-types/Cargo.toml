@@ -1,9 +1,9 @@
 [package]
 name = "hotshot-example-types"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+edition = { workspace = true }
 description = "Types and traits for the HotShot consesus module"
-authors = ["Espresso Systems <hello@espressosys.com>"]
+authors = { workspace = true }
 
 [features]
 default = []
@@ -19,15 +19,13 @@ async-compatibility-layer = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace  = true }
 sha3 = "^0.10"
-bincode = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot" }
 hotshot-types = { workspace = true }
-hotshot-utils = { path = "../utils" }
-hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
+hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
 rand = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use surf_disco::{client::HealthStatus, Client, Url};
 use tagged_base64::TaggedBase64;
+use versioned_binary_serialization::version::StaticVersionType;
 
 #[derive(Debug, Snafu, Serialize, Deserialize)]
 /// Represents errors thant builder client may return
@@ -52,14 +53,14 @@ impl From<BuilderApiError> for BuilderClientError {
 }
 
 /// Client for builder API
-pub struct BuilderClient<TYPES: NodeType> {
+pub struct BuilderClient<TYPES: NodeType, Ver: StaticVersionType> {
     /// Underlying surf_disco::Client
-    inner: Client<BuilderApiError>,
+    inner: Client<BuilderApiError, Ver>,
     /// Marker for [`NodeType`] used here
     _marker: std::marker::PhantomData<TYPES>,
 }
 
-impl<TYPES: NodeType> BuilderClient<TYPES>
+impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver>
 where
     <<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType:
         for<'a> TryFrom<&'a TaggedBase64> + Into<TaggedBase64>,

@@ -1,9 +1,9 @@
 [package]
 name = "hotshot-testing"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+edition = { workspace = true }
 description = "Types and traits for the HotShot consesus module"
-authors = ["Espresso Systems <hello@espressosys.com>"]
+authors = { workspace = true }
 
 [features]
 default = []
@@ -16,34 +16,34 @@ gpu-vid = [
 [dependencies]
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
 async-trait = { workspace = true }
-sha3 = "^0.10"
-bincode = { workspace = true }
+bitvec = { workspace = true }
 commit = { workspace = true }
 either = { workspace = true }
+ethereum-types = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", features = ["hotshot-testing"] }
-hotshot-types = { workspace = true }
-hotshot-utils = { path = "../utils" }
+hotshot-example-types = { path = "../example-types" }
 hotshot-macros = { path = "../macros" }
-hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
+hotshot-task = { path = "../task" }
+hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
+hotshot-types = { workspace = true }
 hs-builder-api = { workspace = true }
 jf-primitives = { workspace = true }
+portpicker = { workspace = true }
 rand = { workspace = true }
-snafu = { workspace = true }
-tracing = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
-async-lock = { workspace = true }
-bitvec = { workspace = true }
-ethereum-types = { workspace = true }
-hotshot-task = { path = "../task" }
-hotshot-example-types = { path = "../example-types" }
+sha3 = "^0.10"
+snafu = { workspace = true }
 tide-disco = { workspace = true }
-portpicker = { workspace = true }
+tracing = { workspace = true }
+versioned-binary-serialization = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
+
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }

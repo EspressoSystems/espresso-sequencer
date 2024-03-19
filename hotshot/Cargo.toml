@@ -1,17 +1,15 @@
 [package]
-authors = ["Espresso Systems <hello@espressosys.com>"]
+authors = { workspace = true }
 description = "HotShot consesus module"
-edition = "2021"
+edition = { workspace = true }
 name = "hotshot"
 readme = "README.md"
-version = "0.3.3"
-rust-version = "1.65.0"
+version = { workspace = true }
+rust-version = { workspace = true }
 
 [features]
 default = ["docs", "doc-images"]
-gpu-vid = [
-    "hotshot-task-impls/gpu-vid",
-]
+gpu-vid = ["hotshot-task-impls/gpu-vid"]
 
 # Features required for binaries
 bin-orchestrator = ["clap"]
@@ -23,6 +21,7 @@ hotshot-testing = []
 randomized-leader-election = []
 
 [dependencies]
+anyhow = { workspace = true }
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
@@ -38,12 +37,11 @@ either = { workspace = true }
 embed-doc-image = "0.1.4"
 ethereum-types = { workspace = true }
 futures = { workspace = true }
-hotshot-web-server = { version = "0.1.1", path = "../web_server", default-features = false }
-hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
-hotshot-types = { workspace = true }
+hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task" }
-hotshot-utils = { path = "../utils" }
-hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
+hotshot-types = { workspace = true }
+hotshot-web-server = { version = "0.5.26", path = "../web_server", default-features = false }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
 lru = "0.12.3"
@@ -54,18 +52,28 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
-anyhow = { workspace = true }
+versioned-binary-serialization = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
 cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
-cdn-broker = { workspace = true, features = ["insecure", "runtime-tokio", "strong_consistency", "local_discovery"] }
+cdn-broker = { workspace = true, features = [
+    "insecure",
+    "runtime-tokio",
+    "strong_consistency",
+    "local_discovery",
+] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
 cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
-cdn-broker = { workspace = true, features = ["insecure", "runtime-async-std", "strong_consistency", "local_discovery"] }
+cdn-broker = { workspace = true, features = [
+    "insecure",
+    "runtime-async-std",
+    "strong_consistency",
+    "local_discovery",
+] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
 
 

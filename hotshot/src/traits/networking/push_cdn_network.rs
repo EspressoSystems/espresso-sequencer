@@ -1,5 +1,8 @@
 use super::NetworkError;
-use bincode::Options;
+use async_compatibility_layer::art::{async_block_on, async_spawn};
+use async_compatibility_layer::channel::UnboundedSendError;
+use async_trait::async_trait;
+use bincode::config::Options;
 use cdn_broker::{
     reexports::connection::protocols::Tcp, Broker, Config, ConfigBuilder as BrokerConfigBuilder,
 };
@@ -12,28 +15,31 @@ use cdn_client::{
     Client, ConfigBuilder as ClientConfigBuilder,
 };
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
-use hotshot_utils::bincode::bincode_opts;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use tracing::{error, warn};
-
-use async_compatibility_layer::art::{async_block_on, async_spawn};
-use async_trait::async_trait;
-
-use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
+use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::{
     boxed_sync,
+    constants::{Version01, VERSION_0_1},
     data::ViewNumber,
     message::Message,
     traits::{
-        network::{ConnectedNetwork, ConsensusIntentEvent, PushCdnNetworkError},
+        network::{
+            ConnectedNetwork, ConsensusIntentEvent, NetworkReliability, PushCdnNetworkError,
+        },
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
+    utils::bincode_opts,
     BoxSyncFuture,
 };
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
+use tracing::{error, warn};
+use versioned_binary_serialization::{
+    version::{StaticVersionType, Version},
+    BinarySerializer, Serializer,
+};
 
 /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
 /// trait in order to sign and verify messages to/from the CDN.
@@ -46,12 +52,14 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
     /// Sign a message of arbitrary data and return the serialized signature
     fn sign(private_key: &Self::PrivateKey, message: &[u8]) -> anyhow::Result<Vec<u8>> {
         let signature = T::sign(private_key, message)?;
-
+        // TODO: replace with rigorously defined serialization scheme...
+        // why did we not make `PureAssembledSignatureType` be `CanonicalSerialize + CanonicalDeserialize`?
         Ok(bincode_opts().serialize(&signature)?)
     }
 
     /// Verify a message of arbitrary data and return the result
     fn verify(public_key: &Self::PublicKey, message: &[u8], signature: &[u8]) -> bool {
+        // TODO: replace with rigorously defined signing scheme
         let signature: T::PureAssembledSignatureType = match bincode_opts().deserialize(signature) {
             Ok(key) => key,
             Err(_) => return false,
@@ -115,13 +123,14 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn broadcast_message(
+    async fn broadcast_message<Ver: StaticVersionType>(
         &self,
         message: Message<TYPES>,
         topic: Topic,
+        _: Ver,
     ) -> Result<(), NetworkError> {
         // Bincode the message
-        let serialized_message = match bincode_opts().serialize(&message) {
+        let serialized_message = match Serializer::<Ver>::serialize(&message) {
             Ok(serialized) => serialized,
             Err(e) => {
                 warn!("Failed to serialize message: {}", e);
@@ -318,12 +327,14 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn broadcast_message(
+    async fn broadcast_message<Ver: StaticVersionType>(
         &self,
         message: Message<TYPES>,
         _recipients: BTreeSet<TYPES::SignatureKey>,
+        bind_version: Ver,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, Topic::Global).await
+        self.broadcast_message(message, Topic::Global, bind_version)
+            .await
     }
 
     /// Broadcast a message to all members of the DA committee.
@@ -331,25 +342,28 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn da_broadcast_message(
+    async fn da_broadcast_message<Ver: StaticVersionType>(
         &self,
         message: Message<TYPES>,
         _recipients: BTreeSet<TYPES::SignatureKey>,
+        bind_version: Ver,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, Topic::DA).await
+        self.broadcast_message(message, Topic::DA, bind_version)
+            .await
     }
 
     /// Send a direct message to a node with a particular key. Does not retry.
     ///
     /// - If we fail to serialize the message
     /// - If we fail to send the direct message
-    async fn direct_message(
+    async fn direct_message<Ver: StaticVersionType>(
         &self,
         message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
+        _: Ver,
     ) -> Result<(), NetworkError> {
         // Bincode the message
-        let serialized_message = match bincode_opts().serialize(&message) {
+        let serialized_message = match Serializer::<Ver>::serialize(&message) {
             Ok(serialized) => serialized,
             Err(e) => {
                 warn!("Failed to serialize message: {}", e);
@@ -401,13 +415,24 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             return Ok(vec![]);
         };
 
-        // Deserialize it
-        let result: Message<TYPES> = bincode_opts()
-            .deserialize(&message)
-            .map_err(|e| NetworkError::FailedToSerialize { source: e })?;
+        let message_version = Version::deserialize(&message)
+            .map_err(|e| NetworkError::FailedToDeserialize { source: e })?;
+        if message_version.0 == VERSION_0_1 {
+            let result: Message<TYPES> = Serializer::<Version01>::deserialize(&message)
+                .map_err(|e| NetworkError::FailedToDeserialize { source: e })?;
 
-        // Return it
-        Ok(vec![result])
+            // Deserialize it
+            // Return it
+            Ok(vec![result])
+        } else {
+            Err(NetworkError::FailedToDeserialize {
+                source: anyhow::format_err!(
+                    "version mismatch, expected {}, got {}",
+                    VERSION_0_1,
+                    message_version.0
+                ),
+            })
+        }
     }
 
     /// Do nothing here, as we don't need to look up nodes.

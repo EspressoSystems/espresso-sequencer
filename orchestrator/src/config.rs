@@ -544,6 +544,8 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub propose_min_round_time: Duration,
     /// The maximum amount of time a leader can wait to start a round
     pub propose_max_round_time: Duration,
+    /// Time to wait until we request data associated with a proposal
+    pub data_request_delay: Duration,
 }
 
 /// Holds configuration for a validator node
@@ -619,8 +621,8 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
             num_bootstrap: val.num_bootstrap,
             propose_min_round_time: val.propose_min_round_time,
             propose_max_round_time: val.propose_max_round_time,
+            data_request_delay: val.data_request_delay,
             election_config: None,
-            data_request_delay: Duration::from_millis(200),
         }
     }
 }
@@ -671,9 +673,10 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             timeout_ratio: (11, 10),
             round_start_delay: 1,
             start_delay: 1,
+            num_bootstrap: 5,
             propose_min_round_time: Duration::from_secs(0),
             propose_max_round_time: Duration::from_secs(10),
-            num_bootstrap: 5,
+            data_request_delay: Duration::from_millis(200),
         }
     }
 }

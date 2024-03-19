@@ -29,7 +29,7 @@ use futures::join;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_task_impls::helpers::broadcast_event;
 use hotshot_task_impls::network;
-use hotshot_types::constants::{EVENT_CHANNEL_SIZE, VERSION_0_1};
+use hotshot_types::constants::{EVENT_CHANNEL_SIZE, STATIC_VER_0_1};
 
 use hotshot_task::task::TaskRegistry;
 use hotshot_types::{
@@ -310,17 +310,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 // TODO We should have a function that can return a network error if there is one
                 // but first we'd need to ensure our network implementations can support that
                 // (and not hang instead)
-                //
+
+                // version <0, 1> currently fixed; this is the same as VERSION_0_1,
+                // and will be updated to be part of SystemContext. I wanted to use associated
+                // constants in NodeType, but that seems to be unavailable in the current Rust.
                 api
                     .networks
                     .da_network
                     .broadcast_message(
                         Message {
-                            version: VERSION_0_1,
                             sender: api.public_key.clone(),
                             kind: MessageKind::from(message),
                         },
                         da_membership.get_whole_committee(view_number),
+                        STATIC_VER_0_1,
                     ),
                 api
                     .send_external_event(Event {

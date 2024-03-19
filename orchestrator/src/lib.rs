@@ -35,6 +35,19 @@ use libp2p::identity::{
     ed25519::{Keypair as EdKeypair, SecretKey},
     Keypair,
 };
+use versioned_binary_serialization::version::{StaticVersion, StaticVersionType};
+
+/// Orchestrator is not, strictly speaking, bound to the network; it can have its own versioning.
+/// Orchestrator Version (major)
+pub const ORCHESTRATOR_MAJOR_VERSION: u16 = 0;
+/// Orchestrator Version (minor)
+pub const ORCHESTRATOR_MINOR_VERSION: u16 = 1;
+/// Orchestrator Version as a type
+pub type OrchestratorVersion =
+    StaticVersion<ORCHESTRATOR_MAJOR_VERSION, ORCHESTRATOR_MINOR_VERSION>;
+/// Orchestrator Version as a type-binding instance
+pub const ORCHESTRATOR_VERSION: OrchestratorVersion = StaticVersion {};
+
 /// Generate an keypair based on a `seed` and an `index`
 /// # Panics
 /// This panics if libp2p is unable to generate a secret key from the seed
@@ -360,20 +373,21 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY: SignatureKey, ELECTION: ElectionConfig, State>(
-) -> Result<Api<State, ServerError>, ApiError>
+fn define_api<KEY: SignatureKey, ELECTION: ElectionConfig, State, VER: StaticVersionType>(
+) -> Result<Api<State, ServerError, VER>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ELECTION>,
     KEY: serde::Serialize,
     ELECTION: serde::Serialize,
+    VER: 'static,
 {
     let api_toml = toml::from_str::<toml::Value>(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/api.toml"
     )))
     .expect("API file is not valid toml");
-    let mut api = Api::<State, ServerError>::new(api_toml)?;
+    let mut api = Api::<State, ServerError, VER>::new(api_toml)?;
     api.post("post_identity", |req, state| {
         async move {
             let identity = req.string_param("identity")?.parse::<IpAddr>();
@@ -447,9 +461,12 @@ where
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
-    let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
+    let mut app = App::<
+        RwLock<OrchestratorState<KEY, ELECTION>>,
+        ServerError, OrchestratorVersion
+    >::with_state(state);
     app.register_module("api", web_api.unwrap())
         .expect("Error registering api");
     tracing::error!("listening on {:?}", url);
-    app.serve(url).await
+    app.serve(url, ORCHESTRATOR_VERSION).await
 }

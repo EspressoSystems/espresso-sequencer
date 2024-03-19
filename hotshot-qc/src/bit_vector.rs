@@ -275,14 +275,19 @@ mod tests {
             // Check the QC and the QCParams can be serialized / deserialized
             assert_eq!(
                 qc,
-                bincode::deserialize(&bincode::serialize(&qc).unwrap()).unwrap()
+                Serializer::<STATIC_VER_0_1>::deserialize(
+                    &Serializer::<STATIC_VER_0_1>::serialize(&qc).unwrap()
+                )
+                .unwrap()
             );
 
             // (alex) since deserialized stake table's leaf would contain normalized projective
             // points with Z=1, which differs from the original projective representation.
             // We compare individual fields for equivalence instead.
-            let de_qc_pp: QCParams<$aggsig, ST> =
-                bincode::deserialize(&bincode::serialize(&qc_pp).unwrap()).unwrap();
+            let de_qc_pp: QCParams<$aggsig, ST> = Serializer::<STATIC_VER_0_1>::deserialize(
+                &Serializer::<STATIC_VER_0_1>::serialize(&qc_pp).unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 qc_pp.stake_table.commitment(SnapshotVersion::Head).unwrap(),
                 de_qc_pp
