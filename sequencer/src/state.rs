@@ -427,6 +427,12 @@ pub struct FeeInfo {
     amount: FeeAmount,
 }
 impl FeeInfo {
+    pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
+        Self {
+            account: account.into(),
+            amount: amount.into(),
+        }
+    }
     /// The minimum fee paid by the given builder account for a proposed block.
     // TODO this function should take the block size as an input, we need to get this information
     // from HotShot.
