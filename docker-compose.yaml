@@ -30,6 +30,7 @@ services:
       - ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
 
   da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
@@ -39,6 +40,7 @@ services:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG=error
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -51,6 +53,7 @@ services:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG=error
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -64,6 +67,7 @@ services:
       - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
 
   prover-service:
     image: ghcr.io/espressosystems/espresso-sequencer/prover-service:main
@@ -80,6 +84,7 @@ services:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -110,6 +115,7 @@ services:
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -145,6 +151,7 @@ services:
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -175,6 +182,7 @@ services:
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -204,6 +212,7 @@ services:
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -233,6 +242,7 @@ services:
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -254,6 +264,7 @@ services:
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
         condition: service_healthy
@@ -270,6 +281,7 @@ services:
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
       - RUST_LOG
       - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
         condition: service_healthy

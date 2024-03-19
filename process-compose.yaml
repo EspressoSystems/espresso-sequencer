@@ -26,6 +26,10 @@ processes:
 
   orchestrator:
     command: orchestrator
+    environment:
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     readiness_probe:
       http_get:
         scheme: http
@@ -42,6 +46,9 @@ processes:
     command: web-server
     environment:
       - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_DA_SERVER_PORT
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -56,6 +63,9 @@ processes:
     command: web-server
     environment:
       - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_CONSENSUS_SERVER_PORT
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -71,6 +81,9 @@ processes:
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_PORT
       - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     readiness_probe:
       http_get:
         scheme: http
@@ -89,6 +102,9 @@ processes:
       - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
       - ESPRESSO_SEQUENCER_HOTSHOT_NUM_BLOCKS_PER_EPOCH
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -110,6 +126,9 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=10
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -138,6 +157,9 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=11
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -165,6 +187,9 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=12
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -192,6 +217,9 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=13
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -219,6 +247,9 @@ processes:
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=14
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -236,6 +267,10 @@ processes:
 
   commitment-task:
     command: commitment-task --deploy
+    environment:
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -254,6 +289,9 @@ processes:
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
         condition: process_healthy
