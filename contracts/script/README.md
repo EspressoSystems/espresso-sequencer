@@ -84,7 +84,7 @@ rm -rf out
 2. Verify the Contract
 
 ```bash
-forge verify-contract --etherscan-api-key $ETHERSCAN_API_KEY $FEE_CONTRACT_ADDRESS contracts/src/LightClient.sol:LightClient --chain 11155111
+forge verify-contract --etherscan-api-key $ETHERSCAN_API_KEY $LIGHT_CLIENT_CONTRACT_ADDRESS contracts/src/LightClient.sol:LightClient --chain 11155111
 ```
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
