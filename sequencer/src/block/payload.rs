@@ -96,14 +96,17 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         0..self.ns_table.len()
     }
 
-    /// Returns the flat bytes for namespace `ns_id`.
-    pub fn namespace(&self, ns_id: NamespaceId) -> Option<&[u8]> {
+    /// Returns the list of txs for namespace `ns_id`.
+    pub fn namespace(&self, ns_id: NamespaceId) -> Option<Vec<Transaction>> {
         let ns_index = self.ns_table.lookup(ns_id)?;
         let ns_payload_range = self
             .ns_table
             .get_payload_range(ns_index, self.raw_payload.len())
             .1;
-        self.raw_payload.get(ns_payload_range)
+        Some(parse_ns_payload(
+            self.raw_payload.get(ns_payload_range)?,
+            ns_id,
+        ))
     }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
@@ -384,7 +387,7 @@ mod test {
             payload_flat: Vec<u8>,
             tx_table: Vec<TxTableEntry>, // TODO Philippe => change
             #[allow(dead_code)] // TODO temporary
-            tx_payloads: Vec<Vec<u8>>,
+            txs: Vec<Transaction>,
         }
 
         let vid = vid_scheme(NUM_STORAGE_NODES);
@@ -442,12 +445,16 @@ mod test {
                     ns_payload
                 };
 
+                let new_ns_id = (n as u64).into();
                 let already_exists = derived_nss.insert(
-                    (n as u64).into(),
+                    new_ns_id,
                     NamespaceInfo {
                         payload_flat: ns_payload_flat,
                         tx_table: tx_table_derived,
-                        tx_payloads,
+                        txs: tx_payloads
+                            .into_iter()
+                            .map(|p| Transaction::new(new_ns_id, p))
+                            .collect::<Vec<Transaction>>(),
                     },
                 );
                 assert!(already_exists.is_none());
@@ -455,11 +462,9 @@ mod test {
             assert_eq!(derived_nss.len(), test_case.len());
 
             // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
-            let all_txs_iter = derived_nss.iter().flat_map(|(ns_id, ns)| {
-                ns.tx_payloads
-                    .iter()
-                    .map(|p| Transaction::new(*ns_id, p.clone()))
-            });
+            let all_txs_iter = derived_nss
+                .iter()
+                .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
             let (block, actual_ns_table) = Payload::from_transactions(all_txs_iter).unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
@@ -516,9 +521,9 @@ mod test {
                 );
 
                 // test ns without proof
-                let ns_payload_without_proof = block.namespace(ns_id).unwrap();
+                let ns_txs = block.namespace(ns_id).unwrap();
                 assert_eq!(
-                    ns_payload_without_proof, &derived_ns.payload_flat,
+                    ns_txs, derived_ns.txs,
                     "namespace {ns_id} incorrect payload bytes returned from `namespace`",
                 );
 
@@ -545,15 +550,7 @@ mod test {
                     .verify(&vid, &disperse_data.commit, &actual_ns_table)
                     .unwrap_or_else(|| panic!("namespace {ns_id} proof verification failure"));
                 assert_eq!(ns_proof_ns_id, ns_id);
-                assert_eq!(
-                    ns_proof_txs,
-                    derived_ns
-                        .tx_payloads
-                        .clone()
-                        .into_iter()
-                        .map(|p| Transaction::new(ns_id, p))
-                        .collect::<Vec<Transaction>>()
-                );
+                assert_eq!(ns_proof_txs, derived_ns.txs);
 
                 // test tx table length
                 let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
@@ -588,19 +585,24 @@ mod test {
                     assert_eq!(tx_idx, next_tx.tx_idx);
 
                     let idx = TxIndex { ns_idx, tx_idx };
-                    let tx = block.transaction(&actual_ns_table, &idx).unwrap();
-                    let tx_payload = derived_ns.tx_payloads[tx_idx].to_vec();
+
                     // test `transaction()`
-                    assert_eq!(ns_id, tx.namespace());
-                    assert_eq!(tx_payload, tx.payload());
+                    let tx = block.transaction(&actual_ns_table, &idx).unwrap();
+                    assert_eq!(tx, derived_ns.txs[tx_idx]);
 
                     // test `transaction_with_proof()`
-                    let (tx, proof) = block
+                    let (tx_with_proof, proof) = block
                         .transaction_with_proof(&actual_ns_table, &idx)
                         .unwrap();
-                    assert_eq!(tx_payload, tx.payload());
+                    assert_eq!(tx, tx_with_proof);
                     proof
-                        .verify(&tx, idx, &vid, &disperse_data.commit, &disperse_data.common)
+                        .verify(
+                            &tx_with_proof,
+                            idx,
+                            &vid,
+                            &disperse_data.commit,
+                            &disperse_data.common,
+                        )
                         .unwrap()
                         .unwrap();
                 }
