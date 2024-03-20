@@ -21,6 +21,7 @@ use ethers::{
 
 use l1_client::L1Client;
 
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -60,8 +61,8 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::net::Ipv4Addr;
 use std::time::Duration;
+use std::{collections::HashSet, net::Ipv4Addr};
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -158,8 +159,11 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type Storage = SeqDAStorage;
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-pub struct Delta {}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Delta {
+    blocks_delta: HashSet<u64>,
+    fees_delta: HashSet<FeeAccount>,
+}
 
 impl StateDelta for Delta {}
 
@@ -461,6 +465,9 @@ pub mod testing {
                 da_staked_committee_size: num_nodes,
                 da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
+                // ???
+                view_sync_timeout: Duration::from_secs(1),
+                data_request_delay: Duration::from_secs(1),
             };
 
             Self {
@@ -614,15 +621,16 @@ mod test {
         },
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
+    use versioned_binary_serialization::version::StaticVersion;
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_logging();
         setup_backtrace();
-
+        let ver = StaticVersion::<1, 0> {};
         // Assign `config` so it isn't dropped early.
         let config = TestConfig::default();
-        let handles = config.init_nodes().await;
+        let handles = config.init_nodes(ver).await;
 
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {
@@ -646,9 +654,10 @@ mod test {
         setup_backtrace();
 
         let success_height = 30;
+        let ver = StaticVersion::<1, 0> {};
         // Assign `config` so it isn't dropped early.
         let config = TestConfig::default();
-        let handles = config.init_nodes().await;
+        let handles = config.init_nodes(ver).await;
 
         let mut events = handles[0].get_event_stream();
         for handle in handles.iter() {

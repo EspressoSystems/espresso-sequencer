@@ -18,16 +18,19 @@ use ethers::prelude::U256;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
+    merklized_state::{self, MerklizedState, MerklizedStateDataSource},
     node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
+use tagged_base64::TaggedBase64;
 use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
 };
+
 use versioned_binary_serialization::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -142,7 +145,9 @@ where
     Ok(api)
 }
 
-pub(super) fn submit<N, S, Ver: StaticVersionType>() -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, S, Ver: StaticVersionType>(
+    bind_version: Ver,
+) -> anyhow::Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
@@ -154,7 +159,7 @@ where
     api.post("submit", |req, state| {
         async move {
             let tx = req
-                .body_auto::<Transaction, Ver>()
+                .body_auto::<Transaction, Ver>(bind_version)
                 .map_err(Error::from_request_error)?;
             let hash = tx.commit();
             state
@@ -270,5 +275,20 @@ where
         .boxed()
     })?;
 
+    Ok(api)
+}
+
+pub(super) fn merklized_state<N, D, S, Ver: StaticVersionType>(
+    _: Ver,
+) -> anyhow::Result<Api<AvailState<N, D, Ver>, merklized_state::Error, Ver>>
+where
+    N: network::Type,
+    D: MerklizedStateDataSource<SeqTypes, S> + Send + Sync + 'static,
+    S: MerklizedState<SeqTypes>,
+    for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
+{
+    let api = merklized_state::define_api::<AvailState<N, D, Ver>, SeqTypes, S, Ver>(
+        &Default::default(),
+    )?;
     Ok(api)
 }

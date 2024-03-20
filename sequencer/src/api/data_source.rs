@@ -3,7 +3,11 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{network, persistence, state::ValidatedState, Node, SeqTypes};
+use crate::{
+    network, persistence,
+    state::{BlockMerkleTree, FeeMerkleTree, ValidatedState},
+    Node, SeqTypes,
+};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
@@ -11,6 +15,7 @@ use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
+    merklized_state::{MerklizedStateDataSource, UpdateStateData},
     node::NodeDataSource,
     status::StatusDataSource,
 };
@@ -51,6 +56,10 @@ pub trait SequencerDataSource:
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
     + VersionedDataSource
+    + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
+    + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
+    + UpdateStateData<SeqTypes, BlockMerkleTree>
+    + UpdateStateData<SeqTypes, FeeMerkleTree>
     + Sized
 {
     type Options: DataSourceOptions<DataSource = Self>;

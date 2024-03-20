@@ -7,7 +7,11 @@ use super::{
     endpoints, fs, sql,
     update::update_loop,
 };
-use crate::{context::SequencerContext, network, persistence};
+use crate::{
+    context::SequencerContext,
+    network, persistence,
+    state::{BlockMerkleTree, FeeMerkleTree},
+};
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
@@ -203,6 +207,16 @@ impl Options {
         // Initialize availability and node APIs (these both use the same data source).
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
+        // Initialize merklized state module for block merkle tree
+        app.register_module(
+            "state/blocks",
+            endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
+        )?;
+        // Initialize merklized state module for fee merkle tree
+        app.register_module(
+            "state/fees",
+            endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
+        )?;
 
         self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
@@ -231,7 +245,7 @@ impl Options {
         let bind_version = Ver::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit()?;
+            let submit_api = endpoints::submit(bind_version)?;
             app.register_module("submit", submit_api)?;
         }
 

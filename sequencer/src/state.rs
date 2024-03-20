@@ -13,6 +13,7 @@ use ethers::{
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
+use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::data::{BlockError, ViewNumber};
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
@@ -27,8 +28,8 @@ use jf_primitives::{
 };
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
-use typenum::Unsigned;
+use std::{ops::Add, str::FromStr};
+use typenum::{Unsigned, U3};
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -120,6 +121,7 @@ impl ValidatedState {
 
 pub fn validate_and_apply_proposal(
     state: &mut ValidatedState,
+    delta: &mut Delta,
     parent_leaf: &Leaf,
     proposal: &Header,
     receipts: Vec<FeeInfo>,
@@ -142,6 +144,7 @@ pub fn validate_and_apply_proposal(
 
     // validate proposal is descendent of parent by appending to parent
     block_merkle_tree.push(parent_header.commit()).unwrap();
+    delta.blocks_delta.insert(parent_header.height);
     let block_merkle_tree_root = block_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.block_merkle_tree_root == block_merkle_tree_root,
@@ -159,6 +162,8 @@ pub fn validate_and_apply_proposal(
                 Some(balance.cloned().unwrap_or_default().add(amount))
             })
             .expect("update_with succeeds");
+
+        delta.fees_delta.insert(account);
     }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
@@ -250,12 +255,19 @@ fn validate_and_charge_builder(
 /// is available in the `validated_state`.
 fn validate_and_apply_header(
     validated_state: &mut ValidatedState,
+    delta: &mut Delta,
     parent_leaf: &Leaf,
     proposed_header: &Header,
     l1_deposits: Vec<FeeInfo>,
 ) -> Result<(), BlockError> {
     // validate proposed header against parent
-    match validate_and_apply_proposal(validated_state, parent_leaf, proposed_header, l1_deposits) {
+    match validate_and_apply_proposal(
+        validated_state,
+        delta,
+        parent_leaf,
+        proposed_header,
+        l1_deposits,
+    ) {
         // Note that currently only block state is updated.
         Ok(validated_state) => validated_state,
         Err(e) => {
@@ -271,6 +283,9 @@ fn validate_and_apply_header(
         tracing::warn!("Invalid Builder: {}", e);
         return Err(BlockError::InvalidBlockHeader);
     };
+
+    delta.fees_delta.insert(proposed_header.fee_info.account);
+
     Ok(())
 }
 
@@ -359,15 +374,18 @@ impl HotShotState<SeqTypes> for ValidatedState {
             }
         }
 
+        let mut delta = Delta::default();
+
         // Lastly validate and apply the header
         validate_and_apply_header(
             &mut validated_state,
+            &mut delta,
             parent_leaf,
             proposed_header,
             l1_deposits,
         )?;
 
-        Ok((validated_state, Delta {}))
+        Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
     ///
@@ -383,7 +401,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
     /// Construct a genesis validated state.
     #[must_use]
     fn genesis(instance: &Self::Instance) -> (Self, Self::Delta) {
-        (instance.genesis_state.clone(), Delta {})
+        (instance.genesis_state.clone(), Delta::default())
     }
 }
 
@@ -408,6 +426,27 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
 
 pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
+
+impl MerklizedState<SeqTypes> for BlockMerkleTree {
+    type Arity = U3;
+    type Key = Self::Index;
+    type Entry = Commitment<Header>;
+    type T = Sha3Node;
+    type Commit = Self::Commitment;
+    type Digest = Sha3Digest;
+
+    fn state_type() -> &'static str {
+        "block_merkle_tree"
+    }
+
+    fn header_state_commitment_field() -> &'static str {
+        "block_merkle_tree_root"
+    }
+
+    fn tree_height() -> usize {
+        3
+    }
+}
 
 #[derive(
     Hash,
@@ -549,6 +588,14 @@ impl FeeAccount {
     }
 }
 
+impl FromStr for FeeAccount {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.parse()?))
+    }
+}
+
 impl Valid for FeeAmount {
     fn check(&self) -> Result<(), SerializationError> {
         Ok(())
@@ -626,6 +673,27 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
 pub type FeeMerkleTree =
     UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, typenum::U256, Sha3Node>;
 pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
+
+impl MerklizedState<SeqTypes> for FeeMerkleTree {
+    type Arity = typenum::U256;
+    type Key = Self::Index;
+    type Entry = Self::Element;
+    type T = Sha3Node;
+    type Commit = Self::Commitment;
+    type Digest = Sha3Digest;
+
+    fn state_type() -> &'static str {
+        "fee_merkle_tree"
+    }
+
+    fn header_state_commitment_field() -> &'static str {
+        "fee_merkle_tree_root"
+    }
+
+    fn tree_height() -> usize {
+        256
+    }
+}
 
 /// A proof of the balance of an account in the fee ledger.
 ///
