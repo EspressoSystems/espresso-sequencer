@@ -79,6 +79,9 @@ where
             if let Some(status) = modules.status {
                 opt = opt.status(status);
             }
+            if let Some(state) = modules.state {
+                opt = opt.state(state);
+            }
             let storage = storage_opt.create().await?;
             opt.serve(move |metrics| {
                 async move {
