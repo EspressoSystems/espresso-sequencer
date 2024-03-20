@@ -88,6 +88,14 @@ path = "push-cdn/all.rs"
 name = "validator-push-cdn"
 path = "push-cdn/validator.rs"
 
+[[example]]
+name = "broker-push-cdn"
+path = "push-cdn/broker.rs"
+
+[[example]]
+name = "marshal-push-cdn"
+path = "push-cdn/marshal.rs"
+
 [dependencies]
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
@@ -150,6 +158,8 @@ clap = { version = "4.5", features = ["derive", "env"] }
 toml = { workspace = true }
 blake3 = { workspace = true }
 local-ip-address = "0.6.1"
+anyhow.workspace = true
+tracing-subscriber = "0.3.18"
 
 [lints]
 workspace = true
