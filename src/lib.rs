@@ -495,7 +495,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload,
-    Header<Types>: availability::QueryableHeader<Types>,
+    Header<Types>: availability::QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource

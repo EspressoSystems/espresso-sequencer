@@ -14,6 +14,7 @@ pub(crate) mod currency;
 pub(crate) mod data_source;
 pub(crate) mod errors;
 pub(crate) mod monetary_value;
+pub(crate) mod traits;
 use self::data_source::{
     BlockIdentifier, BlockRange, GetBlockDetailError, GetBlockSummariesError,
     GetExplorerSummaryError, GetTransactionDetailError, GetTransactionSummariesError,
@@ -21,7 +22,8 @@ use self::data_source::{
     TransactionSummaryFilter,
 };
 use self::data_source::{ExplorerDataSource, GetBlockSummariesRequest};
-use crate::api::load_api;
+use self::traits::ExplorerHeader;
+use crate::{api::load_api, Header};
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
@@ -77,6 +79,7 @@ pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
+    Header<Types>: ExplorerHeader<Types>,
     <State as ReadState>::State: Send + Sync + ExplorerDataSource<Types>,
 {
     let mut api = load_api::<State, Error, Ver>(

@@ -15,8 +15,9 @@
 use super::{AvailabilityStorage, ExplorerStorage};
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
@@ -191,12 +192,13 @@ where
 #[async_trait]
 impl<Types: NodeType> ExplorerStorage<Types> for NoStorage
 where
+    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
     Payload<Types>: QueryablePayload,
 {
     async fn get_block_summaries(
         &self,
         _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>> {
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>> {
         Err(QueryError::Error {
             message: "unimplemented".to_string(),
         })

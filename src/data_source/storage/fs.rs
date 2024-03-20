@@ -463,12 +463,12 @@ where
 impl<Types: NodeType> ExplorerStorage<Types> for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
+    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
 {
     async fn get_block_summaries(
         &self,
         _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>> {
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>> {
         Err(QueryError::Error {
             message: "unimplemented".to_string(),
         })

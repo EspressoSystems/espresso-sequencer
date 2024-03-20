@@ -26,8 +26,9 @@
 
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::VersionedDataSource,
     explorer, Header, Payload, QueryResult,
@@ -113,12 +114,13 @@ where
 pub trait ExplorerStorage<Types>: AvailabilityStorage<Types>
 where
     Types: NodeType,
+    Header<Types>: explorer::traits::ExplorerHeader<Types> + QueryableHeader<Types>,
     Payload<Types>: QueryablePayload,
 {
     async fn get_block_summaries(
         &self,
         request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>>;
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>>;
 
     async fn get_transaction_summaries(
         &self,

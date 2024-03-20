@@ -13,6 +13,7 @@
 use super::{
     errors::{ExplorerAPIError, Unimplemented},
     monetary_value::MonetaryValue,
+    traits::ExplorerHeader,
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
@@ -141,24 +142,34 @@ impl<'de> Deserialize<'de> for Timestamp {
     }
 }
 
+pub type WalletAddress<Types> = <Header<Types> as ExplorerHeader<Types>>::WalletAddress;
+pub type NamespaceId<Types> = <Header<Types> as ExplorerHeader<Types>>::NamespaceId;
+pub type ProposerId<Types> = <Header<Types> as ExplorerHeader<Types>>::ProposerId;
+pub type BalanceAmount<Types> = <Header<Types> as ExplorerHeader<Types>>::BalanceAmount;
+
 /// [BlockDetail] is a struct that represents the details of a specific block
 /// for use in a Block Explorer.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct BlockDetail {
+#[serde(bound = "")]
+pub struct BlockDetail<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
     pub height: u64,
     pub time: Timestamp,
     pub num_transactions: u64,
-    pub proposer_id: WalletAddress,
-    pub fee_recipient: WalletAddress,
+    pub proposer_id: ProposerId<Types>,
+    pub fee_recipient: WalletAddress<Types>,
     pub size: u64,
     pub block_reward: Vec<MonetaryValue>,
 }
 
-impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockDetail
+impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockDetail<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
+    Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
+    BalanceAmount<Types>: Into<MonetaryValue>,
 {
     type Error = TimestampConversionError;
 
@@ -169,34 +180,11 @@ where
             height: value.height(),
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
             num_transactions: value.num_transactions,
-            proposer_id: value.header().fee_info_account().into(),
-            fee_recipient: value.header().fee_info_account().into(),
+            proposer_id: value.header().proposer_id(),
+            fee_recipient: value.header().fee_info_account(),
             size: value.size,
-            block_reward: vec![value.header().fee_info_reward().into()],
+            block_reward: vec![value.header().fee_info_balance().into()],
         })
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
-pub struct WalletAddress([u8; 20]);
-
-impl WalletAddress {
-    pub fn zero() -> Self {
-        WalletAddress([0; 20])
-    }
-}
-
-impl From<[u8; 20]> for WalletAddress {
-    fn from(bytes: [u8; 20]) -> Self {
-        WalletAddress(bytes)
-    }
-}
-
-impl From<Vec<u8>> for WalletAddress {
-    fn from(bytes: Vec<u8>) -> Self {
-        let mut arr = [0; 20];
-        arr.copy_from_slice(&bytes);
-        WalletAddress(arr)
     }
 }
 
@@ -204,9 +192,13 @@ impl From<Vec<u8>> for WalletAddress {
 /// block.  It does not have all of the details of a [BlockDetail], but it is
 /// useful for displaying information in a list of Blocks.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct BlockSummary {
+#[serde(bound = "")]
+pub struct BlockSummary<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
     pub height: u64,
-    pub proposer_id: WalletAddress,
+    pub proposer_id: ProposerId<Types>,
     pub num_transactions: u64,
     pub size: u64,
     pub time: Timestamp,
@@ -238,11 +230,11 @@ impl From<TimestampConversionError> for QueryError {
     }
 }
 
-impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockSummary
+impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockSummary<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
+    Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
 {
     type Error = TimestampConversionError;
 
@@ -251,18 +243,13 @@ where
 
         Ok(Self {
             height: value.height(),
-            proposer_id: value.header().fee_info_account().into(),
+            proposer_id: value.header().proposer_id(),
             num_transactions: value.num_transactions,
             size: value.size,
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
         })
     }
 }
-
-/// [NamespaceId] is a specific type that represents an identified for a
-/// given namespace.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NamespaceId(u64);
 
 /// [FeeAttribution] represents a specific attribution of fees for a specific
 /// purpose.
@@ -310,9 +297,12 @@ pub struct TransactionDetailResponse<Types: NodeType> {
 /// information in a list of Transactions.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct TransactionSummary<Types: NodeType> {
+pub struct TransactionSummary<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
     pub hash: TransactionHash<Types>,
-    pub rollups: Vec<NamespaceId>,
+    pub rollups: Vec<NamespaceId<Types>>,
     pub height: u64,
     pub time: Timestamp,
 }
@@ -326,7 +316,7 @@ impl<Types: NodeType>
 where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
+    Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
 {
     type Error = TimestampConversionError;
 
@@ -357,7 +347,7 @@ impl<Types: NodeType>
 where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types>,
+    Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
 {
     type Error = TimestampConversionError;
 
@@ -398,7 +388,7 @@ pub struct GetBlockSummariesRequest<Types: NodeType>(pub BlockRange<Types>);
 #[derive(Debug, Deserialize, Serialize)]
 pub enum TransactionSummaryFilter {
     None,
-    RollUp(NamespaceId),
+    RollUp(usize),
     Block(usize),
 }
 
@@ -620,11 +610,14 @@ impl ExplorerAPIError for GetExplorerSummaryError {
 /// concerned with providing the requested data as quickly as possible, and in
 /// a way that can be easily cached.
 #[async_trait]
-pub trait ExplorerDataSource<Types: NodeType> {
+pub trait ExplorerDataSource<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
     async fn get_block_detail(
         &self,
         request: BlockIdentifier<Types>,
-    ) -> Result<BlockDetail, GetBlockDetailError> {
+    ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
         let _ = request;
         Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
     }
@@ -632,7 +625,7 @@ pub trait ExplorerDataSource<Types: NodeType> {
     async fn get_block_summaries(
         &self,
         request: GetBlockSummariesRequest<Types>,
-    ) -> Result<Vec<BlockSummary>, GetBlockSummariesError> {
+    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
         let _ = request;
         Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
     }

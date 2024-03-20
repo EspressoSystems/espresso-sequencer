@@ -10,6 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::explorer::traits::ExplorerHeader;
 use crate::merklized_state::MerklizedState;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
@@ -51,6 +52,33 @@ pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
 impl QueryableHeader<MockTypes> for MockHeader {
     fn timestamp(&self) -> u64 {
         self.timestamp
+    }
+}
+
+impl ExplorerHeader<MockTypes> for MockHeader {
+    type BalanceAmount = i128;
+    type WalletAddress = [u8; 32];
+    type ProposerId = [u8; 32];
+    type NamespaceId = u64;
+
+    fn proposer_id(&self) -> Self::ProposerId {
+        [0; 32]
+    }
+
+    fn fee_info_account(&self) -> Self::WalletAddress {
+        [0; 32]
+    }
+
+    fn fee_info_balance(&self) -> Self::BalanceAmount {
+        0
+    }
+
+    fn reward_balance(&self) -> Self::BalanceAmount {
+        0
+    }
+
+    fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
+        vec![0]
     }
 }
 
