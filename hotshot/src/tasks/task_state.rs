@@ -2,8 +2,9 @@ use crate::types::SystemContextHandle;
 
 use async_trait::async_trait;
 use hotshot_task_impls::{
-    consensus::ConsensusTaskState, da::DATaskState, transactions::TransactionTaskState,
-    upgrade::UpgradeTaskState, vid::VIDTaskState, view_sync::ViewSyncTaskState,
+    consensus::ConsensusTaskState, da::DATaskState, request::NetworkRequestState,
+    transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VIDTaskState,
+    view_sync::ViewSyncTaskState,
 };
 use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::traits::{
@@ -15,6 +16,7 @@ use std::{
     marker::PhantomData,
     sync::Arc,
 };
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Trait for creating task states.
 #[async_trait]
@@ -25,6 +27,27 @@ where
 {
     /// Function to create the task state from a given `SystemContextHandle`.
     async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> Self;
+}
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: StaticVersionType> CreateTaskState<TYPES, I>
+    for NetworkRequestState<TYPES, I, V>
+{
+    async fn create_from(
+        handle: &SystemContextHandle<TYPES, I>,
+    ) -> NetworkRequestState<TYPES, I, V> {
+        NetworkRequestState {
+            network: handle.hotshot.networks.quorum_network.clone(),
+            state: handle.hotshot.get_consensus(),
+            view: handle.get_cur_view().await,
+            delay: handle.hotshot.config.data_request_delay,
+            da_membership: handle.hotshot.memberships.da_membership.clone(),
+            quorum_membership: handle.hotshot.memberships.quorum_membership.clone(),
+            public_key: handle.public_key().clone(),
+            private_key: handle.private_key().clone(),
+            _phantom: PhantomData,
+        }
+    }
 }
 
 #[async_trait]

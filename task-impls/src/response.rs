@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_broadcast::Receiver;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use bincode::config::Options;
 use either::Either::Right;
 use futures::{channel::mpsc, FutureExt, StreamExt};
@@ -22,6 +24,8 @@ use hotshot_types::{
     utils::bincode_opts,
 };
 use sha2::{Digest, Sha256};
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
 
 use crate::events::HotShotEvent;
 
@@ -29,27 +33,27 @@ use crate::events::HotShotEvent;
 type LockedConsensusState<TYPES> = Arc<RwLock<Consensus<TYPES>>>;
 
 /// Type alias for the channel that we receive requests from the network on.
-type ReqestReceiver<TYPES> = mpsc::Receiver<(Message<TYPES>, ResponseChannel<Message<TYPES>>)>;
+pub type RequestReceiver<TYPES> = mpsc::Receiver<(Message<TYPES>, ResponseChannel<Message<TYPES>>)>;
 
 /// Task state for the Network Request Task. The task is responsible for handling
 /// requests sent to this node by the network.  It will validate the sender,
 /// parse the request, and try to find the data request in the consensus stores.
-pub struct NetworkRequestState<TYPES: NodeType> {
+pub struct NetworkResponseState<TYPES: NodeType> {
     /// Locked consensus state
     consensus: LockedConsensusState<TYPES>,
     /// Receiver for requests
-    receiver: ReqestReceiver<TYPES>,
+    receiver: RequestReceiver<TYPES>,
     /// Quorum membership for checking if requesters have state
     quorum: TYPES::Membership,
     /// This replicas public key
     pub_key: TYPES::SignatureKey,
 }
 
-impl<TYPES: NodeType> NetworkRequestState<TYPES> {
+impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// Create the network request state with the info it needs
     pub fn new(
         consensus: LockedConsensusState<TYPES>,
-        receiver: ReqestReceiver<TYPES>,
+        receiver: RequestReceiver<TYPES>,
         quorum: TYPES::Membership,
         pub_key: TYPES::SignatureKey,
     ) -> Self {
@@ -63,7 +67,7 @@ impl<TYPES: NodeType> NetworkRequestState<TYPES> {
 
     /// Run the request response loop until a `HotShotEvent::Shutdown` is received.
     /// Or the stream is closed.
-    async fn run_loop(mut self, shutdown: EventDependency<HotShotEvent<TYPES>>) {
+    async fn run_loop(mut self, shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>) {
         let mut shutdown = Box::pin(shutdown.completed().fuse());
         loop {
             futures::select! {
@@ -162,16 +166,16 @@ fn valid_signature<TYPES: NodeType>(
     sender.validate(&req.signature, &Sha256::digest(data))
 }
 
-/// Spawn the network request task to handle incoming request for data
+/// Spawn the network response task to handle incoming request for data
 /// from other nodes.  It will shutdown when it gets `HotshotEvent::Shutdown`
 /// on the `event_stream` arg.
-pub fn run_request_task<TYPES: NodeType>(
-    task_state: NetworkRequestState<TYPES>,
-    event_stream: Receiver<HotShotEvent<TYPES>>,
-) {
+pub fn run_response_task<TYPES: NodeType>(
+    task_state: NetworkResponseState<TYPES>,
+    event_stream: Receiver<Arc<HotShotEvent<TYPES>>>,
+) -> JoinHandle<()> {
     let dep = EventDependency::new(
         event_stream,
-        Box::new(|e| matches!(e, HotShotEvent::Shutdown)),
+        Box::new(|e| matches!(e.as_ref(), HotShotEvent::Shutdown)),
     );
-    async_spawn(task_state.run_loop(dep));
+    async_spawn(task_state.run_loop(dep))
 }

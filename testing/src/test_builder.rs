@@ -35,6 +35,8 @@ pub struct TimingData {
     pub propose_min_round_time: Duration,
     /// The maximum amount of time a leader can wait to start a round
     pub propose_max_round_time: Duration,
+    /// time to wait until we request data associated with a proposal
+    pub data_request_delay: Duration,
     /// Delay before sending through the secondary network in CombinedNetworks
     pub secondary_network_delay: Duration,
     /// view sync timeout
@@ -86,6 +88,7 @@ impl Default for TimingData {
             start_delay: 100,
             propose_min_round_time: Duration::new(0, 0),
             propose_max_round_time: Duration::from_millis(100),
+            data_request_delay: Duration::from_millis(200),
             secondary_network_delay: Duration::from_millis(1000),
             view_sync_timeout: Duration::from_millis(2000),
         }
@@ -306,6 +309,7 @@ impl TestMetadata {
             start_delay,
             propose_min_round_time,
             propose_max_round_time,
+            data_request_delay,
             secondary_network_delay,
             view_sync_timeout,
         } = timing_data;
@@ -318,6 +322,7 @@ impl TestMetadata {
                 a.start_delay = start_delay;
                 a.propose_min_round_time = propose_min_round_time;
                 a.propose_max_round_time = propose_max_round_time;
+                a.data_request_delay = data_request_delay;
                 a.view_sync_timeout = view_sync_timeout;
             };
 

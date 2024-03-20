@@ -56,7 +56,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tasks::add_vid_task;
+use tasks::{add_request_network_task, add_response_task, add_vid_task};
 use tracing::{debug, instrument, trace};
 
 // -- Rexports
@@ -474,6 +474,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         add_network_message_task(registry.clone(), event_tx.clone(), quorum_network.clone()).await;
         add_network_message_task(registry.clone(), event_tx.clone(), da_network.clone()).await;
+
+        if let Some(request_rx) = da_network.spawn_request_receiver_task(STATIC_VER_0_1).await {
+            add_response_task(
+                registry.clone(),
+                event_rx.activate_cloned(),
+                request_rx,
+                &handle,
+            )
+            .await;
+        }
+        add_request_network_task(
+            registry.clone(),
+            event_tx.clone(),
+            event_rx.activate_cloned(),
+            &handle,
+        )
+        .await;
 
         add_network_event_task(
             registry.clone(),

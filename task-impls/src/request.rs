@@ -32,13 +32,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
 /// The task will wait a it's `delay` and then send a request iteratively to peers
 /// for any data they don't have related to the proposal.  For now it's just requesting VID
 /// shares.
-pub struct NetworkResponseState<
+pub struct NetworkRequestState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     Ver: StaticVersionType,
 > {
     /// Network to send requests over
-    pub network: I::QuorumNetwork,
+    pub network: Arc<I::QuorumNetwork>,
     /// Consensus shared state so we can check if we've gotten the information
     /// before sending a request
     pub state: Arc<RwLock<Consensus<TYPES>>>,
@@ -55,7 +55,7 @@ pub struct NetworkResponseState<
     /// This nodes private/signign key, used to sign requests.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// Version discrimination
-    _phantom: PhantomData<fn(&Ver)>,
+    pub _phantom: PhantomData<fn(&Ver)>,
 }
 
 /// Alias for a signature
@@ -63,9 +63,9 @@ type Signature<TYPES> =
     <<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType;
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'static> TaskState
-    for NetworkResponseState<TYPES, I, Ver>
+    for NetworkRequestState<TYPES, I, Ver>
 {
-    type Event = HotShotEvent<TYPES>;
+    type Event = Arc<HotShotEvent<TYPES>>;
 
     type Output = HotShotTaskCompleted;
 
@@ -73,7 +73,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         event: Self::Event,
         task: &mut hotshot_task::task::Task<Self>,
     ) -> Option<Self::Output> {
-        match event {
+        match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal) => {
                 let state = task.state();
                 let prop_view = proposal.get_view_number();
@@ -85,6 +85,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
                 None
             }
             HotShotEvent::ViewChange(view) => {
+                let view = *view;
                 if view > task.state().view {
                     task.state_mut().view = view;
                 }
@@ -96,11 +97,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
     }
 
     fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event, HotShotEvent::Shutdown)
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
+
     fn filter(&self, event: &Self::Event) -> bool {
         !matches!(
-            event,
+            event.as_ref(),
             HotShotEvent::Shutdown
                 | HotShotEvent::QuorumProposalValidated(_)
                 | HotShotEvent::ViewChange(_)
@@ -109,13 +111,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'static>
-    NetworkResponseState<TYPES, I, Ver>
+    NetworkRequestState<TYPES, I, Ver>
 {
     /// Spawns tasks for a given view to retrieve any data needed.
     async fn spawn_requests(
         &self,
         view: TYPES::Time,
-        sender: Sender<HotShotEvent<TYPES>>,
+        sender: Sender<Arc<HotShotEvent<TYPES>>>,
         bind_version: Ver,
     ) {
         let requests = self.build_requests(view, bind_version).await;
@@ -142,7 +144,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
     fn run_delay(
         &self,
         request: RequestKind<TYPES>,
-        sender: Sender<HotShotEvent<TYPES>>,
+        sender: Sender<Arc<HotShotEvent<TYPES>>>,
         view: TYPES::Time,
         _: Ver,
     ) {
@@ -179,11 +181,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
 /// the view has moved beyond the view we are requesting, the task will completed.
 struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Network to send requests
-    network: I::QuorumNetwork,
+    network: Arc<I::QuorumNetwork>,
     /// Shared state to check if the data go populated
     state: Arc<RwLock<Consensus<TYPES>>>,
     /// Channel to send the event when we receive a response
-    sender: Sender<HotShotEvent<TYPES>>,
+    sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Duration to delay sending the first request
     delay: Duration,
     /// The peers we will request in a random order
@@ -265,7 +267,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     async fn handle_response_message(&self, message: SequencingMessage<TYPES>) {
         let event = match message.0 {
             Either::Right(CommitteeConsensusMessage::VidDisperseMsg(prop)) => {
-                HotShotEvent::VidDisperseRecv(prop)
+                Arc::new(HotShotEvent::VidDisperseRecv(prop))
             }
             _ => return,
         };
