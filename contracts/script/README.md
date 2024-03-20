@@ -1,18 +1,7 @@
 # Deploying Upgradeable Smart Contracts
 
 Upgradeable Smart contracts are deployed with Openzeppelin Defender to enable a deployment strategy that is more secure
-and also uses a multi-sig Safe wallet. When deploying using openzeppelin the `defender` profile in the `foundry.toml`
-file is used.
-
-Note: One must set the environment variable `FOUNDRY_PROFILE` accordingly to use the appropriate profile in the
-`foundry.toml` settings. E.g.
-
-```bash
-export FOUNDRY_PROFILE=defender
-```
-
-The profile, `profile.default` is used by default. Setting the `FOUNDRY_PROFILE` variable overrides the `foundry.toml`
-settings.
+and also uses a multi-sig Safe wallet.
 
 ## Prerequisites
 
@@ -25,22 +14,19 @@ settings.
 
 ## Deployments
 
+### Building the
+
 ### Deploying the Fee Contract
 
 Steps:
 
 1. Run the Deployment Command This command requires you to go to OpenZeppelin Defender's UI to see the transaction.
-   Click that transaction which opens up the Safe UI where your signers for that Safe multi-sig wallet can confirm the
+   Click that transaction which opens up the Safe UI where your signers for that Safe multi-sig wallet . can confirm the
    transaction. The two transactions to be confirmed are: (i) deployment of implementation contract (ii) deployment of
    proxy contract
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
-forge clean && \
-forge build && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com
 ```
 
 2. Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
@@ -73,12 +59,7 @@ Read Deploying the Fee Contract for a more detailed version of this.
 1. Initiate the Deployment with OpenZeppelin Defender
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
-forge clean && \
-forge build && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com
 ```
 
 2. Verify the Contract
@@ -102,12 +83,7 @@ Steps:
    and the run the following command.
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
-forge clean && \
-forge build && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
@@ -127,12 +103,7 @@ Steps:
    and the run the following command.
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
-forge clean && \
-forge build && \
 forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which

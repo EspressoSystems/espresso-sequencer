@@ -23,8 +23,12 @@
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-  inputs.foundry.url =
-    "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
+  # TODO: switch back to monthly when
+  # https://github.com/foundry-rs/foundry/commit/af8685f49e8c00f2302875cb5cfbfedf96e50042
+  # is in monthly.
+  inputs.foundry.url = "github:shazow/foundry.nix/main";
+  # inputs.foundry.url = "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
+
   inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
 
   inputs.flake-compat.url = "github:edolstra/flake-compat";
@@ -270,7 +274,7 @@
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
           CARGO_INCREMENTAL = "0";
           shellHook = ''
-           RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
+            RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
           '';
           RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
         };
