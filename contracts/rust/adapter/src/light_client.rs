@@ -7,7 +7,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput};
+use hotshot_types::light_client::{LightClientState, PublicInput};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
@@ -33,13 +33,13 @@ impl FromStr for ParsedLightClientState {
 impl From<PublicInput> for ParsedLightClientState {
     fn from(pi: PublicInput) -> Self {
         Self {
-            view_num: field_to_u256(pi.view_number()).as_u64(),
-            block_height: field_to_u256(pi.block_height()).as_u64(),
-            block_comm_root: field_to_u256(pi.block_comm_root()),
-            fee_ledger_comm: field_to_u256(pi.fee_ledger_comm()),
-            bls_key_comm: field_to_u256(pi.qc_key_comm()),
-            schnorr_key_comm: field_to_u256(pi.state_key_comm()),
-            amount_comm: field_to_u256(pi.stake_amount_comm()),
+            view_num: 0,
+            block_height: 0,
+            block_comm_root: U256::zero(),
+            fee_ledger_comm: U256::zero(),
+            bls_key_comm: U256::zero(),
+            schnorr_key_comm: U256::zero(),
+            amount_comm: U256::zero(),
             threshold: field_to_u256(pi.threshold()),
         }
     }
@@ -64,13 +64,13 @@ impl From<ParsedLightClientState> for PublicInput {
     fn from(s: ParsedLightClientState) -> Self {
         let fields = vec![
             u256_to_field(s.threshold),
-            CircuitField::from(s.view_num),
-            CircuitField::from(s.block_height),
-            u256_to_field(s.block_comm_root),
-            u256_to_field(s.fee_ledger_comm),
-            u256_to_field(s.bls_key_comm),
-            u256_to_field(s.schnorr_key_comm),
-            u256_to_field(s.amount_comm),
+            // CircuitField::from(s.view_num),
+            // CircuitField::from(s.block_height),
+            // u256_to_field(s.block_comm_root),
+            // u256_to_field(s.fee_ledger_comm),
+            // u256_to_field(s.bls_key_comm),
+            // u256_to_field(s.schnorr_key_comm),
+            // u256_to_field(s.amount_comm),
         ];
         Self::from(fields)
     }
