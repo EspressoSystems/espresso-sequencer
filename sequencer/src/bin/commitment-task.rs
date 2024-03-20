@@ -13,22 +13,9 @@ use std::time::Duration;
 use tide_disco::error::ServerError;
 use tide_disco::Api;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersion;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Commitment Task Command
-///
-/// There is an additional env var `ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG`
-/// that is not handled by clap because it must be set via env var (and not via
-/// CLI arguments).
-///
-/// Used testing with a pre-merge geth node that does not support the finalized
-/// block tag.
-///
-/// Do not use in production.
-///
-/// When set to a truthy value ("y", "yes", "t", "true", "on", "1") the
-/// commitment task will fetch "latest" block timestamps instead of
-/// "finalized" ones.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// URL of a HotShot sequencer node.
@@ -69,6 +56,10 @@ pub struct Options {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     pub port: Option<u16>,
+
+    /// Client-side timeout for HTTP requests.
+    #[clap(long, env = "ESPRESSO_COMMITMENT_TASK_REQUEST_TIMEOUT", value_parser = parse_duration, default_value = "5s")]
+    pub request_timeout: Duration,
 
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
     #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
@@ -131,6 +122,7 @@ async fn main() {
         delay: opt.delay,
         sequencer_mnemonic: opt.eth_mnemonic,
         sequencer_account_index: opt.hotshot_account_index,
+        request_timeout: opt.request_timeout,
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
@@ -140,16 +132,16 @@ async fn main() {
     .await;
 }
 
-fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+fn start_http_server<Ver: StaticVersionType>(
     port: u16,
     hotshot_address: Address,
-    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::new(toml)
+    let mut api = Api::<(), ServerError, Ver>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("gethotshotcontract", move |_, _| {
@@ -160,14 +152,14 @@ fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     app.register_module("api", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    spawn(app.serve(format!("0.0.0.0:{port}")));
+    spawn(app.serve(format!("0.0.0.0:{port}"), bind_version));
     Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use es_version::SEQUENCER_VERSION;
+    use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use portpicker::pick_unused_port;
     use surf_disco::Client;
 
@@ -187,7 +179,7 @@ mod test {
         start_http_server(port, expected_addr, SEQUENCER_VERSION)
             .expect("Failed to start the server");
 
-        let client: Client<ServerError, { es_version::MAJOR }, { es_version::MINOR }> =
+        let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

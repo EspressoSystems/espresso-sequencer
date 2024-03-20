@@ -1,14 +1,13 @@
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
-use clap::Parser;
 use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{
     future,
     stream::{self, StreamExt},
 };
-use hotshot_query_service::availability::LeafQueryData;
+use hotshot_query_service::{availability::LeafQueryData, types::HeightIndexed};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
@@ -16,19 +15,17 @@ use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
-use crate::{options::parse_duration, Header, SeqTypes};
+use crate::{Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
-    surf_disco::Client<hotshot_query_service::Error, MAJOR_VERSION, MINOR_VERSION>;
+type HotShotClient<Ver: StaticVersionType> = surf_disco::Client<hotshot_query_service::Error, Ver>;
 
-// TODO: (alex) remove clap related info on tihs struct, as the CLI is in ./bin/hotshot-commitment.rs
-#[derive(Parser, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider: Url,
 
     /// Chain ID for layer 1 Ethereum.
@@ -36,50 +33,43 @@ pub struct CommitmentTaskOptions {
     /// This can be specified explicitly as a sanity check. No transactions will be executed if the
     /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
     /// the RPC will be used.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_CHAIN_ID")]
     pub l1_chain_id: Option<u64>,
 
     /// Address of HotShot contract on layer 1.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS", default_value = None)]
     pub hotshot_address: Address,
 
     /// Mnemonic phrase for a funded wallet.
     ///
     /// This is the wallet that will be used to send blocks sequenced by HotShot to the sequencer
     /// contract. It must be funded with ETH on layer 1.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC", default_value = None)]
     pub sequencer_mnemonic: String,
 
     /// Index of a funded account derived from sequencer-mnemonic.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
-        default_value = "0"
-    )]
     pub sequencer_account_index: u32,
 
     /// URL of HotShot Query Service
     ///
     /// Even though this is an Option type it *must* currently be set when
     /// passing the options to `run_hotshot_commitment_task`.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_QUERY_SERVICE_URL")]
     pub query_service_url: Option<Url>,
 
+    /// Client-side timeout for HTTP requests.
+    pub request_timeout: Duration,
+
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
-    #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
     pub delay: Option<Duration>,
 }
 
 /// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-pub async fn run_hotshot_commitment_task<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    opt: &CommitmentTaskOptions,
-) {
+pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &CommitmentTaskOptions) {
     // init a client connecting to HotShot query service
-    let hotshot = HotShotClient::<MAJOR_VERSION, MINOR_VERSION>::new(
+    let hotshot = HotShotClient::<Ver>::builder(
         opt.query_service_url
             .clone()
             .expect("query service URL must be specified"),
-    );
+    )
+    .set_timeout(Some(opt.request_timeout))
+    .build();
     hotshot.connect(None).await;
 
     // init a signer connecting to the HotShot contract
@@ -96,8 +86,8 @@ pub async fn run_hotshot_commitment_task<const MAJOR_VERSION: u16, const MINOR_V
     sequence(hotshot, contract, opt.delay).await;
 }
 
-async fn sequence<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    hotshot: HotShotClient<MAJOR_VERSION, MINOR_VERSION>,
+async fn sequence<Ver: StaticVersionType>(
+    hotshot: HotShotClient<Ver>,
     contract: HotShot<Signer>,
     delay: Option<Duration>,
 ) {
@@ -156,9 +146,7 @@ trait HotShotDataSource {
 }
 
 #[async_trait]
-impl<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> HotShotDataSource
-    for HotShotClient<MAJOR_VERSION, MINOR_VERSION>
-{
+impl<Ver: StaticVersionType> HotShotDataSource for HotShotClient<Ver> {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {
@@ -387,10 +375,10 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
 
         for i in 0..num_batches {
             data.leaves.push(Some(mock_leaf(i as u64, &node_state)));
@@ -459,10 +447,10 @@ mod test {
         // Create a test batch.
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
         data.leaves.push(Some(mock_leaf(0, &node_state)));
 
         // Connect to the HotShot contract with the expected L1 client.
@@ -523,10 +511,10 @@ mod test {
                 .unwrap(),
         );
 
-        let node_state = NodeState {
-            l1_client: L1Client::new(anvil.provider().url().clone(), Address::default()),
-            ..Default::default()
-        };
+        let node_state = NodeState::mock().with_l1(L1Client::new(
+            anvil.provider().url().clone(),
+            Address::default(),
+        ));
 
         // Create a sequence of leaves, some of which are missing.
         let mut data = MockDataSource::default();

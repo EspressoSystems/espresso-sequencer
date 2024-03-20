@@ -5,13 +5,11 @@ use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_query_service::{
-    data_source::{UpdateDataSource, VersionedDataSource},
-    status::StatusDataSource,
-};
+use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
+use versioned_binary_serialization::version::StaticVersionType;
 
-pub(super) async fn update_loop<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    state: Arc<RwLock<StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>>>,
+pub(super) async fn update_loop<N, D, Ver: StaticVersionType>(
+    state: Arc<RwLock<StorageState<N, D, Ver>>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: network::Type,
@@ -36,20 +34,15 @@ pub(super) async fn update_loop<N, D, const MAJOR_VERSION: u16, const MINOR_VERS
     tracing::warn!("end of HotShot event stream, updater task will exit");
 }
 
-async fn update_state<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    state: &mut StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>,
+async fn update_state<N, D, Ver: StaticVersionType>(
+    state: &mut StorageState<N, D, Ver>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync,
 {
-    // Remember the current block height, so we can update our local index
-    // based on any new blocks that get added.
-    let prev_block_height = state.block_height().await?;
-
     state.update(event).await?;
-    state.inner_mut().refresh_indices(prev_block_height).await?;
     state.commit().await?;
 
     Ok(())

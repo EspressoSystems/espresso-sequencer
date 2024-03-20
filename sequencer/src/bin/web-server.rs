@@ -20,8 +20,6 @@ async fn main() {
     tracing::info!("starting web server on port {}", args.port);
     run_web_server::<
         <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        { hotshot_constants::WEB_SERVER_MAJOR_VERSION },
-        { hotshot_constants::WEB_SERVER_MINOR_VERSION },
     >(
         None,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),

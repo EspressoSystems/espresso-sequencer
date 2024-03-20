@@ -11,6 +11,7 @@ use std::cmp::max;
 use std::process::exit;
 use std::time::Duration;
 use surf_disco::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Utility program to verify properties of headers sequenced by HotShot.
 #[derive(Clone, Debug, Parser)]
@@ -50,12 +51,12 @@ struct Options {
     url: Url,
 }
 
-type SequencerClient<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
-    surf_disco::Client<hotshot_query_service::Error, MAJOR_VERSION, MINOR_VERSION>;
+type SequencerClient<Ver: StaticVersionType> =
+    surf_disco::Client<hotshot_query_service::Error, Ver>;
 
-async fn verify_header<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+async fn verify_header<Ver: StaticVersionType>(
     opt: &Options,
-    seq: &SequencerClient<MAJOR_VERSION, MINOR_VERSION>,
+    seq: &SequencerClient<Ver>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -114,10 +115,7 @@ async fn verify_header<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     (header, ok)
 }
 
-async fn get_header<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    seq: &SequencerClient<MAJOR_VERSION, MINOR_VERSION>,
-    height: usize,
-) -> Header {
+async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: usize) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))

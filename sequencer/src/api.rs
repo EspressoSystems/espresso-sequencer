@@ -9,6 +9,7 @@ use data_source::{StateDataSource, SubmitDataSource};
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use versioned_binary_serialization::version::StaticVersionType;
 
 pub mod data_source;
 pub mod endpoints;
@@ -19,16 +20,13 @@ mod update;
 
 pub use options::Options;
 
-struct State<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> {
-    state_signer: Arc<StateSigner<MAJOR_VERSION, MINOR_VERSION>>,
+struct State<N: network::Type, Ver: StaticVersionType> {
+    state_signer: Arc<StateSigner<Ver>>,
     handle: SystemContextHandle<SeqTypes, Node<N>>,
 }
 
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
-    From<&SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>>
-    for State<N, MAJOR_VERSION, MINOR_VERSION>
-{
-    fn from(ctx: &SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>) -> Self {
+impl<N: network::Type, Ver: StaticVersionType> From<&SequencerContext<N, Ver>> for State<N, Ver> {
+    fn from(ctx: &SequencerContext<N, Ver>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
             handle: ctx.consensus().clone(),
@@ -36,27 +34,22 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
     }
 }
 
-type StorageState<N, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> =
-    ExtensibleDataSource<D, State<N, MAJOR_VERSION, MINOR_VERSION>>;
+type StorageState<N, D, Ver: StaticVersionType> = ExtensibleDataSource<D, State<N, Ver>>;
 
-impl<N: network::Type, D, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> SubmitDataSource<N>
-    for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, D, Ver: StaticVersionType> SubmitDataSource<N> for StorageState<N, D, Ver> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> SubmitDataSource<N>
-    for State<N, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, Ver: StaticVersionType> SubmitDataSource<N> for State<N, Ver> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         &self.handle
     }
 }
 
-impl<N: network::Type, D: Send + Sync, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
-    StateDataSource for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
+impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType> StateDataSource
+    for StorageState<N, D, Ver>
 {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.as_ref().get_decided_state().await
@@ -67,9 +60,7 @@ impl<N: network::Type, D: Send + Sync, const MAJOR_VERSION: u16, const MINOR_VER
     }
 }
 
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> StateDataSource
-    for State<N, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, Ver: StaticVersionType> StateDataSource for State<N, Ver> {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.handle.get_decided_state().await
     }
@@ -80,8 +71,8 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> State
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
-    StateSignatureDataSource<N> for StorageState<N, D, MAJOR_VERSION, MINOR_VERSION>
+impl<N: network::Type, D: Sync, Ver: StaticVersionType> StateSignatureDataSource<N>
+    for StorageState<N, D, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
@@ -89,9 +80,7 @@ impl<N: network::Type, D: Sync, const MAJOR_VERSION: u16, const MINOR_VERSION: u
 }
 
 #[async_trait]
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
-    StateSignatureDataSource<N> for State<N, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, Ver: StaticVersionType> StateSignatureDataSource<N> for State<N, Ver> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer.get_state_signature(height).await
     }
@@ -102,6 +91,7 @@ mod test_helpers {
     use super::*;
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
+        catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{wait_for_decide_on_handle, TestConfig},
@@ -110,14 +100,18 @@ mod test_helpers {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use commit::Committable;
-    use es_version::SEQUENCER_VERSION;
+    use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use ethers::prelude::Address;
     use futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-    use hotshot_types::traits::{metrics::NoMetrics, node_implementation::ConsensusTime};
+    use hotshot_types::{
+        event::LeafInfo,
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+    };
+    use itertools::izip;
     use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -125,20 +119,21 @@ mod test_helpers {
     use tide_disco::error::ServerError;
 
     pub struct TestNetwork {
-        pub server: SequencerContext<network::Memory, { es_version::MAJOR }, { es_version::MINOR }>,
-        pub peers:
-            Vec<SequencerContext<network::Memory, { es_version::MAJOR }, { es_version::MINOR }>>,
+        pub server: SequencerContext<network::Memory, SequencerVersion>,
+        pub peers: Vec<SequencerContext<network::Memory, SequencerVersion>>,
         pub cfg: TestConfig,
     }
 
     impl TestNetwork {
         pub async fn with_state(
             opt: Options,
+            state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
             let cfg = TestConfig::default();
-            let mut nodes =
-                join_all(persistence.into_iter().enumerate().map(|(i, persistence)| {
+            let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
+                |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
                     let cfg = &cfg;
                     async move {
@@ -147,8 +142,15 @@ mod test_helpers {
                                 |metrics| {
                                     let cfg = cfg.clone();
                                     async move {
-                                        cfg.init_node(0, persistence, &*metrics, SEQUENCER_VERSION)
-                                            .await
+                                        cfg.init_node(
+                                            0,
+                                            state,
+                                            persistence,
+                                            catchup,
+                                            &*metrics,
+                                            SEQUENCER_VERSION,
+                                        )
+                                        .await
                                     }
                                     .boxed()
                                 },
@@ -157,12 +159,20 @@ mod test_helpers {
                             .await
                             .unwrap()
                         } else {
-                            cfg.init_node(i, persistence, &NoMetrics, SEQUENCER_VERSION)
-                                .await
+                            cfg.init_node(
+                                i,
+                                state,
+                                persistence,
+                                catchup,
+                                &NoMetrics,
+                                SEQUENCER_VERSION,
+                            )
+                            .await
                         }
                     }
-                }))
-                .await;
+                },
+            ))
+            .await;
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -175,7 +185,13 @@ mod test_helpers {
         }
 
         pub async fn new(opt: Options) -> Self {
-            Self::with_state(opt, [NoStorage; TestConfig::NUM_NODES]).await
+            Self::with_state(
+                opt,
+                Default::default(),
+                [NoStorage; TestConfig::NUM_NODES],
+                std::array::from_fn(|_| MockStateCatchup::default()),
+            )
+            .await
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -199,7 +215,7 @@ mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, 0, 1> = Client::new(url);
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
         let _network = TestNetwork::new(options).await;
@@ -245,7 +261,7 @@ mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, 0, 1> = Client::new(url);
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let network = TestNetwork::new(options).await;
@@ -274,7 +290,7 @@ mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, 0, 1> = Client::new(url);
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
         let network = TestNetwork::new(options).await;
@@ -315,7 +331,7 @@ mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, 0, 1> = Client::new(url);
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).state(Default::default()));
         let mut network = TestNetwork::new(options).await;
@@ -331,7 +347,7 @@ mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|(leaf, _)| leaf.block_header.height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header.height > 2)
                 {
                     break;
                 }
@@ -434,22 +450,25 @@ mod test_helpers {
 mod api_tests {
     use super::*;
     use crate::{
+        catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
     use commit::Committable;
     use data_source::testing::TestableSequencerDataSource;
-    use endpoints::{NamespaceProofQueryData, TimeWindowQueryData};
+    use endpoints::NamespaceProofQueryData;
+    use es_version::SequencerVersion;
     use futures::{
         future::join_all,
         stream::{StreamExt, TryStreamExt},
     };
-    use hotshot_query_service::availability::{BlockQueryData, LeafQueryData};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        types::HeightIndexed,
+    };
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -493,7 +512,7 @@ mod api_tests {
         let mut events = network.server.get_event_stream();
 
         // Connect client.
-        let client: Client<ServerError, 0, 1> =
+        let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -572,12 +591,14 @@ mod api_tests {
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
+            Default::default(),
             persistence,
+            std::array::from_fn(|_| MockStateCatchup::default()),
         )
         .await;
 
         // Connect client.
-        let client: Client<ServerError, 0, 1> =
+        let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -613,6 +634,10 @@ mod api_tests {
             .try_collect()
             .await
             .unwrap();
+        let decided_view = chain.last().unwrap().leaf().view_number;
+
+        // Get the most recent state, for catchup.
+        let state = network.server.consensus().get_decided_state().await;
 
         // Fully shut down the API servers.
         drop(network);
@@ -625,10 +650,27 @@ mod api_tests {
             .unwrap();
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
+            Default::default(),
             persistence,
+            std::array::from_fn(|i| {
+                let catchup: Box<dyn StateCatchup> = if i == 0 {
+                    // Give the server node a copy of the full state to use for catchup. This
+                    // simulates a node with archival state storage, which is then able to seed the
+                    // rest of the network after a restart.
+                    Box::new(MockStateCatchup::from_iter([(decided_view, state.clone())]))
+                } else {
+                    // The remaining nodes should use this archival node as a peer for catchup.
+                    Box::new(StatePeers::<SequencerVersion>::from_urls(vec![format!(
+                        "http://localhost:{port}"
+                    )
+                    .parse()
+                    .unwrap()]))
+                };
+                catchup
+            }),
         )
         .await;
-        let client: Client<ServerError, 0, 1> =
+        let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -658,189 +700,23 @@ mod api_tests {
             .unwrap();
         assert_eq!(chain, new_chain);
     }
-
-    #[async_std::test]
-    pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
-        setup_logging();
-        setup_backtrace();
-
-        // Start query service.
-        let port = pick_unused_port().expect("No ports free");
-        let storage = D::create_storage().await;
-        let _network = TestNetwork::new(
-            D::options(&storage, options::Http { port }.into()).status(Default::default()),
-        )
-        .await;
-
-        // Connect client.
-        let client: Client<ServerError, 0, 1> =
-            Client::new(format!("http://localhost:{port}").parse().unwrap());
-        client.connect(None).await;
-
-        // Wait for blocks with at least three different timestamps to be sequenced. This lets us
-        // test all the edge cases.
-        let mut test_blocks: Vec<Vec<Header>> = vec![];
-        while test_blocks.len() < 3 {
-            let num_blocks = test_blocks.iter().flatten().count();
-
-            // Wait for the next block to be sequenced.
-            loop {
-                let block_height = client
-                    .get::<usize>("status/block-height")
-                    .send()
-                    .await
-                    .unwrap();
-                if block_height > num_blocks {
-                    break;
-                }
-                tracing::info!("waiting for block {num_blocks}, current height {block_height}");
-                sleep(Duration::from_secs(1)).await;
-            }
-
-            let block: BlockQueryData<SeqTypes> = client
-                .get(&format!("availability/block/{num_blocks}"))
-                .send()
-                .await
-                .unwrap();
-            let header = block.header().clone();
-            if let Some(last_timestamp) = test_blocks.last_mut() {
-                if last_timestamp[0].timestamp == header.timestamp {
-                    last_timestamp.push(header);
-                } else {
-                    test_blocks.push(vec![header]);
-                }
-            } else {
-                test_blocks.push(vec![header]);
-            }
-        }
-        tracing::info!("blocks for testing: {test_blocks:#?}");
-
-        // Define invariants that every response should satisfy.
-        let check_invariants = |res: &TimeWindowQueryData, start, end, check_prev| {
-            let mut prev = res.prev.as_ref();
-            if let Some(prev) = prev {
-                if check_prev {
-                    assert!(prev.timestamp < start);
-                }
-            } else {
-                // `prev` can only be `None` if the first block in the window is the genesis block.
-                assert_eq!(res.from().unwrap(), 0);
-            };
-            for header in &res.window {
-                assert!(start <= header.timestamp);
-                assert!(header.timestamp < end);
-                if let Some(prev) = prev {
-                    assert!(prev.timestamp <= header.timestamp);
-                }
-                prev = Some(header);
-            }
-            if let Some(next) = &res.next {
-                assert!(next.timestamp >= end);
-                // If there is a `next`, there must be at least one previous block (either `prev`
-                // itself or the last block if the window is nonempty), so we can `unwrap` here.
-                assert!(next.timestamp >= prev.unwrap().timestamp);
-            }
-        };
-
-        let get_window = |start, end| {
-            let client = client.clone();
-            async move {
-                let res = client
-                    .get(&format!("availability/headers/window/{start}/{end}"))
-                    .send()
-                    .await
-                    .unwrap();
-                tracing::info!("window for timestamp range {start}-{end}: {res:#?}");
-                check_invariants(&res, start, end, true);
-                res
-            }
-        };
-
-        // Case 0: happy path. All blocks are available, including prev and next.
-        let start = test_blocks[1][0].timestamp;
-        let end = start + 1;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
-        assert_eq!(res.window, test_blocks[1]);
-        assert_eq!(res.next.unwrap(), test_blocks[2][0]);
-
-        // Case 1: no `prev`, start of window is before genesis.
-        let start = 0;
-        let end = test_blocks[0][0].timestamp + 1;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev, None);
-        assert_eq!(res.window, test_blocks[0]);
-        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
-
-        // Case 2: no `next`, end of window is after the most recently sequenced block.
-        let start = test_blocks[2][0].timestamp;
-        let end = i64::MAX as u64;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
-        // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
-        // that the prefix of the window is correct.
-        assert_eq!(res.window[..test_blocks[2].len()], test_blocks[2]);
-        assert_eq!(res.next, None);
-        // Fetch more blocks using the `from` form of the endpoint. Start from the last block we had
-        // previously (ie fetch a slightly overlapping window) to ensure there is at least one block
-        // in the new window.
-        let from = test_blocks.iter().flatten().count() - 1;
-        let more: TimeWindowQueryData = client
-            .get(&format!("availability/headers/window/from/{from}/{end}",))
-            .send()
-            .await
-            .unwrap();
-        check_invariants(&more, start, end, false);
-        assert_eq!(
-            more.prev.as_ref().unwrap(),
-            test_blocks.iter().flatten().nth(from - 1).unwrap()
-        );
-        assert_eq!(
-            more.window[..res.window.len() - test_blocks[2].len() + 1],
-            res.window[test_blocks[2].len() - 1..]
-        );
-        assert_eq!(res.next, None);
-        // We should get the same result whether we query by block height or hash.
-        let more2: TimeWindowQueryData = client
-            .get(&format!(
-                "availability/headers/window/from/hash/{}/{}",
-                test_blocks[2].last().unwrap().commit(),
-                end
-            ))
-            .send()
-            .await
-            .unwrap();
-        check_invariants(&more2, start, end, false);
-        assert_eq!(more2.from().unwrap(), more.from().unwrap());
-        assert_eq!(more2.prev, more.prev);
-        assert_eq!(more2.next, more.next);
-        assert_eq!(more2.window[..more.window.len()], more.window);
-
-        // Case 3: the window is empty.
-        let start = test_blocks[1][0].timestamp;
-        let end = start;
-        let res = get_window(start, end).await;
-        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
-        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
-        assert_eq!(res.window, vec![]);
-
-        // Case 5: no relevant blocks are available yet.
-        client
-            .get::<TimeWindowQueryData>(&format!(
-                "availability/headers/window/{}/{}",
-                i64::MAX - 1,
-                i64::MAX
-            ))
-            .send()
-            .await
-            .unwrap_err();
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{
+        catchup::StatePeers, persistence::no_storage::NoStorage, testing::TestConfig, Header,
+        NodeState,
+    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use commit::Committable;
+    use es_version::SequencerVersion;
+    use ethers::prelude::Signer;
+    use futures::stream::StreamExt;
+    use hotshot::types::EventType;
+    use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
+    use jf_primitives::merkle_tree::AppendableMerkleTreeScheme;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
@@ -856,7 +732,7 @@ mod test {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, 0, 1> = Client::new(url);
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
         let options = Options::from(options::Http { port });
         let _network = TestNetwork::new(options).await;
 
@@ -883,5 +759,69 @@ mod test {
     #[async_std::test]
     async fn state_test_without_query_module() {
         state_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn test_catchup() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create some non-trivial initial state. We will give all the nodes in the network this
+        // state, except for one, which will have a forgotten state and need to catch up.
+        let mut state = ValidatedState::default();
+        // Prefund an arbitrary account so the fee state has some data to forget.
+        state.prefund_account(Default::default(), 1000.into());
+        // Push an arbitrary header commitment so the block state has some data to forget.
+        state
+            .block_merkle_tree
+            .push(
+                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
+                    .commit(),
+            )
+            .unwrap();
+        let states = std::array::from_fn(|i| {
+            if i == TestConfig::NUM_NODES - 1 {
+                state.forget()
+            } else {
+                state.clone()
+            }
+        });
+
+        // Start a sequencer network, using the query service for catchup.
+        let port = pick_unused_port().expect("No ports free");
+        let network = TestNetwork::with_state(
+            Options::from(options::Http { port }).state(Default::default()),
+            states,
+            [NoStorage; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+        )
+        .await;
+        let mut events = network.server.get_event_stream();
+
+        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
+        // up.
+        let builder = TestConfig::builder_wallet(TestConfig::NUM_NODES - 1)
+            .address()
+            .into();
+        'outer: loop {
+            let event = events.next().await.unwrap();
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
+                let height = leaf.block_header.height;
+                let leaf_builder = leaf.block_header.fee_info.account();
+                tracing::info!(
+                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
+                );
+                if height > 1 && leaf_builder == builder {
+                    break 'outer;
+                }
+            }
+        }
     }
 }

@@ -20,6 +20,7 @@ use ethers::{
 use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_orchestrator::OrchestratorVersion;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
@@ -27,24 +28,28 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use hotshot_types::{
     light_client::{
-        CircuitField, LightClientState, PublicInput, StateKeyPair, StateSignaturesBundle,
-        StateVerKey,
+        CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
     },
-    traits::signature_key::SignatureKey,
+    traits::signature_key::StakeTableEntryType,
 };
 use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::time::Duration;
+use std::{iter, time::Duration};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersion;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<
+    BLSPubKey,
+    hotshot::traits::election::static_committee::StaticElectionConfig,
+>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -59,10 +64,8 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Number of nodes
-    pub num_nodes: usize,
-    /// Seed to generate keys
-    pub seed: [u8; 32],
+    /// Address of the hotshot orchestrator, used for stake table initialization.
+    pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -70,29 +73,69 @@ pub struct StateProverConfig {
 }
 
 pub fn init_stake_table(
-    num_node: usize,
-    seed: [u8; 32],
-) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+    bls_keys: &[BLSPubKey],
+    state_keys: &[StateVerKey],
+) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, StakeTableError> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
-    (0..num_node).for_each(|id| {
-        let bls_key = BLSPubKey::generated_from_seed_indexed(seed, id as u64).0;
-        let state_ver_key = StateKeyPair::generate_from_seed_indexed(seed, id as u64).ver_key();
-        st.register(bls_key, U256::from(1u64), state_ver_key)
-            .expect("Key registration shouldn't fail.");
-    });
+    st.batch_register(
+        bls_keys.iter().cloned(),
+        iter::repeat(U256::one()).take(bls_keys.len()),
+        state_keys.iter().cloned(),
+    )?;
     st.advance();
     st.advance();
-    st
+    Ok(st)
 }
 
-pub async fn init_stake_table_from_config(
-    config: &StateProverConfig,
+pub async fn init_stake_table_from_orchestrator(
+    orchestrator_url: &Url,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    let st = init_stake_table(config.num_nodes, config.seed);
-    std::println!("Stake table initialized.");
-    st
+    tracing::info!("Initializing stake table from HotShot orchestrator.");
+    let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
+    loop {
+        match client.get::<bool>("api/peer_pub_ready").send().await {
+            Ok(true) => {
+                match client
+                    .get::<NetworkConfig>("api/config_after_peer_collected")
+                    .send()
+                    .await
+                {
+                    Ok(config) => {
+                        let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+                            STAKE_TABLE_CAPACITY,
+                        );
+                        config
+                            .config
+                            .known_nodes_with_stake
+                            .into_iter()
+                            .for_each(|config| {
+                                st.register(
+                                    *config.stake_table_entry.get_key(),
+                                    config.stake_table_entry.get_stake(),
+                                    config.state_ver_key,
+                                )
+                                .expect("Key registration shouldn't fail.");
+                            });
+                        st.advance();
+                        st.advance();
+                        return st;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Orchestrator error: {e}, retrying.");
+                    }
+                }
+            }
+            Ok(false) => {
+                tracing::info!("Peers' keys are not ready, retrying.");
+            }
+            Err(e) => {
+                tracing::warn!("Orchestrator error {e}, retrying.");
+            }
+        }
+        sleep(Duration::from_secs(2)).await;
+    }
 }
 
 pub fn load_proving_key() -> ProvingKey {
@@ -131,8 +174,8 @@ pub fn load_proving_key() -> ProvingKey {
     pk
 }
 
-pub async fn fetch_latest_state<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    client: &Client<ServerError, MAJOR_VERSION, MINOR_VERSION>,
+pub async fn fetch_latest_state<Ver: StaticVersionType>(
+    client: &Client<ServerError, Ver>,
 ) -> Result<StateSignaturesBundle, ServerError> {
     tracing::info!("Fetching the latest state signatures bundle from relay server.");
     client
@@ -198,20 +241,27 @@ pub async fn submit_state_and_proof(
     Ok(())
 }
 
-pub async fn sync_state<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+pub async fn sync_state<Ver: StaticVersionType>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     proving_key: &ProvingKey,
-    relay_server_client: &Client<ServerError, MAJOR_VERSION, MINOR_VERSION>,
+    relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
+    tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
+    tracing::info!(
+        "Current HotShot block height on contract: {}",
+        old_state.block_height
+    );
     if old_state.block_height >= bundle.state.block_height {
         tracing::info!("No update needed.");
         return Ok(());
     }
+    tracing::debug!("Old state: {old_state:?}");
+    tracing::debug!("New state: {:?}", bundle.state);
 
     let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
     tracing::info!("Threshold before syncing state: {}", threshold);
@@ -267,16 +317,16 @@ pub async fn sync_state<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     Ok(())
 }
 
-fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+fn start_http_server<Ver: StaticVersionType + 'static>(
     port: u16,
     lightclient_address: Address,
-    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::new(toml)
+    let mut api = Api::<(), ServerError, Ver>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("getlightclientcontract", move |_, _| {
@@ -287,25 +337,22 @@ fn start_http_server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
     app.register_module("api", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    spawn(app.serve(format!("0.0.0.0:{port}")));
+    spawn(app.serve(format!("0.0.0.0:{port}"), bind_version));
     Ok(())
 }
 
-pub async fn run_prover_service<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     config: StateProverConfig,
-    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    bind_version: Ver,
 ) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(init_stake_table_from_config(&config).await);
+    let st = Arc::new(init_stake_table_from_orchestrator(&config.orchestrator_url).await);
     let proving_key = Arc::new(load_proving_key());
-    let relay_server_client = Arc::new(Client::<ServerError, MAJOR_VERSION, MINOR_VERSION>::new(
-        config.relay_server.clone(),
-    ));
+    let relay_server_client =
+        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
     let config = Arc::new(config);
     let update_interval = config.update_interval;
 
-    tracing::info!("Seed: {:?}", config.seed);
-    tracing::info!("Number of nodes: {:?}", config.num_nodes);
     tracing::info!("Light client address: {:?}", config.light_client_address);
 
     if let Some(port) = config.port {
@@ -329,14 +376,10 @@ pub async fn run_prover_service<const MAJOR_VERSION: u16, const MINOR_VERSION: u
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    config: StateProverConfig,
-    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
-) {
-    let st = init_stake_table_from_config(&config).await;
+pub async fn run_prover_once<Ver: StaticVersionType>(config: StateProverConfig, _: Ver) {
+    let st = init_stake_table_from_orchestrator(&config.orchestrator_url).await;
     let proving_key = load_proving_key();
-    let relay_server_client =
-        Client::<ServerError, MAJOR_VERSION, MINOR_VERSION>::new(config.relay_server.clone());
+    let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
 
     sync_state(&st, &proving_key, &relay_server_client, &config)
         .await
@@ -512,15 +555,19 @@ mod test {
         let signer = Wallet::from(anvil.keys()[0].clone());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        let status = Command::new("just")
+        let output = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
             .arg(TEST_MNEMONIC)
             .arg(BLOCKS_PER_EPOCH.to_string())
             .arg(NUM_INIT_VALIDATORS.to_string())
-            .status()
+            .output()
             .expect("fail to deploy");
-        assert!(status.success());
+
+        if !output.status.success() {
+            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
+            return Err(anyhow!("failed to deploy contract"));
+        }
 
         let last_blk_num = provider.get_block_number().await?;
         // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
@@ -553,8 +600,7 @@ mod test {
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
-                num_nodes: 10,
-                seed: [0u8; 32],
+                orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
             }
         }

@@ -15,8 +15,6 @@ pub trait Table<TableWord: TableWordTraits> {
     // Returns raw bytes, no checking for large values
     fn get_table_len(&self, offset: usize) -> TxTableEntry;
 
-    fn get_payload(&self) -> Vec<u8>;
-
     fn byte_len() -> usize {
         size_of::<TableWord>()
     }
@@ -35,24 +33,21 @@ impl<TableWord: TableWordTraits> Table<TableWord> for NameSpaceTable<TableWord> 
         entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.bytes[tx_table_len_range]);
         TxTableEntry::from_bytes_array(entry_bytes)
     }
-
-    fn get_payload(&self) -> Vec<u8> {
-        self.bytes.clone()
-    }
 }
 
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize, Default)]
 #[derivative(Hash, PartialEq)]
 pub struct NameSpaceTable<TableWord: TableWordTraits> {
+    #[serde(with = "base64_bytes")]
     pub(super) bytes: Vec<u8>,
     #[serde(skip)]
     pub(super) phantom: PhantomData<TableWord>,
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
-    pub fn from_vec(v: Vec<u8>) -> Self {
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
         Self {
-            bytes: v,
+            bytes: bytes.into(),
             phantom: Default::default(),
         }
     }
@@ -60,12 +55,12 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     pub fn from_namespace_offsets(
         namespace_offsets: Vec<(NamespaceId, usize)>,
     ) -> Result<Self, Error> {
-        let mut ns_table = NameSpaceTable::from_vec(Vec::from(
+        let mut ns_table = NameSpaceTable::from_bytes(
             TxTableEntry::try_from(namespace_offsets.len())
                 .ok()
                 .context(BlockBuildingSnafu)?
                 .to_bytes(),
-        ));
+        );
         for (id, offset) in namespace_offsets {
             ns_table.add_new_entry_ns_id(id)?;
             ns_table.add_new_entry_payload_len(offset)?;
@@ -73,15 +68,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
         Ok(ns_table)
     }
 
-    // TODO don't clone the entire payload
-    pub fn from_bytes(b: &[u8]) -> Self {
-        Self {
-            bytes: b.to_vec(),
-            phantom: Default::default(),
-        }
-    }
-
-    pub fn get_bytes(&self) -> &Vec<u8> {
+    pub fn get_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
@@ -89,10 +76,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     ///
     /// TODO return Result or Option? Want to avoid catch-all Error type :(
     pub fn lookup(&self, ns_id: NamespaceId) -> Option<usize> {
-        // TODO don't use TxTable, need a new method
-        let ns_table_len = TxTable::get_tx_table_len(&self.bytes);
-
-        (0..ns_table_len).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
+        (0..self.len()).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
     }
 
     fn add_new_entry_ns_id(&mut self, id: NamespaceId) -> Result<(), Error> {
@@ -119,7 +103,8 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     // Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
     pub fn len(&self) -> usize {
         let left = self.get_table_len(0).try_into().unwrap_or(0);
-        let right = (self.bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
+        let right = self.bytes.len().saturating_sub(TxTableEntry::byte_len())
+            / (2 * TxTableEntry::byte_len());
         std::cmp::min(left, right)
     }
 
@@ -129,7 +114,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
     // returns (ns_id, ns_offset)
     // ns_offset is not checked, could be anything
-    pub fn get_table_entry(&self, ns_index: usize) -> (NamespaceId, usize) {
+    fn get_table_entry(&self, ns_index: usize) -> (NamespaceId, usize) {
         // get the range for ns_id bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         let start = std::cmp::min(
@@ -178,28 +163,29 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     }
 
     /// Like `tx_payload_range` except for namespaces.
-    /// Returns the byte range for a ns in the block payload bytes.
+    /// Returns the ns id and the ns byte range in the block payload bytes.
     ///
     /// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
     pub fn get_payload_range(
         &self,
         ns_index: usize,
         block_payload_byte_len: usize,
-    ) -> Range<usize> {
-        let end = std::cmp::min(self.get_table_entry(ns_index).1, block_payload_byte_len);
+    ) -> (NamespaceId, Range<usize>) {
+        let (ns_id, offset) = self.get_table_entry(ns_index);
+        let end = std::cmp::min(offset, block_payload_byte_len);
         let start = if ns_index == 0 {
             0
         } else {
             std::cmp::min(self.get_table_entry(ns_index - 1).1, end)
         };
-        start..end
+        (ns_id, start..end)
     }
 }
 
 pub struct TxTable {}
 impl TxTable {
     // Parse `TxTableEntry::byte_len()`` bytes from `raw_payload`` starting at `offset` into a `TxTableEntry`
-    pub(crate) fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
+    fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
             raw_payload.len(),
@@ -225,7 +211,7 @@ impl TxTable {
     // returns tx_offset
     // if tx_index would reach beyond ns_bytes then return 0.
     // tx_offset is not checked, could be anything
-    pub(crate) fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
+    fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
         // get the range for tx_offset bytes in tx table
         let tx_offset_range = {
             let start = std::cmp::min(
@@ -247,6 +233,29 @@ impl TxTable {
         usize::try_from(TxTableEntry::from_bytes(&tx_offset_bytes).unwrap_or(TxTableEntry::zero()))
             .unwrap_or(0)
     }
+
+    /// Ensures that the returned range is valid: `start <= end <= ns_bytes`.
+    pub fn get_payload_range(ns_bytes: &[u8], tx_idx: usize, tx_len: usize) -> Range<usize> {
+        let tx_payloads_offset = tx_len
+            .saturating_add(1)
+            .saturating_mul(TxTableEntry::byte_len());
+
+        let end = std::cmp::min(
+            TxTable::get_table_entry(ns_bytes, tx_idx).saturating_add(tx_payloads_offset),
+            ns_bytes.len(),
+        );
+
+        let start = if tx_idx == 0 {
+            tx_payloads_offset
+        } else {
+            std::cmp::min(
+                TxTable::get_table_entry(ns_bytes, tx_idx - 1).saturating_add(tx_payloads_offset),
+                end,
+            )
+        };
+
+        start..end
+    }
 }
 #[cfg(test)]
 pub(super) mod test {
@@ -264,10 +273,6 @@ pub(super) mod test {
         fn get_table_len(&self, offset: usize) -> TxTableEntry {
             TxTable::get_len(&self.raw_payload, offset)
         }
-
-        fn get_payload(&self) -> Vec<u8> {
-            self.raw_payload.clone()
-        }
     }
     impl<TableWord: TableWordTraits> TxTableTest<TableWord> {
         #[cfg(test)]
@@ -283,6 +288,10 @@ pub(super) mod test {
                 raw_payload: tx_table,
                 phantom: Default::default(),
             }
+        }
+
+        pub fn get_payload(&self) -> Vec<u8> {
+            self.raw_payload.clone()
         }
     }
 }

@@ -10,6 +10,7 @@ use hotshot_types::light_client::{
     CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
 };
 use hotshot_types::{
+    event::LeafInfo,
     light_client::{StateSignature, StateSignatureScheme},
     signature_key::BLSPubKey,
     traits::{
@@ -27,6 +28,7 @@ use jf_primitives::{
 use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -35,7 +37,7 @@ pub mod relay_server;
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 #[derive(Debug)]
-pub struct StateSigner<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> {
+pub struct StateSigner<Ver: StaticVersionType> {
     /// Key pair for signing a new light client state
     key_pair: StateKeyPair,
 
@@ -46,10 +48,10 @@ pub struct StateSigner<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> {
     stake_table_comm: StakeTableCommitmentType,
 
     /// The state relay server url
-    relay_server_client: Option<Client<ServerError, MAJOR_VERSION, MINOR_VERSION>>,
+    relay_server_client: Option<Client<ServerError, Ver>>,
 }
 
-impl<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> StateSigner<MAJOR_VERSION, MINOR_VERSION> {
+impl<Ver: StaticVersionType> StateSigner<Ver> {
     pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
         Self {
             key_pair,
@@ -69,7 +71,7 @@ impl<const MAJOR_VERSION: u16, const MINOR_VERSION: u16> StateSigner<MAJOR_VERSI
         let EventType::Decide { leaf_chain, .. } = &event.event else {
             return;
         };
-        let Some((leaf, _)) = leaf_chain.first() else {
+        let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
             return;
         };
         match form_light_client_state(leaf, &self.stake_table_comm) {

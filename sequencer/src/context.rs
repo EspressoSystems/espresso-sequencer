@@ -8,7 +8,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{election::static_committee::GeneralStaticCommittee, implementations::MemoryStorage},
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
@@ -22,11 +22,12 @@ use hotshot_types::{
 };
 use std::fmt::Display;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersion;
+use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
+    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqDAStorage, SeqTypes,
+    Transaction,
 };
 
 /// The consensus handle
@@ -35,7 +36,7 @@ pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct SequencerContext<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> {
+pub struct SequencerContext<N: network::Type, Ver: StaticVersionType> {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
     handle: Consensus<N>,
@@ -45,7 +46,7 @@ pub struct SequencerContext<N: network::Type, const MAJOR_VERSION: u16, const MI
     node_index: u64,
 
     /// Context for generating state signatures.
-    state_signer: Arc<StateSigner<MAJOR_VERSION, MINOR_VERSION>>,
+    state_signer: Arc<StateSigner<Ver>>,
 
     /// An orchestrator to wait for before starting consensus.
     #[derivative(Debug = "ignore")]
@@ -57,9 +58,7 @@ pub struct SequencerContext<N: network::Type, const MAJOR_VERSION: u16, const MI
     detached: bool,
 }
 
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
-    SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, Ver: StaticVersionType> SequencerContext<N, Ver> {
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
@@ -69,13 +68,14 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
-        _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+        _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
         let initializer = persistence.load_consensus_state(instance_state).await?;
 
         let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            config.total_nodes.get() as u64,
+            config.num_nodes_with_stake.get() as u64,
+            0,
         );
         let membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
@@ -87,6 +87,7 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
             vid_membership: membership.clone(),
             view_sync_membership: membership,
         };
+        let da_storage = SeqDAStorage {};
 
         let stake_table_commit =
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -97,11 +98,11 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
             config.my_own_validator_config.private_key.clone(),
             node_id,
             config,
-            MemoryStorage::empty(),
             memberships,
             networks,
             initializer,
             ConsensusMetricsValue::new(metrics),
+            da_storage,
         )
         .await?
         .0;
@@ -119,7 +120,7 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
         handle: Consensus<N>,
         persistence: impl SequencerPersistence,
         node_index: u64,
-        state_signer: StateSigner<MAJOR_VERSION, MINOR_VERSION>,
+        state_signer: StateSigner<Ver>,
     ) -> Self {
         let events = handle.get_event_stream();
         let mut ctx = Self {
@@ -144,7 +145,7 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
     }
 
     /// Return a reference to the consensus state signer.
-    pub fn state_signer(&self) -> Arc<StateSigner<MAJOR_VERSION, MINOR_VERSION>> {
+    pub fn state_signer(&self) -> Arc<StateSigner<Ver>> {
         self.state_signer.clone()
     }
 
@@ -220,9 +221,7 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
     }
 }
 
-impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> Drop
-    for SequencerContext<N, MAJOR_VERSION, MINOR_VERSION>
-{
+impl<N: network::Type, Ver: StaticVersionType> Drop for SequencerContext<N, Ver> {
     fn drop(&mut self) {
         if !self.detached {
             async_std::task::block_on(self.shut_down());
@@ -230,10 +229,10 @@ impl<N: network::Type, const MAJOR_VERSION: u16, const MINOR_VERSION: u16> Drop
     }
 }
 
-async fn handle_events<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     mut persistence: impl SequencerPersistence,
-    state_signer: Arc<StateSigner<MAJOR_VERSION, MINOR_VERSION>>,
+    state_signer: Arc<StateSigner<Ver>>,
 ) {
     while let Some(event) = events.next().await {
         tracing::debug!(?event, "consensus event");

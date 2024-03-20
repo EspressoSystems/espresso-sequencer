@@ -37,11 +37,7 @@ async fn main() {
     setup_backtrace();
 
     let opt = Options::parse();
-    let client = surf_disco::Client::<
-        hotshot_query_service::Error,
-        { es_version::MAJOR },
-        { es_version::MINOR },
-    >::new(opt.url);
+    let client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(opt.url);
     client.connect(None).await;
 
     let block_height: u64 = client

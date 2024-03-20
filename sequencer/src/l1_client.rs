@@ -133,9 +133,9 @@ impl L1Client {
             }
         }
     }
-    /// Get fee info for each `Deposit` ocurring between `prev`
+    /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
-    pub async fn _get_finalized_deposits(
+    pub async fn get_finalized_deposits(
         &self,
         prev_finalized: Option<u64>,
         new_finalized: u64,
@@ -146,11 +146,11 @@ impl L1Client {
             return vec![];
         }
 
-        // `prev` should have allready been processed unless we
+        // `prev` should have already been processed unless we
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
 
-        // query for deposit events, loop until successfull.
+        // query for deposit events, loop until successful.
         let events = loop {
             match contract_bindings::fee_contract::FeeContract::new(
                 self._address,
@@ -224,10 +224,10 @@ mod test {
 
         // Test that nothing funky is happening to the provider when
         // passed along in state.
-        let state = NodeState {
-            l1_client: L1Client::new(anvil.endpoint().parse().unwrap(), Address::default()),
-            ..Default::default()
-        };
+        let state = NodeState::mock().with_l1(L1Client::new(
+            anvil.endpoint().parse().unwrap(),
+            Address::default(),
+        ));
         let version = state.l1_client().provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 
@@ -286,7 +286,7 @@ mod test {
                 .await?
                 .await?;
 
-            // Successfull transactions have `status` of `1`.
+            // Successful transactions have `status` of `1`.
             assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
         }
 
@@ -299,7 +299,7 @@ mod test {
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
-        let pending = l1_client._get_finalized_deposits(None, deposits + 1).await;
+        let pending = l1_client.get_finalized_deposits(None, deposits + 1).await;
 
         assert_eq!(deposits as usize, pending.len());
         assert_eq!(&wallet_address, &pending[0].account().into());
@@ -311,21 +311,25 @@ mod test {
 
         // check a few more cases
         let pending = l1_client
-            ._get_finalized_deposits(Some(0), deposits + 1)
+            .get_finalized_deposits(Some(0), deposits + 1)
             .await;
         assert_eq!(deposits as usize, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(0), 0).await;
+        let pending = l1_client.get_finalized_deposits(Some(0), 0).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(0), 1).await;
+        let pending = l1_client.get_finalized_deposits(Some(0), 1).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(1), 1).await;
+        let pending = l1_client.get_finalized_deposits(Some(1), 1).await;
         assert_eq!(0, pending.len());
 
-        let pending = l1_client._get_finalized_deposits(Some(1), 2).await;
+        let pending = l1_client.get_finalized_deposits(Some(1), 2).await;
         assert_eq!(1, pending.len());
+
+        // what happens if `new_finalized` is `0`?
+        let pending = l1_client.get_finalized_deposits(Some(1), 0).await;
+        assert_eq!(0, pending.len());
 
         Ok(())
     }

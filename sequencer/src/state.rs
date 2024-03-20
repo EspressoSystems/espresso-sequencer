@@ -1,26 +1,30 @@
-use crate::{Header, L1BlockInfo, Leaf, NodeState, SeqTypes};
-use anyhow::{ensure, Context};
+use crate::{Delta, Header, Leaf, NodeState, SeqTypes};
+use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
-use derive_more::{Add, From, Into, Sub};
+use derive_more::{Add, Display, From, Into, Sub};
 use ethers::{
     abi::Address,
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer, Wallet},
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_types::data::{BlockError, ViewNumber};
-use jf_primitives::merkle_tree::{
-    prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
-    universal_merkle_tree::UniversalMerkleTree,
-    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme,
-};
+use itertools::Itertools;
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
+use jf_primitives::{
+    errors::PrimitivesError,
+    merkle_tree::{
+        prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
+        universal_merkle_tree::UniversalMerkleTree,
+        AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme,
+        ForgetableUniversalMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
+    },
+};
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
@@ -56,19 +60,77 @@ impl ValidatedState {
     pub fn prefund_account(&mut self, account: FeeAccount, amount: FeeAmount) {
         self.fee_merkle_tree.update(account, amount).unwrap();
     }
+
+    /// Find accounts that are not in memory.
+    ///
+    /// As an optimization we could try to apply updates and return the
+    /// forgotten accounts to be fetched from peers and update them later.
+    pub fn forgotten_accounts(
+        &self,
+        accounts: impl IntoIterator<Item = FeeAccount>,
+    ) -> Vec<FeeAccount> {
+        accounts
+            .into_iter()
+            .unique()
+            .filter(|account| {
+                self.fee_merkle_tree
+                    .lookup(*account)
+                    .expect_not_in_memory()
+                    .is_ok()
+            })
+            .collect()
+    }
+
+    /// Check if the merkle tree is available
+    pub fn need_to_fetch_blocks_mt_frontier(&self) -> bool {
+        let num_leaves = self.block_merkle_tree.num_leaves();
+        if num_leaves == 0 {
+            false
+        } else {
+            self.block_merkle_tree
+                .lookup(num_leaves - 1)
+                .expect_ok()
+                .is_err()
+        }
+    }
+
+    /// Insert a fee deposit receipt
+    pub fn insert_fee_deposit(
+        &mut self,
+        fee_info: FeeInfo,
+    ) -> Result<LookupResult<FeeAmount, (), ()>, PrimitivesError> {
+        self.fee_merkle_tree
+            .update_with(fee_info.account, |balance| {
+                Some(balance.cloned().unwrap_or_default().add(fee_info.amount))
+            })
+    }
 }
 
-pub fn validate_proposal(
+#[cfg(any(test, feature = "testing"))]
+impl ValidatedState {
+    pub fn forget(&self) -> Self {
+        Self {
+            fee_merkle_tree: FeeMerkleTree::from_commitment(self.fee_merkle_tree.commitment()),
+            block_merkle_tree: BlockMerkleTree::from_commitment(
+                self.block_merkle_tree.commitment(),
+            ),
+        }
+    }
+}
+
+pub fn validate_and_apply_proposal(
     state: &mut ValidatedState,
-    parent: &Header,
+    parent_leaf: &Leaf,
     proposal: &Header,
+    receipts: Vec<FeeInfo>,
 ) -> anyhow::Result<()> {
+    let parent_header = parent_leaf.get_block_header();
     // validate height
     anyhow::ensure!(
-        proposal.height == parent.height + 1,
+        proposal.height == parent_header.height + 1,
         anyhow::anyhow!(
             "Invalid Height Error: {}, {}",
-            parent.height,
+            parent_header.height,
             proposal.height
         )
     );
@@ -79,36 +141,31 @@ pub fn validate_proposal(
     } = state;
 
     // validate proposal is descendent of parent by appending to parent
-    block_merkle_tree.push(parent.commit()).unwrap();
+    block_merkle_tree.push(parent_header.commit()).unwrap();
     let block_merkle_tree_root = block_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.block_merkle_tree_root == block_merkle_tree_root,
         anyhow::anyhow!(
-            "Invalid Block Root Error: {}, {}",
+            "Invalid Block Root Error: local={}, proposal={}",
             block_merkle_tree_root,
             proposal.block_merkle_tree_root
         )
     );
 
-    // fetch receipts from the l1
-    let receipts = fetch_fee_receipts(parent.l1_finalized, proposal.l1_finalized);
+    // Insert the fee deposits
     for FeeInfo { account, amount } in receipts {
-        // Get the balance in order to add amount, ignoring the proof.
-        match fee_merkle_tree.universal_lookup(account) {
-            LookupResult::Ok(balance, _) => fee_merkle_tree
-                .update(account, balance.add(amount))
-                .unwrap(),
-            // Handle `NotFound` and `NotInMemory` by initializing
-            // state.
-            _ => fee_merkle_tree.update(account, amount).unwrap(),
-        };
+        fee_merkle_tree
+            .update_with(account, |balance| {
+                Some(balance.cloned().unwrap_or_default().add(amount))
+            })
+            .expect("update_with succeeds");
     }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.fee_merkle_tree_root == fee_merkle_tree_root,
         anyhow::anyhow!(
-            "Invalid Fee Root Error: {}, {}",
+            "Invalid Fee Root Error: local={}, proposal={}",
             fee_merkle_tree_root,
             proposal.fee_merkle_tree_root
         )
@@ -116,24 +173,50 @@ pub fn validate_proposal(
     Ok(())
 }
 
-/// Fetch receipts from the l1 and add them to local balance.
-fn update_balance(fee_merkle_tree: &mut FeeMerkleTree, parent: &Header, proposed: &Header) {
-    let receipts = fetch_fee_receipts(parent.l1_finalized, proposed.l1_finalized);
-    for FeeInfo { account, amount } in receipts {
-        // Add `amount` to `balance`, if `balance` is `None` set it to `amount`
-        #[allow(clippy::single_match)]
-        match fee_merkle_tree.update_with(account, |balance| {
-            Some(balance.cloned().unwrap_or_default().add(amount))
-        }) {
-            Ok(LookupResult::Ok(..)) => (),
-            // TODO handle `LookupResult::NotInMemory` by looking up the value from
-            // a peer during catchup.
-            _ => (),
-        }
+#[derive(Debug)]
+enum ChargeFeeError {
+    /// Account not in memory, needs to be fetched from peer
+    NotInMemory,
+    /// Account exists but has insufficient funds
+    InsufficientFunds,
+}
+
+fn charge_fee(
+    fee_merkle_tree: &mut FeeMerkleTree,
+    fee_info: FeeInfo,
+) -> Result<(), ChargeFeeError> {
+    let FeeInfo { account, amount } = fee_info;
+    let mut err = None;
+    let res = fee_merkle_tree
+        .update_with(account, |balance| {
+            let balance = balance.copied();
+            let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
+                // Return an error without updating the account.
+                err = Some(ChargeFeeError::InsufficientFunds);
+                return balance;
+            };
+            if updated == FeeAmount::default() {
+                // Delete the account from the tree if its balance ended up at 0; this saves some
+                // space since the account is no longer carrying any information.
+                None
+            } else {
+                // Otherwise store the updated balance.
+                Some(updated)
+            }
+        })
+        .expect("updated succeeds");
+    if res.expect_not_in_memory().is_ok() {
+        return Err(ChargeFeeError::NotInMemory);
+    }
+    if let Some(err) = err {
+        Err(err)
+    } else {
+        Ok(())
     }
 }
-/// Validate builder account by verifiying signature and charging the account.
-fn validate_builder(
+
+/// Validate builder account by verifying signature and charging the account.
+fn validate_and_charge_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
     proposed_header: &Header,
 ) -> anyhow::Result<()> {
@@ -155,26 +238,38 @@ fn validate_builder(
     );
 
     // charge the fee to the builder
-    let mut fee_merkle_tree = fee_merkle_tree.clone();
-    match fee_merkle_tree.universal_lookup(fee_info.account) {
-        LookupResult::Ok(balance, _) => {
-            let updated = balance
-                .checked_sub(&fee_info.amount)
-                .ok_or_else(|| anyhow::anyhow!("Insufficient funds"))?;
-            fee_merkle_tree.update(fee_info.account, updated).unwrap();
+    if charge_fee(fee_merkle_tree, fee_info).is_err() {
+        bail!("Insufficient funds")
+    };
+    Ok(())
+}
+
+/// A pure function to validate and apply a header to the state.
+///
+/// It assumes that all state required to validate and apply the header
+/// is available in the `validated_state`.
+fn validate_and_apply_header(
+    validated_state: &mut ValidatedState,
+    parent_leaf: &Leaf,
+    proposed_header: &Header,
+    l1_deposits: Vec<FeeInfo>,
+) -> Result<(), BlockError> {
+    // validate proposed header against parent
+    match validate_and_apply_proposal(validated_state, parent_leaf, proposed_header, l1_deposits) {
+        // Note that currently only block state is updated.
+        Ok(validated_state) => validated_state,
+        Err(e) => {
+            tracing::warn!("Invalid Proposal: {}", e);
+            return Err(BlockError::InvalidBlockHeader);
         }
-        LookupResult::NotFound(_) => {
-            anyhow::bail!(format!(
-                "Account Not Found {:?}",
-                fee_info.account.address()
-            ));
-        }
-        LookupResult::NotInMemory => {
-            anyhow::bail!(format!(
-                "Invalid Builder Account {:?}",
-                fee_info.account.address()
-            ));
-        }
+    };
+
+    // Validate builder by verifying signature and charging account
+    if let Err(e) =
+        validate_and_charge_builder(&mut validated_state.fee_merkle_tree, proposed_header)
+    {
+        tracing::warn!("Invalid Builder: {}", e);
+        return Err(BlockError::InvalidBlockHeader);
     };
     Ok(())
 }
@@ -185,43 +280,94 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
     type Time = ViewNumber;
 
+    type Delta = Delta;
     fn on_commit(&self) {}
     /// Validate parent against known values (from state) and validate
     /// proposal descends from parent. Returns updated `ValidatedState`.
+    #[tracing::instrument(
+        skip_all,
+        fields(view = ?parent_leaf.view_number, height = parent_leaf.block_header.height),
+    )]
     async fn validate_and_apply_header(
         &self,
-        _instance: &Self::Instance,
+        instance: &Self::Instance,
         parent_leaf: &Leaf,
         proposed_header: &Header,
-    ) -> Result<Self, Self::Error> {
+    ) -> Result<(Self, Self::Delta), Self::Error> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
-        let parent_header = parent_leaf.get_block_header();
-        // validate proposed header against parent
-        match validate_proposal(&mut validated_state, parent_header, proposed_header) {
-            // Note that currently only block state is updated.
-            Ok(validated_state) => validated_state,
-            Err(e) => {
-                tracing::warn!("Invalid Proposal: {}", e);
-                return Err(BlockError::InvalidBlockHeader);
-            }
+
+        let accounts = std::iter::once(proposed_header.fee_info.account);
+
+        // Fetch the new L1 deposits between parent and current finalized L1 block.
+        let l1_deposits = if let Some(block_info) = proposed_header.l1_finalized {
+            instance
+                .l1_client
+                .get_finalized_deposits(
+                    parent_leaf
+                        .get_block_header()
+                        .l1_finalized
+                        .map(|block_info| block_info.number),
+                    block_info.number,
+                )
+                .await
+        } else {
+            vec![]
         };
 
-        // Update account balance from the l1
-        update_balance(
-            &mut validated_state.fee_merkle_tree,
-            parent_header,
-            proposed_header,
+        // Find missing state entries
+        let missing_accounts = self.forgotten_accounts(
+            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
-        // Validate builder by verifying signature and charging account
-        if let Err(e) = validate_builder(&mut validated_state.fee_merkle_tree, proposed_header) {
-            tracing::warn!("Invalid Builder: {}", e);
-            return Err(BlockError::InvalidBlockHeader);
+        let view = parent_leaf.get_view_number();
+
+        // Ensure merkle tree has frontier
+        if self.need_to_fetch_blocks_mt_frontier() {
+            tracing::warn!("fetching block frontier from peers");
+            instance
+                .peers
+                .as_ref()
+                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
+                .await;
         }
 
-        Ok(validated_state)
+        // Fetch missing fee state entries
+        if !missing_accounts.is_empty() {
+            tracing::warn!(
+                "fetching {} missing accounts from peers",
+                missing_accounts.len()
+            );
+
+            let missing_account_proofs = instance
+                .peers
+                .as_ref()
+                .fetch_accounts(
+                    view,
+                    validated_state.fee_merkle_tree.commitment(),
+                    missing_accounts,
+                )
+                .await;
+
+            // Remember the fee state entries
+            for account in missing_account_proofs.iter() {
+                account
+                    .proof
+                    .remember(&mut validated_state.fee_merkle_tree)
+                    .expect("proof previously verified");
+            }
+        }
+
+        // Lastly validate and apply the header
+        validate_and_apply_header(
+            &mut validated_state,
+            parent_leaf,
+            proposed_header,
+            l1_deposits,
+        )?;
+
+        Ok((validated_state, Delta {}))
     }
     /// Construct the state with the given block header.
     ///
@@ -236,8 +382,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
     }
     /// Construct a genesis validated state.
     #[must_use]
-    fn genesis(instance: &Self::Instance) -> Self {
-        instance.genesis_state.clone()
+    fn genesis(instance: &Self::Instance) -> (Self, Self::Delta) {
+        (instance.genesis_state.clone(), Delta {})
     }
 }
 
@@ -281,13 +427,33 @@ pub struct FeeInfo {
     amount: FeeAmount,
 }
 impl FeeInfo {
-    pub fn new(account: FeeAccount) -> Self {
-        let amount = FeeAmount::default(); // TODO grab from config (instance_state?)
-        Self { account, amount }
+    pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
+        Self {
+            account: account.into(),
+            amount: amount.into(),
+        }
     }
+    /// The minimum fee paid by the given builder account for a proposed block.
+    // TODO this function should take the block size as an input, we need to get this information
+    // from HotShot.
+    pub fn base_fee(account: FeeAccount) -> Self {
+        Self {
+            account,
+            amount: FeeAmount::default(),
+        }
+    }
+
+    pub fn genesis() -> Self {
+        Self {
+            account: Default::default(),
+            amount: Default::default(),
+        }
+    }
+
     pub fn account(&self) -> FeeAccount {
         self.account
     }
+
     pub fn amount(&self) -> FeeAmount {
         self.amount
     }
@@ -298,15 +464,6 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
-        }
-    }
-}
-
-impl Default for FeeInfo {
-    fn default() -> Self {
-        Self {
-            amount: FeeAmount::default(),
-            account: FeeAccount::test_wallet().address().into(),
         }
     }
 }
@@ -338,6 +495,12 @@ impl FeeAmount {
     }
 }
 
+impl From<u64> for FeeAmount {
+    fn from(amt: u64) -> Self {
+        Self(amt.into())
+    }
+}
+
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
         self.0.checked_sub(v.0).map(FeeAmount)
@@ -352,6 +515,7 @@ impl CheckedSub for FeeAmount {
     Copy,
     Clone,
     Debug,
+    Display,
     Deserialize,
     Serialize,
     PartialEq,
@@ -361,6 +525,7 @@ impl CheckedSub for FeeAmount {
     From,
     Into,
 )]
+#[display(fmt = "{_0:x}")]
 pub struct FeeAccount(Address);
 impl FeeAccount {
     /// Return inner `Address`
@@ -456,16 +621,6 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
             .map(|i| i as usize)
             .collect()
     }
-}
-
-/// Fetch all deposit receitps between `prev_l1_finalized` and
-/// `new_l1_finalized`. This is currently a mock function to be
-/// implemented in the future.
-pub fn fetch_fee_receipts(
-    _prev_l1_finalized: Option<L1BlockInfo>,
-    _new_l1_finalized: Option<L1BlockInfo>,
-) -> Vec<FeeInfo> {
-    Vec::from([FeeInfo::default()])
 }
 
 pub type FeeMerkleTree =

@@ -157,6 +157,12 @@
               types_or = [ "markdown" ];
               pass_filenames = true;
             };
+            spell-checking = {
+              enable = true;
+              description = "Spell checking";
+              entry = "typos";
+              pass_filenames = true;
+            };
             nixpkgs-fmt.enable = true;
           };
         };
@@ -187,6 +193,7 @@
             cargo-audit
             cargo-edit
             cargo-sort
+            typos
             just
             fenix.packages.${system}.rust-analyzer
 
@@ -229,6 +236,45 @@
         crossShell { config = "x86_64-unknown-linux-musl"; };
       devShells.armCrossShell =
         crossShell { config = "aarch64-unknown-linux-musl"; };
+      devShells.nightly =
+        let
+          toolchain = pkgs.rust-bin.nightly.latest.minimal.override {
+            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+          };
+        in
+        mkShell {
+          buildInputs = [
+            # Rust dependencies
+            pkg-config
+            openssl
+            curl
+            protobuf # to compile libp2p-autonat
+            toolchain
+          ];
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+        };
+      devShells.coverage =
+        let
+          toolchain = pkgs.rust-bin.nightly.latest.minimal;
+        in
+        mkShell {
+          buildInputs = [
+            # Rust dependencies
+            pkg-config
+            openssl
+            curl
+            protobuf # to compile libp2p-autonat
+            toolchain
+            grcov
+          ];
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          CARGO_INCREMENTAL = "0";
+          shellHook = ''
+           RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
+          '';
+          RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
+        };
+
       devShells.rustShell =
         let
           stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {

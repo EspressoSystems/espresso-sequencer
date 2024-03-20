@@ -6,13 +6,13 @@ use bytesize::ByteSize;
 use clap::Parser;
 use commit::{Commitment, Committable};
 use derive_more::From;
-use es_version::SEQUENCER_VERSION;
+use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
     stream::StreamExt,
 };
-use hotshot_query_service::{availability::BlockQueryData, Error};
+use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
@@ -24,7 +24,7 @@ use std::{
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
-use versioned_binary_serialization::version::StaticVersion;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -133,8 +133,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client =
-        Client::<Error, { es_version::MAJOR }, { es_version::MINOR }>::new(opt.url.clone());
+    let client = Client::<Error, SequencerVersion>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -225,13 +224,13 @@ struct SubmittedTransaction {
     submitted_at: Instant,
 }
 
-async fn submit_transactions<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+async fn submit_transactions<Ver: StaticVersionType>(
     opt: Options,
     mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
-    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
+    _: Ver,
 ) {
-    let client = Client::<Error, MAJOR_VERSION, MINOR_VERSION>::new(opt.url.clone());
+    let client = Client::<Error, Ver>::new(opt.url.clone());
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -266,12 +265,9 @@ async fn submit_transactions<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>
     }
 }
 
-async fn server<const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
-    port: u16,
-    _: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
-) {
-    if let Err(err) = App::<(), ServerError, MAJOR_VERSION, MINOR_VERSION>::with_state(())
-        .serve(format!("0.0.0.0:{port}"))
+async fn server<Ver: StaticVersionType>(port: u16, bind_version: Ver) {
+    if let Err(err) = App::<(), ServerError, Ver>::with_state(())
+        .serve(format!("0.0.0.0:{port}"), bind_version)
         .await
     {
         tracing::error!("web server exited: {err}");

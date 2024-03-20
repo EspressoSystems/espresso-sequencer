@@ -49,6 +49,7 @@ impl Namespace for NamespaceId {
 )]
 pub struct Transaction {
     namespace: NamespaceId,
+    #[serde(with = "base64_bytes")]
     payload: Vec<u8>,
 }
 
@@ -71,7 +72,7 @@ impl Transaction {
         let len = rng.gen_range(0..100);
         Self::new(
             NamespaceId(rng.gen_range(0..10)),
-            (0..len).map(|_| rand::random::<u8>()).collect(),
+            (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
     }
 }

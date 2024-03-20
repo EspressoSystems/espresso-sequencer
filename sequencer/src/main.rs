@@ -10,7 +10,7 @@ use sequencer::{
     options::{Modules, Options},
     persistence, BuilderParams, L1Params, NetworkParams,
 };
-use versioned_binary_serialization::version::StaticVersion;
+use versioned_binary_serialization::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,12 +43,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn init_with_storage<S, const MAJOR_VERSION: u16, const MINOR_VERSION: u16>(
+async fn init_with_storage<S, Ver: StaticVersionType>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-    bind_version: StaticVersion<MAJOR_VERSION, MINOR_VERSION>,
-) -> anyhow::Result<SequencerContext<network::Web, MAJOR_VERSION, MINOR_VERSION>>
+    bind_version: Ver,
+) -> anyhow::Result<SequencerContext<network::Web, Ver>>
 where
     S: DataSourceOptions,
 {
@@ -69,6 +69,7 @@ where
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: opt.private_staking_key,
         private_state_key: opt.private_state_key,
+        state_peers: opt.state_peers,
     };
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
