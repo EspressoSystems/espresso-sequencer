@@ -158,3 +158,14 @@ pub enum EventType<TYPES: NodeType> {
         sender: TYPES::SignatureKey,
     },
 }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum HotShotAction {
+    Vote,
+    Propose,
+    DAPropose,
+    DAVote,
+    DACert,
+    VidDisperse,
+    UpgradeVote,
+    UpgradePropose,
+}

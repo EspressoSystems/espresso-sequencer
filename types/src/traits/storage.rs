@@ -8,7 +8,9 @@ use async_trait::async_trait;
 
 use crate::{
     data::{DAProposal, VidDisperse},
+    event::HotShotAction,
     message::Proposal,
+    simple_certificate::QuorumCertificate,
 };
 
 use super::node_implementation::NodeType;
@@ -18,4 +20,6 @@ use super::node_implementation::NodeType;
 pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperse<TYPES>>) -> Result<()>;
     async fn append_da(&self, proposal: &Proposal<TYPES, DAProposal<TYPES>>) -> Result<()>;
+    async fn record_action(&self, view: TYPES::Time, action: HotShotAction) -> Result<()>;
+    async fn update_high_qc(&self, qc: QuorumCertificate<TYPES>) -> Result<()>;
 }

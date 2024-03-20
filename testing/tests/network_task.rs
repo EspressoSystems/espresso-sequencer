@@ -1,144 +1,146 @@
-use hotshot::types::SignatureKey;
+use async_compatibility_layer::art::async_timeout;
+use async_lock::RwLock;
+use hotshot::tasks::add_network_message_task;
+use hotshot::traits::implementations::MemoryNetwork;
+use hotshot_example_types::node_types::MemoryImpl;
 use hotshot_example_types::node_types::TestTypes;
+use hotshot_task::task::{Task, TaskRegistry};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::task_helpers::{build_quorum_proposal, vid_scheme_from_view_number};
-use hotshot_types::{
-    data::{DAProposal, ViewNumber},
-    traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
-};
-use jf_primitives::vid::VidScheme;
-use sha2::{Digest, Sha256};
-use std::{collections::HashMap, marker::PhantomData};
+use hotshot_task_impls::network::{self, NetworkEventTaskState};
+use hotshot_testing::test_builder::TestMetadata;
+use hotshot_testing::view_generator::TestViewGenerator;
+use hotshot_types::traits::election::Membership;
+use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use std::sync::Arc;
+use std::time::Duration;
+
+// Test that the event task sends a message, and the message task receives it
+// and emits the proper event
+#[cfg(test)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[allow(clippy::too_many_lines)]
+async fn test_network_task() {
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let builder = TestMetadata::default_multiple_rounds();
+    let node_id = 1;
+
+    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
+
+    let networks = (launcher.resource_generator.channel_generator)(node_id);
+
+    let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
+    let config = launcher.resource_generator.config.clone();
+    let public_key = config.my_own_validator_config.public_key;
+    let known_nodes_with_stake = config.known_nodes_with_stake.clone();
+    let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
+        <TestTypes as NodeType>::Membership::default_election_config(
+            config.num_nodes_with_stake.get() as u64,
+            config.num_nodes_without_stake as u64,
+        )
+    });
+
+    let membership = <TestTypes as NodeType>::Membership::create_election(
+        known_nodes_with_stake.clone(),
+        quorum_election_config.clone(),
+    );
+    let channel = networks.0.clone();
+    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_, _>, _> =
+        NetworkEventTaskState {
+            channel: channel.clone(),
+            view: ViewNumber::new(0),
+            membership: membership.clone(),
+            filter: network::quorum_filter,
+            storage,
+        };
+    let (tx, rx) = async_broadcast::broadcast(10);
+    let task_reg = Arc::new(TaskRegistry::default());
+
+    let task = Task::new(tx.clone(), rx, task_reg.clone(), network_state);
+    task_reg.run_task(task).await;
+
+    let mut generator = TestViewGenerator::generate(membership.clone());
+    let view = generator.next().unwrap();
+
+    let (out_tx, mut out_rx) = async_broadcast::broadcast(10);
+    add_network_message_task(task_reg, out_tx.clone(), channel.clone()).await;
+
+    tx.broadcast_direct(Arc::new(HotShotEvent::QuorumProposalSend(
+        view.quorum_proposal,
+        public_key,
+    )))
+    .await
+    .unwrap();
+    let res = async_timeout(Duration::from_millis(100), out_rx.recv_direct())
+        .await
+        .expect("timed out waiting for response")
+        .expect("channel closed");
+    assert!(matches!(
+        res.as_ref(),
+        HotShotEvent::QuorumProposalRecv(_, _)
+    ));
+}
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
-#[allow(clippy::too_many_lines)]
-async fn test_network_task() {
-    use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{data::VidDisperse, message::Proposal};
-
+async fn test_network_storage_fail() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    // Build the API for node 2.
-    let (handle, _tx, _rx) = build_system_handle(2).await;
-    let pub_key = *handle.public_key();
-    let priv_key = handle.private_key();
-    // quorum membership for VID share distribution
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let builder = TestMetadata::default_multiple_rounds();
+    let node_id = 1;
 
-    let encoded_transactions = Vec::new();
-    let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
-    let da_signature =
-        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
-            handle.private_key(),
-            &encoded_transactions_hash,
+    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
+
+    let networks = (launcher.resource_generator.channel_generator)(node_id);
+
+    let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
+    storage.write().await.should_return_err = true;
+    let config = launcher.resource_generator.config.clone();
+    let public_key = config.my_own_validator_config.public_key;
+    let known_nodes_with_stake = config.known_nodes_with_stake.clone();
+    let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
+        <TestTypes as NodeType>::Membership::default_election_config(
+            config.num_nodes_with_stake.get() as u64,
+            config.num_nodes_without_stake as u64,
         )
-        .expect("Failed to sign block payload");
-    let mut vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(2));
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit;
-    let vid_signature =
-        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
-            handle.private_key(),
-            payload_commitment.as_ref(),
-        )
-        .expect("Failed to sign block commitment");
+    });
 
-    let da_proposal = Proposal {
-        data: DAProposal {
-            encoded_transactions: encoded_transactions.clone(),
-            metadata: (),
-            view_number: ViewNumber::new(2),
-        },
-        signature: da_signature,
-        _pd: PhantomData,
-    };
-    let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
+    let membership = <TestTypes as NodeType>::Membership::create_election(
+        known_nodes_with_stake.clone(),
+        quorum_election_config.clone(),
+    );
+    let channel = networks.0.clone();
+    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_, _>, _> =
+        NetworkEventTaskState {
+            channel: channel.clone(),
+            view: ViewNumber::new(0),
+            membership: membership.clone(),
+            filter: network::quorum_filter,
+            storage,
+        };
+    let (tx, rx) = async_broadcast::broadcast(10);
+    let task_reg = Arc::new(TaskRegistry::default());
 
-    let vid_disperse_inner = VidDisperse::from_membership(
-        da_proposal.data.view_number,
-        vid_disperse,
-        &quorum_membership.clone().into(),
-    );
+    let task = Task::new(tx.clone(), rx, task_reg.clone(), network_state);
+    task_reg.run_task(task).await;
 
-    // TODO for now reuse the same block payload commitment and signature as DA committee
-    // https://github.com/EspressoSystems/jellyfish/issues/369
-    let vid_proposal = Proposal {
-        data: vid_disperse_inner.clone(),
-        signature: vid_signature,
-        _pd: PhantomData,
-    };
+    let mut generator = TestViewGenerator::generate(membership.clone());
+    let view = generator.next().unwrap();
 
-    // Every event input is seen on the event stream in the output.
-    let mut input = Vec::new();
-    let mut output = HashMap::new();
+    let (out_tx, mut out_rx) = async_broadcast::broadcast(10);
+    add_network_message_task(task_reg, out_tx.clone(), channel.clone()).await;
 
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::TransactionsSequenced(
-        encoded_transactions.clone(),
-        (),
-        ViewNumber::new(2),
-    ));
-    input.push(HotShotEvent::BlockReady(
-        vid_disperse_inner.clone(),
-        ViewNumber::new(2),
-    ));
-    input.push(HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key));
-    input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::QuorumProposalSend(
-        quorum_proposal.clone(),
-        pub_key,
-    ));
-    // Don't send `Shutdown` as other task unit tests do, to avoid nondeterministic behaviors due
-    // to some tasks shut down earlier than the testing harness and we don't get all the expected
-    // events.
-
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 2);
-    output.insert(
-        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
-        2, // 2 occurrences: 1 from `input`, 1 from the transactions task
-    );
-    output.insert(
-        HotShotEvent::BlockReady(vid_disperse_inner, ViewNumber::new(2)),
-        2, // 2 occurrences: 1 from `input`, 1 from the VID task
-    );
-    output.insert(
-        HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key),
-        3, // 2 occurrences: 1 from `input`, 2 from the DA task
-    );
-    output.insert(
-        HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
-        2, // 2 occurrences: 1 from `input`, 1 from the VID task
-    );
-    // Only one output from the input.
-    // The consensus task will fail to send a second proposal, like the DA task does, due to the
-    // view number check in `publish_proposal_if_able` in consensus.rs, and we will see an error in
-    // logging, but that is fine for testing as long as the network task is correctly handling
-    // events.
-    output.insert(
-        HotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
-        1,
-    );
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 2);
-    output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
-        2, // 2 occurrences: both from the VID task
-    );
-    output.insert(
-        HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),
-        1,
-    );
-    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal), 1);
-    output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
-
-    // let build_fn = |task_runner, _| async { task_runner };
-    // There may be extra outputs not in the expected set, e.g., a second `VidDisperseRecv` if the
-    // VID task runs fast. All event types we want to test should be seen by this point, so waiting
-    // for more events will not help us test more cases for now. Therefore, we set
-    // `allow_extra_output` to `true` for deterministic test result.
-    // run_harness(input, output, Some(event_stream), build_fn, true).await;
+    tx.broadcast_direct(Arc::new(HotShotEvent::QuorumProposalSend(
+        view.quorum_proposal,
+        public_key,
+    )))
+    .await
+    .unwrap();
+    let res = async_timeout(Duration::from_millis(100), out_rx.recv_direct()).await;
+    assert!(res.is_err());
 }

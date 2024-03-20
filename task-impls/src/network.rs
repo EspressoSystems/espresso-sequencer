@@ -4,7 +4,9 @@ use crate::{
 };
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_spawn;
+use async_lock::RwLock;
 use either::Either::{self, Left, Right};
+use hotshot_types::{event::HotShotAction, traits::storage::Storage};
 use std::sync::Arc;
 
 use hotshot_task::task::{Task, TaskState};
@@ -191,6 +193,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
     COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    S: Storage<TYPES>,
 > {
     /// comm channel
     pub channel: Arc<COMMCHANNEL>,
@@ -201,10 +204,15 @@ pub struct NetworkEventTaskState<
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
     /// Filter which returns false for the events that this specific network task cares about
     pub filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
+    /// Storage to store actionable events
+    pub storage: Arc<RwLock<S>>,
 }
 
-impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>> TaskState
-    for NetworkEventTaskState<TYPES, COMMCHANNEL>
+impl<
+        TYPES: NodeType,
+        COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        S: Storage<TYPES> + 'static,
+    > TaskState for NetworkEventTaskState<TYPES, COMMCHANNEL, S>
 {
     type Event = Arc<HotShotEvent<TYPES>>;
 
@@ -231,8 +239,11 @@ impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::Signa
     }
 }
 
-impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>
-    NetworkEventTaskState<TYPES, COMMCHANNEL>
+impl<
+        TYPES: NodeType,
+        COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        S: Storage<TYPES> + 'static,
+    > NetworkEventTaskState<TYPES, COMMCHANNEL, S>
 {
     /// Handle the given event.
     ///
@@ -241,64 +252,82 @@ impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::Signa
     /// Panic sif a direct message event is received with no recipient
     #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
     #[instrument(skip_all, fields(view = *self.view), name = "Network Task", level = "error")]
-
     pub async fn handle_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         membership: &TYPES::Membership,
     ) -> Option<HotShotTaskCompleted> {
+        let mut maybe_action = None;
         let (sender, message_kind, transmit_type, recipient) = match event.as_ref().clone() {
-            HotShotEvent::QuorumProposalSend(proposal, sender) => (
-                sender,
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::Proposal(proposal),
-                ))),
-                TransmitType::Broadcast,
-                None,
-            ),
+            HotShotEvent::QuorumProposalSend(proposal, sender) => {
+                maybe_action = Some(HotShotAction::Propose);
+                (
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
+                        GeneralConsensusMessage::Proposal(proposal),
+                    ))),
+                    TransmitType::Broadcast,
+                    None,
+                )
+            }
 
             // ED Each network task is subscribed to all these message types.  Need filters per network task
-            HotShotEvent::QuorumVoteSend(vote) => (
-                vote.get_signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::Vote(vote.clone()),
-                ))),
-                TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view_number() + 1)),
-            ),
-            HotShotEvent::VidDisperseSend(proposal, sender) => (
-                sender,
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::VidDisperseMsg(proposal),
-                ))), // TODO not a CommitteeConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
-                TransmitType::Broadcast, // TODO not a broadcast https://github.com/EspressoSystems/HotShot/issues/1696
-                None,
-            ),
-            HotShotEvent::DAProposalSend(proposal, sender) => (
-                sender,
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::DAProposal(proposal),
-                ))),
-                TransmitType::DACommitteeBroadcast,
-                None,
-            ),
-            HotShotEvent::DAVoteSend(vote) => (
-                vote.get_signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::DAVote(vote.clone()),
-                ))),
-                TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view_number())),
-            ),
+            HotShotEvent::QuorumVoteSend(vote) => {
+                maybe_action = Some(HotShotAction::Vote);
+                (
+                    vote.get_signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
+                        GeneralConsensusMessage::Vote(vote.clone()),
+                    ))),
+                    TransmitType::Direct,
+                    Some(membership.get_leader(vote.get_view_number() + 1)),
+                )
+            }
+            HotShotEvent::VidDisperseSend(proposal, sender) => {
+                maybe_action = Some(HotShotAction::VidDisperse);
+                (
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
+                        CommitteeConsensusMessage::VidDisperseMsg(proposal),
+                    ))), // TODO not a CommitteeConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
+                    TransmitType::Broadcast, // TODO not a broadcast https://github.com/EspressoSystems/HotShot/issues/1696
+                    None,
+                )
+            }
+            HotShotEvent::DAProposalSend(proposal, sender) => {
+                maybe_action = Some(HotShotAction::DAPropose);
+                (
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
+                        CommitteeConsensusMessage::DAProposal(proposal),
+                    ))),
+                    TransmitType::DACommitteeBroadcast,
+                    None,
+                )
+            }
+            HotShotEvent::DAVoteSend(vote) => {
+                maybe_action = Some(HotShotAction::DAVote);
+                (
+                    vote.get_signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
+                        CommitteeConsensusMessage::DAVote(vote.clone()),
+                    ))),
+                    TransmitType::Direct,
+                    Some(membership.get_leader(vote.get_view_number())),
+                )
+            }
             // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
-            HotShotEvent::DACSend(certificate, sender) => (
-                sender,
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::DACertificate(certificate),
-                ))),
-                TransmitType::Broadcast,
-                None,
-            ),
+            HotShotEvent::DACSend(certificate, sender) => {
+                maybe_action = Some(HotShotAction::DACert);
+                (
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
+                        CommitteeConsensusMessage::DACertificate(certificate),
+                    ))),
+                    TransmitType::Broadcast,
+                    None,
+                )
+            }
             HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
@@ -377,7 +406,23 @@ impl<TYPES: NodeType, COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::Signa
         let view = message.kind.get_view_number();
         let committee = membership.get_whole_committee(view);
         let net = self.channel.clone();
+        let storage = self.storage.clone();
         async_spawn(async move {
+            if let Some(action) = maybe_action {
+                match storage
+                    .write()
+                    .await
+                    .record_action(view, action.clone())
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(e) => {
+                        warn!("Not Sending {:?} because of storage error: {:?}", action, e);
+                        return;
+                    }
+                }
+            }
+
             let transmit_result = match transmit_type {
                 TransmitType::Direct => {
                     net.direct_message(message, recipient.unwrap(), STATIC_VER_0_1)

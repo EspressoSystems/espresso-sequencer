@@ -499,6 +499,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             quorum_network.clone(),
             quorum_membership,
             network::quorum_filter,
+            handle.get_storage().clone(),
         )
         .await;
         add_network_event_task(
@@ -508,6 +509,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             da_network.clone(),
             da_membership,
             network::committee_filter,
+            handle.get_storage().clone(),
         )
         .await;
         add_network_event_task(
@@ -517,6 +519,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             quorum_network.clone(),
             view_sync_membership,
             network::view_sync_filter,
+            handle.get_storage().clone(),
         )
         .await;
         add_network_event_task(
@@ -526,6 +529,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             quorum_network.clone(),
             vid_membership,
             network::vid_filter,
+            handle.get_storage().clone(),
         )
         .await;
         add_consensus_task(
