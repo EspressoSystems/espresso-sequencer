@@ -25,7 +25,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
+use jf_primitives::merkle_tree::prelude::MerklePath;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -285,7 +285,6 @@ where
     U: Send + Sync,
     Types: NodeType,
     State: MerklizedState<Types>,
-    <State as MerkleTreeScheme>::Commitment: Send,
 {
     async fn get_path(
         &self,
