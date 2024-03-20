@@ -8,17 +8,13 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
 contract CallNewFinalizedState is Script {
-    uint64 internal constant STAKE_TABLE_CAPACITY = 10;
-
     LC.LightClientState public genesis;
 
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)
         external
     {
-        vm.startBroadcast();
-
-        uint64 numRegistrations = STAKE_TABLE_CAPACITY - numInitValidators - 1;
-        uint64 numExits = numInitValidators - 1;
+        uint64 numRegistrations = uint64(3);
+        uint64 numExits = uint64(3);
 
         // Generating a few consecutive states and proofs
         string[] memory cmds = new string[](4);
@@ -33,6 +29,11 @@ contract CallNewFinalizedState is Script {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        address admin;
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        (admin,) = deriveRememberKey(seedPhrase, 0);
+        vm.startBroadcast(admin);
 
         LC lc = LC(lcContractAddress);
         lc.newFinalizedState(states[0], proofs[0]);
