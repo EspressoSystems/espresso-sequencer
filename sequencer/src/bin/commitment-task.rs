@@ -14,19 +14,6 @@ use tide_disco::Api;
 use url::Url;
 
 /// Commitment Task Command
-///
-/// There is an additional env var `ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG`
-/// that is not handled by clap because it must be set via env var (and not via
-/// CLI arguments).
-///
-/// Used testing with a pre-merge geth node that does not support the finalized
-/// block tag.
-///
-/// Do not use in production.
-///
-/// When set to a truthy value ("y", "yes", "t", "true", "on", "1") the
-/// commitment task will fetch "latest" block timestamps instead of
-/// "finalized" ones.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// URL of a HotShot sequencer node.
@@ -67,6 +54,10 @@ pub struct Options {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     pub port: Option<u16>,
+
+    /// Client-side timeout for HTTP requests.
+    #[clap(long, env = "ESPRESSO_COMMITMENT_TASK_REQUEST_TIMEOUT", value_parser = parse_duration, default_value = "5s")]
+    pub request_timeout: Duration,
 
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
     #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
@@ -129,6 +120,7 @@ async fn main() {
         delay: opt.delay,
         sequencer_mnemonic: opt.eth_mnemonic,
         sequencer_account_index: opt.hotshot_account_index,
+        request_timeout: opt.request_timeout,
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
