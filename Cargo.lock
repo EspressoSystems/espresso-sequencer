@@ -8300,6 +8300,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
+ "hotshot-state-prover",
  "hotshot-task",
  "hotshot-testing",
  "hotshot-types",

@@ -47,7 +47,7 @@ struct Args {
     /// Index of a funded account derived from eth-mnemonic.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
+        env = "ESPRESSO_SEQUENCER_STATE_PROVER_ACCOUNT_INDEX",
         default_value = "0"
     )]
     eth_account_index: u32,

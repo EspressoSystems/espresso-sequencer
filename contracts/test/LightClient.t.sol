@@ -117,6 +117,25 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         init();
     }
 
+    /// @dev for benchmarking purposes only
+    function testCorrectUpdate() external {
+        // Generating a few consecutive states and proofs
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(3));
+        cmds[5] = vm.toString(uint64(3));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
+        lc.newFinalizedState(states[0], proofs[0]);
+    }
+
     /// @dev Test happy path for (BLOCK_PER_EPOCH + 1) consecutive new finalized blocks
     /// forge-config: default.fuzz.runs = 1
     /// forge-config: quick.fuzz.runs = 1
