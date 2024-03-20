@@ -7,21 +7,6 @@ RUN apt-get update \
     &&  rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["tini", "--"]
 
-# install rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-ENV PATH "$PATH:/root/.cargo/bin"
-
-# install foundry toolchain
-RUN curl -L https://foundry.paradigm.xyz | bash
-ENV PATH "$PATH:/root/.foundry/bin"
-RUN foundryup
-
-# copy the contracts
-RUN mkdir /work
-WORKDIR /work
-COPY foundry.toml /work/foundry.toml
-COPY contracts/ /work/contracts/
-
 # copy the binaries
 COPY target/$TARGETARCH/release/state-prover /usr/local/bin/state-prover
 RUN chmod +x /usr/local/bin/state-prover

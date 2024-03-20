@@ -80,11 +80,6 @@ for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-
   fi
 done
 
-# Copy the contracts
-cp -v -r "${CONTRACTS_DIR}" ${WORKDIR}
-cp -v "./foundry.toml" ${WORKDIR}
-mkdir -p ${WORKDIR}/scripts
-
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}

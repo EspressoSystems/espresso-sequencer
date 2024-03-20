@@ -37,11 +37,6 @@ for ARCH in "amd64" "arm64"; do
   done
 done
 
-# Copy the contracts
-cp -r "${CONTRACTS_DIR}" ${WORKDIR}
-cp -v "./foundry.toml" ${WORKDIR}
-mkdir -p ${WORKDIR}/scripts
-
 export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
