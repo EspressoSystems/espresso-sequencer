@@ -42,8 +42,8 @@ use async_trait::async_trait;
 /// # async fn doc() -> Result<(), hotshot_query_service::Error> {
 /// let data_source = MetricsDataSource::default();
 /// let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
-/// #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
-///     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
+/// #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
+///     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
 ///     // Other fields omitted
 /// ).await.map_err(Error::internal)?.0;
 /// # Ok(())

@@ -27,11 +27,11 @@ use futures::{
     stream::StreamExt,
 };
 use hotshot::{
-    traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
+    traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue},
     types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_example_types::state_types::TestInstanceState;
+use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -109,6 +109,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         election_config: None,
                         da_staked_committee_size: pub_keys.len(),
                         da_non_staked_committee_size: 0,
+                        data_request_delay: Duration::from_millis(200),
+                        view_sync_timeout: Duration::from_millis(250),
                     };
 
                     let pub_keys = pub_keys.clone();
@@ -147,16 +149,18 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             view_sync_membership: membership.clone(),
                         };
 
+                        let hs_storage: TestStorage<MockTypes> = TestStorage::default();
+
                         let hotshot = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
                             config,
-                            MemoryStorage::empty(),
                             memberships,
                             networks,
                             HotShotInitializer::from_genesis(TestInstanceState {}).unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
+                            hs_storage,
                         )
                         .await
                         .unwrap()

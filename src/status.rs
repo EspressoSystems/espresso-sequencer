@@ -34,6 +34,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+use versioned_binary_serialization::version::StaticVersionType;
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -78,12 +79,15 @@ fn internal<M: Display>(msg: M) -> Error {
     }
 }
 
-pub fn define_api<State>(options: &Options) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Ver: StaticVersionType + 'static>(
+    options: &Options,
+    _: Ver,
+) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + StatusDataSource,
 {
-    let mut api = load_api::<State, Error>(
+    let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
         include_str!("../api/status.toml"),
         options.extensions.clone(),
@@ -129,7 +133,8 @@ mod test {
     use async_std::sync::RwLock;
     use bincode::Options as _;
     use futures::FutureExt;
-    use hotshot_utils::bincode::bincode_opts;
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use hotshot_types::utils::bincode_opts;
     use portpicker::pick_unused_port;
     use std::str::FromStr;
     use std::time::Duration;
@@ -147,14 +152,20 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("status", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{}", port)));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "status",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+        );
 
         // Start a client.
         let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
-        let client = Client::<Error>::new(url.clone());
+        let client = Client::<Error, Version01>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Submit a transaction. We have not yet started the validators, so this transaction will
@@ -260,10 +271,13 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api = define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>>(&Options {
-            extensions: vec![extensions.into()],
-            ..Default::default()
-        })
+        let mut api = define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, Version01>(
+            &Options {
+                extensions: vec![extensions.into()],
+                ..Default::default()
+            },
+            STATIC_VER_0_1,
+        )
         .unwrap();
         api.get("get_ext", |_, state| {
             async move { Ok(*state.as_ref()) }.boxed()
@@ -278,14 +292,18 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<_, Error>::with_state(RwLock::new(data_source));
+        let mut app = App::<_, Error, Version01>::with_state(RwLock::new(data_source));
         app.register_module("status", api).unwrap();
 
         let port = pick_unused_port().unwrap();
-        let _server = BackgroundTask::spawn("server", app.serve(format!("0.0.0.0:{}", port)));
+        let _server = BackgroundTask::spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+        );
 
-        let client =
-            Client::<Error>::new(format!("http://localhost:{}/status", port).parse().unwrap());
+        let client = Client::<Error, Version01>::new(
+            format!("http://localhost:{}/status", port).parse().unwrap(),
+        );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 0);

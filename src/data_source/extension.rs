@@ -17,6 +17,7 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
+    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -24,6 +25,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
+use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -273,6 +275,44 @@ where
 
     fn metrics(&self) -> &PrometheusMetrics {
         self.data_source.metrics()
+    }
+}
+
+#[async_trait]
+impl<D, U, Types, State> MerklizedStateDataSource<Types, State> for ExtensibleDataSource<D, U>
+where
+    D: MerklizedStateDataSource<Types, State> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+    State: MerklizedState<Types>,
+    <State as MerkleTreeScheme>::Commitment: Send,
+{
+    async fn get_path(
+        &self,
+        snapshot: Snapshot<Types, State>,
+        key: State::Key,
+    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+        self.data_source.get_path(snapshot, key).await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types, State> UpdateStateData<Types, State> for ExtensibleDataSource<D, U>
+where
+    D: UpdateStateData<Types, State> + Send + Sync,
+    U: Send + Sync,
+    State: MerklizedState<Types>,
+    Types: NodeType,
+{
+    async fn insert_merkle_nodes(
+        &mut self,
+        path: MerklePath<State::Entry, State::Key, State::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> QueryResult<()> {
+        self.data_source
+            .insert_merkle_nodes(path, traversal_path, block_number)
+            .await
     }
 }
 

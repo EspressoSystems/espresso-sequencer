@@ -17,9 +17,11 @@ use super::{
     storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
-use crate::availability::QueryableHeader;
 pub use crate::include_migrations;
-use crate::{availability::QueryablePayload, Header, Payload, QueryResult};
+use crate::{
+    availability::{QueryableHeader, QueryablePayload},
+    Header, Payload, QueryResult,
+};
 pub use anyhow::Error;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -263,15 +265,17 @@ impl Config {
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
 /// # use tide_disco::App;
+/// # use versioned_binary_serialization::version::StaticVersionType;
 /// struct AppState {
 ///     hotshot_qs: SqlDataSource<AppTypes, NoFetching>,
 ///     // additional state for other modules
 /// }
 ///
-/// async fn init_server(
+/// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     config: Config,
 ///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
-/// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
+///     _: Ver,
+/// ) -> Result<App<Arc<RwLock<AppState>>, Error, Ver>, Error> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
 ///     let tx = hotshot_qs.transaction().await.map_err(Error::internal)?;

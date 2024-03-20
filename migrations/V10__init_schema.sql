@@ -13,7 +13,7 @@ CREATE TABLE header
     -- possibly adding an index for performance reasons).
     data JSONB NOT NULL
 );
- 
+
 CREATE INDEX header_timestamp_idx ON header (timestamp);
 
 CREATE TABLE payload

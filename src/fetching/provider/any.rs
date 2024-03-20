@@ -66,6 +66,7 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// Fetching from multiple query services, for resiliency.
 ///
 /// ```
+/// # use hotshot_types::constants::STATIC_VER_0_1;
 /// # use hotshot_types::traits::node_implementation::NodeType;
 /// # async fn doc<Types>() -> anyhow::Result<()>
 /// # where
@@ -73,8 +74,8 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// # {
 /// use hotshot_query_service::fetching::provider::{AnyProvider, QueryServiceProvider};
 ///
-/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?);
-/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?);
+/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?, STATIC_VER_0_1);
+/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?, STATIC_VER_0_1);
 /// let provider = AnyProvider::<Types>::default()
 ///     .with_provider(qs1)
 ///     .with_provider(qs2);
@@ -212,6 +213,7 @@ mod test {
         Error,
     };
     use futures::stream::StreamExt;
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
     use tide_disco::App;
 
@@ -226,10 +228,16 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        let _server = BackgroundTask::spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        let _server = BackgroundTask::spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
@@ -238,6 +246,7 @@ mod test {
                 .with_provider(NoFetching)
                 .with_provider(QueryServiceProvider::new(
                     format!("http://localhost:{port}").parse().unwrap(),
+                    STATIC_VER_0_1,
                 ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 

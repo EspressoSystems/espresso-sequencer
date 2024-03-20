@@ -583,7 +583,7 @@ pub mod node_tests {
         let mut ds = D::connect(&storage).await;
 
         // Set up a mock VID scheme to use for generating test data.
-        let vid = vid_scheme(2);
+        let mut vid = vid_scheme(2);
 
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
@@ -727,8 +727,8 @@ pub mod node_tests {
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
-                timestamp: i,
                 payload_commitment,
+                timestamp: i,
             };
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
@@ -779,7 +779,7 @@ pub mod node_tests {
         let mut ds = D::connect(&storage).await;
 
         // Generate some test VID data.
-        let vid = vid_scheme(2);
+        let mut vid = vid_scheme(2);
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common and a share.
@@ -1028,7 +1028,7 @@ pub mod status_tests {
         },
     };
     use bincode::Options;
-    use hotshot_utils::bincode::bincode_opts;
+    use hotshot_types::utils::bincode_opts;
     use std::time::Duration;
 
     #[async_std::test]
