@@ -1361,7 +1361,6 @@ impl<Types, State> MerklizedStateDataSource<Types, State> for SqlStorage
 where
     Types: NodeType,
     State: MerklizedState<Types> + 'static,
-    State::Commitment: Send,
 {
     /// Retreives a Merkle path from the database
     async fn get_path(
