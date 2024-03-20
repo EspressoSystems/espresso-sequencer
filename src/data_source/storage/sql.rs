@@ -1991,7 +1991,7 @@ where
     async fn get_transaction_summaries(
         &self,
         request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary>> {
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>> {
         let range = &request.range;
         let target = &range.target;
         // let filter = &request.filter;
@@ -2074,7 +2074,7 @@ where
             };
 
         let result = self.query(&query, params).await.map(|row_stream| {
-            row_stream.map(|row| -> Result<Vec<explorer::data_source::TransactionSummary>, QueryError> {
+            row_stream.map(|row| -> Result<Vec<explorer::data_source::TransactionSummary<Types>>, QueryError> {
                 let block = parse_block::<Types>(row?)?;
                 let block_ref = &block;
 
@@ -2085,12 +2085,12 @@ where
                     .map(move |(index, (_, txn))| {
                         Ok(explorer::data_source::TransactionSummary::try_from((block_ref, index, txn))?)
                     })
-                    .try_collect::<explorer::data_source::TransactionSummary, Vec<explorer::data_source::TransactionSummary>, QueryError>()
+                    .try_collect::<explorer::data_source::TransactionSummary<Types>, Vec<explorer::data_source::TransactionSummary<Types>>, QueryError>()
             })
         });
 
         let non_flattened_results = result?
-            .try_collect::<Vec<Vec<explorer::data_source::TransactionSummary>>>()
+            .try_collect::<Vec<Vec<explorer::data_source::TransactionSummary<Types>>>>()
             .await?;
 
         let flattened_results = non_flattened_results
@@ -2099,15 +2099,96 @@ where
             .skip(offset.unwrap_or(0))
             .skip_while(|txn| {
                 if let explorer::data_source::TransactionIdentifier::Hash(hash) = target {
-                    txn.hash != *hash.to_string()
+                    txn.hash != *hash
                 } else {
                     false
                 }
             })
             .take(range.num_transactions.get())
-            .collect::<Vec<explorer::data_source::TransactionSummary>>();
+            .collect::<Vec<explorer::data_source::TransactionSummary<Types>>>();
 
         Ok(flattened_results)
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: &explorer::data_source::TransactionIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>> {
+        let target = request;
+
+        let (query, params): (String, Vec<Box<dyn ToSql + Send + Sync>>) = match target {
+            explorer::data_source::TransactionIdentifier::Latest => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height = (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT 1
+                            )
+                            ORDER BY h.height DESC"
+                ),
+                vec![],
+            ),
+            explorer::data_source::TransactionIdentifier::HeightAndOffset(height, offset) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height = (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE t1.block_height = $1
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    OFFSET $2
+                                    LIMIT 1
+                            )
+                            ORDER BY h.height DESC"
+                ),
+                vec![Box::new(*height as i64), Box::new(*offset as i64)],
+            ),
+            explorer::data_source::TransactionIdentifier::Hash(hash) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height = (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE t1.hash = $1
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT 1
+                            )
+                            ORDER BY h.height DESC"
+                ),
+                vec![Box::new(hash.to_string())],
+            ),
+        };
+
+        let query_row = self.query_one(&query, params).await?;
+        let block = parse_block::<Types>(query_row)?;
+
+        let txns = block.enumerate().map(|(_, txn)| txn).collect::<Vec<_>>();
+
+        let (offset, txn) = match target {
+            explorer::data_source::TransactionIdentifier::Latest => {
+                txns.into_iter().enumerate().last().unwrap()
+            }
+            explorer::data_source::TransactionIdentifier::HeightAndOffset(_, offset) => {
+                txns.into_iter().enumerate().rev().nth(*offset).unwrap()
+            }
+            explorer::data_source::TransactionIdentifier::Hash(hash) => txns
+                .into_iter()
+                .enumerate()
+                .find(|(_, txn)| txn.commit() == *hash)
+                .unwrap(),
+        };
+
+        Ok(explorer::data_source::TransactionDetailResponse::try_from(
+            (&block, offset, txn),
+        )?)
     }
 }
 

@@ -771,7 +771,7 @@ where
         &self,
         request: explorer::data_source::GetTransactionSummariesRequest<Types>,
     ) -> Result<
-        Vec<explorer::data_source::TransactionSummary>,
+        Vec<explorer::data_source::TransactionSummary<Types>>,
         explorer::data_source::GetTransactionSummariesError,
     > {
         self.storage()
@@ -786,6 +786,30 @@ where
                     ))
                 }
                 _ => explorer::data_source::GetTransactionSummariesError::Unimplemented(
+                    explorer::errors::Unimplemented {},
+                ),
+            })
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: explorer::data_source::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::data_source::TransactionDetailResponse<Types>,
+        explorer::data_source::GetTransactionDetailError,
+    > {
+        self.storage()
+            .await
+            .get_transaction_detail(&request)
+            .await
+            .map_err(|err| match err {
+                QueryError::NotFound => {
+                    explorer::data_source::GetTransactionDetailError::TransactionNotFound(format!(
+                        "{:?}",
+                        request,
+                    ))
+                }
+                _ => explorer::data_source::GetTransactionDetailError::Unimplemented(
                     explorer::errors::Unimplemented {},
                 ),
             })

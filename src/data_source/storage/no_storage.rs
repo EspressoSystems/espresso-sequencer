@@ -205,7 +205,16 @@ where
     async fn get_transaction_summaries(
         &self,
         _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary>> {
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        _request: &explorer::data_source::TransactionIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>> {
         Err(QueryError::Error {
             message: "unimplemented".to_string(),
         })

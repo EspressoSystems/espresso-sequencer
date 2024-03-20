@@ -30,10 +30,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::VersionedDataSource,
-    explorer::data_source::{
-        BlockSummary, GetBlockSummariesRequest, GetTransactionSummariesRequest, TransactionSummary,
-    },
-    Header, Payload, QueryResult,
+    explorer, Header, Payload, QueryResult,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -120,11 +117,16 @@ where
 {
     async fn get_block_summaries(
         &self,
-        request: &GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<BlockSummary>>;
+        request: &explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::BlockSummary>>;
 
     async fn get_transaction_summaries(
         &self,
-        request: &GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<TransactionSummary>>;
+        request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>>;
+
+    async fn get_transaction_detail(
+        &self,
+        request: &explorer::data_source::TransactionIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>>;
 }

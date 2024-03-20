@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
-    Header, Payload, QueryError, Resolvable,
+    Header, Payload, QueryError, Resolvable, Transaction,
 };
 use crate::{node::BlockHash, types::HeightIndexed};
 use async_trait::async_trait;
@@ -281,17 +281,27 @@ pub struct FeeAttribution {
 /// [TransactionDetail] is a struct that represents the details of a specific
 /// transaction / payload contained within a Block.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TransactionDetail {
-    pub height: usize,
+#[serde(bound = "")]
+pub struct TransactionDetail<Types: NodeType> {
+    pub hash: TransactionHash<Types>,
+    pub height: u64,
     pub block_confirmed: bool,
-    pub index: usize,
-    pub num_transactions: usize,
-    pub size: usize,
-    pub hash: String,
+    pub offset: u64,
+    pub num_transactions: u64,
+    pub size: u64,
     pub time: Timestamp,
-    // pub sender: ProposerID,
     pub sequencing_fees: Vec<MonetaryValue>,
     pub fee_details: Vec<FeeAttribution>,
+}
+
+/// [TransactionDetailResponse] is a struct that represents the information
+/// returned concerning a request for a Transaction Detail. It contains the
+/// data payloads separately from the details of the Transaction itself.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct TransactionDetailResponse<Types: NodeType> {
+    pub details: TransactionDetail<Types>,
+    pub data: Vec<Transaction<Types>>,
 }
 
 /// [TransactionSummary] is a struct that represents a summary overview of a
@@ -299,8 +309,9 @@ pub struct TransactionDetail {
 /// all of the details of a [TransactionDetail], but it is useful for displaying
 /// information in a list of Transactions.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TransactionSummary {
-    pub hash: String,
+#[serde(bound = "")]
+pub struct TransactionSummary<Types: NodeType> {
+    pub hash: TransactionHash<Types>,
     pub rollups: Vec<NamespaceId>,
     pub height: u64,
     pub time: Timestamp,
@@ -311,7 +322,7 @@ impl<Types: NodeType>
         &BlockQueryData<Types>,
         usize,
         <Types as NodeType>::Transaction,
-    )> for TransactionSummary
+    )> for TransactionSummary<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
@@ -320,7 +331,7 @@ where
     type Error = TimestampConversionError;
 
     fn try_from(
-        (block, _index, transaction): (
+        (block, _offset, transaction): (
             &BlockQueryData<Types>,
             usize,
             <Types as NodeType>::Transaction,
@@ -329,10 +340,49 @@ where
         let seconds = i64::try_from(block.header.timestamp())?;
 
         Ok(Self {
-            hash: transaction.commitment().to_string(),
+            hash: transaction.commitment(),
             height: block.height(),
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
             rollups: vec![],
+        })
+    }
+}
+
+impl<Types: NodeType>
+    TryFrom<(
+        &BlockQueryData<Types>,
+        usize,
+        <Types as NodeType>::Transaction,
+    )> for TransactionDetailResponse<Types>
+where
+    BlockQueryData<Types>: HeightIndexed,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types>,
+{
+    type Error = TimestampConversionError;
+
+    fn try_from(
+        (block, offset, transaction): (
+            &BlockQueryData<Types>,
+            usize,
+            <Types as NodeType>::Transaction,
+        ),
+    ) -> Result<Self, Self::Error> {
+        let seconds = i64::try_from(block.header.timestamp())?;
+
+        Ok(Self {
+            details: TransactionDetail {
+                hash: transaction.commitment(),
+                height: block.height(),
+                block_confirmed: true,
+                offset: offset as u64,
+                num_transactions: block.num_transactions,
+                size: block.size,
+                time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
+                sequencing_fees: vec![],
+                fee_details: vec![],
+            },
+            data: vec![transaction],
         })
     }
 }
@@ -590,7 +640,7 @@ pub trait ExplorerDataSource<Types: NodeType> {
     async fn get_transaction_detail(
         &self,
         request: TransactionIdentifier<Types>,
-    ) -> Result<TransactionDetail, GetTransactionDetailError> {
+    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
         let _ = request;
         Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
     }
@@ -598,7 +648,7 @@ pub trait ExplorerDataSource<Types: NodeType> {
     async fn get_transaction_summaries(
         &self,
         request: GetTransactionSummariesRequest<Types>,
-    ) -> Result<Vec<TransactionSummary>, GetTransactionSummariesError> {
+    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError> {
         let _ = request;
         Err(GetTransactionSummariesError::Unimplemented(
             Unimplemented {},
