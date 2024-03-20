@@ -2878,6 +2878,7 @@ checksum = "16d45b981f5fa769e1d0343ebc2a44cfa88c9bc312eb681b676318b40cef6fb1"
 dependencies = [
  "chrono",
  "ethers-core",
+ "ethers-solc",
  "reqwest",
  "semver 1.0.21",
  "serde",
@@ -7608,6 +7609,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
+ "hotshot-state-prover",
  "hotshot-task",
  "hotshot-testing",
  "hotshot-types",

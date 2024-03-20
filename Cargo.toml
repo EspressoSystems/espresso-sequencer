@@ -34,14 +34,15 @@ async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1.77"
 base64 = "0.22"
 base64-bytes = "0.1"
-clap = { version = "4.4", features = ["derive", "env"] }
+clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
-ethers = { version = "2.0" }
+ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
+hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot-types", tag = "0.1.1" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.24" }
