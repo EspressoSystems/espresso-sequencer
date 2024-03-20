@@ -115,7 +115,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the full API server with all modules, default storage
-    command: sequencer -- http -- query -- status -- submit
+    command: sequencer -- http -- query -- state -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -148,7 +148,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the availability API only, using postgres for persistence
-    command: sequencer -- storage-sql -- http -- query
+    command: sequencer -- storage-sql -- http -- query -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -182,7 +182,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the status API only. Load config from the file system.
-    command: sequencer -- storage-fs -- http -- status
+    command: sequencer -- storage-fs -- http -- status -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -213,7 +213,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the submit API only. Load config from the file system.
-    command: sequencer -- storage-fs -- http -- submit
+    command: sequencer -- storage-fs -- http -- submit -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -243,7 +243,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the minimal server with healthcheck only
-    command: sequencer -- http
+    command: sequencer -- http -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
