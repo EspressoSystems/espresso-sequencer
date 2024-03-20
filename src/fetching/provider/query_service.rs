@@ -25,18 +25,19 @@ use hotshot_types::{
 };
 use jf_primitives::vid::VidScheme;
 use surf_disco::{Client, Url};
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Data availability provider backed by another instance of this query service.
 ///
 /// This fetcher implements the [`Provider`] interface by querying the REST API provided by another
 /// instance of this query service to try and retrieve missing objects.
 #[derive(Clone, Debug)]
-pub struct QueryServiceProvider {
-    client: Client<Error>,
+pub struct QueryServiceProvider<Ver: StaticVersionType> {
+    client: Client<Error, Ver>,
 }
 
-impl QueryServiceProvider {
-    pub fn new(url: Url) -> Self {
+impl<Ver: StaticVersionType> QueryServiceProvider<Ver> {
+    pub fn new(url: Url, _: Ver) -> Self {
         Self {
             client: Client::new(url),
         }
@@ -44,7 +45,7 @@ impl QueryServiceProvider {
 }
 
 #[async_trait]
-impl<Types> Provider<Types, PayloadRequest> for QueryServiceProvider
+impl<Types, Ver: StaticVersionType> Provider<Types, PayloadRequest> for QueryServiceProvider<Ver>
 where
     Types: NodeType,
 {
@@ -101,7 +102,7 @@ where
 }
 
 #[async_trait]
-impl<Types> Provider<Types, LeafRequest> for QueryServiceProvider
+impl<Types, Ver: StaticVersionType> Provider<Types, LeafRequest> for QueryServiceProvider<Ver>
 where
     Types: NodeType,
 {
@@ -129,7 +130,7 @@ where
 }
 
 #[async_trait]
-impl<Types> Provider<Types, VidCommonRequest> for QueryServiceProvider
+impl<Types, Ver: StaticVersionType> Provider<Types, VidCommonRequest> for QueryServiceProvider<Ver>
 where
     Types: NodeType,
 {
@@ -187,12 +188,13 @@ mod test {
         stream::StreamExt,
     };
     use generic_array::GenericArray;
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
     use rand::RngCore;
     use std::{future::IntoFuture, time::Duration};
     use tide_disco::{error::ServerError, App};
 
-    type Provider = TestProvider<QueryServiceProvider>;
+    type Provider = TestProvider<QueryServiceProvider<Version01>>;
 
     fn ignore<T>(_: T) {}
 
@@ -227,15 +229,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -447,15 +456,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -499,15 +515,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -555,15 +578,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -608,15 +638,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -662,10 +699,16 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus. We don't give it a
         // fetcher since transactions are always fetched passively anyways.
@@ -730,15 +773,22 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("availability", define_api(&Default::default()).unwrap())
-            .unwrap();
-        network.spawn("server", app.serve(format!("0.0.0.0:{port}")));
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
 
         // Start a data source which is not receiving events from consensus.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
         ));
         let mut data_source = builder(&db, &provider)
             .await
@@ -793,7 +843,7 @@ mod test {
     }
 
     async fn malicious_server(port: u16) {
-        let mut api = load_api::<(), ServerError>(
+        let mut api = load_api::<(), ServerError, Version01>(
             None::<std::path::PathBuf>,
             include_str!("../../../api/availability.toml"),
             vec![],
@@ -817,9 +867,11 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<(), ServerError>::with_state(());
+        let mut app = App::<(), ServerError, Version01>::with_state(());
         app.register_module("availability", api).unwrap();
-        app.serve(format!("0.0.0.0:{port}")).await.ok();
+        app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1)
+            .await
+            .ok();
     }
 
     #[async_std::test]
@@ -829,8 +881,10 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn("malicious server", malicious_server(port));
 
-        let provider =
-            QueryServiceProvider::new(format!("http://localhost:{port}").parse().unwrap());
+        let provider = QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
+        );
         provider.client.connect(None).await;
 
         // Query for a random payload, the server will respond with a different payload, and we

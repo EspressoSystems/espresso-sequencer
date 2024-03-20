@@ -209,6 +209,7 @@ pub mod testing {
     };
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
     use std::{fmt::Display, time::Duration};
     use tide_disco::App;
@@ -229,7 +230,7 @@ pub mod testing {
 
     pub enum DataSource {
         Sql(SqlDataSource<MockTypes, NoFetching>),
-        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider>),
+        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<Version01>>),
     }
 
     #[async_trait]
@@ -257,6 +258,7 @@ pub mod testing {
                         format!("http://localhost:{fetch_from_port}")
                             .parse()
                             .unwrap(),
+                        STATIC_VER_0_1,
                     );
                     Self::NoStorage(
                         FetchingDataSource::builder(NoStorage, provider)
@@ -298,10 +300,16 @@ pub mod testing {
             };
             tracing::info!("spawning server for missing data on port {fetch_from_port}");
             let api_data_source = network.data_source_index(1);
-            let mut app = App::<_, Error>::with_state(api_data_source);
-            app.register_module("availability", define_api(&Default::default()).unwrap())
-                .unwrap();
-            network.spawn("server", app.serve(format!("0.0.0.0:{fetch_from_port}")));
+            let mut app = App::<_, Error, Version01>::with_state(api_data_source);
+            app.register_module(
+                "availability",
+                define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            )
+            .unwrap();
+            network.spawn(
+                "server",
+                app.serve(format!("0.0.0.0:{fetch_from_port}"), STATIC_VER_0_1),
+            );
         }
 
         async fn handle_event(&mut self, event: &Event<MockTypes>) {

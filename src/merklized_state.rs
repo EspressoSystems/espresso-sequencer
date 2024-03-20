@@ -26,6 +26,7 @@ use snafu::{ResultExt, Snafu};
 use std::fmt::Debug;
 use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{api::load_api, QueryError};
 
@@ -77,16 +78,21 @@ impl Error {
     }
 }
 
-pub fn define_api<State, Types: NodeType, M: MerklizedState<Types>>(
+pub fn define_api<
+    State,
+    Types: NodeType,
+    M: MerklizedState<Types>,
+    Ver: StaticVersionType + 'static,
+>(
     options: &Options,
-) -> Result<Api<State, Error>, ApiError>
+) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M>,
     Types: NodeType,
     for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
-    let mut api = load_api::<State, Error>(
+    let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
         include_str!("../api/state.toml"),
         options.extensions.clone(),
