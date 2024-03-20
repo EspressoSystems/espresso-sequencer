@@ -95,7 +95,7 @@ typenum = "1"
 versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization.git", tag = "0.1.2" }
 
 # Dependencies enabled by feature "file-system-data-source".
-atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.3", optional = true }
+atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.4", optional = true }
 
 # Dependencies enabled by feature "sql-data-source".
 include_dir = { version = "0.7", optional = true }
