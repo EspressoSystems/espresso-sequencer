@@ -1,7 +1,7 @@
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
-    vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
+    vote_collection::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
 use async_broadcast::Sender;
 use async_lock::RwLock;
@@ -30,7 +30,7 @@ use hotshot_types::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::vote::HandleVoteEvent;
+use crate::vote_collection::HandleVoteEvent;
 use std::{marker::PhantomData, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;

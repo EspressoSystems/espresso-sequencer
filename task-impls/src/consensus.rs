@@ -1,7 +1,7 @@
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::{broadcast_event, cancel_task},
-    vote::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
+    vote_collection::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
 };
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -40,7 +40,7 @@ use hotshot_types::{
 use tracing::warn;
 use versioned_binary_serialization::version::Version;
 
-use crate::vote::HandleVoteEvent;
+use crate::vote_collection::HandleVoteEvent;
 use chrono::Utc;
 use std::{collections::HashSet, marker::PhantomData, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
