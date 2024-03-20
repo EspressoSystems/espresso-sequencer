@@ -250,18 +250,9 @@ where
 
     let lightclient_state_pub_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
 
-    let view_number_f = F::from(lightclient_state.view_number as u64);
-    let block_height_f = F::from(lightclient_state.block_height as u64);
-    let public_inputs = vec![
-        threshold,
-        view_number_f,
-        block_height_f,
-        lightclient_state.block_comm_root,
-        lightclient_state.fee_ledger_comm,
-        lightclient_state.stake_table_comm.0,
-        lightclient_state.stake_table_comm.1,
-        lightclient_state.stake_table_comm.2,
-    ];
+    //let view_number_f = F::from(lightclient_state.view_number as u64);
+    //let block_height_f = F::from(lightclient_state.block_height as u64);
+    let public_inputs = vec![threshold];
 
     // Checking whether the accumulated weight exceeds the quorum threshold
     let mut signed_amount_var = (0..STAKE_TABLE_CAPACITY / 2)

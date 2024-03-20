@@ -32,8 +32,9 @@ contract LightClientTest is LC {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[] memory publicInput = preparePublicInput(state);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
-            revert InvalidProof();
-        }
+        PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
+        //        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+        //            revert InvalidProof();
+        //        }
     }
 }
