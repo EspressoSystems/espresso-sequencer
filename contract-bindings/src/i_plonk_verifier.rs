@@ -786,6 +786,11 @@ pub mod i_plonk_verifier {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     pub struct BatchVerifyReturn(pub bool);
     ///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x202a4b1b`
@@ -795,6 +800,11 @@ pub mod i_plonk_verifier {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     pub struct VerifyReturn(pub bool);
 }
