@@ -140,7 +140,7 @@ Running the script will save a file with details about the deployment in `contra
 
 #### Benchmarking and profiling
 
-1. Deploy the light client contract on Sepolia 2. Set `SEPOLIA_RPC_URL`, `MNEMONIC` `ETHERSCAN_API_KEY` env vars run
+1. Deploy the light client contract on Sepolia. Set `SEPOLIA_RPC_URL`, `MNEMONIC` `ETHERSCAN_API_KEY` env vars and run:
    ```
    forge script contracts/script/LightClient.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" 3 5  --fork-url $SEPOLIA_RPC_URL --broadcast --verify  --chain-id sepolia
    ```
