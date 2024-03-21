@@ -8,7 +8,6 @@ pub mod address;
 pub mod bls_sig;
 pub mod bn254;
 pub mod bytes_lib;
-pub mod call_new_finalized_state;
 pub mod context_upgradeable;
 pub mod demo_box_v1;
 pub mod demo_box_v2;
