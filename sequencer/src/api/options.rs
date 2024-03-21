@@ -245,7 +245,7 @@ impl Options {
         let bind_version = Ver::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit(bind_version)?;
+            let submit_api = endpoints::submit()?;
             app.register_module("submit", submit_api)?;
         }
 
