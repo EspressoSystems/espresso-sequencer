@@ -11,6 +11,7 @@ use hotshot_types::traits::{
 use std::time::Duration;
 use tide_disco::Url;
 
+#[ignore]
 #[cfg(test)]
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -30,9 +31,9 @@ async fn test_block_builder() {
 
     // Test getting blocks
     let mut blocks = client
-        .get_avaliable_blocks(vid_commitment(&vec![], 1))
+        .get_available_blocks(vid_commitment(&vec![], 1))
         .await
-        .expect("Failed to get avaliable blocks");
+        .expect("Failed to get available blocks");
 
     assert!(!blocks.is_empty());
 

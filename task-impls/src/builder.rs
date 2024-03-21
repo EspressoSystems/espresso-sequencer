@@ -97,7 +97,7 @@ where
     /// # Errors
     /// - [`BuilderClientError::NotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn get_avaliable_blocks(
+    pub async fn get_available_blocks(
         &self,
         parent: VidCommitment,
     ) -> Result<Vec<BuilderCommitment>, BuilderClientError> {
