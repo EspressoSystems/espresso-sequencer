@@ -31,6 +31,9 @@ use serde::{Deserialize, Serialize};
 use std::{ops::Add, str::FromStr};
 use typenum::{Unsigned, U3};
 
+const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
+const FEE_MERKLE_TREE_HEIGHT: usize = 20;
+
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
     /// Frontier of Block Merkle Tree
@@ -41,14 +44,20 @@ pub struct ValidatedState {
 
 impl Default for ValidatedState {
     fn default() -> Self {
-        let block_merkle_tree =
-            BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
+        let block_merkle_tree = BlockMerkleTree::from_elems(
+            Some(BLOCK_MERKLE_TREE_HEIGHT),
+            Vec::<Commitment<Header>>::new(),
+        )
+        .unwrap();
 
         // Words of wisdom from @mrain: "capacity = arity^height"
         // "For index space 2^160, arity 256 (2^8),
         // you should set the height as 160/8=20"
-        let fee_merkle_tree =
-            FeeMerkleTree::from_kv_set(20, Vec::<(FeeAccount, FeeAmount)>::new()).unwrap();
+        let fee_merkle_tree = FeeMerkleTree::from_kv_set(
+            FEE_MERKLE_TREE_HEIGHT,
+            Vec::<(FeeAccount, FeeAmount)>::new(),
+        )
+        .unwrap();
         Self {
             block_merkle_tree,
             fee_merkle_tree,
@@ -444,7 +453,7 @@ impl MerklizedState<SeqTypes> for BlockMerkleTree {
     }
 
     fn tree_height() -> usize {
-        3
+        BLOCK_MERKLE_TREE_HEIGHT
     }
 }
 
@@ -691,7 +700,7 @@ impl MerklizedState<SeqTypes> for FeeMerkleTree {
     }
 
     fn tree_height() -> usize {
-        256
+        FEE_MERKLE_TREE_HEIGHT
     }
 }
 
