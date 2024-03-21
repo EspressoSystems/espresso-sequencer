@@ -18,7 +18,7 @@ use ethers::{
     types::{Address, U256},
 };
 use futures::FutureExt;
-use hotshot_contract_adapter::jellyfish::ParsedPlonkProof;
+use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
@@ -27,10 +27,12 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use hotshot_types::{
     light_client::{
-        CircuitField, LightClientState, PublicInput, StateSignaturesBundle, StateVerKey,
+        CircuitField, GenericPublicInput, LightClientState, PublicInput, StateSignaturesBundle,
+        StateVerKey,
     },
     traits::signature_key::StakeTableEntryType,
 };
+
 use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
@@ -40,6 +42,8 @@ use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
+
+type F = ark_ed_on_bn254::Fq;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -87,7 +91,7 @@ pub fn init_stake_table(
     Ok(st)
 }
 
-pub async fn init_stake_table_from_orchestrator(
+async fn init_stake_table_from_orchestrator(
     orchestrator_url: &Url,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     tracing::info!("Initializing stake table from HotShot orchestrator.");
@@ -96,7 +100,7 @@ pub async fn init_stake_table_from_orchestrator(
         match client.get::<bool>("api/peer_pub_ready").send().await {
             Ok(true) => {
                 match client
-                    .get::<NetworkConfig>("api/config_after_peer_collected")
+                    .get::<NetworkConfig>("api/get_config_after_peer_collected")
                     .send()
                     .await
                 {
@@ -134,6 +138,29 @@ pub async fn init_stake_table_from_orchestrator(
         }
         sleep(Duration::from_secs(2)).await;
     }
+}
+
+pub async fn light_client_genesis(
+    orchestrator_url: &Url,
+) -> anyhow::Result<ParsedLightClientState> {
+    let st = init_stake_table_from_orchestrator(orchestrator_url).await;
+    let (bls_comm, schnorr_comm, stake_comm) = st
+        .commitment(SnapshotVersion::LastEpochStart)
+        .expect("Commitment computation shouldn't fail.");
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+
+    let pi = vec![
+        u256_to_field(threshold),
+        F::from(0_u64), // Arbitrary value for view number
+        F::from(0_u64), // Arbitrary value for block height
+        F::from(0_u64), // Arbitrary value for state commitment
+        F::from(0_u64), // Arbitrary value for fee ledger commitment
+        bls_comm,
+        schnorr_comm,
+        stake_comm,
+    ];
+    let pi: GenericPublicInput<F> = pi.into();
+    Ok(pi.into())
 }
 
 pub fn load_proving_key() -> ProvingKey {
