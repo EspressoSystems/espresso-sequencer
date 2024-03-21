@@ -2316,7 +2316,7 @@ where
                         let (height, _timestamp, time, size, num_transactions) = row?;
                         histograms
                             .block_time
-                            .push(std::time::Duration::from_secs(time));
+                            .push(time);
                         histograms.block_size.push(size);
                         histograms.block_transactions.push(num_transactions);
                         histograms.block_heights.push(height);

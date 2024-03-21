@@ -27,7 +27,6 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     num::{NonZeroUsize, TryFromIntError},
-    time::Duration,
 };
 use tide_disco::StatusCode;
 use time::format_description::well_known::Rfc3339;
@@ -443,7 +442,7 @@ pub struct GenesisOverview {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExplorerHistograms {
-    pub block_time: Vec<Duration>,
+    pub block_time: Vec<u64>,
     pub block_size: Vec<u64>,
     pub block_transactions: Vec<u64>,
     pub block_heights: Vec<u64>,
@@ -466,6 +465,7 @@ where
 /// [GetBlockDetailError] represents an error that has occurred in response to
 /// the [GetBlockDetail] request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+
 pub enum GetBlockDetailError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
