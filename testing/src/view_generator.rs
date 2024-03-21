@@ -15,7 +15,7 @@ use commit::Committable;
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, VidDisperseShare, ViewNumber},
+    data::{DAProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
     message::Proposal,
     simple_certificate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -90,9 +90,8 @@ impl TestView {
             block_header: block_header.clone(),
             view_number: genesis_view,
             justify_qc: QuorumCertificate::genesis(),
-            timeout_certificate: None,
             upgrade_certificate: None,
-            view_sync_certificate: None,
+            proposal_certificate: None,
             proposer_id: public_key,
         };
 
@@ -266,6 +265,12 @@ impl TestView {
             None
         };
 
+        let proposal_certificate = if let Some(tc) = timeout_certificate {
+            Some(ViewChangeEvidence::Timeout(tc))
+        } else {
+            view_sync_certificate.map(ViewChangeEvidence::ViewSync)
+        };
+
         let block_header = TestBlockHeader {
             block_number: *next_view,
             timestamp: *next_view,
@@ -292,9 +297,8 @@ impl TestView {
             block_header: block_header.clone(),
             view_number: next_view,
             justify_qc: quorum_certificate.clone(),
-            timeout_certificate,
             upgrade_certificate,
-            view_sync_certificate,
+            proposal_certificate,
             proposer_id: public_key,
         };
 

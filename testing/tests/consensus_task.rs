@@ -5,13 +5,18 @@ use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*}
 use hotshot_testing::task_helpers::key_pair_for_id;
 use hotshot_testing::test_helpers::permute_input_with_index_order;
 use hotshot_testing::{
-    predicates::{exact, is_at_view_number, quorum_proposal_send, quorum_vote_send},
+    predicates::{
+        exact, is_at_view_number, quorum_proposal_send, quorum_vote_send, timeout_vote_send,
+    },
     script::{run_test_script, TestScriptStage},
     task_helpers::{build_system_handle, vid_scheme_from_view_number},
     view_generator::TestViewGenerator,
 };
-use hotshot_types::simple_vote::ViewSyncFinalizeData;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeData};
+use hotshot_types::{
+    data::{ViewChangeEvidence, ViewNumber},
+    traits::node_implementation::ConsensusTime,
+};
 use jf_primitives::vid::VidScheme;
 
 #[cfg(test)]
@@ -243,16 +248,6 @@ async fn test_consensus_vote_with_permuted_dac() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_finalize_propose() {
-    use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
-    use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
-    use hotshot_testing::{
-        predicates::{exact, is_at_view_number, quorum_proposal_send, timeout_vote_send},
-        script::{run_test_script, TestScriptStage},
-        task_helpers::{build_system_handle, vid_scheme_from_view_number},
-        view_generator::TestViewGenerator,
-    };
-    use hotshot_types::simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeData};
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -324,7 +319,10 @@ async fn test_view_sync_finalize_propose() {
     };
 
     // Handle the view sync finalize cert, get the requisite data, propose.
-    let cert = proposals[1].data.view_sync_certificate.clone().unwrap();
+    let cert = match proposals[1].data.proposal_certificate.clone().unwrap() {
+        ViewChangeEvidence::ViewSync(vsc) => vsc,
+        _ => panic!("Found a TC when there should have been a view sync cert"),
+    };
 
     // Generate the timeout votes for the timeouts that just occurred.
     let timeout_vote_view_2 = TimeoutVote::create_signed_vote(
@@ -448,7 +446,10 @@ async fn test_view_sync_finalize_vote() {
     // assumption.
 
     // Try to view sync at view 4.
-    let view_sync_cert = proposals[3].data.view_sync_certificate.clone().unwrap();
+    let cert = match proposals[3].data.proposal_certificate.clone().unwrap() {
+        ViewChangeEvidence::ViewSync(vsc) => vsc,
+        _ => panic!("Found a TC when there should have been a view sync cert"),
+    };
 
     // Highest qc so far is actually from view 1, so re-assign proposal 0 to the slot of proposal
     // 3.
@@ -458,7 +459,7 @@ async fn test_view_sync_finalize_vote() {
     let view_3 = TestScriptStage {
         inputs: vec![
             // Multiple timeouts in a row, so we call for a view sync
-            ViewSyncFinalizeCertificate2Recv(view_sync_cert),
+            ViewSyncFinalizeCertificate2Recv(cert),
             // Receive a proposal for view 4, but with the highest qc being from view 1.
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
         ],
@@ -488,6 +489,8 @@ async fn test_view_sync_finalize_vote() {
 /// Makes sure that, when a valid ViewSyncFinalize certificate is available, the consensus task
 /// will NOT vote when the certificate matches a different view number.
 async fn test_view_sync_finalize_vote_fail_view_number() {
+    use hotshot_testing::predicates::timeout_vote_send;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -495,7 +498,7 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 
     let view_sync_finalize_data: ViewSyncFinalizeData<TestTypes> = ViewSyncFinalizeData {
-        relay: 10,
+        relay: 4,
         round: ViewNumber::new(10),
     };
 
@@ -505,7 +508,7 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     let mut votes = Vec::new();
     let mut vids = Vec::new();
     let mut dacs = Vec::new();
-    for view in (&mut generator).take(2) {
+    for view in (&mut generator).take(3) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_quorum_vote(&handle));
@@ -539,39 +542,48 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     };
 
     let view_2 = TestScriptStage {
-        inputs: vec![
-            VidDisperseRecv(vids[1].0.clone()),
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-            DACRecv(dacs[1].clone()),
-        ],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(2))),
-            exact(QuorumProposalValidated(proposals[1].data.clone())),
-            exact(QuorumVoteSend(votes[1].clone())),
-        ],
-        asserts: vec![is_at_view_number(2)],
+        inputs: vec![Timeout(ViewNumber::new(2)), Timeout(ViewNumber::new(3))],
+        outputs: vec![timeout_vote_send(), timeout_vote_send()],
+        // Times out, so we now have a delayed view
+        asserts: vec![is_at_view_number(1)],
     };
 
-    let mut cert = proposals[2].data.view_sync_certificate.clone().unwrap();
+    // Now we're on the latest view. We want to set the quorum
+    // certificate to be the previous highest QC (before the timeouts). This will be distinct from
+    // the view sync cert, which is saying "hey, I'm _actually_ at view 4, but my highest QC is
+    // only for view 1." This forces the QC to be for view 1, and we can move on under this
+    // assumption.
 
-    // Trigger the timeout cert check
-    proposals[2].data.justify_qc.view_number = ViewNumber::new(1);
+    let mut cert = match proposals[3].data.proposal_certificate.clone().unwrap() {
+        ViewChangeEvidence::ViewSync(vsc) => vsc,
+        _ => panic!("Found a TC when there should have been a view sync cert"),
+    };
 
-    // Overwrite the cert view number with something invalid to force the failure. This should
-    // result in the vote NOT being sent below in the outputs.
+    // Force this to fail by making the cert happen for a view we've never seen. This will
+    // intentionally skip the proposal for this node so we can get the proposal and fail to vote.
     cert.view_number = ViewNumber::new(10);
+
+    // Highest qc so far is actually from view 1, so re-assign proposal 0 to the slot of proposal
+    // 3.
+    proposals[0].data.proposer_id = proposals[3].data.proposer_id;
+
+    // We introduce an error by setting a different view number as well, this makes the task check
+    // for a view sync or timeout cert. This value could be anything as long as it is not the
+    // previous view number.
+    proposals[0].data.justify_qc.view_number = proposals[3].data.justify_qc.view_number;
+
+    // Now at view 3 we receive the proposal received response.
     let view_3 = TestScriptStage {
         inputs: vec![
+            // Multiple timeouts in a row, so we call for a view sync
             ViewSyncFinalizeCertificate2Recv(cert),
-            QuorumProposalRecv(proposals[2].clone(), leaders[2]),
-            VidDisperseRecv(vids[2].0.clone()),
-            DACRecv(dacs[2].clone()),
+            // Receive a proposal for view 4, but with the highest qc being from view 1.
+            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
         ],
         outputs: vec![
-            /* The entire thing dies */
+            /* No outputs make it through. We never got a valid proposal, so we never vote */
         ],
-        // We are unable to move to the next view.
-        asserts: vec![is_at_view_number(2)],
+        asserts: vec![is_at_view_number(1)],
     };
 
     let consensus_state = ConsensusTaskState::<
