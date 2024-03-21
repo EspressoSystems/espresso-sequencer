@@ -81,13 +81,13 @@ impl<D: UpdateStateData<SeqTypes, BlockMerkleTree> + UpdateStateData<SeqTypes, F
         } = delta.as_ref();
 
         // Insert block merkle tree nodes
-        for block_delta in blocks_delta {
+        for delta in blocks_delta {
             let (_, proof) = block_merkle_tree
-                .lookup(block_delta)
+                .lookup(delta)
                 .expect_ok()
                 .context("Index not found in block merkle tree")?;
             let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
-                block_delta,
+                delta,
                 block_merkle_tree.height(),
             );
 
@@ -102,15 +102,16 @@ impl<D: UpdateStateData<SeqTypes, BlockMerkleTree> + UpdateStateData<SeqTypes, F
         }
 
         // Insert fee merkle tree nodes
-        for fee_delta in fees_delta {
+        for delta in fees_delta {
             let (_, proof) = fee_merkle_tree
-                .universal_lookup(fee_delta)
+                .universal_lookup(delta)
                 .expect_ok()
                 .context("Index not found in fee merkle tree")?;
-            let path = <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
-                fee_delta,
-                block_merkle_tree.height(),
-            );
+            let path: Vec<usize> =
+                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
+                    delta,
+                    fee_merkle_tree.height(),
+                );
 
             <D as UpdateStateData<SeqTypes, FeeMerkleTree>>::insert_merkle_nodes(
                 storage,

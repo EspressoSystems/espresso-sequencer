@@ -522,7 +522,7 @@ pub mod testing {
             self.priv_keys.len()
         }
 
-        pub async fn init_nodes<Ver: StaticVersionType>(
+        pub async fn init_nodes<Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
         ) -> Vec<SequencerContext<network::Memory, Ver>> {
@@ -540,7 +540,7 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<Ver: StaticVersionType>(
+        pub async fn init_node<Ver: StaticVersionType + 'static>(
             &self,
             i: usize,
             state: ValidatedState,
