@@ -715,9 +715,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         &self,
         bind_version: VER,
     ) -> Option<mpsc::Receiver<(M, network::ResponseChannel<M>)>> {
-        let Some(mut internal_rx) = self.inner.requests_rx.lock().await.take() else {
-            return None;
-        };
+        let mut internal_rx = self.inner.requests_rx.lock().await.take()?;
         let handle = self.inner.handle.clone();
         let (mut tx, rx) = mpsc::channel(100);
         async_spawn(async move {

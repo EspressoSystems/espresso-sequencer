@@ -42,9 +42,7 @@ impl RequestResponseState {
                     request_id,
                     response,
                 } => {
-                    let Some(chan) = self.request_map.remove(&request_id) else {
-                        return None;
-                    };
+                    let chan = self.request_map.remove(&request_id)?;
                     if chan.send(Some(response)).is_err() {
                         tracing::warn!("Failed to send resonse to client, channel closed.");
                     }
@@ -57,9 +55,7 @@ impl RequestResponseState {
                 error,
             } => {
                 tracing::warn!("Error Sending Request {:?}", error);
-                let Some(chan) = self.request_map.remove(&request_id) else {
-                    return None;
-                };
+                let chan = self.request_map.remove(&request_id)?;
                 if chan.send(None).is_err() {
                     tracing::warn!("Failed to send resonse to client, channel closed.");
                 }

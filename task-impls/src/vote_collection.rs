@@ -85,9 +85,7 @@ impl<
             );
             return None;
         }
-        let Some(ref mut accumulator) = self.accumulator else {
-            return None;
-        };
+        let accumulator = self.accumulator.as_mut()?;
         match accumulator.accumulate(vote, &self.membership) {
             Either::Left(()) => None,
             Either::Right(cert) => {
