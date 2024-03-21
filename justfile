@@ -69,7 +69,7 @@ gen-bindings:
     # the source tree so that the deploy script can be compiled whenever the bindings are up to
     # date, without needed to recompile the contracts.
     mkdir -p contract-bindings/artifacts
-    cp contracts/out/LightClient.sol/LightClient.json contract-bindings/artifacts/
+    jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
 
     cargo fmt --all
     cargo sort -g -w
