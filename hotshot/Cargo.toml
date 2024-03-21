@@ -34,10 +34,8 @@ custom_debug = { workspace = true }
 dashmap = "5.5.1"
 derive_more = "0.99.17"
 either = { workspace = true }
-embed-doc-image = "0.1.4"
 ethereum-types = { workspace = true }
 futures = { workspace = true }
-hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
 hotshot-types = { path = "../types" }
@@ -80,7 +78,6 @@ cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
 [dev-dependencies]
 blake3 = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"] }
-local-ip-address = "0.6.1"
 toml = { workspace = true }
 
 [lints]

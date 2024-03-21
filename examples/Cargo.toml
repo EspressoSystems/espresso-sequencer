@@ -107,7 +107,6 @@ commit = { workspace = true }
 custom_debug = { workspace = true }
 dashmap = "5.5.1"
 either = { workspace = true }
-embed-doc-image = "0.1.4"
 futures = { workspace = true }
 hotshot-web-server = { version = "0.5.26", path = "../web_server", default-features = false }
 hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }

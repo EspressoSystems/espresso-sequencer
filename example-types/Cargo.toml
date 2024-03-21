@@ -22,7 +22,6 @@ either = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot" }
 hotshot-types = { path = "../types" }
-hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
 rand = { workspace = true }
 snafu = { workspace = true }

@@ -35,7 +35,6 @@ tide = { version = "0.16", optional = true, default-features = false, features =
 tracing = { workspace = true }
 versioned-binary-serialization = { workspace = true }
 void = "1.0.2"
-dashmap = "5.5.3"
 lazy_static = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
