@@ -3,7 +3,7 @@ use hotshot_example_types::{
     node_types::TestTypes,
 };
 use hotshot_task_impls::builder::{BuilderClient, BuilderClientError};
-use hotshot_testing::block_builder::run_builder;
+use hotshot_testing::block_builder::run_random_builder;
 use hotshot_types::traits::BlockPayload;
 use hotshot_types::traits::{
     block_contents::vid_commitment, node_implementation::NodeType, signature_key::SignatureKey,
@@ -23,7 +23,7 @@ async fn test_block_builder() {
     let port = portpicker::pick_unused_port().expect("Could not find an open port");
     let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
-    run_builder(api_url.clone());
+    run_random_builder(api_url.clone());
 
     let client: BuilderClient<TestTypes, Version01> = BuilderClient::new(api_url);
     assert!(client.connect(Duration::from_millis(100)).await);
@@ -34,7 +34,7 @@ async fn test_block_builder() {
         .await
         .expect("Failed to get avaliable blocks");
 
-    assert_eq!(blocks.len(), 1);
+    assert!(!blocks.is_empty());
 
     // Test claiming available block
     let signature = {
