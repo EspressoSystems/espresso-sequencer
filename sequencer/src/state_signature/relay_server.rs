@@ -183,7 +183,7 @@ pub struct Options {
 /// Set up APIs for relay server
 fn define_api<State, Ver: StaticVersionType + 'static>(
     options: &Options,
-    bind_version: Ver,
+    _: Ver,
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
@@ -212,7 +212,7 @@ where
                 state: lcstate,
                 signature,
             } = req
-                .body_auto::<StateSignatureRequestBody, Ver>(bind_version)
+                .body_auto::<StateSignatureRequestBody, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
             state.post_signature(key, lcstate, signature)
         }

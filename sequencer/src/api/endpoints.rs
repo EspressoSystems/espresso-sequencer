@@ -55,7 +55,7 @@ pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof
 
 pub(super) type AvailState<N, D, Ver: StaticVersionType> = Arc<RwLock<StorageState<N, D, Ver>>>;
 
-pub(super) fn availability<N, D, Ver: StaticVersionType>(
+pub(super) fn availability<N, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> anyhow::Result<Api<AvailState<N, D, Ver>, availability::Error, Ver>>
 where
@@ -131,7 +131,7 @@ where
     Ok(api)
 }
 
-pub(super) fn node<N, D, Ver: StaticVersionType>(
+pub(super) fn node<N, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> anyhow::Result<Api<AvailState<N, D, Ver>, node::Error, Ver>>
 where
@@ -144,10 +144,7 @@ where
     )?;
     Ok(api)
 }
-
-pub(super) fn submit<N, S, Ver: StaticVersionType>(
-    bind_version: Ver,
-) -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, S, Ver: StaticVersionType + 'static>() -> anyhow::Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
@@ -159,7 +156,7 @@ where
     api.post("submit", |req, state| {
         async move {
             let tx = req
-                .body_auto::<Transaction, Ver>(bind_version)
+                .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
             let hash = tx.commit();
             state
@@ -175,7 +172,7 @@ where
     Ok(api)
 }
 
-pub(super) fn state_signature<N, S, Ver: StaticVersionType>(
+pub(super) fn state_signature<N, S, Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> anyhow::Result<Api<S, Error, Ver>>
 where
@@ -205,7 +202,9 @@ where
     Ok(api)
 }
 
-pub(super) fn state<S, Ver: StaticVersionType>(_: Ver) -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn state<S, Ver: StaticVersionType + 'static>(
+    _: Ver,
+) -> anyhow::Result<Api<S, Error, Ver>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateDataSource,
