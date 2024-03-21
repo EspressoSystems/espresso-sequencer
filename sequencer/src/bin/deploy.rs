@@ -17,13 +17,12 @@ use ethers::{
 };
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_state_prover::service::light_client_genesis;
-use serde_json::Value;
 use std::{
     collections::HashMap,
     fs::File,
-    io::{stdout, BufReader, Write},
+    io::{stdout, Write},
     ops::Deref,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use url::Url;
 
@@ -295,13 +294,15 @@ async fn deploy_light_client_contract<M: Middleware + 'static>(
         )
         .await?;
 
-    // Link with LightClient's bytecode artifacts
-    let bytecode_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../contracts/out/LightClient.sol/LightClient.json");
-    let json: Value = serde_json::from_reader(BufReader::new(File::open(bytecode_path)?))?;
-
-    let mut bytecode =
-        serde_json::from_value::<BytecodeObject>(json["bytecode"]["object"].clone())?;
+    // Link with LightClient's bytecode artifacts. We include the unlinked bytecode for the contract
+    // in this binary so that the contract artifacts do not have to be distributed with the binary.
+    // This should be fine because if the bindings we are importing are up to date, so should be the
+    // contract artifacts: this is no different than foundry inlining bytecode objects in generated
+    // bindings, except that foundry doesn't provide the bytecode for contracts that link with
+    // libraries, so we have to do it ourselves.
+    let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
+        "../../../contract-bindings/artifacts/LightClient_bytecode.json"
+    ))?;
     bytecode
         .link_fully_qualified(
             "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
