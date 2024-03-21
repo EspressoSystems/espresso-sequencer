@@ -63,7 +63,7 @@ pub trait SequencerDataSource:
 pub type Provider = AnyProvider<SeqTypes>;
 
 /// Create a provider for fetching missing data from a list of peer query services.
-pub fn provider<Ver: StaticVersionType>(
+pub fn provider<Ver: StaticVersionType + 'static>(
     peers: impl IntoIterator<Item = Url>,
     bind_version: Ver,
 ) -> Provider {

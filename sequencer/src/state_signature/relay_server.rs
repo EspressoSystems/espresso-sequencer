@@ -212,7 +212,7 @@ where
                 state: lcstate,
                 signature,
             } = req
-                .body_auto::<StateSignatureRequestBody, Ver>()
+                .body_auto::<StateSignatureRequestBody, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
             state.post_signature(key, lcstate, signature)
         }

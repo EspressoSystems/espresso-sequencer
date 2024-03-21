@@ -219,7 +219,7 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, S, Ver: StaticVersionType>(
+    fn init_hotshot_modules<N, S, Ver: StaticVersionType + 'static>(
         &self,
         app: &mut App<S, Error, Ver>,
     ) -> anyhow::Result<()>
