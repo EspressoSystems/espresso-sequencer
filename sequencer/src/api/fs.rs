@@ -1,12 +1,7 @@
 use super::data_source::{Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
-use hotshot_query_service::{
-    data_source::{storage::FileSystemStorage, FileSystemDataSource},
-    merklized_state::MerklizedState,
-    merklized_state::{MerklizedStateDataSource, Snapshot, UpdateStateData},
-    QueryError, QueryResult,
-};
+use hotshot_query_service::{data_source::FileSystemDataSource, merklized_state::MerklizedState};
 use jf_primitives::merkle_tree::prelude::MerklePath;
 use std::path::Path;
 
@@ -28,36 +23,14 @@ impl SequencerDataSource for DataSource {
 
         Ok(data_source)
     }
-}
 
-// TODO : Move these blanket impls into query service
-#[async_trait]
-impl<State: MerklizedState<SeqTypes>> UpdateStateData<SeqTypes, State>
-    for FileSystemStorage<SeqTypes>
-{
-    async fn insert_merkle_nodes(
+    async fn store_state<S: MerklizedState<SeqTypes>>(
         &mut self,
-        _path: MerklePath<State::Entry, State::Key, State::T>,
+        _path: MerklePath<S::Entry, S::Key, S::T>,
         _traversal_path: Vec<usize>,
         _block_number: u64,
-    ) -> QueryResult<()> {
+    ) -> anyhow::Result<()> {
         Ok(())
-    }
-}
-
-// TODO : Move these blanket impls into query service
-#[async_trait]
-impl<State> MerklizedStateDataSource<SeqTypes, State> for FileSystemStorage<SeqTypes>
-where
-    State: MerklizedState<SeqTypes> + 'static,
-{
-    /// Retrieves a Merkle path from the database
-    async fn get_path(
-        &self,
-        _snapshot: Snapshot<SeqTypes, State>,
-        _key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
-        Err(QueryError::Missing)
     }
 }
 

@@ -13,7 +13,7 @@ use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_query_service::{
     data_source::{UpdateDataSource, VersionedDataSource},
-    merklized_state::{UpdateStateData, UpdateStateStorage},
+    merklized_state::UpdateStateStorage,
     Leaf,
 };
 use jf_primitives::merkle_tree::{MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -60,12 +60,15 @@ where
 }
 
 #[async_trait]
-impl<D: UpdateStateData<SeqTypes, BlockMerkleTree> + UpdateStateData<SeqTypes, FeeMerkleTree>>
-    UpdateStateStorage<SeqTypes, D> for ValidatedState
+impl<N, D, Ver: StaticVersionType> UpdateStateStorage<SeqTypes, StorageState<N, D, Ver>>
+    for ValidatedState
+where
+    N: network::Type,
+    D: SequencerDataSource + Send + Sync,
 {
     async fn update_storage(
         &self,
-        storage: &mut D,
+        storage: &mut StorageState<N, D, Ver>,
         leaf: &Leaf<SeqTypes>,
         delta: Arc<Delta>,
     ) -> anyhow::Result<()> {
@@ -91,14 +94,11 @@ impl<D: UpdateStateData<SeqTypes, BlockMerkleTree> + UpdateStateData<SeqTypes, F
                 block_merkle_tree.height(),
             );
 
-            <D as UpdateStateData<SeqTypes, BlockMerkleTree>>::insert_merkle_nodes(
-                storage,
-                proof.proof,
-                path,
-                block_number,
-            )
-            .await
-            .context("failed to insert merkle nodes for block merkle tree")?;
+            storage
+                .inner_mut()
+                .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
+                .await
+                .context("failed to insert merkle nodes for block merkle tree")?;
         }
 
         // Insert fee merkle tree nodes
@@ -113,14 +113,11 @@ impl<D: UpdateStateData<SeqTypes, BlockMerkleTree> + UpdateStateData<SeqTypes, F
                     fee_merkle_tree.height(),
                 );
 
-            <D as UpdateStateData<SeqTypes, FeeMerkleTree>>::insert_merkle_nodes(
-                storage,
-                proof.proof,
-                path,
-                block_number,
-            )
-            .await
-            .context("failed to insert merkle nodes for fee merkle tree")?;
+            storage
+                .inner_mut()
+                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
+                .await
+                .context("failed to insert merkle nodes for block merkle tree")?;
         }
 
         Ok(())

@@ -3,11 +3,7 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{
-    network, persistence,
-    state::{BlockMerkleTree, FeeMerkleTree, ValidatedState},
-    Node, SeqTypes,
-};
+use crate::{network, persistence, state::ValidatedState, Node, SeqTypes};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
@@ -15,11 +11,12 @@ use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
-    merklized_state::{MerklizedStateDataSource, UpdateStateData},
+    merklized_state::MerklizedState,
     node::NodeDataSource,
     status::StatusDataSource,
 };
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use jf_primitives::merkle_tree::prelude::MerklePath;
 use tide_disco::Url;
 use versioned_binary_serialization::version::StaticVersionType;
 
@@ -56,16 +53,19 @@ pub trait SequencerDataSource:
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
     + VersionedDataSource
-    + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
-    + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
-    + UpdateStateData<SeqTypes, BlockMerkleTree>
-    + UpdateStateData<SeqTypes, FeeMerkleTree>
     + Sized
 {
     type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
+    /// Wrapper function to store merkle nodes
+    async fn store_state<S: MerklizedState<SeqTypes>>(
+        &mut self,
+        path: MerklePath<S::Entry, S::Key, S::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> anyhow::Result<()>;
 }
 
 /// Provider for fetching missing data for the query service.

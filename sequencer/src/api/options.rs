@@ -6,11 +6,13 @@ use super::{
     },
     endpoints, fs, sql,
     update::update_loop,
+    StorageState,
 };
 use crate::{
     context::SequencerContext,
     network, persistence,
     state::{BlockMerkleTree, FeeMerkleTree},
+    SeqTypes,
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
@@ -18,6 +20,7 @@ use clap::Parser;
 use futures::future::BoxFuture;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
+    merklized_state::MerklizedStateDataSource,
     status::{self, UpdateStatusData},
     Error,
 };
@@ -35,6 +38,7 @@ pub struct Options {
     pub submit: Option<Submit>,
     pub status: Option<Status>,
     pub state: Option<State>,
+    pub state_storage: Option<StateStorage>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -47,6 +51,7 @@ impl From<Http> for Options {
             submit: None,
             status: None,
             state: None,
+            state_storage: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -109,7 +114,7 @@ impl Options {
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module::<N, sql::DataSource, Ver>(
+                self.init_with_query_module_sql::<N, sql::DataSource, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -117,7 +122,7 @@ impl Options {
                 )
                 .await
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module::<N, fs::DataSource, Ver>(
+                self.init_with_query_module_fs::<N, fs::DataSource, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -166,18 +171,19 @@ impl Options {
         }
     }
 
-    async fn init_with_query_module<N, D, Ver: StaticVersionType + 'static>(
-        self,
-        query_opt: Query,
-        mod_opt: D::Options,
+    async fn init_app_modules<N, D, Ver: StaticVersionType + 'static>(
+        &self,
+        ds: D,
         init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
         bind_version: Ver,
-    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    ) -> anyhow::Result<(
+        SequencerContext<N, Ver>,
+        App<Arc<RwLock<StorageState<N, D, Ver>>>, Error, Ver>,
+    )>
     where
         N: network::Type,
         D: SequencerDataSource + Send + Sync + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
         let metrics = ds.populate_metrics();
 
         // Start up handle
@@ -207,24 +213,75 @@ impl Options {
         // Initialize availability and node APIs (these both use the same data source).
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
-        // Initialize merklized state module for block merkle tree
-        app.register_module(
-            "state/blocks",
-            endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
-        )?;
-        // Initialize merklized state module for fee merkle tree
-        app.register_module(
-            "state/fees",
-            endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
-        )?;
 
         self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
+
+        Ok((context, app))
+    }
+
+    async fn init_with_query_module_fs<N, D, Ver: StaticVersionType + 'static>(
+        &self,
+        query_opt: Query,
+        mod_opt: D::Options,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        bind_version: Ver,
+    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    where
+        N: network::Type,
+        D: SequencerDataSource + Send + Sync + 'static,
+    {
+        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+
+        let (mut context, app) = self
+            .init_app_modules(ds, init_context, bind_version)
+            .await?;
+
         context.spawn(
             "API server",
             app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
         );
+        Ok(context)
+    }
 
+    async fn init_with_query_module_sql<N, D, Ver: StaticVersionType + 'static>(
+        self,
+        query_opt: Query,
+        mod_opt: D::Options,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        bind_version: Ver,
+    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    where
+        N: network::Type,
+        D: SequencerDataSource
+            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
+            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+        let (mut context, mut app) = self
+            .init_app_modules(ds, init_context, bind_version)
+            .await?;
+
+        if self.state_storage.is_some() {
+            // Initialize merklized state module for block merkle tree
+            app.register_module(
+                "state/blocks",
+                endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
+            )?;
+            // Initialize merklized state module for fee merkle tree
+            app.register_module(
+                "state/fees",
+                endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
+            )?;
+        }
+
+        context.spawn(
+            "API server",
+            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+        );
         Ok(context)
     }
 
@@ -293,3 +350,6 @@ pub struct Query {
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
     pub peers: Vec<Url>,
 }
+
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct StateStorage;
