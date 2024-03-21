@@ -611,9 +611,9 @@ mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
+    use es_version::SequencerVersion;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
-
     use hotshot_types::{
         event::LeafInfo,
         traits::block_contents::{
@@ -621,13 +621,12 @@ mod test {
         },
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
-    use versioned_binary_serialization::version::StaticVersion;
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_logging();
         setup_backtrace();
-        let ver = StaticVersion::<1, 0> {};
+        let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
         let config = TestConfig::default();
         let handles = config.init_nodes(ver).await;
@@ -654,7 +653,7 @@ mod test {
         setup_backtrace();
 
         let success_height = 30;
-        let ver = StaticVersion::<1, 0> {};
+        let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
         let config = TestConfig::default();
         let handles = config.init_nodes(ver).await;
