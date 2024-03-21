@@ -21,7 +21,7 @@ use crate::{Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient<Ver: StaticVersionType> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type HotShotClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
 
 #[derive(Clone, Debug)]
 pub struct CommitmentTaskOptions {

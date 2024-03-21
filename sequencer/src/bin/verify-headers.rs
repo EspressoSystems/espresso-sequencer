@@ -51,8 +51,7 @@ struct Options {
     url: Url,
 }
 
-type SequencerClient<Ver: StaticVersionType> =
-    surf_disco::Client<hotshot_query_service::Error, Ver>;
+type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
 
 async fn verify_header<Ver: StaticVersionType>(
     opt: &Options,
@@ -169,10 +168,9 @@ async fn main() {
     setup_backtrace();
 
     let opt = Arc::new(Options::parse());
-    let seq = Arc::new(SequencerClient::<
-        { es_version::MAJOR },
-        { es_version::MINOR },
-    >::new(opt.url.clone()));
+    let seq = Arc::new(SequencerClient::<es_version::SequencerVersion>::new(
+        opt.url.clone(),
+    ));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

@@ -390,7 +390,7 @@ mod test {
             txs: Vec<Transaction>,
         }
 
-        let vid = vid_scheme(NUM_STORAGE_NODES);
+        let mut vid = vid_scheme(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
@@ -675,7 +675,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let vid = vid_scheme(NUM_STORAGE_NODES);
+        let mut vid = vid_scheme(NUM_STORAGE_NODES);
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.into_iter().enumerate() {
             let payload_byte_len = test_case.payload.len();
@@ -744,7 +744,7 @@ mod test {
         // test: cannot make a proof for such a small block
         // assert!(block.transaction_with_proof(&0).is_none());
 
-        let vid = vid_scheme(NUM_STORAGE_NODES);
+        let mut vid = vid_scheme(NUM_STORAGE_NODES);
         let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
         // make a fake proof for a nonexistent tx in the small block
@@ -787,7 +787,7 @@ mod test {
         setup_backtrace();
         let mut rng = jf_utils::test_rng();
         let entry_len = TxTableEntry::byte_len();
-        let vid = vid_scheme(NUM_STORAGE_NODES);
+        let mut vid = vid_scheme(NUM_STORAGE_NODES);
 
         // test 1
         let mut ns1 = vec![0; 100];

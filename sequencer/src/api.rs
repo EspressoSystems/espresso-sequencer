@@ -25,7 +25,9 @@ struct State<N: network::Type, Ver: StaticVersionType> {
     handle: SystemContextHandle<SeqTypes, Node<N>>,
 }
 
-impl<N: network::Type, Ver: StaticVersionType> From<&SequencerContext<N, Ver>> for State<N, Ver> {
+impl<N: network::Type, Ver: StaticVersionType + 'static> From<&SequencerContext<N, Ver>>
+    for State<N, Ver>
+{
     fn from(ctx: &SequencerContext<N, Ver>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
@@ -34,7 +36,7 @@ impl<N: network::Type, Ver: StaticVersionType> From<&SequencerContext<N, Ver>> f
     }
 }
 
-type StorageState<N, D, Ver: StaticVersionType> = ExtensibleDataSource<D, State<N, Ver>>;
+type StorageState<N, D, Ver> = ExtensibleDataSource<D, State<N, Ver>>;
 
 impl<N: network::Type, D, Ver: StaticVersionType> SubmitDataSource<N> for StorageState<N, D, Ver> {
     fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {

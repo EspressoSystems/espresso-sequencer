@@ -265,7 +265,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
     }
 }
 
-async fn server<Ver: StaticVersionType>(port: u16, bind_version: Ver) {
+async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
     if let Err(err) = App::<(), ServerError, Ver>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await

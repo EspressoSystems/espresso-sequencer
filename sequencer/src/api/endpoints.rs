@@ -53,7 +53,7 @@ impl From<(FeeAccountProof, U256)> for AccountQueryData {
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
-pub(super) type AvailState<N, D, Ver: StaticVersionType> = Arc<RwLock<StorageState<N, D, Ver>>>;
+pub(super) type AvailState<N, D, Ver> = Arc<RwLock<StorageState<N, D, Ver>>>;
 
 pub(super) fn availability<N, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
@@ -277,7 +277,7 @@ where
     Ok(api)
 }
 
-pub(super) fn merklized_state<N, D, S, Ver: StaticVersionType>(
+pub(super) fn merklized_state<N, D, S, Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> anyhow::Result<Api<AvailState<N, D, Ver>, merklized_state::Error, Ver>>
 where

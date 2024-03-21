@@ -4,6 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::sleep;
 use clap::Parser;
 use commit::Committable;
+use es_version::SequencerVersion;
 use futures::future::join_all;
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::SeqTypes;

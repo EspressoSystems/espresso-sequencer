@@ -36,7 +36,7 @@ pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct SequencerContext<N: network::Type, Ver: StaticVersionType> {
+pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
     handle: Consensus<N>,
@@ -58,7 +58,7 @@ pub struct SequencerContext<N: network::Type, Ver: StaticVersionType> {
     detached: bool,
 }
 
-impl<N: network::Type, Ver: StaticVersionType> SequencerContext<N, Ver> {
+impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver> {
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
@@ -221,7 +221,7 @@ impl<N: network::Type, Ver: StaticVersionType> SequencerContext<N, Ver> {
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType> Drop for SequencerContext<N, Ver> {
+impl<N: network::Type, Ver: StaticVersionType + 'static> Drop for SequencerContext<N, Ver> {
     fn drop(&mut self) {
         if !self.detached {
             async_std::task::block_on(self.shut_down());

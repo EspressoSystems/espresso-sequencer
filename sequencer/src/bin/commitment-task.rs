@@ -80,13 +80,10 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<{ es_version::MAJOR }, { es_version::MINOR }>(
-        &hotshot_contract_options,
-    )
-    .await;
+    run_hotshot_commitment_task::<es_version::SequencerVersion>(&hotshot_contract_options).await;
 }
 
-fn start_http_server<Ver: StaticVersionType>(
+fn start_http_server<Ver: StaticVersionType + 'static>(
     port: u16,
     hotshot_address: Address,
     bind_version: Ver,
