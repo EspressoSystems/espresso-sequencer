@@ -185,9 +185,10 @@ impl OrchestratorClient {
         OrchestratorClient { client, identity }
     }
 
-    /// Sends an identify message to the orchestrator and attempts to get its config
-    /// Returns both the `node_index` and the run configuration without peer's public config from the orchestrator
-    /// Will block until both are returned
+    /// Get the config from the orchestrator.
+    /// If the identity is provided, register the identity with the orchestrator.
+    /// If not, just retrieving the config (for passive observers)
+    ///
     /// # Panics
     /// if unable to convert the node index from usize into u64
     /// (only applicable on 32 bit systems)
@@ -244,6 +245,29 @@ impl OrchestratorClient {
         self.wait_for_fn_from_orchestrator(cur_node_index).await
     }
 
+    /// Requests the configuration from the orchestrator with the stipulation that
+    /// a successful call requires all nodes to be registered.
+    ///
+    /// Does not fail, retries internally until success.
+    pub async fn get_config_after_collection<K: SignatureKey, E: ElectionConfig>(
+        &self,
+    ) -> NetworkConfig<K, E> {
+        // Define the request for post-register configurations
+        let get_config_after_collection = |client: Client<ClientError, OrchestratorVersion>| {
+            async move {
+                client
+                    .get("api/get_config_after_peer_collected")
+                    .send()
+                    .await
+            }
+            .boxed()
+        };
+
+        // Loop until successful
+        self.wait_for_fn_from_orchestrator(get_config_after_collection)
+            .await
+    }
+
     /// Sends my public key to the orchestrator so that it can collect all public keys
     /// And get the updated config
     /// Blocks until the orchestrator collects all peer's public keys/configs
@@ -270,12 +294,7 @@ impl OrchestratorClient {
         self.wait_for_fn_from_orchestrator::<_, _, ()>(wait_for_all_nodes_pub_key)
             .await;
 
-        // get the newest updated config
-        self.client
-            .get("api/get_config_after_peer_collected")
-            .send()
-            .await
-            .expect("Unable to get the updated config")
+        self.get_config_after_collection().await
     }
 
     /// Tells the orchestrator this validator is ready to start

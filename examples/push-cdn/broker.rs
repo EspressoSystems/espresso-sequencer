@@ -2,10 +2,9 @@
 //! a `Broker` object.
 
 use anyhow::{Context, Result};
-use cdn_broker::reexports::connection::protocols::{Quic, Tcp};
 use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config, ConfigBuilder};
 use clap::Parser;
-use hotshot::traits::implementations::WrappedSignatureKey;
+use hotshot::traits::implementations::{ProductionDef, WrappedSignatureKey};
 use hotshot::types::SignatureKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -80,13 +79,7 @@ async fn main() -> Result<()> {
 
     // Create new `Broker`
     // Uses TCP from broker connections and Quic for user connections.
-    let broker = Broker::<
-        WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>,
-        WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>,
-        Tcp,
-        Quic,
-    >::new(broker_config)
-    .await?;
+    let broker = Broker::<ProductionDef<TestTypes>>::new(broker_config).await?;
 
     // Start the main loop, consuming it
     broker.start().await?;

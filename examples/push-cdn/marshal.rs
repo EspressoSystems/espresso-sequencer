@@ -2,12 +2,10 @@
 //! a `Marshal` object with the `HotShot` types.
 //!
 use anyhow::{Context, Result};
-use cdn_broker::reexports::connection::protocols::Quic;
 use cdn_marshal::{ConfigBuilder, Marshal};
 use clap::Parser;
-use hotshot::traits::implementations::WrappedSignatureKey;
+use hotshot::traits::implementations::ProductionDef;
 use hotshot_example_types::node_types::TestTypes;
-use hotshot_types::traits::node_implementation::NodeType;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -41,9 +39,7 @@ async fn main() -> Result<()> {
         .with_context(|| "failed to build Marshal config")?;
 
     // Create new `Marshal` from the config
-    let marshal =
-        Marshal::<WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>, Quic>::new(config)
-            .await?;
+    let marshal = Marshal::<ProductionDef<TestTypes>>::new(config).await?;
 
     // Start the main loop, consuming it
     marshal.start().await?;

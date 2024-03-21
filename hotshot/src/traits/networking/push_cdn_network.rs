@@ -3,6 +3,8 @@ use async_compatibility_layer::art::{async_block_on, async_spawn};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use bincode::config::Options;
+use cdn_broker::reexports::def::RunDef;
+use cdn_broker::reexports::discovery::{Embedded, Redis};
 use cdn_broker::{
     reexports::connection::protocols::Tcp, Broker, Config, ConfigBuilder as BrokerConfigBuilder,
 };
@@ -34,6 +36,7 @@ use hotshot_types::{
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
+use std::marker::PhantomData;
 use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
 use versioned_binary_serialization::{
@@ -79,6 +82,40 @@ impl<T: SignatureKey> Serializable for WrappedSignatureKey<T> {
     fn deserialize(serialized: &[u8]) -> anyhow::Result<Self> {
         Ok(WrappedSignatureKey(T::from_bytes(serialized)?))
     }
+}
+
+/// The testing run definition for the Push CDN.
+/// Uses the real protocols, but with an embedded discovery client.
+pub struct TestingDef<TYPES: NodeType> {
+    /// Phantom data to hold the type
+    pd: PhantomData<TYPES>,
+}
+
+impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
+    type BrokerScheme = WrappedSignatureKey<TYPES::SignatureKey>;
+    type BrokerProtocol = Tcp;
+
+    type UserScheme = WrappedSignatureKey<TYPES::SignatureKey>;
+    type UserProtocol = Quic;
+
+    type DiscoveryClientType = Embedded;
+}
+
+/// The production run definition for the Push CDN.
+/// Uses the real protocols and a Redis discovery client.
+pub struct ProductionDef<TYPES: NodeType> {
+    /// Phantom data to hold the type
+    pd: PhantomData<TYPES>,
+}
+
+impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
+    type BrokerScheme = WrappedSignatureKey<TYPES::SignatureKey>;
+    type BrokerProtocol = Tcp;
+
+    type UserScheme = WrappedSignatureKey<TYPES::SignatureKey>;
+    type UserProtocol = Quic;
+
+    type DiscoveryClientType = Redis;
 }
 
 /// A communication channel to the Push CDN, which is a collection of brokers and a marshal
@@ -211,12 +248,8 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
             // Create and spawn the broker
             async_spawn(async move {
-                let broker: Broker<
-                    WrappedSignatureKey<TYPES::SignatureKey>,
-                    WrappedSignatureKey<TYPES::SignatureKey>,
-                    Tcp,
-                    Quic,
-                > = Broker::new(config).await.expect("broker failed to start");
+                let broker: Broker<TestingDef<TYPES>> =
+                    Broker::new(config).await.expect("broker failed to start");
 
                 // Error if we stopped unexpectedly
                 if let Err(err) = broker.start().await {
@@ -238,10 +271,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
         // Spawn the marshal
         async_spawn(async move {
-            let marshal: Marshal<WrappedSignatureKey<TYPES::SignatureKey>, Quic> =
-                Marshal::new(marshal_config)
-                    .await
-                    .expect("failed to spawn marshal");
+            let marshal: Marshal<TestingDef<TYPES>> = Marshal::new(marshal_config)
+                .await
+                .expect("failed to spawn marshal");
 
             // Error if we stopped unexpectedly
             if let Err(err) = marshal.start().await {

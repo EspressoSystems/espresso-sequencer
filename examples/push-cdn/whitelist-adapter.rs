@@ -1,0 +1,91 @@
+//! The whitelist is an adaptor that is able to update the allowed public keys for
+//! all brokers. Right now, we do this by asking the orchestrator for the list of
+//! allowed public keys. In the future, we will pull the stake table from the L1.
+
+use std::str::FromStr;
+use std::sync::Arc;
+
+use anyhow::Context;
+use anyhow::Result;
+use cdn_broker::reexports::discovery::DiscoveryClient;
+use cdn_broker::reexports::discovery::{Embedded, Redis};
+use clap::Parser;
+use hotshot_example_types::node_types::TestTypes;
+use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::client::ValidatorArgs;
+use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::signature_key::SignatureKey;
+use surf_disco::Url;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+/// The main component of the push CDN.
+struct Args {
+    /// The discovery client endpoint (including scheme) to connect to.
+    /// With the local discovery feature, this is a file path.
+    /// With the remote (redis) discovery feature, this is a redis URL (e.g. `redis://127.0.0.1:6789`).
+    #[arg(short, long)]
+    discovery_endpoint: String,
+
+    /// The URL the orchestrator is running on. This should be something like `http://localhost:5555`
+    #[arg(short, long)]
+    orchestrator_url: String,
+
+    /// Whether or not to use the local discovery client
+    #[arg(short, long)]
+    local_discovery: bool,
+}
+
+#[cfg_attr(async_executor_impl = "tokio", tokio::main)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::main)]
+async fn main() -> Result<()> {
+    // Parse the command line arguments
+    let args = Args::parse();
+
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
+
+    // Create a new `OrchestratorClient` from the supplied URL
+    let orchestrator_client = OrchestratorClient::new(
+        ValidatorArgs {
+            url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
+            public_ip: None,
+            network_config_file: None,
+        },
+        "whitelist-adapter".to_string(),
+    );
+
+    // Attempt to get the config from the orchestrator.
+    // Loops internally until the config is received.
+    let config: NetworkConfig<
+        <TestTypes as NodeType>::SignatureKey,
+        <TestTypes as NodeType>::ElectionConfigType,
+    > = orchestrator_client.get_config_after_collection().await;
+
+    tracing::info!("Received config from orchestrator");
+
+    // Extrapolate the state_ver_keys from the config and convert them to a compatible format
+    let whitelist = config
+        .config
+        .known_nodes_with_stake
+        .iter()
+        .map(|k| Arc::from(k.stake_table_entry.stake_key.to_bytes()))
+        .collect();
+
+    if args.local_discovery {
+        <Embedded as DiscoveryClient>::new(args.discovery_endpoint, None)
+            .await?
+            .set_whitelist(whitelist)
+            .await?;
+    } else {
+        <Redis as DiscoveryClient>::new(args.discovery_endpoint, None)
+            .await?
+            .set_whitelist(whitelist)
+            .await?;
+    }
+
+    tracing::info!("Posted config to discovery endpoint");
+
+    Ok(())
+}

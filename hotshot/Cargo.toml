@@ -51,6 +51,7 @@ surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 versioned-binary-serialization = { workspace = true }
+jf-primitives.workspace = true
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
@@ -59,7 +60,6 @@ cdn-broker = { workspace = true, features = [
   "insecure",
   "runtime-tokio",
   "strong_consistency",
-  "local_discovery",
 ] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
 
@@ -70,7 +70,6 @@ cdn-broker = { workspace = true, features = [
   "insecure",
   "runtime-async-std",
   "strong_consistency",
-  "local_discovery",
 ] }
 cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
 

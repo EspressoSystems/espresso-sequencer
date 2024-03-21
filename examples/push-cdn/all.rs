@@ -5,11 +5,10 @@ pub mod types;
 use crate::infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs};
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun};
 use async_compatibility_layer::art::async_spawn;
-use cdn_broker::reexports::connection::protocols::{Quic, Tcp};
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use cdn_broker::Broker;
 use cdn_marshal::Marshal;
-use hotshot::traits::implementations::WrappedSignatureKey;
+use hotshot::traits::implementations::{TestingDef, WrappedSignatureKey};
 use hotshot::types::SignatureKey;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
@@ -79,12 +78,8 @@ async fn main() {
 
         // Create and spawn the broker
         async_spawn(async move {
-            let broker: Broker<
-                WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>,
-                WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>,
-                Tcp,
-                Quic,
-            > = Broker::new(config).await.expect("broker failed to start");
+            let broker: Broker<TestingDef<TestTypes>> =
+                Broker::new(config).await.expect("broker failed to start");
 
             // Error if we stopped unexpectedly
             if let Err(err) = broker.start().await {
@@ -106,10 +101,9 @@ async fn main() {
 
     // Spawn the marshal
     async_spawn(async move {
-        let marshal: Marshal<WrappedSignatureKey<<TestTypes as NodeType>::SignatureKey>, Quic> =
-            Marshal::new(marshal_config)
-                .await
-                .expect("failed to spawn marshal");
+        let marshal: Marshal<TestingDef<TestTypes>> = Marshal::new(marshal_config)
+            .await
+            .expect("failed to spawn marshal");
 
         // Error if we stopped unexpectedly
         if let Err(err) = marshal.start().await {

@@ -1,7 +1,6 @@
 use crate::infra::PushCdnDaRun;
-use hotshot::traits::implementations::PushCdnNetwork;
+use hotshot::traits::{implementations::PushCdnNetwork, NodeImplementation};
 use hotshot_example_types::{state_types::TestTypes, storage_types::TestStorage};
-use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize, Hash, PartialEq, Eq)]
