@@ -302,7 +302,7 @@ async fn deploy_light_client_contract<M: Middleware + 'static>(
     // bindings, except that foundry doesn't provide the bytecode for contracts that link with
     // libraries, so we have to do it ourselves.
     let json: Value = serde_json::from_str(include_str!(
-        "../../../contracts/out/LightClient.sol/LightClient.json"
+        "../../../contract-bindings/artifacts/LightClient.json"
     ))?;
     let mut bytecode =
         serde_json::from_value::<BytecodeObject>(json["bytecode"]["object"].clone())?;
