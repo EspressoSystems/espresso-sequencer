@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn init_with_storage<S, Ver: StaticVersionType>(
+async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
     modules: Modules,
     opt: Options,
     storage_opt: S,

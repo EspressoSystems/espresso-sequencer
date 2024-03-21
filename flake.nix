@@ -188,6 +188,7 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
             jq
+            capnproto
 
             # Rust tools
             cargo-audit
@@ -249,6 +250,7 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
+            capnproto
             toolchain
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
@@ -264,6 +266,7 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
+            capnproto
             toolchain
             grcov
           ];
