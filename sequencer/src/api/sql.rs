@@ -45,7 +45,7 @@ impl SequencerDataSource for DataSource {
             block_number,
         )
         .await
-        .context("failed to insert merkle nodes")
+        .context("failed to insert merkle nodes! ")
     }
 }
 

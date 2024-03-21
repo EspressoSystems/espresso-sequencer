@@ -38,7 +38,7 @@ pub struct Options {
     pub submit: Option<Submit>,
     pub status: Option<Status>,
     pub state: Option<State>,
-    pub state_storage: Option<StateStorage>,
+    pub merklized_state: Option<MerklizedState>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -51,7 +51,7 @@ impl From<Http> for Options {
             submit: None,
             status: None,
             state: None,
-            state_storage: None,
+            merklized_state: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -265,7 +265,7 @@ impl Options {
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
-        if self.state_storage.is_some() {
+        if self.merklized_state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "state/blocks",
@@ -352,4 +352,4 @@ pub struct Query {
 }
 
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct StateStorage;
+pub struct MerklizedState;
