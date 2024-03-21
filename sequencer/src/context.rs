@@ -26,8 +26,7 @@ use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqDAStorage, SeqTypes,
-    Transaction,
+    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 
 /// The consensus handle
@@ -87,7 +86,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             vid_membership: membership.clone(),
             view_sync_membership: membership,
         };
-        let da_storage = SeqDAStorage {};
+        let da_storage = Default::default();
 
         let stake_table_commit =
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);

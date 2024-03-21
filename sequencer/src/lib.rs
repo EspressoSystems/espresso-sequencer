@@ -30,6 +30,7 @@ mod state;
 pub mod transaction;
 use async_trait::async_trait;
 
+use async_std::sync::RwLock;
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -62,7 +63,10 @@ use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::time::Duration;
-use std::{collections::HashSet, net::Ipv4Addr};
+use std::{
+    collections::{HashMap, HashSet},
+    net::Ipv4Addr,
+};
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -134,29 +138,60 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 type ElectionConfig = StaticElectionConfig;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SeqDAStorage;
+#[derive(Clone, Debug)]
+pub struct ToBeReplacedStorageState<TYPES: NodeType> {
+    vids: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
+    das: HashMap<TYPES::Time, Proposal<TYPES, DAProposal<TYPES>>>,
+}
+
+impl<TYPES: NodeType> Default for ToBeReplacedStorageState<TYPES> {
+    fn default() -> Self {
+        Self {
+            vids: HashMap::new(),
+            das: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ToBeReplacedStorage<TYPES: NodeType> {
+    inner: Arc<RwLock<ToBeReplacedStorageState<TYPES>>>,
+}
+
+impl<TYPES: NodeType> Default for ToBeReplacedStorage<TYPES> {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(ToBeReplacedStorageState::default())),
+        }
+    }
+}
+
 #[async_trait]
-impl Storage<SeqTypes> for SeqDAStorage {
+impl<TYPES: NodeType> Storage<TYPES> for ToBeReplacedStorage<TYPES> {
     async fn append_vid(
         &self,
-        _proposal: &Proposal<SeqTypes, VidDisperse<SeqTypes>>,
+        proposal: &Proposal<TYPES, VidDisperse<TYPES>>,
     ) -> anyhow::Result<()> {
-        unimplemented!()
+        let mut inner = self.inner.write().await;
+        inner
+            .vids
+            .insert(proposal.data.view_number, proposal.clone());
+        Ok(())
     }
 
-    async fn append_da(
-        &self,
-        _proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        unimplemented!()
+    async fn append_da(&self, proposal: &Proposal<TYPES, DAProposal<TYPES>>) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        inner
+            .das
+            .insert(proposal.data.view_number, proposal.clone());
+        Ok(())
     }
 }
 
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
-    type Storage = SeqDAStorage;
+    type Storage = ToBeReplacedStorage<SeqTypes>;
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
