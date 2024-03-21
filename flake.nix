@@ -250,8 +250,8 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
-            capnproto
             toolchain
+            capnproto
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
         };
@@ -291,6 +291,7 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
+            capnproto
             stableToolchain
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
