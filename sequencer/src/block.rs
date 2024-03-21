@@ -4,6 +4,7 @@ use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use snafu::OptionExt;
 
 pub mod entry;
@@ -78,8 +79,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     }
 
     /// Generate commitment that builders use to sign block options.
-    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
-        unimplemented!("TODO builder_commitment");
+    fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment {
+        //unimplemented!("TODO builder_commitment");
+        let payload_hash = sha2::Sha256::digest(&self.raw_payload);
+        let metadata_hash = sha2::Sha256::digest(metadata.get_bytes());
+        BuilderCommitment::from_bytes([payload_hash, metadata_hash].concat())
     }
 
     fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {

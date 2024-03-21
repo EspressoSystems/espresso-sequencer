@@ -48,7 +48,6 @@ pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
-    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {

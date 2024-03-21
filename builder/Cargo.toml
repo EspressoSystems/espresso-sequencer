@@ -25,14 +25,17 @@ hotshot-types = { workspace = true }
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.24" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.25" }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 hs-builder-api = { path = "../../hs-builder-api" }
 hs-builder-core = { path = "../../hs-builder-core" }
 sequencer = { path = "../sequencer", features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"
+snafu = { workspace = true }
+serde = { workspace = true }
 tracing = { workspace = true }
 tide-disco = { workspace = true }
+surf-disco = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 # [[bin]]

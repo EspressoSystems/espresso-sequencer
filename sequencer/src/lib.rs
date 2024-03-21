@@ -442,6 +442,7 @@ pub mod testing {
                 da_staked_committee_size: num_nodes,
                 da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
+                data_request_delay: Duration::from_millis(200),
             };
 
             Self {

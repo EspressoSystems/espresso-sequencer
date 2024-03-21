@@ -41,7 +41,7 @@ where
     N: network::Type,
     D: SequencerDataSource + Send + Sync,
 {
-    state.update(event).await?;
+    //state.update(event).await?;
     state.commit().await?;
 
     Ok(())
