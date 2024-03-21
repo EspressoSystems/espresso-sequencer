@@ -3,7 +3,7 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::data::{QuorumProposal, UpgradeProposal};
+use crate::data::{QuorumProposal, UpgradeProposal, VidDisperseShare};
 use crate::simple_certificate::{
     DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
     ViewSyncPreCommitCertificate2,
@@ -16,7 +16,7 @@ use crate::traits::network::ResponseMessage;
 use crate::traits::signature_key::SignatureKey;
 use crate::vote::HasViewNumber;
 use crate::{
-    data::{DAProposal, VidDisperse},
+    data::DAProposal,
     simple_vote::QuorumVote,
     traits::{
         network::{DataRequest, NetworkMsg, ViewMessage},
@@ -184,9 +184,9 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
 
     /// Initiate VID dispersal.
     ///
-    /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from [`VidDisperse`].
+    /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from `VidDisperse`.
     /// TODO this variant should not be a [`CommitteeConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
-    VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>),
+    VidDisperseMsg(Proposal<TYPES, VidDisperseShare<TYPES>>),
 }
 
 /// Messages for sequencing consensus.
@@ -289,6 +289,8 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
 
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
+#[allow(clippy::large_enum_variant)]
+/// TODO: Put `DataResponse` content in a `Box` to make enum smaller
 /// Messages related to sending data between nodes
 pub enum DataMessage<TYPES: NodeType> {
     /// Contains a transaction to be submitted

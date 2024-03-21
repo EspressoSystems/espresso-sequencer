@@ -2,10 +2,12 @@ use hotshot::types::SignatureKey;
 use hotshot_example_types::{block_types::TestTransaction, node_types::TestTypes};
 use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
 use hotshot_testing::task_helpers::{build_system_handle, vid_scheme_from_view_number};
-use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::{
-    data::{DAProposal, VidDisperse, ViewNumber},
-    traits::consensus_api::ConsensusApi,
+    data::{DAProposal, VidDisperse, VidDisperseShare, ViewNumber},
+    traits::{
+        consensus_api::ConsensusApi,
+        node_implementation::{ConsensusTime, NodeType},
+    },
 };
 use jf_primitives::vid::VidScheme;
 use std::collections::HashMap;
@@ -60,6 +62,10 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
+    let vid_share_proposal = VidDisperseShare::from_vid_disperse(vid_disperse.clone())
+        .swap_remove(0)
+        .to_proposal(handle.private_key())
+        .expect("Failed to sign block payload!");
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
@@ -77,7 +83,7 @@ async fn test_vid_task() {
         ViewNumber::new(2),
     ));
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone()));
+    input.push(HotShotEvent::VidDisperseRecv(vid_share_proposal.clone()));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(

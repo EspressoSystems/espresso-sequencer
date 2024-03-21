@@ -2,16 +2,21 @@ use anyhow::{bail, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_types::{
-    data::{DAProposal, VidDisperse},
+    data::{DAProposal, VidDisperseShare},
     message::Proposal,
     traits::{node_implementation::NodeType, storage::Storage},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
 
+type VidShares<TYPES> = HashMap<
+    <TYPES as NodeType>::Time,
+    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
+>;
+
 #[derive(Clone, Debug)]
 pub struct TestStorageState<TYPES: NodeType> {
-    vids: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
+    vids: VidShares<TYPES>,
     das: HashMap<TYPES::Time, Proposal<TYPES, DAProposal<TYPES>>>,
 }
 
@@ -42,14 +47,16 @@ impl<TYPES: NodeType> Default for TestStorage<TYPES> {
 
 #[async_trait]
 impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
-    async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperse<TYPES>>) -> Result<()> {
+    async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }
         let mut inner = self.inner.write().await;
         inner
             .vids
-            .insert(proposal.data.view_number, proposal.clone());
+            .entry(proposal.data.view_number)
+            .or_default()
+            .insert(proposal.data.recipient_key.clone(), proposal.clone());
         Ok(())
     }
 

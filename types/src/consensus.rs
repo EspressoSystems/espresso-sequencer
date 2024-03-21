@@ -4,7 +4,7 @@ pub use crate::utils::{View, ViewInner};
 use displaydoc::Display;
 
 use crate::{
-    data::{Leaf, VidDisperse},
+    data::{Leaf, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
     simple_certificate::{DACertificate, QuorumCertificate, UpgradeCertificate},
@@ -26,6 +26,12 @@ use tracing::error;
 /// A type alias for `HashMap<Commitment<T>, T>`
 type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 
+/// A type alias for `BTreeMap<T::Time, HashMap<T::SignatureKey, Proposal<T, VidDisperseShare<T>>>>`
+type VidShares<TYPES> = BTreeMap<
+    <TYPES as NodeType>::Time,
+    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
+>;
+
 /// A reference to the consensus algorithm
 ///
 /// This will contain the state of all rounds.
@@ -38,10 +44,7 @@ pub struct Consensus<TYPES: NodeType> {
     pub validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 
     /// All the VID shares we've received for current and future views.
-    /// In the future we will need a different struct similar to VidDisperse except
-    /// it stores only one share.
-    /// TODO <https://github.com/EspressoSystems/HotShot/issues/1732>
-    pub vid_shares: BTreeMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
+    pub vid_shares: VidShares<TYPES>,
 
     /// All the DA certs we've received for current and future views.
     /// view -> DA cert

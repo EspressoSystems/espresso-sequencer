@@ -132,13 +132,16 @@ impl NetworkBehaviour for DMBehaviour {
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<ToSwarm<DMEvent, THandlerInEvent<Self>>> {
-        while let Some(req) = self.failed_rr.pop_front() {
+        let mut retry_req_indices = Vec::new();
+        for (idx, req) in self.failed_rr.iter().enumerate() {
             if req.backoff.is_expired() {
-                self.add_direct_request(req);
-            } else {
-                self.failed_rr.push_back(req);
+                retry_req_indices.push(idx);
             }
         }
+        let _ = retry_req_indices.into_iter().map(|idx| {
+            let req = self.failed_rr.remove(idx).unwrap();
+            self.add_direct_request(req);
+        });
         while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.request_response, cx) {
             match ready {
                 // NOTE: this generates request

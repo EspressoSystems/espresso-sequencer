@@ -7,20 +7,21 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use either::Either::{self, Left, Right};
 use hotshot_types::{event::HotShotAction, traits::storage::Storage};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::constants::STATIC_VER_0_1;
-use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
+    data::{VidDisperse, VidDisperseShare},
     message::{
         CommitteeConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind,
-        SequencingMessage,
+        Proposal, SequencingMessage,
     },
     traits::{
         election::Membership,
         network::{ConnectedNetwork, TransmitType, ViewMessage},
-        node_implementation::NodeType,
+        node_implementation::{ConsensusTime, NodeType},
     },
     vote::{HasViewNumber, Vote},
 };
@@ -284,15 +285,7 @@ impl<
                 )
             }
             HotShotEvent::VidDisperseSend(proposal, sender) => {
-                maybe_action = Some(HotShotAction::VidDisperse);
-                (
-                    sender,
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                        CommitteeConsensusMessage::VidDisperseMsg(proposal),
-                    ))), // TODO not a CommitteeConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
-                    TransmitType::Broadcast, // TODO not a broadcast https://github.com/EspressoSystems/HotShot/issues/1696
-                    None,
-                )
+                return self.handle_vid_disperse_proposal(proposal, &sender);
             }
             HotShotEvent::DAProposalSend(proposal, sender) => {
                 maybe_action = Some(HotShotAction::DAPropose);
@@ -408,19 +401,15 @@ impl<
         let net = self.channel.clone();
         let storage = self.storage.clone();
         async_spawn(async move {
-            if let Some(action) = maybe_action {
-                match storage
-                    .write()
-                    .await
-                    .record_action(view, action.clone())
-                    .await
-                {
-                    Ok(()) => {}
-                    Err(e) => {
-                        warn!("Not Sending {:?} because of storage error: {:?}", action, e);
-                        return;
-                    }
-                }
+            if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
+                maybe_action,
+                storage,
+                view,
+            )
+            .await
+            .is_err()
+            {
+                return;
             }
 
             let transmit_result = match transmit_type {
@@ -445,5 +434,74 @@ impl<
         });
 
         None
+    }
+
+    /// handle `VidDisperseSend`
+    fn handle_vid_disperse_proposal(
+        &self,
+        vid_proposal: Proposal<TYPES, VidDisperse<TYPES>>,
+        sender: &<TYPES as NodeType>::SignatureKey,
+    ) -> Option<HotShotTaskCompleted> {
+        let view = vid_proposal.data.view_number;
+        let vid_share_proposals = VidDisperseShare::to_vid_share_proposals(vid_proposal);
+        let messages: HashMap<_, _> = vid_share_proposals
+            .into_iter()
+            .map(|proposal| {
+                (
+                    proposal.data.recipient_key.clone(),
+                    Message {
+                        sender: sender.clone(),
+                        kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage(
+                            Right(CommitteeConsensusMessage::VidDisperseMsg(proposal)),
+                        )), // TODO not a CommitteeConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
+                    },
+                )
+            })
+            .collect();
+
+        let net = self.channel.clone();
+        let storage = self.storage.clone();
+        async_spawn(async move {
+            if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
+                Some(HotShotAction::VidDisperse),
+                storage,
+                view,
+            )
+            .await
+            .is_err()
+            {
+                return;
+            }
+            match net.vid_broadcast_message(messages, STATIC_VER_0_1).await {
+                Ok(()) => {}
+                Err(e) => error!("Failed to send message from network task: {:?}", e),
+            }
+        });
+
+        None
+    }
+
+    /// Record `HotShotAction` if available
+    async fn maybe_record_action(
+        maybe_action: Option<HotShotAction>,
+        storage: Arc<RwLock<S>>,
+        view: <TYPES as NodeType>::Time,
+    ) -> Result<(), ()> {
+        if let Some(action) = maybe_action {
+            match storage
+                .write()
+                .await
+                .record_action(view, action.clone())
+                .await
+            {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    warn!("Not Sending {:?} because of storage error: {:?}", action, e);
+                    Err(())
+                }
+            }
+        } else {
+            Ok(())
+        }
     }
 }

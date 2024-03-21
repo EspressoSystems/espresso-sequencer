@@ -9,9 +9,12 @@ use hotshot_task_impls::events::HotShotEvent;
 use hotshot_task_impls::network::{self, NetworkEventTaskState};
 use hotshot_testing::test_builder::TestMetadata;
 use hotshot_testing::view_generator::TestViewGenerator;
-use hotshot_types::traits::election::Membership;
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::{
+        election::Membership, node_implementation::ConsensusTime, node_implementation::NodeType,
+    },
+};
 use std::sync::Arc;
 use std::time::Duration;
 

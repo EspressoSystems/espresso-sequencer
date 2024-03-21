@@ -15,7 +15,7 @@ use commit::Committable;
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, VidDisperse, ViewNumber},
+    data::{DAProposal, Leaf, QuorumProposal, VidDisperseShare, ViewNumber},
     message::Proposal,
     simple_certificate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -42,7 +42,7 @@ pub struct TestView {
     pub view_number: ViewNumber,
     pub quorum_membership: <TestTypes as NodeType>::Membership,
     pub vid_proposal: (
-        Proposal<TestTypes, VidDisperse<TestTypes>>,
+        Proposal<TestTypes, VidDisperseShare<TestTypes>>,
         <TestTypes as NodeType>::SignatureKey,
     ),
     pub leader_public_key: <TestTypes as NodeType>::SignatureKey,

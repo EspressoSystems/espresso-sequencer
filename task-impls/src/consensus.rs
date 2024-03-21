@@ -42,7 +42,12 @@ use versioned_binary_serialization::version::Version;
 
 use crate::vote_collection::HandleVoteEvent;
 use chrono::Utc;
-use std::{collections::HashSet, marker::PhantomData, sync::Arc};
+use hotshot_types::data::VidDisperseShare;
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument};
@@ -735,10 +740,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     leaf.fill_block_payload_unchecked(payload);
                                 }
 
-                                let vid = consensus
-                                    .vid_shares
-                                    .get(&leaf.get_view_number())
-                                    .map(|vid_proposal| vid_proposal.data.clone());
+                                let vid = VidDisperseShare::to_vid_disperse(
+                                    consensus
+                                        .vid_shares
+                                        .get(&leaf.get_view_number())
+                                        .unwrap_or(&HashMap::new())
+                                        .iter()
+                                        .map(|(_key, proposal)| &proposal.data)
+                                );
 
                                 leaf_views.push(LeafInfo::new(leaf.clone(), state.clone(), delta.clone(), vid));
                                 leafs_decided.push(leaf.clone());
@@ -1079,7 +1088,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .write()
                     .await
                     .vid_shares
-                    .insert(view, disperse.clone());
+                    .entry(view)
+                    .or_default()
+                    .insert(disperse.data.recipient_key.clone(), disperse.clone());
 
                 if self.vote_if_able(&event_stream).await {
                     self.current_proposal = None;

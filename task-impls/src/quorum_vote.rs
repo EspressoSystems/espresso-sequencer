@@ -11,7 +11,7 @@ use hotshot_task::{
     task::{Task, TaskState},
 };
 use hotshot_types::{
-    data::{QuorumProposal, VidDisperse},
+    data::{QuorumProposal, VidDisperseShare},
     event::Event,
     message::Proposal,
     simple_certificate::DACertificate,
@@ -67,7 +67,7 @@ fn validate_dac<TYPES: NodeType>(
 // <https://github.com/EspressoSystems/HotShot/issues/2710>
 #[allow(clippy::needless_pass_by_value)]
 fn validate_vid<TYPES: NodeType>(
-    _disperse: Proposal<TYPES, VidDisperse<TYPES>>,
+    _disperse: Proposal<TYPES, VidDisperseShare<TYPES>>,
     _event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
 ) -> bool {
     true

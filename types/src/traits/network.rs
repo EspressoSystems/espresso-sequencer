@@ -20,13 +20,20 @@ use crate::{
 };
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
+use futures::future::join_all;
 use rand::{
     distributions::{Bernoulli, Uniform},
     prelude::Distribution,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{collections::BTreeSet, fmt::Debug, hash::Hash, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+    hash::Hash,
+    sync::Arc,
+    time::Duration,
+};
 use versioned_binary_serialization::version::StaticVersionType;
 
 /// for any errors we decide to add to memory network
@@ -145,6 +152,8 @@ pub enum NetworkError {
     UnableToCancel,
     /// The requested data was not found
     NotFound,
+    /// Multiple errors
+    MultipleErrors { errors: Vec<Box<NetworkError>> },
 }
 #[derive(Clone, Debug)]
 // Storing view number as a u64 to avoid the need TYPES generic
@@ -266,6 +275,8 @@ pub enum RequestKind<TYPES: NodeType> {
 /// The kind of message `M` is is determined by what we requested
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
+#[allow(clippy::large_enum_variant)]
+/// TODO: Put `Found` content in a `Box` to make enum smaller
 pub enum ResponseMessage<TYPES: NodeType> {
     /// Peer returned us some data
     Found(SequencingMessage<TYPES>),
@@ -320,6 +331,33 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
         recipients: BTreeSet<K>,
         bind_version: VER,
     ) -> Result<(), NetworkError>;
+
+    /// send messages with vid shares to its recipients
+    /// blocking
+    async fn vid_broadcast_message<VER: StaticVersionType + 'static>(
+        &self,
+        messages: HashMap<K, M>,
+        bind_version: VER,
+    ) -> Result<(), NetworkError> {
+        let future_results = messages.into_iter().map(|(recipient_key, message)| {
+            self.direct_message(message, recipient_key, bind_version)
+        });
+        let results = join_all(future_results).await;
+
+        let errors: Vec<_> = results
+            .into_iter()
+            .filter_map(|r| match r {
+                Err(error) => Some(Box::new(error)),
+                _ => None,
+            })
+            .collect();
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(NetworkError::MultipleErrors { errors })
+        }
+    }
 
     /// Sends a direct message to a specific node
     /// blocking
