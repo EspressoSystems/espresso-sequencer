@@ -11,7 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::{
-    errors::{ExplorerAPIError, Unimplemented},
+    errors::{ExplorerAPIError, InvalidLimit, Unimplemented},
     monetary_value::MonetaryValue,
     traits::ExplorerHeader,
 };
@@ -507,6 +507,8 @@ pub enum GetBlockSummariesError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
     #[serde(untagged)]
+    InvalidLimit(InvalidLimit),
+    #[serde(untagged)]
     TargetNotFound(String),
 }
 
@@ -514,6 +516,7 @@ impl GetBlockSummariesError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetBlockSummariesError::Unimplemented(err) => err.status(),
+            GetBlockSummariesError::InvalidLimit(err) => err.status(),
             GetBlockSummariesError::TargetNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -523,6 +526,7 @@ impl Display for GetBlockSummariesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetBlockSummariesError::Unimplemented(err) => write!(f, "{err}"),
+            GetBlockSummariesError::InvalidLimit(err) => write!(f, "{err}"),
             GetBlockSummariesError::TargetNotFound(identifier) => {
                 write!(f, "target not found: {}", identifier)
             }
@@ -534,6 +538,7 @@ impl ExplorerAPIError for GetBlockSummariesError {
     fn code(&self) -> &str {
         match self {
             GetBlockSummariesError::Unimplemented(err) => err.code(),
+            GetBlockSummariesError::InvalidLimit(err) => err.code(),
             GetBlockSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
         }
     }
@@ -585,6 +590,8 @@ pub enum GetTransactionSummariesError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
     #[serde(untagged)]
+    InvalidLimit(InvalidLimit),
+    #[serde(untagged)]
     TargetNotFound(String),
 }
 
@@ -592,6 +599,7 @@ impl GetTransactionSummariesError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => err.status(),
+            GetTransactionSummariesError::InvalidLimit(err) => err.status(),
             GetTransactionSummariesError::TargetNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -601,6 +609,7 @@ impl Display for GetTransactionSummariesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => write!(f, "{err}"),
+            GetTransactionSummariesError::InvalidLimit(err) => write!(f, "{err}"),
             GetTransactionSummariesError::TargetNotFound(identifier) => {
                 write!(f, "target not found: {}", identifier)
             }
@@ -612,6 +621,7 @@ impl ExplorerAPIError for GetTransactionSummariesError {
     fn code(&self) -> &str {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => err.code(),
+            GetTransactionSummariesError::InvalidLimit(err) => err.code(),
             GetTransactionSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
         }
     }
@@ -623,15 +633,12 @@ impl ExplorerAPIError for GetTransactionSummariesError {
 pub enum GetExplorerSummaryError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
-    QueryError(String),
 }
 
 impl GetExplorerSummaryError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => err.status(),
-            GetExplorerSummaryError::QueryError(_) => StatusCode::InternalServerError,
         }
     }
 }
@@ -640,7 +647,6 @@ impl Display for GetExplorerSummaryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => write!(f, "{err}"),
-            GetExplorerSummaryError::QueryError(err) => write!(f, "{err}"),
         }
     }
 }
@@ -649,7 +655,6 @@ impl ExplorerAPIError for GetExplorerSummaryError {
     fn code(&self) -> &str {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => err.code(),
-            GetExplorerSummaryError::QueryError(_) => "QUERY_ERROR",
         }
     }
 }

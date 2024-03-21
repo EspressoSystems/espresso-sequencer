@@ -845,7 +845,11 @@ where
             .await
             .get_explorer_summary()
             .await
-            .map_err(|e| explorer::data_source::GetExplorerSummaryError::QueryError(e.to_string()))
+            .map_err(|_| {
+                explorer::data_source::GetExplorerSummaryError::Unimplemented(
+                    explorer::errors::Unimplemented {},
+                )
+            })
     }
 }
 

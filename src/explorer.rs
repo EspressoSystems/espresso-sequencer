@@ -16,12 +16,13 @@ pub(crate) mod errors;
 pub(crate) mod monetary_value;
 pub(crate) mod traits;
 use self::data_source::{
-    BlockIdentifier, BlockRange, GetBlockDetailError, GetBlockSummariesError,
-    GetExplorerSummaryError, GetTransactionDetailError, GetTransactionSummariesError,
-    GetTransactionSummariesRequest, TransactionIdentifier, TransactionRange,
-    TransactionSummaryFilter,
+    BlockDetail, BlockIdentifier, BlockRange, BlockSummary, ExplorerSummary, GetBlockDetailError,
+    GetBlockSummariesError, GetExplorerSummaryError, GetTransactionDetailError,
+    GetTransactionSummariesError, GetTransactionSummariesRequest, TransactionIdentifier,
+    TransactionRange, TransactionSummary, TransactionSummaryFilter,
 };
 use self::data_source::{ExplorerDataSource, GetBlockSummariesRequest};
+use self::errors::InvalidLimit;
 use self::traits::ExplorerHeader;
 use crate::{api::load_api, Header};
 use futures::FutureExt;
@@ -72,7 +73,115 @@ impl Display for Error {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct BlockDetailResponse<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub block_detail: BlockDetail<Types>,
+}
+
+impl<Types: NodeType> From<BlockDetail<Types>> for BlockDetailResponse<Types>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    fn from(block_detail: BlockDetail<Types>) -> Self {
+        Self { block_detail }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct BlockSummaryResponse<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub block_summaries: Vec<BlockSummary<Types>>,
+}
+
+impl<Types: NodeType> From<Vec<BlockSummary<Types>>> for BlockSummaryResponse<Types>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    fn from(block_summaries: Vec<BlockSummary<Types>>) -> Self {
+        Self { block_summaries }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct TransactionDetailResponse<Types: NodeType> {
+    pub transaction_detail: data_source::TransactionDetailResponse<Types>,
+}
+
+impl<Types: NodeType> From<data_source::TransactionDetailResponse<Types>>
+    for TransactionDetailResponse<Types>
+{
+    fn from(transaction_detail: data_source::TransactionDetailResponse<Types>) -> Self {
+        Self { transaction_detail }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct TransactionSummariesResponse<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub transaction_summaries: Vec<TransactionSummary<Types>>,
+}
+
+impl<Types: NodeType> From<Vec<TransactionSummary<Types>>> for TransactionSummariesResponse<Types>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    fn from(transaction_summaries: Vec<TransactionSummary<Types>>) -> Self {
+        Self {
+            transaction_summaries,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct ExplorerSummaryResponse<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub explorer_summary: ExplorerSummary<Types>,
+}
+
+impl<Types: NodeType> From<ExplorerSummary<Types>> for ExplorerSummaryResponse<Types>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    fn from(explorer_summary: ExplorerSummary<Types>) -> Self {
+        Self { explorer_summary }
+    }
+}
+
 impl std::error::Error for Error {}
+
+fn validate_limit(
+    limit: Result<usize, tide_disco::RequestError>,
+) -> Result<NonZeroUsize, InvalidLimit> {
+    let num_blocks = match limit {
+        Ok(limit) => Ok(limit),
+        _ => Err(InvalidLimit {}),
+    }?;
+
+    let num_blocks = match NonZeroUsize::new(num_blocks) {
+        Some(num_blocks) => Ok(num_blocks),
+        None => Err(InvalidLimit {}),
+    }?;
+
+    if num_blocks.get() > 100 {
+        return Err(InvalidLimit {});
+    }
+
+    Ok(num_blocks)
+}
 
 pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
     _: Ver,
@@ -89,23 +198,39 @@ where
     )?;
 
     api.with_version("0.0.1".parse().unwrap())
-        .get("get_block_detail", move |_req, state| {
+        .get("get_block_detail", move |req, state| {
             async move {
+                let target = match req.opt_integer_param::<str, usize>("from") {
+                    Ok(Some(from)) => BlockIdentifier::Height(from),
+                    _ => BlockIdentifier::Latest,
+                };
+
                 state
-                    .get_block_detail(BlockIdentifier::Latest)
+                    .get_block_detail(target)
                     .await
+                    .map(BlockDetailResponse::from)
                     .map_err(Error::GetBlockDetail)
             }
             .boxed()
         })?
-        .get("get_block_summaries", move |_req, state| {
+        .get("get_block_summaries", move |req, state| {
             async move {
+                let num_blocks = validate_limit(req.integer_param("limit"))
+                    .map_err(GetBlockSummariesError::InvalidLimit)
+                    .map_err(Error::GetBlockSummaries)?;
+
+                let target = match req.opt_integer_param::<str, usize>("from") {
+                    Ok(Some(from)) => BlockIdentifier::Height(from),
+                    _ => BlockIdentifier::Latest,
+                };
+
                 state
                     .get_block_summaries(GetBlockSummariesRequest(BlockRange {
-                        target: BlockIdentifier::Latest,
-                        num_blocks: NonZeroUsize::new(20).unwrap(),
+                        target,
+                        num_blocks,
                     }))
                     .await
+                    .map(BlockSummaryResponse::from)
                     .map_err(Error::GetBlockSummaries)
             }
             .boxed()
@@ -115,21 +240,39 @@ where
                 state
                     .get_transaction_detail(TransactionIdentifier::Latest)
                     .await
+                    .map(TransactionDetailResponse::from)
                     .map_err(Error::GetTransactionDetail)
             }
             .boxed()
         })?
-        .get("get_transaction_summaries", move |_req, state| {
+        .get("get_transaction_summaries", move |req, state| {
             async move {
+                let num_transactions = validate_limit(req.integer_param("limit"))
+                    .map_err(GetTransactionSummariesError::InvalidLimit)
+                    .map_err(Error::GetTransactionSummaries)?;
+
+                let target = match (
+                    req.opt_integer_param::<str, usize>("height"),
+                    req.opt_integer_param::<str, usize>("offset"),
+                    req.opt_blob_param("hash"),
+                ) {
+                    (Ok(Some(height)), Ok(Some(offset)), _) => {
+                        TransactionIdentifier::HeightAndOffset(height, offset)
+                    }
+                    (_, _, Ok(Some(hash))) => TransactionIdentifier::Hash(hash),
+                    _ => TransactionIdentifier::Latest,
+                };
+
                 state
                     .get_transaction_summaries(GetTransactionSummariesRequest {
                         range: TransactionRange {
-                            target: TransactionIdentifier::Latest,
-                            num_transactions: NonZeroUsize::new(20).unwrap(),
+                            target,
+                            num_transactions,
                         },
                         filter: TransactionSummaryFilter::None,
                     })
                     .await
+                    .map(TransactionSummariesResponse::from)
                     .map_err(Error::GetTransactionSummaries)
             }
             .boxed()
@@ -139,6 +282,7 @@ where
                 state
                     .get_explorer_summary()
                     .await
+                    .map(ExplorerSummaryResponse::from)
                     .map_err(Error::GetExplorerSummary)
             }
             .boxed()

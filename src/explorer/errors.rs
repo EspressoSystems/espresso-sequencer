@@ -90,6 +90,47 @@ impl Serialize for Unimplemented {
     }
 }
 
+/// [InvalidLimit] is an error that represents that the there was a problem
+/// with the given limit parameter.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "code", rename = "INVALID_LIMIT")]
+pub struct InvalidLimit {}
+
+impl InvalidLimit {
+    pub fn status(&self) -> StatusCode {
+        StatusCode::BadRequest
+    }
+}
+
+impl ExplorerAPIError for InvalidLimit {
+    fn code(&self) -> &str {
+        "INVALID_LIMIT"
+    }
+}
+
+impl Display for InvalidLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "limit must be provided, and must be a positive integer less than 100"
+        )
+    }
+}
+
+impl std::error::Error for InvalidLimit {}
+
+impl Serialize for InvalidLimit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut st = serializer.serialize_struct("InvalidLimit", 2)?;
+        st.serialize_field("code", &self.code())?;
+        st.serialize_field("message", &format!("{}", self))?;
+        st.end()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::Unimplemented;
