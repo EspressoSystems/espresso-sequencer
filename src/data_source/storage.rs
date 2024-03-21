@@ -122,6 +122,11 @@ where
         request: &explorer::data_source::GetBlockSummariesRequest<Types>,
     ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>>;
 
+    async fn get_block_detail(
+        &self,
+        request: &explorer::data_source::BlockIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::BlockDetail<Types>>;
+
     async fn get_transaction_summaries(
         &self,
         request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
@@ -131,4 +136,8 @@ where
         &self,
         request: &explorer::data_source::TransactionIdentifier<Types>,
     ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>>;
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>>;
 }

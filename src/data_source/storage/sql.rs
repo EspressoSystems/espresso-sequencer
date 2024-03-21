@@ -63,6 +63,7 @@ use std::{
     cmp::min,
     collections::{HashMap, HashSet, VecDeque},
     fmt::{Debug, Display},
+    num::NonZeroUsize,
     ops::{Bound, RangeBounds},
     pin::Pin,
     str::FromStr,
@@ -1990,6 +1991,55 @@ where
         results?.await
     }
 
+    async fn get_block_detail(
+        &self,
+        request: &explorer::data_source::BlockIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::BlockDetail<Types>> {
+        let (query, params): (String, Vec<Box<dyn ToSql + Sync + Send>>) = match request {
+            explorer::data_source::BlockIdentifier::Latest => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        ORDER BY h.height DESC 
+                        LIMIT 1"
+                ),
+                vec![],
+            ),
+            explorer::data_source::BlockIdentifier::Height(height) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        WHERE h.height = $1
+                        ORDER BY h.height DESC 
+                        LIMIT 1"
+                ),
+                vec![Box::new(*height as i64)],
+            ),
+            explorer::data_source::BlockIdentifier::Hash(hash) => (
+                format!(
+                    "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        WHERE h.hash = $1
+                        ORDER BY h.height DESC 
+                        LIMIT 1"
+                ),
+                vec![Box::new(hash.to_string())],
+            ),
+        };
+
+        let query_result = self.query_one(&query, params).await?;
+        let block = parse_block(query_result)?;
+
+        Ok(
+            explorer::data_source::BlockDetail::try_from(block).map_err(|e| QueryError::Error {
+                message: e.to_string(),
+            })?,
+        )
+    }
+
     async fn get_transaction_summaries(
         &self,
         request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
@@ -2191,6 +2241,152 @@ where
         Ok(explorer::data_source::TransactionDetailResponse::try_from(
             (&block, offset, txn),
         )?)
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>> {
+        let histograms= async {
+            let historgram_query_result = self.query(
+                "SELECT
+                    h.height AS height,
+                    h.timestamp AS timestamp,
+                    h.timestamp - lead(timestamp) OVER (ORDER BY h.height DESC) AS time,
+                    p.size AS size,
+                    (SELECT COUNT(*) AS transactions FROM transaction AS t WHERE t.block_height = h.height) as transactions
+                FROM header AS h
+                JOIN payload AS p ON
+                    p.height = h.height
+                ORDER BY h.height DESC
+                LIMIT 50",
+                Vec::<Box<dyn ToSql + Send + Sync>>::new(),
+            ).await?;
+
+            let histograms:Result<explorer::data_source::ExplorerHistograms, QueryError> = historgram_query_result
+                .map(|row_stream| {
+                    row_stream.map(|row| {
+                        let height: i64 = row.try_get("height").map_err(|e| QueryError::Error {
+                            message: format!("failed to get column height {e}"),
+                        })?;
+                        let timestamp: i64 =
+                            row.try_get("timestamp").map_err(|e| QueryError::Error {
+                                message: format!("failed to get column timestamp {e}"),
+                            })?;
+                        let time: Option<i64> = row.try_get("time").map_err(|e| QueryError::Error {
+                            message: format!("failed to get column time {e}"),
+                        })?;
+                        let size: i32 = row.try_get("size").map_err(|e| QueryError::Error {
+                            message: format!("failed to get column size {e}"),
+                        })?;
+                        let num_transactions: i64 =
+                            row.try_get("transactions").map_err(|e| QueryError::Error {
+                                message: format!("failed to get column transactions {e}"),
+                            })?;
+
+                        let height: u64 = height.try_into().map_err(|e| QueryError::Error {
+                            message: format!("failed to convert height to u64 {e}"),
+                        })?;
+                        let timestamp: u64 =
+                            timestamp.try_into().map_err(|e| QueryError::Error {
+                                message: format!("failed to convert timestamp to u64 {e}"),
+                            })?;
+                        let time: u64 = time.unwrap_or(0).try_into().map_err(|e| QueryError::Error {
+                            message: format!("failed to convert time to u64 {e}"),
+                        })?;
+                        let size: u64 = size.try_into().map_err(|e| QueryError::Error {
+                            message: format!("failed to convert size to u64 {e}"),
+                        })?;
+                        let num_transactions: u64 =
+                            num_transactions.try_into().map_err(|e| QueryError::Error {
+                                message: format!("failed to convert num_transactions to u64 {e}"),
+                            })?;
+
+                        Ok((height, timestamp, time, size, num_transactions))
+                    })
+                })
+                .try_fold(
+                    explorer::data_source::ExplorerHistograms {
+                        block_time: Vec::with_capacity(50),
+                        block_size: Vec::with_capacity(50),
+                        block_transactions: Vec::with_capacity(50),
+                        block_heights: Vec::with_capacity(50),
+                    },
+                    |mut histograms: explorer::data_source::ExplorerHistograms,
+                     row: Result<(u64, u64, u64, u64, u64), QueryError>| async {
+                        let (height, _timestamp, time, size, num_transactions) = row?;
+                        histograms
+                            .block_time
+                            .push(std::time::Duration::from_secs(time));
+                        histograms.block_size.push(size);
+                        histograms.block_transactions.push(num_transactions);
+                        histograms.block_heights.push(height);
+                        Ok(histograms)
+                    },
+                ).await;
+
+            histograms
+        }.await?;
+
+        let genesis_overview = async {
+            let row = self
+                .query_one(
+                    "SELECT
+                    (SELECT COUNT(*) FROM header) AS blocks,
+                    (SELECT COUNT(*) FROM transaction) AS transactions",
+                    Vec::<Box<dyn ToSql + Send + Sync>>::new(),
+                )
+                .await?;
+
+            let blocks: i64 = row.try_get("blocks").map_err(|e| QueryError::Error {
+                message: format!("failed to get column blocks {e}"),
+            })?;
+            let transactions: i64 = row.try_get("transactions").map_err(|e| QueryError::Error {
+                message: format!("failed to get column transactions {e}"),
+            })?;
+
+            let blocks: u64 = blocks.try_into().map_err(|e| QueryError::Error {
+                message: format!("failed to convert blocks to u64 {e}"),
+            })?;
+            let transactions: u64 = transactions.try_into().map_err(|e| QueryError::Error {
+                message: format!("failed to convert transactions to u64 {e}"),
+            })?;
+
+            Ok::<_, QueryError>(explorer::data_source::GenesisOverview {
+                rollups: 0,
+                transactions,
+                blocks,
+            })
+        }
+        .await?;
+
+        let latest_block: explorer::data_source::BlockDetail<Types> = self
+            .get_block_detail(&explorer::data_source::BlockIdentifier::Latest)
+            .await?;
+        let latest_blocks: Vec<BlockSummary<Types>> = self
+            .get_block_summaries(&explorer::data_source::GetBlockSummariesRequest(
+                explorer::data_source::BlockRange {
+                    target: explorer::data_source::BlockIdentifier::Latest,
+                    num_blocks: NonZeroUsize::new(10).unwrap(),
+                },
+            ))
+            .await?;
+        let latest_transactions: Vec<explorer::data_source::TransactionSummary<Types>> = self
+            .get_transaction_summaries(&explorer::data_source::GetTransactionSummariesRequest {
+                range: explorer::data_source::TransactionRange {
+                    target: explorer::data_source::TransactionIdentifier::Latest,
+                    num_transactions: NonZeroUsize::new(10).unwrap(),
+                },
+                filter: explorer::data_source::TransactionSummaryFilter::None,
+            })
+            .await?;
+
+        Ok(explorer::data_source::ExplorerSummary {
+            genesis_overview,
+            latest_block,
+            latest_transactions,
+            latest_blocks,
+            histograms,
+        })
     }
 }
 

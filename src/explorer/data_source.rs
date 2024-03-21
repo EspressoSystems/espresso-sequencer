@@ -27,6 +27,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     num::{NonZeroUsize, TryFromIntError},
+    time::Duration,
 };
 use tide_disco::StatusCode;
 use time::format_description::well_known::Rfc3339;
@@ -208,6 +209,24 @@ where
 pub enum TimestampConversionError {
     TimeError(time::error::ComponentRange),
     IntError(TryFromIntError),
+}
+
+impl Display for TimestampConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimestampConversionError::TimeError(err) => write!(f, "{:?}", err),
+            TimestampConversionError::IntError(err) => write!(f, "{:?}", err),
+        }
+    }
+}
+
+impl std::error::Error for TimestampConversionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            TimestampConversionError::TimeError(err) => Some(err),
+            TimestampConversionError::IntError(err) => Some(err),
+        }
+    }
 }
 
 impl From<time::error::ComponentRange> for TimestampConversionError {
@@ -414,6 +433,36 @@ impl<Types: NodeType> Default for GetTransactionSummariesRequest<Types> {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GenesisOverview {
+    pub rollups: u64,
+    pub transactions: u64,
+    pub blocks: u64,
+    // pub sequencer_nodes: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExplorerHistograms {
+    pub block_time: Vec<Duration>,
+    pub block_size: Vec<u64>,
+    pub block_transactions: Vec<u64>,
+    pub block_heights: Vec<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct ExplorerSummary<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub latest_block: BlockDetail<Types>,
+    pub genesis_overview: GenesisOverview,
+    pub latest_blocks: Vec<BlockSummary<Types>>,
+    pub latest_transactions: Vec<TransactionSummary<Types>>,
+    //  Most Active Rollups
+    pub histograms: ExplorerHistograms,
+}
+
 /// [GetBlockDetailError] represents an error that has occurred in response to
 /// the [GetBlockDetail] request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -574,12 +623,15 @@ impl ExplorerAPIError for GetTransactionSummariesError {
 pub enum GetExplorerSummaryError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
+    #[serde(untagged)]
+    QueryError(String),
 }
 
 impl GetExplorerSummaryError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => err.status(),
+            GetExplorerSummaryError::QueryError(_) => StatusCode::InternalServerError,
         }
     }
 }
@@ -588,6 +640,7 @@ impl Display for GetExplorerSummaryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => write!(f, "{err}"),
+            GetExplorerSummaryError::QueryError(err) => write!(f, "{err}"),
         }
     }
 }
@@ -596,6 +649,7 @@ impl ExplorerAPIError for GetExplorerSummaryError {
     fn code(&self) -> &str {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => err.code(),
+            GetExplorerSummaryError::QueryError(_) => "QUERY_ERROR",
         }
     }
 }
@@ -648,7 +702,9 @@ where
         ))
     }
 
-    async fn get_explorer_summary(&self) -> Result<(), GetExplorerSummaryError> {
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
         Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
     }
 }

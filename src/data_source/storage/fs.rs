@@ -474,6 +474,15 @@ where
         })
     }
 
+    async fn get_block_detail(
+        &self,
+        _request: &explorer::data_source::BlockIdentifier<Types>,
+    ) -> QueryResult<explorer::data_source::BlockDetail<Types>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+
     async fn get_transaction_summaries(
         &self,
         _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
@@ -487,6 +496,14 @@ where
         &self,
         _request: &explorer::data_source::TransactionIdentifier<Types>,
     ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>> {
+        Err(QueryError::Error {
+            message: "unimplemented".to_string(),
+        })
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>> {
         Err(QueryError::Error {
             message: "unimplemented".to_string(),
         })

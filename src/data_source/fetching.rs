@@ -768,6 +768,25 @@ where
             })
     }
 
+    async fn get_block_detail(
+        &self,
+        request: explorer::data_source::BlockIdentifier<Types>,
+    ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>
+    {
+        self.storage()
+            .await
+            .get_block_detail(&request)
+            .await
+            .map_err(|err| match err {
+                QueryError::NotFound => explorer::data_source::GetBlockDetailError::BlockNotFound(
+                    format!("{:?}", request),
+                ),
+                _ => explorer::data_source::GetBlockDetailError::Unimplemented(
+                    explorer::errors::Unimplemented {},
+                ),
+            })
+    }
+
     async fn get_transaction_summaries(
         &self,
         request: explorer::data_source::GetTransactionSummariesRequest<Types>,
@@ -814,6 +833,19 @@ where
                     explorer::errors::Unimplemented {},
                 ),
             })
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<
+        explorer::data_source::ExplorerSummary<Types>,
+        explorer::data_source::GetExplorerSummaryError,
+    > {
+        self.storage()
+            .await
+            .get_explorer_summary()
+            .await
+            .map_err(|e| explorer::data_source::GetExplorerSummaryError::QueryError(e.to_string()))
     }
 }
 
