@@ -16,7 +16,7 @@ services:
       - "./geth-config/test-jwt-secret.txt:/config/test-jwt-secret.txt"
 
   deploy-contracts:
-    image: ghcr.io/espressosystems/deploy:main
+    image: ghcr.io/espressosystems/espresso-sequencer/deploy:main
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
