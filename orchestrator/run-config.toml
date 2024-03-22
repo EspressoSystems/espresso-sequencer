@@ -1,4 +1,4 @@
-rounds = 100
+rounds = 10
 transactions_per_round = 10
 transaction_size = 1000
 node_index = 0
@@ -77,23 +77,23 @@ url = "http://localhost:9001"
 
 [web_server_config.wait_between_polls]
 secs = 0
-nanos = 100000000 # 10 ms
+nanos = 10_000_000
 
 [da_web_server_config.wait_between_polls]
 secs = 0
-nanos = 100000000 # 10 ms
+nanos = 10_000_000
 
-
-[config.data_request_delay]
-secs = 0
-nanos = 2000000000 # 200 ms
-
-[config.propose_min_round_time]
-secs = 0
-nanos = 0
 
 [config.view_sync_timeout]
 secs = 2
+nanos = 0
+
+[config.data_request_delay]
+secs = 0
+nanos = 200_000_000
+
+[config.propose_min_round_time]
+secs = 0
 nanos = 0
 
 # TODO (Keyao) Clean up configuration parameters.

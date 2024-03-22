@@ -64,7 +64,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use std::{fs, time::Instant};
 use std::{num::NonZeroUsize, str::FromStr};
 use surf_disco::Url;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use versioned_binary_serialization::version::StaticVersionType;
 
 #[derive(Debug, Clone)]
@@ -172,6 +172,22 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
                 .help("Sets the url of the orchestrator")
                 .required(false),
         )
+        .arg(
+            Arg::new("webserver_url")
+                .short('w')
+                .long("webserver_url")
+                .value_name("URL")
+                .help("Sets the url of the webserver")
+                .required(false),
+        )
+        .arg(
+            Arg::new("da_webserver_url")
+                .short('a')
+                .long("da_webserver_url")
+                .value_name("URL")
+                .help("Sets the url of the da webserver")
+                .required(false),
+        )
         .get_matches();
 
     if let Some(config_file_string) = matches.get_one::<String>("config_file") {
@@ -211,6 +227,20 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
     }
     if let Some(orchestrator_url_string) = matches.get_one::<String>("orchestrator_url") {
         orchestrator_url = Url::parse(orchestrator_url_string).unwrap();
+    }
+    if let Some(webserver_url_string) = matches.get_one::<String>("webserver_url") {
+        let updated_web_server_config = WebServerConfig {
+            url: Url::parse(webserver_url_string).unwrap(),
+            wait_between_polls: config.web_server_config.unwrap().wait_between_polls,
+        };
+        config.web_server_config = Some(updated_web_server_config);
+    }
+    if let Some(da_webserver_url_string) = matches.get_one::<String>("da_webserver_url") {
+        let updated_da_web_server_config = WebServerConfig {
+            url: Url::parse(da_webserver_url_string).unwrap(),
+            wait_between_polls: config.da_web_server_config.unwrap().wait_between_polls,
+        };
+        config.da_web_server_config = Some(updated_da_web_server_config);
     }
 
     (config, orchestrator_url)
@@ -260,7 +290,7 @@ pub async fn run_orchestrator<
 >(
     OrchestratorArgs { url, config }: OrchestratorArgs<TYPES>,
 ) {
-    error!("Starting orchestrator",);
+    println!("Starting orchestrator",);
     let _result = hotshot_orchestrator::run_orchestrator::<
         TYPES::SignatureKey,
         TYPES::ElectionConfigType,
@@ -540,10 +570,10 @@ pub trait RunDA<
         let mut total_latency = 0;
         let mut num_latency = 0;
 
-        error!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
+        debug!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
         async_sleep(Duration::from_secs(start_delay_seconds)).await;
 
-        error!("Starting HotShot example!");
+        debug!("Starting HotShot example!");
         let start = Instant::now();
 
         let mut event_stream = context.get_event_stream();
@@ -638,7 +668,7 @@ pub trait RunDA<
                             failed_num_views += 1;
                             warn!("Timed out in view {:?}", view_number);
                         }
-                        _ => {}
+                        _ => {} // mostly DA proposal
                     }
                 }
             }
@@ -647,19 +677,21 @@ pub trait RunDA<
         let consensus = consensus_lock.read().await;
         let total_num_views = usize::try_from(consensus.locked_view.get_u64()).unwrap();
         // When posting to the orchestrator, note that the total number of views also include un-finalized views.
-        error!("Failed views: {failed_num_views}, Total views: {total_num_views}, num_successful_commits: {num_successful_commits}");
+        println!("[{node_index}]: Total views: {total_num_views}, Failed views: {failed_num_views}, num_successful_commits: {num_successful_commits}");
         // +2 is for uncommitted views
         assert!(total_num_views <= (failed_num_views + num_successful_commits + 2));
         // Output run results
         let total_time_elapsed = start.elapsed(); // in seconds
-        error!("[{node_index}]: {rounds} rounds completed in {total_time_elapsed:?} - Total transactions sent: {total_transactions_sent} - Total transactions committed: {total_transactions_committed} - Total commitments: {num_successful_commits}");
+        println!("[{node_index}]: {rounds} rounds completed in {total_time_elapsed:?} - Total transactions sent: {total_transactions_sent} - Total transactions committed: {total_transactions_committed} - Total commitments: {num_successful_commits}");
         if total_transactions_committed != 0 {
             // extra 8 bytes for timestamp
             let throughput_bytes_per_sec = total_transactions_committed
                 * (transaction_size_in_bytes + 8)
                 / total_time_elapsed.as_secs();
+            let avg_latency_in_sec = total_latency / num_latency;
+            println!("[{node_index}]: throughput: {throughput_bytes_per_sec} bytes/sec, avg_latency: {avg_latency_in_sec} sec.");
             BenchResults {
-                avg_latency_in_sec: total_latency / num_latency,
+                avg_latency_in_sec,
                 num_latency,
                 minimum_latency_in_sec: minimum_latency,
                 maximum_latency_in_sec: maximum_latency,
@@ -1056,7 +1088,7 @@ pub async fn main_entry_point<
     setup_logging();
     setup_backtrace();
 
-    error!("Starting validator");
+    debug!("Starting validator");
 
     // see what our public identity will be
     let public_ip = match args.public_ip {
@@ -1128,13 +1160,13 @@ pub async fn main_entry_point<
     }
 
     if let NetworkConfigSource::Orchestrator = source {
-        error!("Waiting for the start command from orchestrator");
+        debug!("Waiting for the start command from orchestrator");
         orchestrator_client
             .wait_for_all_nodes_ready(run_config.clone().node_index)
             .await;
     }
 
-    error!("Starting HotShot");
+    println!("Starting HotShot");
     let bench_results = run
         .run_hotshot(
             hotshot,
