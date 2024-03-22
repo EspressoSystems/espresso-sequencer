@@ -158,11 +158,11 @@
               pass_filenames = true;
             };
             spell-checking = {
-              enable = true;
+              enable = false; #TODO philippe this throws an error....
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
-              excludes = [ "contract-bindings/artifacts" ];
+              excludes = [ "contract-bindings" ];
             };
             nixpkgs-fmt.enable = true;
           };

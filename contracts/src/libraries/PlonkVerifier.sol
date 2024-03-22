@@ -215,11 +215,10 @@ library PlonkVerifier {
 
         transcript.appendMessage(extraTranscriptInitMsg);
         transcript.appendVkAndPubInput(verifyingKey, publicInput);
-        transcript.appendGroupElement(proof.wire0);
-        transcript.appendGroupElement(proof.wire1);
-        transcript.appendGroupElement(proof.wire2);
-        transcript.appendGroupElement(proof.wire3);
-        transcript.appendGroupElement(proof.wire4);
+
+        transcript.append5GroupElements(
+            proof.wire0, proof.wire1, proof.wire2, proof.wire3, proof.wire4
+        );
 
         // have to compute tau, but not really used anywhere
         // slither-disable-next-line unused-return
@@ -231,19 +230,16 @@ library PlonkVerifier {
 
         res.alpha = transcript.getAndAppendChallenge();
 
-        transcript.appendGroupElement(proof.split0);
-        transcript.appendGroupElement(proof.split1);
-        transcript.appendGroupElement(proof.split2);
-        transcript.appendGroupElement(proof.split3);
-        transcript.appendGroupElement(proof.split4);
+        transcript.append5GroupElements(
+            proof.split0, proof.split1, proof.split2, proof.split3, proof.split4
+        );
 
         res.zeta = transcript.getAndAppendChallenge();
 
         transcript.appendProofEvaluations(proof);
         res.v = transcript.getAndAppendChallenge();
 
-        transcript.appendGroupElement(proof.zeta);
-        transcript.appendGroupElement(proof.zetaOmega);
+        transcript.append2GroupElements(proof.zeta, proof.zetaOmega);
         res.u = transcript.getAndAppendChallenge();
 
         assembly {
