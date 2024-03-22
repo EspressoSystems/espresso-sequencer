@@ -92,7 +92,6 @@ impl TestView {
             justify_qc: QuorumCertificate::genesis(),
             upgrade_certificate: None,
             proposal_certificate: None,
-            proposer_id: public_key,
         };
 
         let transactions = vec![TestTransaction(vec![0])];
@@ -123,8 +122,6 @@ impl TestView {
             block_payload: Some(TestBlockPayload {
                 transactions: transactions.clone(),
             }),
-            // Note: this field is not relevant in calculating the leaf commitment.
-            proposer_id: public_key,
         };
 
         let signature = <BLSPubKey as SignatureKey>::sign(&private_key, leaf.commit().as_ref())
@@ -286,8 +283,6 @@ impl TestView {
             block_payload: Some(TestBlockPayload {
                 transactions: transactions.clone(),
             }),
-            // Note: this field is not relevant in calculating the leaf commitment.
-            proposer_id: public_key,
         };
 
         let signature = <BLSPubKey as SignatureKey>::sign(&private_key, leaf.commit().as_ref())
@@ -299,7 +294,6 @@ impl TestView {
             justify_qc: quorum_certificate.clone(),
             upgrade_certificate,
             proposal_certificate,
-            proposer_id: public_key,
         };
 
         let quorum_proposal = Proposal {

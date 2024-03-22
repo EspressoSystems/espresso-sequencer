@@ -310,9 +310,6 @@ pub struct QuorumProposal<TYPES: NodeType> {
     /// - A view sync certificate is only present if the justify_qc and timeout_cert are not
     /// present.
     pub proposal_certificate: Option<ViewChangeEvidence<TYPES>>,
-
-    /// the propser id
-    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
@@ -392,9 +389,6 @@ pub struct Leaf<TYPES: NodeType> {
     ///
     /// It may be empty for nodes not in the DA committee.
     pub block_payload: Option<TYPES::BlockPayload>,
-
-    /// the proposer id of the leaf
-    pub proposer_id: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
@@ -450,7 +444,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             parent_commitment: fake_commitment(),
             block_header: block_header.clone(),
             block_payload: Some(payload),
-            proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }
 
@@ -515,11 +508,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// A commitment to the block payload contained in this leaf.
     pub fn get_payload_commitment(&self) -> VidCommitment {
         self.get_block_header().payload_commitment()
-    }
-
-    /// Identity of the network participant who proposed this leaf.
-    pub fn get_proposer_id(&self) -> TYPES::SignatureKey {
-        self.proposer_id.clone()
     }
 }
 

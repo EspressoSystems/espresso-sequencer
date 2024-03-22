@@ -451,10 +451,6 @@ async fn test_view_sync_finalize_vote() {
         _ => panic!("Found a TC when there should have been a view sync cert"),
     };
 
-    // Highest qc so far is actually from view 1, so re-assign proposal 0 to the slot of proposal
-    // 3.
-    proposals[0].data.proposer_id = proposals[3].data.proposer_id;
-
     // Now at view 3 we receive the proposal received response.
     let view_3 = TestScriptStage {
         inputs: vec![
@@ -562,10 +558,6 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     // Force this to fail by making the cert happen for a view we've never seen. This will
     // intentionally skip the proposal for this node so we can get the proposal and fail to vote.
     cert.view_number = ViewNumber::new(10);
-
-    // Highest qc so far is actually from view 1, so re-assign proposal 0 to the slot of proposal
-    // 3.
-    proposals[0].data.proposer_id = proposals[3].data.proposer_id;
 
     // We introduce an error by setting a different view number as well, this makes the task check
     // for a view sync or timeout cert. This value could be anything as long as it is not the

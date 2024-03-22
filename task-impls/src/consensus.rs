@@ -201,7 +201,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.block_header.clone(),
                     block_payload: None,
-                    proposer_id: self.quorum_membership.get_leader(view),
                 };
 
                 // Validate the DAC.
@@ -533,7 +532,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         parent_commitment: justify_qc.get_data().leaf_commit,
                         block_header: proposal.data.block_header.clone(),
                         block_payload: None,
-                        proposer_id: sender,
                     };
                     let state = Arc::new(
                         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(
@@ -608,7 +606,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     parent_commitment,
                     block_header: proposal.data.block_header.clone(),
                     block_payload: None,
-                    proposer_id: sender.clone(),
                 };
                 let leaf_commitment = leaf.commit();
 
@@ -1336,7 +1333,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 parent_commitment: parent_leaf.commit(),
                 block_header: block_header.clone(),
                 block_payload: None,
-                proposer_id: self.api.public_key().clone(),
             };
 
             let Ok(signature) =
@@ -1375,7 +1371,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 justify_qc: consensus.high_qc.clone(),
                 proposal_certificate,
                 upgrade_certificate: upgrade_cert,
-                proposer_id: leaf.proposer_id,
             };
 
             self.proposal_cert = None;
