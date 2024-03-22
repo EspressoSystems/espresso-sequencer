@@ -175,6 +175,12 @@ impl<T> Notifier<T> {
     }
 }
 
+impl<T> Default for Notifier<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Clone> Notifier<T> {
     /// Notify all subscribers whose predicate is satisfied by `msg`.
     pub fn notify(&mut self, msg: &T) {
