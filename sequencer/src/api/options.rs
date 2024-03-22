@@ -37,8 +37,8 @@ pub struct Options {
     pub query: Option<Query>,
     pub submit: Option<Submit>,
     pub status: Option<Status>,
+    pub catchup: Option<Catchup>,
     pub state: Option<State>,
-    pub merklized_state: Option<MerklizedState>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -50,8 +50,8 @@ impl From<Http> for Options {
             query: None,
             submit: None,
             status: None,
+            catchup: None,
             state: None,
-            merklized_state: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -82,6 +82,12 @@ impl Options {
     /// Add a status API module.
     pub fn status(mut self, opt: Status) -> Self {
         self.status = Some(opt);
+        self
+    }
+
+    /// Add a catchup API module.
+    pub fn catchup(mut self, opt: Catchup) -> Self {
+        self.catchup = Some(opt);
         self
     }
 
@@ -265,7 +271,7 @@ impl Options {
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
-        if self.merklized_state.is_some() {
+        if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "state/blocks",
@@ -307,7 +313,7 @@ impl Options {
         }
 
         // Initialize state API.
-        if self.state.is_some() {
+        if self.catchup.is_some() {
             tracing::info!("initializing state API");
             let state_api = endpoints::state(bind_version)?;
             app.register_module("state", state_api)?;
@@ -339,9 +345,9 @@ pub struct Submit;
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Status;
 
-/// Options for the state API module.
+/// Options for the catchup API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct State;
+pub struct Catchup;
 
 /// Options for the query API module.
 #[derive(Parser, Clone, Debug, Default)]
@@ -351,5 +357,6 @@ pub struct Query {
     pub peers: Vec<Url>,
 }
 
+/// Options for the state API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct MerklizedState;
+pub struct State;

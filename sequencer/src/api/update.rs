@@ -1,12 +1,7 @@
 //! Update loop for query API state.
 
 use super::{data_source::SequencerDataSource, StorageState};
-use crate::{
-    network,
-    state::{BlockMerkleTree, FeeAccount, FeeMerkleTree},
-    Delta, SeqTypes, ValidatedState,
-};
-use anyhow::Context;
+use crate::{network, state::Delta, SeqTypes, ValidatedState};
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use futures::stream::{Stream, StreamExt};
@@ -16,7 +11,6 @@ use hotshot_query_service::{
     merklized_state::UpdateStateStorage,
     Leaf,
 };
-use jf_primitives::merkle_tree::{MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 use versioned_binary_serialization::version::StaticVersionType;
 
 pub(super) async fn update_loop<N, D, Ver: StaticVersionType>(
@@ -72,54 +66,6 @@ where
         leaf: &Leaf<SeqTypes>,
         delta: Arc<Delta>,
     ) -> anyhow::Result<()> {
-        let block_number = leaf.get_height();
-        let ValidatedState {
-            fee_merkle_tree,
-            block_merkle_tree,
-        } = self;
-
-        let Delta {
-            blocks_delta,
-            fees_delta,
-        } = delta.as_ref();
-
-        // Insert block merkle tree nodes
-        for delta in blocks_delta {
-            let (_, proof) = block_merkle_tree
-                .lookup(delta)
-                .expect_ok()
-                .context("Index not found in block merkle tree")?;
-            let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
-                delta,
-                block_merkle_tree.height(),
-            );
-
-            storage
-                .inner_mut()
-                .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
-                .await
-                .context("failed to insert merkle nodes for block merkle tree")?;
-        }
-
-        // Insert fee merkle tree nodes
-        for delta in fees_delta {
-            let (_, proof) = fee_merkle_tree
-                .universal_lookup(delta)
-                .expect_ok()
-                .context("Index not found in fee merkle tree")?;
-            let path: Vec<usize> =
-                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
-                    delta,
-                    fee_merkle_tree.height(),
-                );
-
-            storage
-                .inner_mut()
-                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
-                .await
-                .context("failed to insert merkle nodes for block merkle tree")?;
-        }
-
-        Ok(())
+        self.update_storage(storage.inner_mut(), leaf, delta).await
     }
 }

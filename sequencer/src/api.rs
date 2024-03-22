@@ -335,7 +335,7 @@ mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = opt(Options::from(options::Http { port }).state(Default::default()));
+        let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
         let mut network = TestNetwork::new(options).await;
         client.connect(None).await;
 
@@ -792,7 +792,7 @@ mod test {
         // Start a sequencer network, using the query service for catchup.
         let port = pick_unused_port().expect("No ports free");
         let network = TestNetwork::with_state(
-            Options::from(options::Http { port }).state(Default::default()),
+            Options::from(options::Http { port }).catchup(Default::default()),
             states,
             [NoStorage; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {

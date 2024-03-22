@@ -1,4 +1,4 @@
-use crate::{Delta, Header, Leaf, NodeState, SeqTypes};
+use crate::{Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -14,7 +14,10 @@ use ethers::{
 };
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::merklized_state::MerklizedState;
-use hotshot_types::data::{BlockError, ViewNumber};
+use hotshot_types::{
+    data::{BlockError, ViewNumber},
+    traits::states::StateDelta,
+};
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
 use jf_primitives::{
@@ -28,7 +31,7 @@ use jf_primitives::{
 };
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::{ops::Add, str::FromStr};
+use std::{collections::HashSet, ops::Add, str::FromStr};
 use typenum::{Unsigned, U3};
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
@@ -41,6 +44,13 @@ pub struct ValidatedState {
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
 }
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Delta {
+    pub fees_delta: HashSet<FeeAccount>,
+}
+
+impl StateDelta for Delta {}
 
 impl Default for ValidatedState {
     fn default() -> Self {
@@ -153,7 +163,6 @@ pub fn validate_and_apply_proposal(
 
     // validate proposal is descendent of parent by appending to parent
     block_merkle_tree.push(parent_header.commit()).unwrap();
-    delta.blocks_delta.insert(parent_header.height);
     let block_merkle_tree_root = block_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.block_merkle_tree_root == block_merkle_tree_root,
@@ -232,6 +241,7 @@ fn charge_fee(
 /// Validate builder account by verifying signature and charging the account.
 fn validate_and_charge_builder(
     fee_merkle_tree: &mut FeeMerkleTree,
+    delta: &mut Delta,
     proposed_header: &Header,
 ) -> anyhow::Result<()> {
     // Beware of Malice!
@@ -255,6 +265,8 @@ fn validate_and_charge_builder(
     if charge_fee(fee_merkle_tree, fee_info).is_err() {
         bail!("Insufficient funds")
     };
+
+    delta.fees_delta.insert(fee_info.account);
     Ok(())
 }
 
@@ -287,13 +299,11 @@ fn validate_and_apply_header(
 
     // Validate builder by verifying signature and charging account
     if let Err(e) =
-        validate_and_charge_builder(&mut validated_state.fee_merkle_tree, proposed_header)
+        validate_and_charge_builder(&mut validated_state.fee_merkle_tree, delta, proposed_header)
     {
         tracing::warn!("Invalid Builder: {}", e);
         return Err(BlockError::InvalidBlockHeader);
     };
-
-    delta.fees_delta.insert(proposed_header.fee_info.account);
 
     Ok(())
 }

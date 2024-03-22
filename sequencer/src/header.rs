@@ -370,8 +370,8 @@ mod test_headers {
     use crate::{
         catchup::mock::MockStateCatchup,
         l1_client::L1Client,
-        state::{validate_and_apply_proposal, BlockMerkleTree, FeeMerkleTree},
-        Delta, NodeState,
+        state::{validate_and_apply_proposal, BlockMerkleTree, Delta, FeeMerkleTree},
+        NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{

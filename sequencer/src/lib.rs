@@ -21,7 +21,6 @@ use ethers::{
 
 use l1_client::L1Client;
 
-use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 mod l1_client;
@@ -54,7 +53,7 @@ use hotshot_types::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
-        states::{InstanceState, StateDelta},
+        states::InstanceState,
         storage::Storage,
     },
     ValidatorConfig,
@@ -63,10 +62,7 @@ use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::time::Duration;
-use std::{
-    collections::{HashMap, HashSet},
-    net::Ipv4Addr,
-};
+use std::{collections::HashMap, net::Ipv4Addr};
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -193,14 +189,6 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type CommitteeNetwork = N::DAChannel;
     type Storage = ToBeReplacedStorage<SeqTypes>;
 }
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct Delta {
-    blocks_delta: HashSet<u64>,
-    fees_delta: HashSet<FeeAccount>,
-}
-
-impl StateDelta for Delta {}
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
@@ -500,7 +488,6 @@ pub mod testing {
                 da_staked_committee_size: num_nodes,
                 da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
-                // ???
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
             };

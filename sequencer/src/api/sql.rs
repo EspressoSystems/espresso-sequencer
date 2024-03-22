@@ -1,21 +1,12 @@
-use std::sync::Arc;
-
 use super::data_source::{Provider, SequencerDataSource};
-use crate::{
-    persistence::sql::Options,
-    state::{BlockMerkleTree, FeeAccount, FeeMerkleTree},
-    Delta, SeqTypes, ValidatedState,
-};
+use crate::{persistence::sql::Options, SeqTypes};
 use anyhow::Context;
 use async_trait::async_trait;
 use hotshot_query_service::{
     data_source::sql::{Config, SqlDataSource},
-    merklized_state::{MerklizedState, UpdateStateData, UpdateStateStorage},
-    Leaf,
+    merklized_state::{MerklizedState, UpdateStateData},
 };
-use jf_primitives::merkle_tree::{
-    prelude::MerklePath, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
-};
+use jf_primitives::merkle_tree::prelude::MerklePath;
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 
@@ -46,64 +37,6 @@ impl SequencerDataSource for DataSource {
         )
         .await
         .context("failed to insert merkle nodes! ")
-    }
-}
-
-#[async_trait]
-impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for ValidatedState {
-    async fn update_storage(
-        &self,
-        storage: &mut D,
-        leaf: &Leaf<SeqTypes>,
-        delta: Arc<Delta>,
-    ) -> anyhow::Result<()> {
-        let block_number = leaf.get_height();
-        let ValidatedState {
-            fee_merkle_tree,
-            block_merkle_tree,
-        } = self;
-
-        let Delta {
-            blocks_delta,
-            fees_delta,
-        } = delta.as_ref();
-
-        // Insert block merkle tree nodes
-        for delta in blocks_delta {
-            let (_, proof) = block_merkle_tree
-                .lookup(delta)
-                .expect_ok()
-                .context("Index not found in block merkle tree")?;
-            let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
-                delta,
-                block_merkle_tree.height(),
-            );
-
-            storage
-                .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
-                .await
-                .context("failed to insert merkle nodes for block merkle tree")?;
-        }
-
-        // Insert fee merkle tree nodes
-        for delta in fees_delta {
-            let (_, proof) = fee_merkle_tree
-                .universal_lookup(delta)
-                .expect_ok()
-                .context("Index not found in fee merkle tree")?;
-            let path: Vec<usize> =
-                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
-                    delta,
-                    fee_merkle_tree.height(),
-                );
-
-            storage
-                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
-                .await
-                .context("failed to insert merkle nodes for block merkle tree")?;
-        }
-
-        Ok(())
     }
 }
 
