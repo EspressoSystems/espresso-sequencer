@@ -46,6 +46,30 @@ library Transcript {
         );
     }
 
+    function append8FieldElements(
+        TranscriptData memory self,
+        BN254.ScalarField f1,
+        BN254.ScalarField f2,
+        BN254.ScalarField f3,
+        BN254.ScalarField f4,
+        BN254.ScalarField f5,
+        BN254.ScalarField f6,
+        BN254.ScalarField f7,
+        BN254.ScalarField f8
+    ) internal pure {
+        self.transcript = abi.encodePacked(
+            self.transcript,
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f1)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f2)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f3)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f4)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f5)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f6)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f7)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(f8))
+        );
+    }
+
     function appendGroupElement(TranscriptData memory self, BN254.G1Point memory comm)
         internal
         pure
@@ -264,10 +288,17 @@ library Transcript {
         );
 
         // public inputs
-        // TODO philippe unroll loop?
-        for (uint256 i = 0; i < publicInput.length; i++) {
-            appendFieldElement(self, BN254.ScalarField.wrap(publicInput[i]));
-        }
+        append8FieldElements(
+            self,
+            BN254.ScalarField.wrap(publicInput[0]),
+            BN254.ScalarField.wrap(publicInput[1]),
+            BN254.ScalarField.wrap(publicInput[2]),
+            BN254.ScalarField.wrap(publicInput[3]),
+            BN254.ScalarField.wrap(publicInput[4]),
+            BN254.ScalarField.wrap(publicInput[5]),
+            BN254.ScalarField.wrap(publicInput[6]),
+            BN254.ScalarField.wrap(publicInput[7])
+        );
     }
 
     /// @dev Append the proof to the transcript.
