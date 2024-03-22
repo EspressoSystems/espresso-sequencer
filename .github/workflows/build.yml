@@ -67,6 +67,7 @@ jobs:
             target/release/submit-transactions
             target/release/reset-storage
             target/release/deploy
+            target/release/keygen
 
   build-arm:
     runs-on: [self-hosted, ARM64]
@@ -107,6 +108,7 @@ jobs:
             target/release/submit-transactions
             target/release/reset-storage
             target/release/deploy
+            target/release/keygen
 
   build-dockers:
     runs-on: ubuntu-latest
