@@ -214,7 +214,8 @@ library PlonkVerifier {
         uint256 p = BN254.R_MOD;
 
         transcript.appendMessage(extraTranscriptInitMsg);
-        transcript.appendVkAndPubInput(verifyingKey, publicInput);
+        transcript.appendVk(verifyingKey);
+        transcript.appendPubInput(publicInput);
 
         transcript.append5GroupElements(
             proof.wire0, proof.wire1, proof.wire2, proof.wire3, proof.wire4

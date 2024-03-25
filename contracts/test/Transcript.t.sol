@@ -140,10 +140,9 @@ contract Transcript_appendVkAndPubInput_Test is Test {
     using T for T.TranscriptData;
 
     /// @dev Test if `appendVkAndPubInput` matches that of Jellyfish
-    function testFuzz_appendVkAndPubInput_matches(
-        T.TranscriptData memory transcript,
-        uint256[] memory publicInput
-    ) external {
+    function testFuzz_appendVkAndPubInput_matches(uint256[] memory publicInput) external {
+        T.TranscriptData memory transcript;
+
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
@@ -160,7 +159,9 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendVkAndPubInput(vk, publicInput);
+        transcript.appendVk(vk);
+        //assertEq(transcript.transcript, hex"ff");
+        transcript.appendPubInput(publicInput);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
         assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
