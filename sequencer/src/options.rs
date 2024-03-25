@@ -1,14 +1,18 @@
 use crate::{api, persistence};
+use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use ethers::types::Address;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
-use std::collections::HashSet;
-use std::iter::once;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    iter::once,
+    path::PathBuf,
+    str::FromStr,
+    time::Duration,
+};
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -83,12 +87,35 @@ pub struct Options {
     )]
     pub webserver_poll_interval: Duration,
 
-    // Sequencer Private Staking key
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")]
-    pub private_staking_key: BLSPrivKey,
+    /// Path to file containing private keys.
+    ///
+    /// The file should follow the .env format, with two keys:
+    /// * ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY
+    /// * ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY
+    ///
+    /// Appropriate key files can be generated with the `keygen` utility program.
+    #[clap(long, name = "KEY_FILE", env = "ESPRESSO_SEQUENCER_KEY_FILE")]
+    pub key_file: Option<PathBuf>,
 
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")]
-    pub private_state_key: StateSignKey,
+    /// Private staking key.
+    ///
+    /// This can be used as an alternative to KEY_FILE.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY",
+        conflicts_with = "key_file"
+    )]
+    pub private_staking_key: Option<BLSPrivKey>,
+
+    /// Private state signing key.
+    ///
+    /// This can be used as an alternative to KEY_FILE.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY",
+        conflicts_with = "key_file"
+    )]
+    pub private_state_key: Option<StateSignKey>,
 
     /// Add optional modules to the service.
     ///
@@ -143,6 +170,28 @@ pub struct Options {
 impl Options {
     pub fn modules(&self) -> Modules {
         ModuleArgs(self.modules.clone()).parse()
+    }
+
+    pub fn private_keys(&self) -> anyhow::Result<(BLSPrivKey, StateSignKey)> {
+        if let Some(path) = &self.key_file {
+            let vars = dotenvy::from_path_iter(path)?.collect::<Result<HashMap<_, _>, _>>()?;
+            let staking = vars
+                .get("ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")
+                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")?
+                .parse()?;
+            let state = vars
+                .get("ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")
+                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")?
+                .parse()?;
+            Ok((staking, state))
+        } else if let (Some(staking), Some(state)) = (
+            self.private_staking_key.clone(),
+            self.private_state_key.clone(),
+        ) {
+            Ok((staking, state))
+        } else {
+            bail!("neither key file nor full set of private keys was provided")
+        }
     }
 }
 
