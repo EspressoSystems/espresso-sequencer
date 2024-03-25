@@ -158,7 +158,7 @@
               pass_filenames = true;
             };
             spell-checking = {
-              enable = false; #TODO philippe this throws an error....
+              enable = true;
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
