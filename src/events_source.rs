@@ -1,30 +1,26 @@
 use crate::notifier::Notifier;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
+use hotshot_types::data::ViewNumber;
 use hotshot_types::event::{Event, EventType};
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::future::IntoFuture;
 use std::sync::Arc;
-
 #[async_trait]
 pub trait EventsSource<Types>
 where
     Types: NodeType,
 {
     type EventStream: Stream<Item = Event<Types>> + Unpin + Send + 'static;
-    async fn get_events_starting_from_view(
-        &self,
-        view_number: <Types as NodeType>::Time,
-    ) -> Self::EventStream;
+    async fn get_events_starting_from_view(&self, view_number: u64) -> Self::EventStream;
 
     async fn subscribe_events(&self, view_number: u64) -> BoxStream<'static, Event<Types>> {
-        self.get_events_starting_from_view(<<Types as NodeType>::Time as ConsensusTime>::new(
-            view_number,
-        ))
-        .await
-        .boxed()
+        self.get_events_starting_from_view(view_number)
+            .await
+            .boxed()
     }
 }
 
@@ -72,16 +68,13 @@ impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
 #[async_trait]
 impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
     type EventStream = BoxStream<'static, Event<Types>>;
-    async fn get_events_starting_from_view(
-        &self,
-        view_number: <Types as NodeType>::Time,
-    ) -> Self::EventStream {
+    async fn get_events_starting_from_view(&self, view_number: u64) -> Self::EventStream {
         let notifier = self.notifier.clone();
         stream::unfold(notifier, move |notifier| async move {
             let event = notifier
                 .read()
                 .await
-                .wait_for(move |event| event.view_number >= view_number)
+                .wait_for(move |event| event.view_number.get_u64() >= view_number)
                 .into_future()
                 .await
                 .await

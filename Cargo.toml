@@ -24,11 +24,13 @@ tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag 
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.5.0" }
 toml = "0.8"
 versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization", tag = "0.1.2" }
+tracing = "0.1"
 
 [dev-dependencies]
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main", features = [
     "testing",
 ] }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.27" }
 portpicker = "0.1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.5.0" }
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.27" }
