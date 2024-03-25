@@ -196,6 +196,7 @@ impl ModuleArgs {
                 SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
+                SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
             }
         }
 
@@ -226,6 +227,7 @@ module!("http", api::options::Http);
 module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
+module!("state", api::options::State, requires: "http");
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -291,6 +293,10 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     Status(Module<api::options::Status>),
+    /// Run the state catchup API module.
+    ///
+    /// This module requires the http module to be started.
+    State(Module<api::options::State>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -301,4 +307,5 @@ pub struct Modules {
     pub query: Option<api::options::Query>,
     pub submit: Option<api::options::Submit>,
     pub status: Option<api::options::Status>,
+    pub state: Option<api::options::State>,
 }
