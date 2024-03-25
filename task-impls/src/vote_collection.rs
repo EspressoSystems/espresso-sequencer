@@ -67,6 +67,7 @@ impl<
 {
     /// Take one vote and accumultate it. Returns either the cert or the updated state
     /// after the vote is accumulated
+    #[allow(clippy::question_mark)]
     pub async fn accumulate_vote(
         &mut self,
         vote: &VOTE,
@@ -85,6 +86,7 @@ impl<
             );
             return None;
         }
+
         let accumulator = self.accumulator.as_mut()?;
         match accumulator.accumulate(vote, &self.membership) {
             Either::Left(()) => None,

@@ -20,7 +20,6 @@ use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestS
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 
 use hotshot_task::task::{Task, TaskRegistry, TestTask};
-use hotshot_types::constants::EVENT_CHANNEL_SIZE;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::Leaf,
@@ -30,6 +29,7 @@ use hotshot_types::{
     },
     HotShotConfig, ValidatorConfig,
 };
+use hotshot_types::{constants::EVENT_CHANNEL_SIZE, simple_certificate::QuorumCertificate};
 use hotshot_types::{
     message::Message,
     traits::{network::ConnectedNetwork, node_implementation::NodeImplementation},
@@ -219,6 +219,7 @@ where
             latest_view: None,
             changes,
             last_decided_leaf: Leaf::genesis(&TestInstanceState {}),
+            high_qc: QuorumCertificate::genesis(),
         };
         let spinning_task = TestTask::<SpinningTask<TYPES, I>, SpinningTask<TYPES, I>>::new(
             Task::new(tx.clone(), rx.clone(), reg.clone(), spinning_task_state),

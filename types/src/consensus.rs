@@ -24,7 +24,7 @@ use std::{
 use tracing::error;
 
 /// A type alias for `HashMap<Commitment<T>, T>`
-type CommitmentMap<T> = HashMap<Commitment<T>, T>;
+pub type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 
 /// A type alias for `BTreeMap<T::Time, HashMap<T::SignatureKey, Proposal<T, VidDisperseShare<T>>>>`
 type VidShares<TYPES> = BTreeMap<

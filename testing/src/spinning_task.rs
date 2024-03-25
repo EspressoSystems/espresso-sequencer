@@ -3,10 +3,12 @@ use std::collections::HashMap;
 use crate::test_runner::HotShotTaskCompleted;
 use crate::test_runner::{LateStartNode, Node, TestRunner};
 use either::{Left, Right};
+use hotshot::types::EventType;
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer};
 use hotshot_example_types::state_types::TestInstanceState;
 use hotshot_example_types::storage_types::TestStorage;
 use hotshot_task::task::{Task, TaskState, TestTaskState};
+use hotshot_types::simple_certificate::QuorumCertificate;
 use hotshot_types::{data::Leaf, ValidatorConfig};
 use hotshot_types::{
     event::Event,
@@ -39,6 +41,8 @@ pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) latest_view: Option<TYPES::Time>,
     /// Last decided leaf that can be used as the anchor leaf to initialize the node.
     pub(crate) last_decided_leaf: Leaf<TYPES>,
+    /// Highest qc seen in the test for restarting nodes
+    pub(crate) high_qc: QuorumCertificate<TYPES>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState for SpinningTask<TYPES, I> {
@@ -83,13 +87,24 @@ where
         _id: usize,
         task: &mut hotshot_task::task::TestTask<Self::State, Self>,
     ) -> Option<Self::Output> {
-        let Event {
-            view_number,
-            event: _,
-        } = message;
+        let Event { view_number, event } = message;
 
         let state = &mut task.state_mut();
 
+        if let EventType::Decide {
+            leaf_chain,
+            qc: _,
+            block_size: _,
+        } = event
+        {
+            state.last_decided_leaf = leaf_chain.first().unwrap().leaf.clone();
+        } else if let EventType::QuorumProposal {
+            proposal,
+            sender: _,
+        } = event
+        {
+            state.high_qc = proposal.data.justify_qc;
+        }
         // if we have not seen this view before
         if state.latest_view.is_none() || view_number > state.latest_view.unwrap() {
             // perform operations on the nodes
@@ -111,6 +126,9 @@ where
                                             TestInstanceState {},
                                             None,
                                             view_number,
+                                            state.high_qc.clone(),
+                                            Vec::new(),
+                                            BTreeMap::new(),
                                         );
                                         // We assign node's public key and stake value rather than read from config file since it's a test
                                         let validator_config =

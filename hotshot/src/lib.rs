@@ -198,10 +198,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 },
             },
         );
+        for (view_num, inner) in initializer.undecided_state {
+            validated_state_map.insert(view_num, inner);
+        }
 
         let mut saved_leaves = HashMap::new();
         let mut saved_payloads = BTreeMap::new();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
+        for leaf in initializer.undecided_leafs {
+            saved_leaves.insert(leaf.commit(), leaf.clone());
+        }
         if let Some(payload) = anchored_leaf.get_block_payload() {
             let encoded_txns: Vec<u8> = match payload.encode() {
                 // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
@@ -229,7 +235,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
-            high_qc: anchored_leaf.get_justify_qc(),
+            high_qc: initializer.high_qc,
             metrics: consensus_metrics.clone(),
         };
         let consensus = Arc::new(RwLock::new(consensus));
@@ -637,6 +643,15 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Starting view number that we are confident won't lead to a double vote after restart.
     start_view: TYPES::Time,
+    /// Highest QC that was seen, for genesis it's the genesis QC.  It should be for a view greater
+    /// than `inner`s view number for the non genesis case because we must have seen higher QCs
+    /// to decide on the leaf.
+    high_qc: QuorumCertificate<TYPES>,
+    /// Undecided leafs that were seen, but not yet decided on.  These allow a restarting node
+    /// to vote and propose right away if they didn't miss anything while down.
+    undecided_leafs: Vec<Leaf<TYPES>>,
+    /// Not yet decided state
+    undecided_state: BTreeMap<TYPES::Time, View<TYPES>>,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
@@ -651,6 +666,9 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state: Some(Arc::new(validated_state)),
             state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::Time::new(0),
+            high_qc: QuorumCertificate::genesis(),
+            undecided_leafs: Vec::new(),
+            undecided_state: BTreeMap::new(),
         })
     }
 
@@ -666,6 +684,9 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         instance_state: TYPES::InstanceState,
         validated_state: Option<Arc<TYPES::ValidatedState>>,
         start_view: TYPES::Time,
+        high_qc: QuorumCertificate<TYPES>,
+        undecided_leafs: Vec<Leaf<TYPES>>,
+        undecided_state: BTreeMap<TYPES::Time, View<TYPES>>,
     ) -> Self {
         Self {
             inner: anchor_leaf,
@@ -673,6 +694,9 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state,
             state_delta: None,
             start_view,
+            high_qc,
+            undecided_leafs,
+            undecided_state,
         }
     }
 }

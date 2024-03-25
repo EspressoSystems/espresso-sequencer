@@ -2,11 +2,13 @@ use anyhow::{bail, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_types::{
-    data::{DAProposal, VidDisperseShare},
+    consensus::CommitmentMap,
+    data::{DAProposal, Leaf, VidDisperseShare},
     message::Proposal,
     traits::{node_implementation::NodeType, storage::Storage},
+    utils::View,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 type VidShares<TYPES> = HashMap<
@@ -84,7 +86,17 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
 
     async fn update_high_qc(
         &self,
-        _qc: hotshot_types::simple_certificate::QuorumCertificate<TYPES>,
+        _high_qc: hotshot_types::simple_certificate::QuorumCertificate<TYPES>,
+    ) -> Result<()> {
+        if self.should_return_err {
+            bail!("Failed to update high qc to storage");
+        }
+        Ok(())
+    }
+    async fn update_undecided_state(
+        &self,
+        _leafs: CommitmentMap<Leaf<TYPES>>,
+        _state: BTreeMap<TYPES::Time, View<TYPES>>,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to update high qc to storage");
