@@ -52,10 +52,10 @@ async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
 where
     S: DataSourceOptions,
 {
+    let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
-
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
@@ -67,8 +67,8 @@ where
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
-        private_staking_key: opt.private_staking_key,
-        private_state_key: opt.private_state_key,
+        private_staking_key,
+        private_state_key,
         state_peers: opt.state_peers,
     };
 

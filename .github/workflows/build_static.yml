@@ -85,6 +85,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/submit-transactions
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/reset-storage
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/deploy
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/keygen
 
   static-dockers:
     runs-on: ubuntu-latest
