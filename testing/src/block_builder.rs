@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     num::NonZeroUsize,
     ops::{Deref, Range},
     sync::Arc,
@@ -8,6 +9,7 @@ use std::{
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
+use commit::{Commitment, Committable};
 use futures::future::BoxFuture;
 use hotshot::{traits::BlockPayload, types::SignatureKey};
 use hotshot_builder_api::{
@@ -19,15 +21,19 @@ use hotshot_example_types::{
     block_types::{TestBlockPayload, TestTransaction},
     node_types::TestTypes,
 };
+use hotshot_task::task::{Task, TaskState};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
-    traits::{block_contents::vid_commitment, node_implementation::NodeType},
+    traits::{block_contents::vid_commitment, election::Membership, node_implementation::NodeType},
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, App, Url};
+
+use crate::test_runner::HotShotTaskCompleted;
 
 /// Entry for a built block
 struct BlockEntry {
@@ -42,7 +48,7 @@ pub struct RandomBuilderOptions {
     /// How many transactions to include in a block
     pub txn_in_block: u64,
     /// How many blocks to generate per second
-    pub blocks_per_second: u64,
+    pub blocks_per_second: u32,
     /// Range of how big a transaction can be (in bytes)
     pub txn_size: Range<u32>,
     /// Number of storage nodes for VID commitment
@@ -99,10 +105,10 @@ impl RandomBuilderSource {
         let (priv_key, pub_key) = (self.priv_key.clone(), self.pub_key);
         async_spawn(async move {
             let mut rng = SmallRng::from_entropy();
-            let time_per_block = Duration::from_millis(1000 / options.blocks_per_second);
+            let time_per_block = Duration::from_secs(1) / options.blocks_per_second;
             loop {
                 let start = std::time::Instant::now();
-                let transactions = (0..options.txn_in_block)
+                let transactions: Vec<TestTransaction> = (0..options.txn_in_block)
                     .map(|_| {
                         let mut bytes = vec![
                             0;
@@ -113,80 +119,20 @@ impl RandomBuilderSource {
                         rng.fill_bytes(&mut bytes);
                         TestTransaction(bytes)
                     })
-                    .collect::<Vec<TestTransaction>>();
-                let block_size = transactions.iter().map(|t| t.0.len() as u64).sum::<u64>();
+                    .collect();
 
-                let block_payload = TestBlockPayload { transactions };
-                let commitment = block_payload.builder_commitment(&());
-                let vid_commitment = vid_commitment(
-                    &block_payload.encode().unwrap().collect(),
+                let (metadata, payload, header_input) = build_block(
+                    transactions,
                     options.num_storage_nodes,
+                    pub_key,
+                    priv_key.clone(),
                 );
 
-                let signature_over_block_info = {
-                    let mut block_info: Vec<u8> = Vec::new();
-                    block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
-                    block_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
-                    block_info.extend_from_slice(commitment.as_ref());
-                    match <TestTypes as NodeType>::SignatureKey::sign(&priv_key, &block_info) {
-                        Ok(sig) => sig,
-                        Err(e) => {
-                            tracing::error!(error = %e, "Failed to sign block");
-                            continue;
-                        }
-                    }
-                };
-
-                let signature_over_builder_commitment =
-                    match <TestTypes as NodeType>::SignatureKey::sign(
-                        &priv_key,
-                        commitment.as_ref(),
-                    ) {
-                        Ok(sig) => sig,
-                        Err(e) => {
-                            tracing::error!(error = %e, "Failed to sign block");
-                            continue;
-                        }
-                    };
-
-                let signature_over_vid_commitment =
-                    match <TestTypes as NodeType>::SignatureKey::sign(
-                        &priv_key,
-                        vid_commitment.as_ref(),
-                    ) {
-                        Ok(sig) => sig,
-                        Err(e) => {
-                            tracing::error!(error = %e, "Failed to sign block");
-                            continue;
-                        }
-                    };
-
-                let block = AvailableBlockData {
-                    block_payload,
-                    metadata: (),
-                    sender: pub_key,
-                    signature: signature_over_block_info,
-                    _phantom: std::marker::PhantomData,
-                };
-                let metadata = AvailableBlockInfo {
-                    sender: pub_key,
-                    signature: signature_over_builder_commitment,
-                    block_hash: commitment,
-                    block_size,
-                    offered_fee: 123,
-                    _phantom: std::marker::PhantomData,
-                };
-                let header_input = AvailableBlockHeaderInput {
-                    vid_commitment,
-                    signature: signature_over_vid_commitment,
-                    sender: pub_key,
-                    _phantom: std::marker::PhantomData,
-                };
                 if let Some((hash, _)) = blocks.write().await.push(
                     metadata.block_hash.clone(),
                     BlockEntry {
                         metadata,
-                        payload: Some(block),
+                        payload: Some(payload),
                         header_input: Some(header_input),
                     },
                 ) {
@@ -278,4 +224,245 @@ pub fn run_random_builder(url: Url) {
         .expect("Failed to register the builder API");
 
     async_spawn(app.serve(url, STATIC_VER_0_1));
+}
+
+pub struct SimpleBuilderSource {
+    pub_key: <TestTypes as NodeType>::SignatureKey,
+    priv_key: <<TestTypes as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+    membership: Arc<<TestTypes as NodeType>::Membership>,
+    transactions: Arc<RwLock<HashMap<Commitment<TestTransaction>, TestTransaction>>>,
+    blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry>>>,
+}
+
+#[async_trait]
+impl ReadState for SimpleBuilderSource {
+    type State = Self;
+
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(self).await
+    }
+}
+
+#[async_trait]
+impl BuilderDataSource<TestTypes> for SimpleBuilderSource {
+    async fn get_available_blocks(
+        &self,
+        _for_parent: &VidCommitment,
+    ) -> Result<Vec<AvailableBlockInfo<TestTypes>>, BuildError> {
+        let transactions = self
+            .transactions
+            .read(|txns| {
+                Box::pin(async { txns.values().cloned().collect::<Vec<TestTransaction>>() })
+            })
+            .await;
+        let (metadata, payload, header_input) = build_block(
+            transactions,
+            self.membership.total_nodes(),
+            self.pub_key,
+            self.priv_key.clone(),
+        );
+
+        self.blocks.write().await.insert(
+            metadata.block_hash.clone(),
+            BlockEntry {
+                metadata: metadata.clone(),
+                payload: Some(payload),
+                header_input: Some(header_input),
+            },
+        );
+
+        Ok(vec![metadata])
+    }
+
+    async fn claim_block(
+        &self,
+        block_hash: &BuilderCommitment,
+        _signature: &<<TestTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Result<AvailableBlockData<TestTypes>, BuildError> {
+        let mut blocks = self.blocks.write().await;
+        let entry = blocks.get_mut(block_hash).ok_or(BuildError::NotFound)?;
+        entry.payload.take().ok_or(BuildError::Missing)
+    }
+
+    async fn claim_block_header_input(
+        &self,
+        block_hash: &BuilderCommitment,
+        _signature: &<<TestTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Result<AvailableBlockHeaderInput<TestTypes>, BuildError> {
+        let mut blocks = self.blocks.write().await;
+        let entry = blocks.get_mut(block_hash).ok_or(BuildError::NotFound)?;
+        entry.header_input.take().ok_or(BuildError::Missing)
+    }
+}
+
+impl SimpleBuilderSource {
+    pub async fn run(self, url: Url) {
+        let builder_api =
+            hotshot_builder_api::builder::define_api::<SimpleBuilderSource, TestTypes, Version01>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
+        let mut app: App<SimpleBuilderSource, hotshot_builder_api::builder::Error, Version01> =
+            App::with_state(self);
+        app.register_module("/", builder_api)
+            .expect("Failed to register the builder API");
+
+        async_spawn(app.serve(url, STATIC_VER_0_1));
+    }
+}
+
+pub struct SimpleBuilderTask {
+    transactions: Arc<RwLock<HashMap<Commitment<TestTransaction>, TestTransaction>>>,
+    blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry>>>,
+}
+
+impl TaskState for SimpleBuilderTask {
+    type Event = Arc<HotShotEvent<TestTypes>>;
+
+    type Output = HotShotTaskCompleted;
+
+    fn filter(&self, event: &Arc<HotShotEvent<TestTypes>>) -> bool {
+        !matches!(
+            event.as_ref(),
+            HotShotEvent::TransactionsRecv(_)
+                | HotShotEvent::LeafDecided(_)
+                | HotShotEvent::Shutdown
+        )
+    }
+
+    async fn handle_event(
+        event: Self::Event,
+        task: &mut Task<Self>,
+    ) -> Option<HotShotTaskCompleted> {
+        let this = task.state_mut();
+        match event.as_ref() {
+            HotShotEvent::TransactionsRecv(transactions) => {
+                let mut queue = this.transactions.write().await;
+                for transaction in transactions {
+                    queue.insert(transaction.commit(), transaction.clone());
+                }
+            }
+            HotShotEvent::LeafDecided(leaf_chain) => {
+                let mut queue = this.transactions.write().await;
+                for leaf in leaf_chain.iter() {
+                    if let Some(ref payload) = leaf.block_payload {
+                        for txn in payload.transaction_commitments(&()) {
+                            queue.remove(&txn);
+                        }
+                    }
+                }
+                this.blocks.write().await.clear();
+            }
+            _ => {}
+        };
+        None
+    }
+
+    fn should_shutdown(event: &Self::Event) -> bool {
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
+    }
+}
+
+pub async fn make_simple_builder(
+    membership: Arc<<TestTypes as NodeType>::Membership>,
+) -> (SimpleBuilderSource, SimpleBuilderTask) {
+    let (pub_key, priv_key) =
+        <TestTypes as NodeType>::SignatureKey::generated_from_seed_indexed([1; 32], 0);
+
+    let transactions = Arc::new(RwLock::new(HashMap::new()));
+    let blocks = Arc::new(RwLock::new(HashMap::new()));
+
+    let source = SimpleBuilderSource {
+        pub_key,
+        priv_key,
+        transactions: transactions.clone(),
+        blocks: blocks.clone(),
+        membership,
+    };
+
+    let task = SimpleBuilderTask {
+        transactions,
+        blocks,
+    };
+
+    (source, task)
+}
+
+/// Helper function to construct all builder data structures from a list of transactions
+fn build_block(
+    transactions: Vec<TestTransaction>,
+    num_storage_nodes: usize,
+    pub_key: <TestTypes as NodeType>::SignatureKey,
+    priv_key: <<TestTypes as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+) -> (
+    AvailableBlockInfo<TestTypes>,
+    AvailableBlockData<TestTypes>,
+    AvailableBlockHeaderInput<TestTypes>,
+) {
+    let block_size = transactions.iter().map(|t| t.0.len() as u64).sum::<u64>();
+
+    let block_payload = TestBlockPayload { transactions };
+
+    let commitment = block_payload.builder_commitment(&());
+
+    let vid_commitment = vid_commitment(
+        &block_payload.encode().unwrap().collect(),
+        num_storage_nodes,
+    );
+
+    let signature_over_block_info = {
+        let mut block_info: Vec<u8> = Vec::new();
+        block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
+        block_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
+        block_info.extend_from_slice(commitment.as_ref());
+        match <TestTypes as NodeType>::SignatureKey::sign(&priv_key, &block_info) {
+            Ok(sig) => sig,
+            Err(e) => {
+                panic!("Failed to sign block: {}", e);
+            }
+        }
+    };
+
+    let signature_over_builder_commitment =
+        match <TestTypes as NodeType>::SignatureKey::sign(&priv_key, commitment.as_ref()) {
+            Ok(sig) => sig,
+            Err(e) => {
+                panic!("Failed to sign block: {}", e);
+            }
+        };
+
+    let signature_over_vid_commitment =
+        match <TestTypes as NodeType>::SignatureKey::sign(&priv_key, vid_commitment.as_ref()) {
+            Ok(sig) => sig,
+            Err(e) => {
+                panic!("Failed to sign block: {}", e);
+            }
+        };
+
+    let block = AvailableBlockData {
+        block_payload,
+        metadata: (),
+        sender: pub_key,
+        signature: signature_over_block_info,
+        _phantom: std::marker::PhantomData,
+    };
+    let metadata = AvailableBlockInfo {
+        sender: pub_key,
+        signature: signature_over_builder_commitment,
+        block_hash: commitment,
+        block_size,
+        offered_fee: 123,
+        _phantom: std::marker::PhantomData,
+    };
+    let header_input = AvailableBlockHeaderInput {
+        vid_commitment,
+        signature: signature_over_vid_commitment,
+        sender: pub_key,
+        _phantom: std::marker::PhantomData,
+    };
+
+    (metadata, block, header_input)
 }
