@@ -66,6 +66,7 @@ fn main() {
     /* solhint-disable no-inline-assembly */
 
     library {} {{
+        uint256 constant LIGHTCLIENT_STATE_UPDATE_VK_ID = 123;
         function getVk() internal pure returns (IPlonkVerifier.VerifyingKey memory vk) {{
             assembly {{
                 // domain size
@@ -130,6 +131,8 @@ fn main() {
                  // qEcc
                 mstore(mload(add(vk, 0x260)), {})
                 mstore(add(mload(add(vk, 0x260)), 0x20), {})
+                // ID
+                mstore(mload(add(vk, 0x280)), LIGHTCLIENT_STATE_UPDATE_VK_ID)
             }}
         }}
     }}",
