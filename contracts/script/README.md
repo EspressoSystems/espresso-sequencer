@@ -35,12 +35,8 @@ Steps:
    proxy contract
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
 forge clean && \
-forge build && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
 ```
 
 2. Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
@@ -77,12 +73,8 @@ Read Deploying the Fee Contract for a more detailed version of this.
 1. Initiate the Deployment with OpenZeppelin Defender
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
 forge clean && \
-forge build && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
 ```
 
 2. Verify the Contract
@@ -111,12 +103,8 @@ Steps:
     deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
 forge clean && \
-forge build && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
@@ -137,12 +125,8 @@ Steps:
     deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
-export FOUNDRY_PROFILE=defender && \
 forge clean && \
-forge build && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com && \
-export FOUNDRY_PROFILE=default && \
-rm -rf out
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which

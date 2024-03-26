@@ -12,9 +12,9 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
 contract FeeContractDefenderDeployScript is Script {
-    string contractName = "FeeContract.sol";
-    UtilsScript utils = new UtilsScript();
-    uint256 contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
+    string internal contractName = "FeeContract.sol";
+    UtilsScript internal utils = new UtilsScript();
+    uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
 
     function run() public returns (address payable proxy, address multisig) {
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
@@ -55,10 +55,10 @@ contract FeeContractDefenderDeployScript is Script {
 }
 
 contract FeeContractDefenderUpgradeScript is Script {
-    string originalContractName = "FeeContract.sol";
-    string upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
-    uint256 contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
-    UtilsScript utils = new UtilsScript();
+    string internal originalContractName = "FeeContract.sol";
+    string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
+    uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
+    UtilsScript internal utils = new UtilsScript();
 
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment

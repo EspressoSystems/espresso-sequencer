@@ -17,7 +17,9 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
-fs_permissions = [{ access = "read-write", path = "./contracts/script/"}]
+extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "contracts/out"}]
+
 
 [profile.defender]
 # Note that if we want to move the `./contracts` directory into it's own repo we
@@ -26,7 +28,7 @@ fs_permissions = [{ access = "read-write", path = "./contracts/script/"}]
 out = 'out'
 build_info = true
 extra_output = ["storageLayout"]
-fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "./out"}]
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "contracts/out"}]
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
