@@ -44,11 +44,14 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
+    consensus::CommitmentMap,
     constants::WebServerVersion,
-    data::{DAProposal, VidDisperse, ViewNumber},
+    data::{DAProposal, VidDisperseShare, ViewNumber},
+    event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
     signature_key::{BLSPrivKey, BLSPubKey},
+    simple_certificate::QuorumCertificate,
     traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
@@ -56,12 +59,13 @@ use hotshot_types::{
         states::InstanceState,
         storage::Storage,
     },
+    utils::View,
     ValidatorConfig,
 };
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use std::{collections::HashMap, net::Ipv4Addr};
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -136,7 +140,7 @@ type ElectionConfig = StaticElectionConfig;
 
 #[derive(Clone, Debug)]
 pub struct ToBeReplacedStorageState<TYPES: NodeType> {
-    vids: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
+    vids: HashMap<TYPES::Time, Proposal<TYPES, VidDisperseShare<TYPES>>>,
     das: HashMap<TYPES::Time, Proposal<TYPES, DAProposal<TYPES>>>,
 }
 
@@ -163,10 +167,10 @@ impl<TYPES: NodeType> Default for ToBeReplacedStorage<TYPES> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType> Storage<TYPES> for ToBeReplacedStorage<TYPES> {
+impl Storage<SeqTypes> for ToBeReplacedStorage<SeqTypes> {
     async fn append_vid(
         &self,
-        proposal: &Proposal<TYPES, VidDisperse<TYPES>>,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         inner
@@ -175,11 +179,37 @@ impl<TYPES: NodeType> Storage<TYPES> for ToBeReplacedStorage<TYPES> {
         Ok(())
     }
 
-    async fn append_da(&self, proposal: &Proposal<TYPES, DAProposal<TYPES>>) -> anyhow::Result<()> {
+    async fn append_da(
+        &self,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         inner
             .das
             .insert(proposal.data.view_number, proposal.clone());
+        Ok(())
+    }
+
+    async fn record_action(
+        &self,
+        _view: <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
+    }
+    /// Update the currently undecided state of consensus.  This includes the undecided leaf chain,
+    /// and the undecided state.
+    async fn update_undecided_state(
+        &self,
+        _leafs: CommitmentMap<Leaf>,
+        _state: BTreeMap<
+            <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
+            View<SeqTypes>,
+        >,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }

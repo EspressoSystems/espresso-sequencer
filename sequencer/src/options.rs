@@ -277,6 +277,7 @@ module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
 module!("state", api::options::State, requires: "http");
+module!("catchup", api::options::Catchup, requires: "http");
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -357,4 +358,5 @@ pub struct Modules {
     pub submit: Option<api::options::Submit>,
     pub status: Option<api::options::Status>,
     pub state: Option<api::options::State>,
+    pub catchup: Option<api::options::Catchup>,
 }

@@ -91,6 +91,10 @@ where
             if let Some(state) = modules.state {
                 opt = opt.state(state);
             }
+            if let Some(catchup) = modules.catchup {
+                opt = opt.catchup(catchup);
+            }
+
             let storage = storage_opt.create().await?;
             opt.serve(
                 move |metrics| {
