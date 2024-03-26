@@ -79,12 +79,13 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/web-server
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-relay-server
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-prover
-            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/gen-demo-genesis
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cli
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/commitment-task
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/submit-transactions
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/reset-storage
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/deploy
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/keygen
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -167,11 +168,11 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/submit-transactions
           flavor: suffix=musl
 
-      - name: Generate example rollup metadata
+      - name: Generate deploy rollup metadata
         uses: docker/metadata-action@v5
-        id: example-rollup
+        id: deploy
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
+          images: ghcr.io/espressosystems/espresso-sequencer/deploy
           flavor: suffix=musl
 
       - name: Build and push sequencer docker
@@ -243,3 +244,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.submit-transactions.outputs.tags }}
           labels: ${{ steps.submit-transactions.outputs.labels }}
+
+      - name: Build and push deploy docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/deploy.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.deploy.outputs.tags }}
+          labels: ${{ steps.deploy.outputs.labels }}
