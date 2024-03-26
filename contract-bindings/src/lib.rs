@@ -15,7 +15,6 @@ pub mod defender;
 pub mod defender_deploy;
 pub mod demo_box_v1;
 pub mod demo_box_v2;
-pub mod deploy_uups_contract;
 pub mod ed_on_bn254;
 pub mod erc1967_proxy;
 pub mod erc1967_utils;

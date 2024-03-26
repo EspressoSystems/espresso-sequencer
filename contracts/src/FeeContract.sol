@@ -8,7 +8,6 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { UUPSUpgradeable } from
     "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-/// @custom:oz-upgrades-from FeeContract
 contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //

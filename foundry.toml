@@ -17,6 +17,7 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}]
 
 [profile.defender]
 # Note that if we want to move the `./contracts` directory into it's own repo we
@@ -40,6 +41,7 @@ ffi = true
 # needed for openzeppelin defender
 build_info = true
 extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "./out"}]
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
