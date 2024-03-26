@@ -97,6 +97,7 @@ where
         .stream("hotshot_events", move |req, state| {
             async move {
                 let view_number = req.integer_param("view_number")?;
+                tracing::info!("client requested view number: {}", view_number);
                 state
                     .read(|state| {
                         async move { Ok(state.subscribe_events(view_number).await.map(Ok)) }.boxed()
