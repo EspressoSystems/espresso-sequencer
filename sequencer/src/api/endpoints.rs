@@ -202,14 +202,14 @@ where
     Ok(api)
 }
 
-pub(super) fn state<S, Ver: StaticVersionType + 'static>(
+pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> anyhow::Result<Api<S, Error, Ver>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateDataSource,
 {
-    let toml = toml::from_str::<toml::Value>(include_str!("../../api/state.toml"))?;
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
     async fn get_state<S: StateDataSource>(

@@ -361,7 +361,7 @@ mod test_helpers {
 
         // Decided fee state: absent account.
         let res = client
-            .get::<AccountQueryData>(&format!("state/account/{:x}", Address::default()))
+            .get::<AccountQueryData>(&format!("catchup/account/{:x}", Address::default()))
             .send()
             .await
             .unwrap();
@@ -386,7 +386,7 @@ mod test_helpers {
         let view = leaf.view_number + 1;
         let res = client
             .get::<AccountQueryData>(&format!(
-                "state/catchup/{}/account/{:x}",
+                "catchup/{}/account/{:x}",
                 view.get_u64(),
                 Address::default()
             ))
@@ -412,7 +412,7 @@ mod test_helpers {
 
         // Decided block state.
         let res = client
-            .get::<BlocksFrontier>("state/blocks")
+            .get::<BlocksFrontier>("catchup/blocks")
             .send()
             .await
             .unwrap();
@@ -429,7 +429,7 @@ mod test_helpers {
 
         // Undecided block state.
         let res = client
-            .get::<BlocksFrontier>(&format!("state/catchup/{}/blocks", view.get_u64()))
+            .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
             .send()
             .await
             .unwrap();

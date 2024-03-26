@@ -246,6 +246,7 @@ impl ModuleArgs {
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
+                SequencerModule::Catchup(m) => curr = m.add(&mut modules.catchup, &mut provided)?,
             }
         }
 
@@ -276,7 +277,7 @@ module!("http", api::options::Http);
 module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
-module!("state", api::options::State, requires: "http");
+module!("state", api::options::State, requires: "http, storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
 
 #[derive(Clone, Debug, Args)]
@@ -346,6 +347,10 @@ enum SequencerModule {
     /// Run the state catchup API module.
     ///
     /// This module requires the http module to be started.
+    Catchup(Module<api::options::Catchup>),
+    /// Run the merklized state  API module.
+    ///
+    /// This module requires the http and storage-sql modules to be started.
     State(Module<api::options::State>),
 }
 

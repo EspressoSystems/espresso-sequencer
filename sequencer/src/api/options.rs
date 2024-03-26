@@ -315,8 +315,8 @@ impl Options {
         // Initialize state API.
         if self.catchup.is_some() {
             tracing::info!("initializing state API");
-            let state_api = endpoints::state(bind_version)?;
-            app.register_module("state", state_api)?;
+            let catchup_api = endpoints::catchup(bind_version)?;
+            app.register_module("catchup", catchup_api)?;
         }
 
         let state_signature_api = endpoints::state_signature(bind_version)?;
