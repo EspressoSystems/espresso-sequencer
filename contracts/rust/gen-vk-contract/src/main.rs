@@ -11,6 +11,8 @@ use hotshot_contract_adapter::jellyfish::ParsedVerifyingKey;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 
+// TODO Philippe how do we generate the file LightClientStatUpdateVKTest.sol ?
+
 fn main() {
     let srs = {
         // load SRS from Aztec's ceremony
@@ -132,7 +134,7 @@ fn main() {
                 mstore(mload(add(vk, 0x260)), {})
                 mstore(add(mload(add(vk, 0x260)), 0x20), {})
                 // ID
-                mstore(mload(add(vk, 0x280)), LIGHTCLIENT_STATE_UPDATE_VK_ID)
+                mstore(add(vk, 0x280), LIGHTCLIENT_STATE_UPDATE_VK_ID)
             }}
         }}
     }}",
