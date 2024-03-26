@@ -3,7 +3,12 @@ use super::{
     options::{Options, Query},
     sql,
 };
-use crate::{network, persistence, state::ValidatedState, Node, SeqTypes};
+use crate::{
+    network, persistence,
+    state::{BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState},
+    Node, SeqTypes,
+};
+use anyhow::Context;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
@@ -11,11 +16,17 @@ use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
+    merklized_state::{MerklizedState, UpdateStateStorage},
     node::NodeDataSource,
     status::StatusDataSource,
+    Leaf,
 };
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use jf_primitives::merkle_tree::{
+    prelude::MerklePath, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+};
 use tide_disco::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -56,17 +67,27 @@ pub trait SequencerDataSource:
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
+    /// Wrapper function to store merkle nodes
+    async fn store_state<S: MerklizedState<SeqTypes>>(
+        &mut self,
+        path: MerklePath<S::Entry, S::Key, S::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> anyhow::Result<()>;
 }
 
 /// Provider for fetching missing data for the query service.
 pub type Provider = AnyProvider<SeqTypes>;
 
 /// Create a provider for fetching missing data from a list of peer query services.
-pub fn provider(peers: impl IntoIterator<Item = Url>) -> Provider {
+pub fn provider<Ver: StaticVersionType + 'static>(
+    peers: impl IntoIterator<Item = Url>,
+    bind_version: Ver,
+) -> Provider {
     let mut provider = Provider::default();
     for peer in peers {
         tracing::info!("will fetch missing data from {peer}");
-        provider = provider.with_provider(QueryServiceProvider::new(peer));
+        provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
     }
     provider
 }
@@ -84,6 +105,59 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
 pub(crate) trait LocalStateDataSource {
     async fn get_decided_state(&self) -> Arc<ValidatedState>;
     async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
+}
+
+#[async_trait]
+impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for ValidatedState {
+    async fn update_storage(
+        &self,
+        storage: &mut D,
+        leaf: &Leaf<SeqTypes>,
+        delta: Arc<Delta>,
+    ) -> anyhow::Result<()> {
+        let block_number = leaf.get_height();
+        let ValidatedState {
+            fee_merkle_tree,
+            block_merkle_tree,
+        } = self;
+
+        let Delta { fees_delta } = delta.as_ref();
+
+        // Insert block merkle tree nodes
+        let (_, proof) = block_merkle_tree
+            .lookup(block_number - 1)
+            .expect_ok()
+            .context("Index not found in block merkle tree")?;
+        let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
+            &(block_number - 1),
+            block_merkle_tree.height(),
+        );
+
+        storage
+            .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
+            .await
+            .context("failed to insert merkle nodes for block merkle tree")?;
+
+        // Insert fee merkle tree nodes
+        for delta in fees_delta {
+            let (_, proof) = fee_merkle_tree
+                .universal_lookup(delta)
+                .expect_ok()
+                .context("Index not found in fee merkle tree")?;
+            let path: Vec<usize> =
+                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
+                    delta,
+                    fee_merkle_tree.height(),
+                );
+
+            storage
+                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
+                .await
+                .context("failed to insert merkle nodes for block merkle tree")?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
