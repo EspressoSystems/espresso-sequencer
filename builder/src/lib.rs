@@ -521,7 +521,7 @@ pub mod testing {
         }
     }
 
-    pub use async_broadcast::{
+    use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
         TryRecvError,
     };
@@ -539,8 +539,8 @@ pub mod testing {
         },
     };
     use hs_builder_core::{
-        builder_state::{BuilderState, MessageType, ResponseMessage},
-        service::GlobalState,
+        builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
+        service::{GlobalState, GlobalStateTxnSubmitter},
     };
 
     pub struct BuilderTestConfig {
@@ -551,6 +551,7 @@ pub mod testing {
         pub da_sender: BroadcastSender<MessageType<SeqTypes>>,
         pub qc_sender: BroadcastSender<MessageType<SeqTypes>>,
         pub decide_sender: BroadcastSender<MessageType<SeqTypes>>,
+        pub instance_state: NodeState,
     }
 
     use async_trait::async_trait;
@@ -563,13 +564,31 @@ pub mod testing {
             Arc<RwLock<GlobalState<SeqTypes>>>,
             SeqTypes,
         >(&Options::default())
-        .expect("Failed to construct the builder API");
+        .expect("Failed to construct the builder APIs for hotshot");
 
         let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError> =
             App::with_state(source);
 
         app.register_module("/", builder_api)
-            .expect("Failed to register the builder API");
+            .expect("Failed to register the builder API for hotshot");
+
+        async_spawn(app.serve(url));
+    }
+    pub fn run_builder_api_to_receive_private_txns(
+        url: Url,
+        source: GlobalStateTxnSubmitter<SeqTypes>,
+    ) {
+        let builder_api = hs_builder_api::builder::submit_api::<
+            GlobalStateTxnSubmitter<SeqTypes>,
+            SeqTypes,
+        >(&Options::default())
+        .expect("Failed to construct the builder API for private mempool txns");
+
+        let mut app: App<GlobalStateTxnSubmitter<SeqTypes>, BuilderApiError> =
+            App::with_state(source);
+
+        app.register_module("/", builder_api)
+            .expect("Failed to register the builder API for private mempool txns");
 
         async_spawn(app.serve(url));
     }
@@ -618,7 +637,7 @@ pub mod testing {
                 req_sender,
                 res_receiver,
                 tx_sender.clone(),
-                node_state,
+                node_state.clone(),
             );
             let global_state = Arc::new(RwLock::new(global_state));
             let global_state_clone = global_state.clone();
@@ -648,6 +667,7 @@ pub mod testing {
                 da_sender: da_sender,
                 qc_sender: qc_sender,
                 decide_sender: decide_sender,
+                instance_state: node_state,
             }
         }
     }
@@ -661,6 +681,7 @@ mod test {
     //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
+    use clap::builder;
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
@@ -671,7 +692,7 @@ mod test {
     };
     use hotshot_types::utils::BuilderCommitment;
     use hs_builder_api::block_info::AvailableBlockData;
-    use hs_builder_core::service::GlobalState;
+    use hs_builder_core::service::{GlobalState, GlobalStateTxnSubmitter};
     use sequencer::block::payload::Payload;
     use sequencer::Header;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
@@ -778,6 +799,7 @@ mod test {
                 builder_test_config.qc_sender,
                 builder_test_config.decide_sender,
                 builder_context_handle,
+                builder_test_config.instance_state,
             )
             .await
             .unwrap();
@@ -787,19 +809,41 @@ mod test {
             builder_test_config.builder_state.event_loop();
         });
 
-        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+        // Run the builder apis to serve hotshot
+        let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
+
         let hotshot_api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
         run_builder_apis_for_hotshot(hotshot_api_url.clone(), builder_test_config.global_state);
 
-        // Start a client.
-        let client = Client::<hs_builder_api::builder::Error>::new(hotshot_api_url);
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        // Run the builder apis to serve private mempool txns
+        let port = portpicker::pick_unused_port()
+            .expect("Could not find an open port for private mempool txns");
+
+        let private_mempool_api_url =
+            Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        let global_state_txns_submitter = GlobalStateTxnSubmitter {
+            global_state: builder_test_config.global_state.clone(),
+        };
+
+        // Start a hotshot client.
+        let hotshot_client = Client::<hs_builder_api::builder::Error>::new(hotshot_api_url);
+        assert!(hotshot_client.connect(Some(Duration::from_secs(60))).await);
+
+        // Start a private mempool client.
+        let private_mempool_client =
+            Client::<hs_builder_api::builder::Error>::new(private_mempool_api_url);
+        assert!(
+            private_mempool_client
+                .connect(Some(Duration::from_secs(60)))
+                .await
+        );
 
         let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
 
         // Test getting available blocks
-        let response = match client
+        let response = match hotshot_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
                 "availableblocks/{parent_commitment}"
             ))
@@ -820,18 +864,18 @@ mod test {
         let builder_commitment = response[0].block_hash.clone();
         let seed = [207_u8; 32];
         // Builder Public, Private key
-        let (_client_pub_key, client_private_key) =
+        let (_hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
         // sign the builder_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &client_private_key,
+            &hotshot_client_private_key,
             builder_commitment.as_ref(),
         )
         .expect("Claim block signing failed");
 
         // Test claiming blocks
-        match client
+        match hotshot_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
                 "claimblock/{builder_commitment}/{encoded_signature}"
             ))
@@ -841,6 +885,8 @@ mod test {
             Ok(response) => {
                 //let blocks = response.body().await.unwrap();
                 println!("Received Block Data: {:?}", response);
+
+                //return;
             }
             Err(e) => {
                 panic!("Error while claiming block {:?}", e);
@@ -848,10 +894,28 @@ mod test {
         }
 
         // Test claiming blocks
-        // match client
-        //     .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-        //         "claimheaderinput/{builder_commitment}/{encoded_signature}"
-        //     ))
+        match hotshot_client
+            .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
+                "claimheaderinput/{builder_commitment}/{encoded_signature}"
+            ))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                //let blocks = response.body().await.unwrap();
+                println!("Received Block Header : {:?}", response);
+                assert!(true);
+                return;
+            }
+            Err(e) => {
+                panic!("Error getting claiming block header {:?}", e);
+            }
+        }
+
+        // let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        // // start a private mempool txns client
+        // match private_mempool_client
+        //     .send::<SeqTypes::Transaction>(&format!("submit/{txn}"))
         //     .send()
         //     .await
         // {
@@ -865,7 +929,6 @@ mod test {
         //         panic!("Error getting claiming block header {:?}", e);
         //     }
         // }
-
         //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 }
