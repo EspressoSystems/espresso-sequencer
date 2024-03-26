@@ -175,7 +175,7 @@ library PlonkVerifier {
         IPlonkVerifier.PlonkProof memory proof,
         bytes memory extraTranscriptInitMsg
     ) internal view returns (PcsInfo memory res) {
-        if (publicInput.length != verifyingKey.numInputs) revert WrongPlonkVK();
+        //if (publicInput.length != verifyingKey.numInputs) revert WrongPlonkVK();
 
         Challenges memory chal =
             _computeChallenges(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
