@@ -36,10 +36,8 @@ contract FeeContractDefenderDeployScript is Script {
         opts.defender.useDefenderDeploy = true;
         opts.defender.salt = bytes32(abi.encodePacked(contractSalt));
 
-        // address proxyAddress =
-        //     Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (multisig)),
-        // opts);
-        address proxyAddress = address(0);
+        address proxyAddress =
+            Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (multisig)), opts);
 
         //generate the deployment file path, output and write to the file
         (string memory filePath, string memory fileData) = utils.generateDeploymentOutput(
