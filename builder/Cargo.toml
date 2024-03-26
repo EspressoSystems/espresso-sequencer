@@ -9,6 +9,7 @@ edition = { workspace = true }
 testing = ["hotshot-testing"]
 
 [dependencies]
+hotshot-builder-core = { path = "../../hs-builder-core" }
 anyhow = { workspace = true }
 hotshot-testing = { workspace = true, optional = true }
 async-broadcast = "0.7.0"
@@ -25,10 +26,9 @@ hotshot-types = { workspace = true }
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.25" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
-hs-builder-api = { path = "../../hs-builder-api" }
-hs-builder-core = { path = "../../hs-builder-core" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
 sequencer = { path = "../sequencer", features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"

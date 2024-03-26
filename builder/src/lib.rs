@@ -538,7 +538,7 @@ pub mod testing {
             node_implementation::ConsensusTime,
         },
     };
-    use hs_builder_core::{
+    use hotshot_builder_core::{
         builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
         service::{GlobalState, GlobalStateTxnSubmitter},
     };
@@ -555,12 +555,12 @@ pub mod testing {
     }
 
     use async_trait::async_trait;
-    use hs_builder_api::builder::Options;
-    use hs_builder_api::builder::{BuildError, Error as BuilderApiError};
+    use hotshot_builder_api::builder::Options;
+    use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
     use serde::{Deserialize, Serialize};
     use snafu::*;
     pub fn run_builder_apis_for_hotshot(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
-        let builder_api = hs_builder_api::builder::define_api::<
+        let builder_api = hotshot_builder_api::builder::define_api::<
             Arc<RwLock<GlobalState<SeqTypes>>>,
             SeqTypes,
         >(&Options::default())
@@ -578,7 +578,7 @@ pub mod testing {
         url: Url,
         source: GlobalStateTxnSubmitter<SeqTypes>,
     ) {
-        let builder_api = hs_builder_api::builder::submit_api::<
+        let builder_api = hotshot_builder_api::builder::submit_api::<
             GlobalStateTxnSubmitter<SeqTypes>,
             SeqTypes,
         >(&Options::default())
@@ -691,8 +691,8 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
-    use hs_builder_api::block_info::AvailableBlockData;
-    use hs_builder_core::service::{GlobalState, GlobalStateTxnSubmitter};
+    use hotshot_builder_api::block_info::AvailableBlockData;
+    use hotshot_builder_core::service::{GlobalState, GlobalStateTxnSubmitter};
     use sequencer::block::payload::Payload;
     use sequencer::Header;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
@@ -767,12 +767,12 @@ mod test {
         use hotshot_types::traits::{
             block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
         };
-        use hs_builder_api::{
+        use hotshot_builder_api::{
             block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
             builder::BuildError,
         };
-        use hs_builder_core::builder_state::BuilderProgress;
-        use hs_builder_core::service::run_standalone_builder_service;
+        use hotshot_builder_core::builder_state::BuilderProgress;
+        use hotshot_builder_core::service::run_standalone_builder_service;
         use std::time::Duration;
         use surf_disco::Client;
         use testing::{run_builder_apis_for_hotshot, BuilderTestConfig};
