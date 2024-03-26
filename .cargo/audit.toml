@@ -7,4 +7,6 @@ ignore = [
     # Tungstenite allows remote attackers to cause a denial of service
     # Dependency of async-tungstenite -> tide-websockets / surf-disco
     "RUSTSEC-2023-0065",
+    # Unfixed "Marvin" vulnerability in `RSA`, unused in sqlite dependency
+    "RUSTSEC-2023-0071",
 ]
