@@ -30,7 +30,7 @@ contract UtilsScript is Script {
         return string(vm.ffi(cmds));
     }
 
-    function addrToStr(address addr) external returns (string memory) {
+    function addrToStr(address addr) external pure returns (string memory) {
         return Strings.toHexString(uint256(uint160(address(addr))));
     }
 
