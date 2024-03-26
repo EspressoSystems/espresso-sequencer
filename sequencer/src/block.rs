@@ -80,14 +80,18 @@ impl BlockPayload for Payload<TxTableEntryWord> {
 
     /// Generate commitment that builders use to sign block options.
     fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment {
-        //unimplemented!("TODO builder_commitment");
-        let payload_hash = sha2::Sha256::digest(&self.raw_payload);
-        let metadata_hash = sha2::Sha256::digest(metadata.get_bytes());
-        BuilderCommitment::from_bytes([payload_hash, metadata_hash].concat())
+        let mut digest = sha2::Sha256::new();
+        digest.update((self.raw_payload.len() as u64).to_le_bytes());
+        digest.update((self.ns_table.bytes.len() as u64).to_le_bytes());
+        digest.update((metadata.bytes.len() as u64).to_le_bytes());
+        digest.update(&self.raw_payload);
+        digest.update(&self.ns_table.bytes);
+        digest.update(&metadata.bytes);
+        BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
-        unimplemented!("TODO get_transactions");
+    fn get_transactions(&self, _: &Self::Metadata) -> &Vec<Self::Transaction> {
+        unimplemented!()
     }
 }
 

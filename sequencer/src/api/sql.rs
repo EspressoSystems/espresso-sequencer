@@ -1,7 +1,12 @@
 use super::data_source::{Provider, SequencerDataSource};
 use crate::{persistence::sql::Options, SeqTypes};
+use anyhow::Context;
 use async_trait::async_trait;
-use hotshot_query_service::data_source::sql::{Config, SqlDataSource};
+use hotshot_query_service::{
+    data_source::sql::{Config, SqlDataSource},
+    merklized_state::{MerklizedState, UpdateStateData},
+};
+use jf_primitives::merkle_tree::prelude::MerklePath;
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 
@@ -16,6 +21,22 @@ impl SequencerDataSource for DataSource {
         }
 
         Ok(cfg.connect(provider).await?)
+    }
+
+    async fn store_state<S: MerklizedState<SeqTypes>>(
+        &mut self,
+        path: MerklePath<S::Entry, S::Key, S::T>,
+        traversal_path: Vec<usize>,
+        block_number: u64,
+    ) -> anyhow::Result<()> {
+        <DataSource as UpdateStateData<SeqTypes, S>>::insert_merkle_nodes(
+            self,
+            path,
+            traversal_path,
+            block_number,
+        )
+        .await
+        .context("failed to insert merkle nodes! ")
     }
 }
 

@@ -12,6 +12,7 @@ on:
     paths:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+  workflow_dispatch:
   # Run the audit job once a day on main.
   schedule:
     - cron: "0 0 * * *"
@@ -20,7 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # See https://github.com/marketplace/actions/rust-audit-check for docs
-      - uses: actions-rs/audit-check@v1
+
+      - name: Install capnproto
+        uses: ./.github/actions/install-capnp
+        
+      # See https://github.com/rustsec/audit-check for docs
+      - uses: rustsec/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

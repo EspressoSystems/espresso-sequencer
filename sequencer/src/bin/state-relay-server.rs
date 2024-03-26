@@ -1,5 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use es_version::SEQUENCER_VERSION;
 use sequencer::state_signature::relay_server::run_relay_server;
 
 #[derive(Parser)]
@@ -37,6 +38,7 @@ async fn main() {
         None,
         args.threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
+        SEQUENCER_VERSION,
     )
     .await
     .unwrap();

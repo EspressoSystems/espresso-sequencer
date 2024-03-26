@@ -1,4 +1,6 @@
-on: [push]
+on:
+  push:
+  workflow_dispatch:
 
 name: udeps
 
@@ -13,16 +15,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+      - uses: dtolnay/rust-toolchain@nightly
+        id: toolchain
+
+      # Set nightly as the default toolchain
+      - run: rustup override set ${{steps.toolchain.outputs.name}}
 
       - uses: Swatinem/rust-cache@v2
+      
+      - name: Install capnproto
+        uses: ./.github/actions/install-capnp
 
       - name: Run cargo-udeps
         uses: aig787/cargo-udeps-action@v1
         with:
-          version: 'latest'
-          args: '--all-targets'
+          version: latest
+          args: --all-targets

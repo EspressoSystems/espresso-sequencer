@@ -50,31 +50,14 @@ impl<'a, TableWord: TableWordTraits> Iterator for TxIterator<'a, TableWord> {
             })
         } else {
             // move to the next name space
-            let payload_len = self.block_payload.raw_payload.len();
+            let payload = &self.block_payload.raw_payload;
             for ns_idx in self.ns_iter.by_ref() {
                 self.ns_idx = ns_idx;
-                let start = if self.ns_idx == 0 {
-                    0
-                } else {
-                    self.ns_table.get_table_entry(self.ns_idx - 1).1
-                };
-                let end = self.ns_table.get_table_entry(self.ns_idx).1;
-
-                // TODO refactor range-checking code
-                let end = std::cmp::min(end, payload_len);
-                let start = std::cmp::min(start, end);
-
-                let tx_table_len = TxTable::get_len(&self.block_payload.raw_payload[start..end], 0)
-                    .try_into()
-                    .unwrap_or(0);
+                let ns_range = self.ns_table.get_payload_range(ns_idx, payload.len()).1;
+                let tx_table_len = TxTable::get_tx_table_len(&payload[ns_range]);
                 self.tx_iter = 0..tx_table_len;
                 if let Some(tx_idx) = self.tx_iter.next() {
-                    return Some(TxIndex {
-                        ns_idx: self.ns_idx,
-                        tx_idx,
-                    });
-                } else {
-                    continue;
+                    return Some(TxIndex { ns_idx, tx_idx });
                 }
             }
             None // all namespaces consumed

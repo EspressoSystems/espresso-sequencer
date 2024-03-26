@@ -1,5 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use es_version::SEQUENCER_VERSION;
 use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
@@ -9,6 +10,7 @@ use sequencer::{
     options::{Modules, Options},
     persistence, BuilderParams, L1Params, NetworkParams,
 };
+use versioned_binary_serialization::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,12 +23,18 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("modules: {:?}", modules);
 
     let ctx = if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(modules, opt, storage).await?
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(modules, opt, storage).await?
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
     } else {
         // Persistence is required. If none is provided, just use the local file system.
-        init_with_storage(modules, opt, persistence::fs::Options::default()).await?
+        init_with_storage(
+            modules,
+            opt,
+            persistence::fs::Options::default(),
+            SEQUENCER_VERSION,
+        )
+        .await?
     };
 
     // Start doing consensus.
@@ -35,18 +43,19 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn init_with_storage<S>(
+async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-) -> anyhow::Result<SequencerContext<network::Web>>
+    bind_version: Ver,
+) -> anyhow::Result<SequencerContext<network::Web, Ver>>
 where
     S: DataSourceOptions,
 {
+    let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
-
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
@@ -58,8 +67,8 @@ where
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
-        private_staking_key: opt.private_staking_key,
-        private_state_key: opt.private_state_key,
+        private_staking_key,
+        private_state_key,
         state_peers: opt.state_peers,
     };
 
@@ -79,21 +88,32 @@ where
             if let Some(status) = modules.status {
                 opt = opt.status(status);
             }
+            if let Some(state) = modules.state {
+                opt = opt.state(state);
+            }
+            if let Some(catchup) = modules.catchup {
+                opt = opt.catchup(catchup);
+            }
+
             let storage = storage_opt.create().await?;
-            opt.serve(move |metrics| {
-                async move {
-                    init_node(
-                        network_params,
-                        &*metrics,
-                        storage,
-                        builder_params,
-                        l1_params,
-                    )
-                    .await
-                    .unwrap()
-                }
-                .boxed()
-            })
+            opt.serve(
+                move |metrics| {
+                    async move {
+                        init_node(
+                            network_params,
+                            &*metrics,
+                            storage,
+                            builder_params,
+                            l1_params,
+                            bind_version,
+                        )
+                        .await
+                        .unwrap()
+                    }
+                    .boxed()
+                },
+                bind_version,
+            )
             .await
         }
         None => {
@@ -103,6 +123,7 @@ where
                 storage_opt.create().await?,
                 builder_params,
                 l1_params,
+                bind_version,
             )
             .await
         }
