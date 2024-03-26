@@ -105,9 +105,10 @@ contracts/src/LightClient.sol:LightClient --watch
 
 Steps:
 
-1. In the `FeeContractWithDefender.s.sol` file, in the contract named, `FeeContractDefenderUpgradeScript`, replace the
-   `proxyAddress` with the proxy address for the FeeContract. Ensure that the salt has been updated in the `.env` file
-   and the run the following command.
+1.  Ensure that the salt has been updated in the `.env` file. The upgrade script retrieves the proxyAddress from the
+    previous deployment by reading a file in the following path:
+    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
+    deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
 export FOUNDRY_PROFILE=defender && \
@@ -130,9 +131,10 @@ Ensure that you update the version in the `getVersion()` method of the latest im
 
 Steps:
 
-1. In the `LightClientWithDefender.s.sol` file, in the contract named, `LightClientDefenderUpgradeScript`, replace the
-   `proxyAddress` with the proxy address for the LightClient. Ensure that the salt has been updated in the `.env` file
-   and the run the following command.
+1.  Ensure that the salt has been updated in the `.env` file. The upgrade script retrieves the proxyAddress from the
+    previous deployment by reading a file in the following path:
+    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
+    deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
 export FOUNDRY_PROFILE=defender && \
@@ -148,3 +150,20 @@ rm -rf out
 
 The transactions being confirmed are: (i) the deployment of the new fee contract (ii) the execution of the
 `upgradeToAndCall` method which updates the implementation contract that the proxy contract is referencing.
+
+## Known Errors
+
+1. Error Parsing ABI for contract Scenario: You ran `just gen-bindings` Example:
+
+```bash
+Error:
+error parsing abi for contract '_70c760a3e059d83dbf77da7f6778fbc0': couldn't parse ABI string as either human readable (1) or JSON (2):
+1. Illegal abi `{`, expected function
+2. data did not match any variant of untagged enum JsonContract
+error: Recipe `gen-bindings` failed on line 65 with exit code 1
+```
+
+This error occurs when build_info is set to true in the foundry.toml configuration. Ensure that this is false or the
+foundry profile is set to default when running commands like `just gen-bindings`.
+
+Solution: `export FOUNDRY_PROFILE=default`

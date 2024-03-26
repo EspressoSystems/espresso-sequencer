@@ -36,14 +36,21 @@ contract FeeContractDefenderDeployScript is Script {
         opts.defender.useDefenderDeploy = true;
         opts.defender.salt = bytes32(abi.encodePacked(contractSalt));
 
-        address proxyAddress =
-            Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (multisig)), opts);
+        // address proxyAddress =
+        //     Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (multisig)),
+        // opts);
+        address proxyAddress = address(0);
 
-        //generate the file path, file output and write to the file
+        //generate the deployment file path, output and write to the file
         (string memory filePath, string memory fileData) = utils.generateDeploymentOutput(
             contractName, contractSalt, proxyAddress, multisig, approvalProcessId, viaType
         );
         utils.writeJson(filePath, fileData);
+
+        //generate the salt history file path,  output and write to the file
+        (string memory saltFilePath, string memory saltFileData) =
+            utils.generateSaltOutput(contractName, contractSalt);
+        utils.writeJson(saltFilePath, saltFileData);
 
         return (payable(proxyAddress), multisig);
     }
@@ -56,12 +63,13 @@ contract FeeContractDefenderUpgradeScript is Script {
     UtilsScript utils = new UtilsScript();
 
     function run() public returns (string memory proposalId, string memory proposalUrl) {
-        //assumes each salt is an increment of the previous
-        /* TODO 
-        * don't assume that the salt is just an increment less, store the previous salts in a file
-        */
-        uint256 prevContractSalt = contractSalt - 1;
-        string memory filePath =
+        //get the previous salt from the salt history - this assumes there was first a deployment
+        // using `FeeContractDefenderDeployScript`
+        (string memory saltFilePath,) = utils.generateSaltFilePath(originalContractName);
+        (, string memory saltData) = utils.readFile(saltFilePath);
+        uint256 prevContractSalt = vm.parseJsonUint(saltData, ".previousSalt");
+
+        (string memory filePath,) =
             utils.generateDeploymentFilePath(originalContractName, prevContractSalt);
 
         //read the deployment file from the previous deployment to get the proxyAddress & multisig
@@ -92,6 +100,11 @@ contract FeeContractDefenderUpgradeScript is Script {
         );
 
         utils.writeJson(upgradeFilePath, fileData);
+
+        //generate the salt history file path,  output and write to the file
+        string memory saltFileData;
+        (saltFilePath, saltFileData) = utils.generateSaltOutput(originalContractName, contractSalt);
+        utils.writeJson(saltFilePath, saltFileData);
 
         return (response.proposalId, response.url);
     }

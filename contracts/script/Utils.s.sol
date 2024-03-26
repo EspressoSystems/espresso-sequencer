@@ -6,6 +6,8 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract UtilsScript is Script {
+    string constant SALT_HISTORY_FILE_NAME = "saltHistory.json";
+
     function readFile(string memory path) external returns (bool, string memory) {
         if (vm.exists(path)) {
             return (true, vm.readFile(path));
@@ -57,7 +59,7 @@ contract UtilsScript is Script {
         vm.serializeAddress(obj1, "multisig", multisig);
         vm.serializeString(obj1, "approvalProcessId", approvalProcessId);
         vm.serializeString(obj1, "approvalType", viaType);
-        string memory obj3 = vm.serializeString(obj1, "salt", Strings.toString(contractSalt));
+        string memory obj3 = vm.serializeUint(obj1, "salt", contractSalt);
 
         return (filePath, obj3);
     }
@@ -81,6 +83,8 @@ contract UtilsScript is Script {
         );
         filePath = string.concat(outputDir, Strings.toString(contractSalt), ".json");
 
+        (filePath, outputDir) = generateDeploymentFilePath(originalContractName, contractSalt);
+
         createDir(outputDir);
 
         string memory obj1 = "object";
@@ -89,17 +93,17 @@ contract UtilsScript is Script {
         vm.serializeString(obj1, "newContractName", newContractName);
         vm.serializeString(obj1, "proposalId", proposalId);
         vm.serializeString(obj1, "responseUrl", responseUrl);
-        string memory obj3 = vm.serializeString(obj1, "salt", Strings.toString(contractSalt));
+        string memory obj3 = vm.serializeUint(obj1, "salt", contractSalt);
 
         return (filePath, obj3);
     }
 
     function generateDeploymentFilePath(string memory contractName, uint256 contractSalt)
-        external
+        public
         view
-        returns (string memory filePath)
+        returns (string memory filePath, string memory outputDir)
     {
-        string memory outputDir = string.concat(
+        outputDir = string.concat(
             vm.projectRoot(),
             "/contracts/script/output/defenderDeployments/",
             contractName,
@@ -109,7 +113,41 @@ contract UtilsScript is Script {
         );
         filePath = string.concat(outputDir, Strings.toString(contractSalt), ".json");
 
-        return filePath;
+        return (filePath, outputDir);
+    }
+
+    function generateSaltOutput(string memory contractName, uint256 contractSalt)
+        external
+        returns (string memory filePath, string memory data)
+    {
+        string memory outputDir;
+        (filePath, outputDir) = generateSaltFilePath(contractName);
+
+        createDir(outputDir);
+
+        string memory obj1 = "contract";
+        vm.serializeString(obj1, "contractName", contractName);
+        string memory obj2 = vm.serializeUint(obj1, "previousSalt", contractSalt);
+
+        return (filePath, obj2);
+    }
+
+    function generateSaltFilePath(string memory contractName)
+        public
+        view
+        returns (string memory filePath, string memory outputDir)
+    {
+        outputDir = string.concat(
+            vm.projectRoot(),
+            "/contracts/script/output/defenderDeployments/",
+            contractName,
+            "/",
+            vm.toString(block.chainid),
+            "/"
+        );
+        filePath = string.concat(outputDir, SALT_HISTORY_FILE_NAME);
+
+        return (filePath, outputDir);
     }
 
     function updateEnvVariable(string memory variableName, string memory newValue) external {
