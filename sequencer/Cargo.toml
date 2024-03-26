@@ -13,7 +13,7 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 hotshot-query-service = { workspace = true, features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"
-tempfile = "3.9.0"
+tempfile = "3.10.1"
 
 [dependencies]
 anyhow = { workspace = true }
