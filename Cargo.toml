@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-broadcast = "0.7.0"
 clap = { version = "4.4", features = ["derive", "env"] }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.2", features = [

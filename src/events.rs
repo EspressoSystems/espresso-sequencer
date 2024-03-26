@@ -94,14 +94,11 @@ where
         options.extensions.clone(),
     )?;
     api.with_version("0.1.0".parse().unwrap())
-        .stream("hotshot_events", move |req, state| {
+        .stream("events", move |_, state| {
             async move {
-                let view_number = req.integer_param("view_number")?;
-                tracing::info!("client requested view number: {}", view_number);
+                tracing::info!("client subscribed to events");
                 state
-                    .read(|state| {
-                        async move { Ok(state.subscribe_events(view_number).await.map(Ok)) }.boxed()
-                    })
+                    .read(|state| async move { Ok(state.subscribe_events().await.map(Ok)) }.boxed())
                     .await
             }
             .try_flatten_stream()

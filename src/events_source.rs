@@ -1,25 +1,21 @@
-use crate::notifier::Notifier;
-use async_std::sync::RwLock;
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
 use hotshot_types::event::{Event, EventType};
-use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::future::IntoFuture;
 use std::sync::Arc;
 
+const RETAINED_EVENTS_COUNT: usize = 4096;
 #[async_trait]
 pub trait EventsSource<Types>
 where
     Types: NodeType,
 {
-    type EventStream: Stream<Item = Event<Types>> + Unpin + Send + 'static;
-    async fn get_events_starting_from_view(&self, view_number: u64) -> Self::EventStream;
+    type EventStream: Stream<Item = Arc<Event<Types>>> + Unpin + Send + 'static;
+    async fn get_event_stream(&self) -> Self::EventStream;
 
-    async fn subscribe_events(&self, view_number: u64) -> BoxStream<'static, Event<Types>> {
-        self.get_events_starting_from_view(view_number)
-            .await
-            .boxed()
+    async fn subscribe_events(&self) -> BoxStream<'static, Arc<Event<Types>>> {
+        self.get_event_stream().await.boxed()
     }
 }
 
@@ -33,7 +29,8 @@ where
 
 #[derive(Debug)]
 pub struct EventsStreamer<Types: NodeType> {
-    notifier: Arc<RwLock<Notifier<Event<Types>>>>,
+    to_subscribe_clone_recv: BroadcastReceiver<Arc<Event<Types>>>,
+    subscriber_send_channel: BroadcastSender<Arc<Event<Types>>>,
 }
 
 #[async_trait]
@@ -59,25 +56,23 @@ impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
             Event { .. } => false,
         };
         if filter {
-            self.notifier.write().await.notify(event);
+            let event = Arc::new(event.clone());
+            let _status = self.subscriber_send_channel.broadcast(event).await;
         }
     }
 }
 
 #[async_trait]
 impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
-    type EventStream = BoxStream<'static, Event<Types>>;
-    async fn get_events_starting_from_view(&self, view_number: u64) -> Self::EventStream {
-        let notifier = self.notifier.clone();
-        stream::unfold(notifier, move |notifier| async move {
-            let future = notifier
-                .read()
-                .await
-                .wait_for(move |event| event.view_number.get_u64() >= view_number)
-                .await
-                .into_future();
-            let event = future.await.unwrap();
-            Some((event, notifier))
+    type EventStream = BoxStream<'static, Arc<Event<Types>>>;
+    async fn get_event_stream(&self) -> Self::EventStream {
+        let recv_channel = self.to_subscribe_clone_recv.clone();
+        stream::unfold(recv_channel, move |mut recv_channel| async move {
+            let event_res = recv_channel.recv().await;
+            if event_res.is_err() {
+                return None;
+            }
+            Some((event_res.unwrap(), recv_channel))
         })
         .boxed()
     }
@@ -85,8 +80,12 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
 
 impl<Types: NodeType> EventsStreamer<Types> {
     pub fn new() -> Self {
+        let (mut subscriber_send_channel, to_subscribe_clone_recv) =
+            broadcast::<Arc<Event<Types>>>(RETAINED_EVENTS_COUNT);
+        subscriber_send_channel.set_overflow(true);
         EventsStreamer {
-            notifier: Arc::new(RwLock::new(Notifier::new())),
+            subscriber_send_channel,
+            to_subscribe_clone_recv,
         }
     }
 }

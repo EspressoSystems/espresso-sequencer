@@ -17,7 +17,6 @@ mod tests {
     use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::{App, Url};
-    use tracing;
 
     // return a empty transaction event
     fn generate_event<Types: NodeType<Time = ViewNumber>>(view_number: u64) -> Event<Types> {
@@ -66,42 +65,42 @@ mod tests {
 
         // client subscrive to hotshot events
         let mut events = client
-            .socket("hotshotevents/0")
+            .socket("events")
             .subscribe::<Event<TestTypes>>()
             .await
             .unwrap();
 
         tracing::info!("Subscribed to events");
 
-        let send_count = 5;
+        let total_count = 5;
 
-        let mut receive_count = 0;
         // wait for these events to receive
         let receive_handle = async_spawn(async move {
+            let mut receive_count = 0;
             loop {
                 let event = events.next().await.unwrap();
                 tracing::info!("Received event: {:?}", event);
                 receive_count += 1;
-                if receive_count >= send_count {
+                if receive_count >= total_count {
                     tracing::info!("Received all sent events, exiting loop");
                     break;
                 }
             }
-            assert_eq!(receive_count, send_count);
+            assert_eq!(receive_count, total_count);
         });
 
         let send_handle = async_spawn(async move {
-            let mut count = 0;
+            let mut send_count = 0;
             loop {
-                let tx_event = generate_event(count);
+                let tx_event = generate_event(send_count);
                 tracing::debug!("Before writing to events_source");
                 events_streamer.write().await.handle_event(&tx_event).await;
-                count += 1;
+                send_count += 1;
                 tracing::debug!("After writing to events_source");
-                if count >= send_count {
+                tracing::info!("Event sent: {:?}", tx_event);
+                if send_count >= total_count {
                     break;
                 }
-                tracing::info!("Event sent: {:?}", tx_event);
             }
         });
 
