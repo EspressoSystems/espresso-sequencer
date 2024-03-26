@@ -21,6 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install capnproto
+        uses: ./.github/actions/install-capnp
+        
       # See https://github.com/rustsec/audit-check for docs
       - uses: rustsec/audit-check@v1
         with:

@@ -15,12 +15,13 @@ use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
+type HotShotClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
 
 #[derive(Clone, Debug)]
 pub struct CommitmentTaskOptions {
@@ -60,9 +61,9 @@ pub struct CommitmentTaskOptions {
 }
 
 /// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
+pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &CommitmentTaskOptions) {
     // init a client connecting to HotShot query service
-    let hotshot = HotShotClient::builder(
+    let hotshot = HotShotClient::<Ver>::builder(
         opt.query_service_url
             .clone()
             .expect("query service URL must be specified"),
@@ -85,7 +86,11 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     sequence(hotshot, contract, opt.delay).await;
 }
 
-async fn sequence(hotshot: HotShotClient, contract: HotShot<Signer>, delay: Option<Duration>) {
+async fn sequence<Ver: StaticVersionType>(
+    hotshot: HotShotClient<Ver>,
+    contract: HotShot<Signer>,
+    delay: Option<Duration>,
+) {
     // Get the maximum number of blocks the contract will allow at a time.
     let hard_block_limit = match contract.max_blocks().call().await {
         Ok(max) => max.as_usize(),
@@ -141,7 +146,7 @@ trait HotShotDataSource {
 }
 
 #[async_trait]
-impl HotShotDataSource for HotShotClient {
+impl<Ver: StaticVersionType> HotShotDataSource for HotShotClient<Ver> {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {

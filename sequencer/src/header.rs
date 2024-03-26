@@ -370,7 +370,7 @@ mod test_headers {
     use crate::{
         catchup::mock::MockStateCatchup,
         l1_client::L1Client,
-        state::{validate_and_apply_proposal, BlockMerkleTree, FeeMerkleTree},
+        state::{validate_and_apply_proposal, BlockMerkleTree, Delta, FeeMerkleTree},
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -652,11 +652,17 @@ mod test_headers {
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
+        let mut delta = Delta::default();
 
         // Advance `proposal.height` to trigger validation error.
-        let result =
-            validate_and_apply_proposal(&mut validated_state, &parent_leaf, &proposal, vec![])
-                .unwrap_err();
+        let result = validate_and_apply_proposal(
+            &mut validated_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal,
+            vec![],
+        )
+        .unwrap_err();
         assert_eq!(
             format!("{}", result.root_cause()),
             "Invalid Height Error: 0, 0"
@@ -665,9 +671,14 @@ mod test_headers {
         // proposed `Header` root should include parent +
         // parent.commit
         proposal.height += 1;
-        let result =
-            validate_and_apply_proposal(&mut validated_state, &parent_leaf, &proposal, vec![])
-                .unwrap_err();
+        let result = validate_and_apply_proposal(
+            &mut validated_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal,
+            vec![],
+        )
+        .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
         assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
@@ -734,8 +745,16 @@ mod test_headers {
 
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
-        validate_and_apply_proposal(&mut proposal_state, &parent_leaf, &proposal.clone(), vec![])
-            .unwrap();
+
+        let mut delta = Delta::default();
+        validate_and_apply_proposal(
+            &mut proposal_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal.clone(),
+            vec![],
+        )
+        .unwrap();
         assert_eq!(
             proposal_state.block_merkle_tree.commitment(),
             proposal.block_merkle_tree_root

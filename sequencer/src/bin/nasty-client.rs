@@ -18,6 +18,7 @@ use async_std::{sync::RwLock, task::spawn};
 use clap::Parser;
 use commit::Committable;
 use derivative::Derivative;
+use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     future::FutureExt,
     stream::{Peekable, StreamExt},
@@ -43,11 +44,7 @@ use std::{
     sync::Arc,
 };
 use strum::{EnumDiscriminants, VariantArray};
-use surf_disco::{
-    error::ClientError,
-    socket::{Connection, Unsupported},
-    Url,
-};
+use surf_disco::{error::ClientError, socket, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
@@ -272,17 +269,19 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
+type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerVersion>;
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 struct Subscription<T: Queryable> {
     #[derivative(Debug = "ignore")]
-    stream: Pin<Box<Peekable<Connection<T, Unsupported, ClientError>>>>,
+    stream: Pin<Box<Peekable<Connection<T>>>>,
     position: u64,
 }
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError>,
+    client: surf_disco::Client<ClientError, SequencerVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     max_open_streams: usize,
@@ -745,14 +744,17 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         PATH = ["/metrics"]
         METHOD = "METRICS"
     };
-    let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
+    let mut app = App::<_, ServerError, _>::with_state(RwLock::new(metrics));
     app.module::<ServerError>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
-    if let Err(err) = app.serve(format!("0.0.0.0:{port}")).await {
+    if let Err(err) = app
+        .serve(format!("0.0.0.0:{port}"), SEQUENCER_VERSION)
+        .await
+    {
         tracing::error!("web server exited unexpectedly: {err:#}");
     }
 }
