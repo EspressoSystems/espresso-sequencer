@@ -23,9 +23,8 @@ library Transcript {
         internal
         pure
     {
-        appendMessage(
-            self, abi.encodePacked(Utils.reverseEndianness(BN254.ScalarField.unwrap(fieldElement)))
-        );
+        self.transcript =
+            abi.encodePacked(Utils.reverseEndianness(BN254.ScalarField.unwrap(fieldElement)));
     }
 
     function append5FieldElements(
@@ -74,8 +73,7 @@ library Transcript {
         internal
         pure
     {
-        bytes memory commBytes = BN254.g1Serialize(comm);
-        appendMessage(self, commBytes);
+        self.transcript = abi.encodePacked(self.transcript, BN254.g1Serialize(comm));
     }
 
     function append2GroupElements(
