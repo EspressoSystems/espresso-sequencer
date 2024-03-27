@@ -1092,9 +1092,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
-                // Check whether the data comes from the right leader for this view
+                // Check whether the data comes from the right leader for this view or
+                // the data was calculated and signed by the current node
                 let view_leader_key = self.quorum_membership.get_leader(view);
-                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
+                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref())
+                    && !self
+                        .public_key
+                        .validate(&disperse.signature, payload_commitment.as_ref())
+                {
                     warn!("Could not verify VID dispersal/share sig.");
                     return;
                 }

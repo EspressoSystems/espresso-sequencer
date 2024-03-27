@@ -398,7 +398,7 @@ pub fn build_vid_proposal(
     view_number: ViewNumber,
     transactions: Vec<TestTransaction>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
-) -> Proposal<TestTypes, VidDisperseShare<TestTypes>> {
+) -> Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>> {
     let mut vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
 
@@ -409,9 +409,13 @@ pub fn build_vid_proposal(
     );
 
     VidDisperseShare::from_vid_disperse(vid_disperse)
-        .swap_remove(0)
-        .to_proposal(private_key)
-        .expect("Failed to sign payload commitment")
+        .into_iter()
+        .map(|vid_disperse| {
+            vid_disperse
+                .to_proposal(private_key)
+                .expect("Failed to sign payload commitment")
+        })
+        .collect()
 }
 
 pub fn build_da_certificate(

@@ -46,7 +46,7 @@ async fn test_vid_task() {
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
-        data: proposal,
+        data: proposal.clone(),
         signature,
         _pd: PhantomData,
     };
@@ -62,10 +62,19 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
-    let vid_share_proposal = VidDisperseShare::from_vid_disperse(vid_disperse.clone())
-        .swap_remove(0)
-        .to_proposal(handle.private_key())
-        .expect("Failed to sign block payload!");
+    let vid_share_proposals: Vec<_> = VidDisperseShare::from_vid_disperse(vid_disperse.clone())
+        .into_iter()
+        .map(|vid_disperse_share| {
+            vid_disperse_share
+                .to_proposal(handle.private_key())
+                .expect("Failed to sign block payload!")
+        })
+        .collect();
+    let vid_share_proposal = vid_share_proposals[0].clone();
+    let disperse_receives: Vec<_> = vid_share_proposals
+        .into_iter()
+        .map(HotShotEvent::VidDisperseRecv)
+        .collect();
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
@@ -81,6 +90,10 @@ async fn test_vid_task() {
     input.push(HotShotEvent::BlockReady(
         vid_disperse.clone(),
         ViewNumber::new(2),
+    ));
+    input.push(HotShotEvent::DAProposalValidated(
+        message,
+        *handle.public_key(),
     ));
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseRecv(vid_share_proposal.clone()));
@@ -99,6 +112,9 @@ async fn test_vid_task() {
         HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
         1,
     );
+    for disperse_receive in disperse_receives {
+        output.insert(disperse_receive, 1);
+    }
 
     let vid_state = VIDTaskState {
         api: handle.clone(),

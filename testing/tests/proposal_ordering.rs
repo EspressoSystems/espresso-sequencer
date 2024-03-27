@@ -52,7 +52,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DACRecv(dacs[0].clone()),
-            VidDisperseRecv(vids[0].0.clone()),
+            VidDisperseRecv(vids[0].0[0].clone()),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),

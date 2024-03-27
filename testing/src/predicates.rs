@@ -33,6 +33,25 @@ where
     }
 }
 
+pub fn multi_exact<TYPES>(
+    events: Vec<HotShotEvent<TYPES>>,
+) -> Vec<Predicate<Arc<HotShotEvent<TYPES>>>>
+where
+    TYPES: NodeType,
+{
+    events
+        .into_iter()
+        .map(|event| {
+            let event = Arc::new(event);
+            let info = format!("{:?}", event);
+            Predicate {
+                function: Box::new(move |e| e == &event),
+                info,
+            }
+        })
+        .collect()
+}
+
 pub fn leaf_decided<TYPES>() -> Predicate<Arc<HotShotEvent<TYPES>>>
 where
     TYPES: NodeType,
