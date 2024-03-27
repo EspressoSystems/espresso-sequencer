@@ -1,0 +1,28 @@
+# Fails if process-compose is edited but not docker-compose
+name: Check Demo Consistency
+
+on:
+  pull_request:
+    paths:
+      - 'process-compose.yaml'
+      - 'docker-compose.yml'
+
+jobs:
+  check-edits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      
+      - name: Check for file edits
+        run: |
+          FILES_CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+          # Check if process-compose.yaml is edited
+          if echo "$FILES_CHANGED" | grep -q "process-compose.yaml"; then
+            # Fail if docker-compose.yml is not also edited
+            if ! echo "$FILES_CHANGED" | grep -q "docker-compose.yml"; then
+              echo "process-compose.yaml is edited but not docker-compose.yml"
+              exit 1
+            fi
+          fi
