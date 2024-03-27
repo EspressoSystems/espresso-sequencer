@@ -1,43 +1,48 @@
 use super::NetworkError;
+#[cfg(feature = "hotshot-testing")]
 use async_compatibility_layer::art::{async_block_on, async_spawn};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use bincode::config::Options;
+use cdn_broker::reexports::connection::protocols::Tcp;
 use cdn_broker::reexports::def::RunDef;
 use cdn_broker::reexports::discovery::{Embedded, Redis};
-use cdn_broker::{
-    reexports::connection::protocols::Tcp, Broker, Config, ConfigBuilder as BrokerConfigBuilder,
-};
+#[cfg(feature = "hotshot-testing")]
+use cdn_broker::{Broker, Config, ConfigBuilder as BrokerConfigBuilder};
+pub use cdn_client::reexports::crypto::signature::KeyPair;
 use cdn_client::{
     reexports::{
         connection::protocols::Quic,
-        crypto::signature::{KeyPair, Serializable, SignatureScheme},
+        crypto::signature::{Serializable, SignatureScheme},
         message::{Broadcast, Direct, Message as PushCdnMessage, Topic},
     },
     Client, ConfigBuilder as ClientConfigBuilder,
 };
+#[cfg(feature = "hotshot-testing")]
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::TestableNetworkingImplementation;
+use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, VERSION_0_1},
     data::ViewNumber,
     message::Message,
     traits::{
-        network::{
-            ConnectedNetwork, ConsensusIntentEvent, NetworkReliability, PushCdnNetworkError,
-        },
+        network::{ConnectedNetwork, ConsensusIntentEvent, PushCdnNetworkError},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
     utils::bincode_opts,
     BoxSyncFuture,
 };
+#[cfg(feature = "hotshot-testing")]
 use rand::rngs::StdRng;
+#[cfg(feature = "hotshot-testing")]
 use rand::{RngCore, SeedableRng};
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
-use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
+#[cfg(feature = "hotshot-testing")]
+use std::{path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
 use versioned_binary_serialization::{
     version::{StaticVersionType, Version},

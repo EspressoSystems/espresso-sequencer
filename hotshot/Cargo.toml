@@ -55,23 +55,21 @@ jf-primitives.workspace = true
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
-cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-client = { workspace = true, features = ["runtime-tokio"] }
 cdn-broker = { workspace = true, features = [
-  "insecure",
   "runtime-tokio",
   "strong_consistency",
 ] }
-cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-marshal = { workspace = true, features = ["runtime-tokio"] }
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
-cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-client = { workspace = true, features = ["runtime-async-std"] }
 cdn-broker = { workspace = true, features = [
-  "insecure",
   "runtime-async-std",
   "strong_consistency",
 ] }
-cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
 
 
 [dev-dependencies]

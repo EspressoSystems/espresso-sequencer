@@ -8,7 +8,7 @@ version = { workspace = true }
 rust-version = "1.65.0"
 
 [features]
-default = ["docs", "doc-images"]
+default = ["docs", "doc-images", "hotshot-testing"]
 gpu-vid = ["hotshot-task-impls/gpu-vid"]
 
 # Features required for binaries
@@ -17,7 +17,7 @@ bin-orchestrator = ["clap"]
 # Build the extended documentation
 docs = []
 doc-images = []
-hotshot-testing = []
+hotshot-testing = ["hotshot/hotshot-testing"]
 randomized-leader-election = []
 
 # libp2p
@@ -89,11 +89,11 @@ name = "validator-push-cdn"
 path = "push-cdn/validator.rs"
 
 [[example]]
-name = "broker-push-cdn"
+name = "cdn-broker"
 path = "push-cdn/broker.rs"
 
 [[example]]
-name = "marshal-push-cdn"
+name = "cdn-marshal"
 path = "push-cdn/marshal.rs"
 
 [[example]]
@@ -131,28 +131,28 @@ hotshot = { path = "../hotshot" }
 hotshot-example-types = { path = "../example-types" }
 chrono = "0.4"
 versioned-binary-serialization = { workspace = true }
+sha2.workspace = true
 
 tracing = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
-cdn-client = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-client = { workspace = true, features = ["runtime-tokio"] }
 cdn-broker = { workspace = true, features = [
-  "insecure",
+
   "runtime-tokio",
   "strong_consistency",
 ] }
-cdn-marshal = { workspace = true, features = ["insecure", "runtime-tokio"] }
+cdn-marshal = { workspace = true, features = ["runtime-tokio"] }
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
-cdn-client = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-client = { workspace = true, features = ["runtime-async-std"] }
 cdn-broker = { workspace = true, features = [
-  "insecure",
   "runtime-async-std",
   "strong_consistency",
 ] }
-cdn-marshal = { workspace = true, features = ["insecure", "runtime-async-std"] }
+cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
 
 [dev-dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
