@@ -36,6 +36,7 @@ use jf_primitives::vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, Header, SeqTypes};
 use serde::de::DeserializeOwned;
+use std::time::Duration;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -67,6 +68,18 @@ struct Options {
         default_value = "10"
     )]
     max_blocking_polls: u8,
+
+    /// Timeout for HTTP requests.
+    ///
+    /// Requests that take longer than this will fail, causing an error log and an increment of the
+    /// `failed_actions` metric.
+    #[clap(
+        long,
+        env = "ESPRESS_NASTY_CLIENT_HTTP_TIMEOUT",
+        default_value = "30s",
+        value_parser = sequencer::options::parse_duration
+    )]
+    http_timeout: Duration,
 
     #[clap(flatten)]
     distribution: ActionDistribution,
@@ -292,7 +305,9 @@ struct ResourceManager<T: Queryable> {
 impl<T: Queryable> ResourceManager<T> {
     fn new(opt: &Options, metrics: Arc<Metrics>) -> Self {
         Self {
-            client: surf_disco::Client::new(opt.url.clone()),
+            client: surf_disco::Client::builder(opt.url.clone())
+                .set_timeout(Some(opt.http_timeout))
+                .build(),
             open_streams: BTreeMap::new(),
             next_stream_id: 0,
             max_open_streams: opt.max_open_streams,
@@ -766,6 +781,7 @@ async fn main() {
 
     let opt = Options::parse();
     let metrics = PrometheusMetrics::default();
+    let failed_actions = metrics.create_counter("failed_actions".into(), None);
     let mut client = Client::new(&opt, &metrics);
     let mut rng = rand::thread_rng();
 
@@ -776,6 +792,7 @@ async fn main() {
             .run(Action::random(&mut rng, &opt.distribution))
             .await
         {
+            failed_actions.add(1);
             tracing::error!("action failed: {err:#}");
         }
     }
