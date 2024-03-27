@@ -26,6 +26,7 @@ jobs:
             # Fail if docker-compose.yml is not also edited
             if ! echo "$FILES_CHANGED" | grep "docker-compose.yaml"; then
               echo "process-compose.yaml is edited but not docker-compose.yaml"
+              echo "If this was intentional, you may ignore this failure"
               exit 1
             fi
           fi
