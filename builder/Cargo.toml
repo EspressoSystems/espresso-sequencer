@@ -1,0 +1,42 @@
+[package]
+name = "builder"
+description = "A standalone builder service"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[features]
+testing = ["hotshot-testing"]
+
+[dependencies]
+hotshot-builder-core = { path = "../../hs-builder-core" }
+anyhow = { workspace = true }
+hotshot-testing = { workspace = true, optional = true }
+async-broadcast = "0.7.0"
+async-lock = "2.8"
+async-trait = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+clap = { workspace = true }
+commit = { git = "https://github.com/EspressoSystems/commit.git" }
+ethers = { workspace = true }
+futures = { workspace = true }
+jf-primitives = { workspace = true }
+hotshot-types = { workspace = true }
+hotshot = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-stake-table = { workspace = true }
+# hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+hotshot-state-prover = { path = "../hotshot-state-prover" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+sequencer = { path = "../sequencer", features = ["testing"] }
+portpicker = "0.1.1"
+rand = "0.8.5"
+snafu = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+versioned-binary-serialization = { workspace = true }
+tide-disco = { workspace = true }
+surf-disco = { workspace = true }
+# [[bin]]
