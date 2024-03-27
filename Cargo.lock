@@ -1324,6 +1324,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "commit",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-builder-core",
+ "hotshot-orchestrator",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-testing",
+ "hotshot-types",
+ "jf-primitives",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "serde",
+ "snafu 0.8.2",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "tracing",
+ "versioned-binary-serialization",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1774,7 +1809,7 @@ dependencies = [
 [[package]]
 name = "commit"
 version = "0.2.2"
-source = "git+https://github.com/EspressoSystems/commit#30679718efd4ecf870b66950160077125dcb8d93"
+source = "git+https://github.com/EspressoSystems/commit.git#30679718efd4ecf870b66950160077125dcb8d93"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -4065,6 +4100,30 @@ dependencies = [
  "tide-disco",
  "toml",
  "versioned-binary-serialization",
+]
+
+[[package]]
+name = "hotshot-builder-core"
+version = "0.1.1"
+dependencies = [
+ "async-broadcast",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "commit",
+ "derivative",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-types",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.2",
+ "tagged-base64",
+ "tide-disco",
+ "tracing",
 ]
 
 [[package]]

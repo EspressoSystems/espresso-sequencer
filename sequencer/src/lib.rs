@@ -23,9 +23,9 @@ use l1_client::L1Client;
 
 use state_signature::static_stake_table_commitment;
 use url::Url;
-mod l1_client;
+pub mod l1_client;
 pub mod persistence;
-mod state;
+pub mod state;
 pub mod transaction;
 use async_trait::async_trait;
 

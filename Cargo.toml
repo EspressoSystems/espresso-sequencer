@@ -15,6 +15,7 @@ members = [
   "hotshot-state-prover",
   "sequencer",
   "utils",
+  "builder",
 ]
 
 [workspace.dependencies]
