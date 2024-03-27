@@ -161,21 +161,19 @@ impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
 #[async_trait]
 impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
     type EventStream = BoxStream<'static, Arc<BuilderEvent<Types>>>;
+
     async fn get_event_stream(&self) -> Self::EventStream {
         let recv_channel = self.to_subscribe_clone_recv.clone();
-
-        let startup_event = self.get_startup_event();
-        self.subscriber_send_channel
-            .broadcast(Arc::new(startup_event))
-            .await
-            .expect("Failed to send startup event");
-
+        let mut starup_event_initialized = false;
+        let startup_event = self.get_startup_event().clone();
         stream::unfold(recv_channel, move |mut recv_channel| async move {
-            let event_res = recv_channel.recv().await;
-            if event_res.is_err() {
-                return None;
-            }
-            Some((event_res.unwrap(), recv_channel))
+            let event_res = if starup_event_initialized {
+                recv_channel.recv().await.ok()
+            } else {
+                starup_event_initialized = true;
+                Some(Arc::new(startup_event.clone()))
+            };
+            event_res.map(|event| (event, recv_channel))
         })
         .boxed()
     }
