@@ -128,6 +128,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init(msg.sender); //sets owner to msg.sender
         __UUPSUpgradeable_init();
         _initializeState(genesis, numBlocksPerEpoch);
+        // Load verifying key
     }
 
     /// @notice only the owner can authorize an upgrade

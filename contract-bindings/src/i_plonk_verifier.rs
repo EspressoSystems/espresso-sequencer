@@ -208,6 +208,7 @@ pub mod i_plonk_verifier {
                                                     ),
                                                 ],
                                             ),
+                                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                         ],),
                                     ),
                                 ),
@@ -493,6 +494,7 @@ pub mod i_plonk_verifier {
                                         ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                         ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ],),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ],),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(
@@ -649,7 +651,7 @@ pub mod i_plonk_verifier {
                 client,
             ))
         }
-        ///Calls the contract's `batchVerify` (0x830affd6) function
+        ///Calls the contract's `batchVerify` (0x4b43a27f) function
         pub fn batch_verify(
             &self,
             verifying_keys: ::std::vec::Vec<VerifyingKey>,
@@ -659,7 +661,7 @@ pub mod i_plonk_verifier {
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
                 .method_hash(
-                    [131, 10, 255, 214],
+                    [75, 67, 162, 127],
                     (
                         verifying_keys,
                         public_inputs,
@@ -669,7 +671,7 @@ pub mod i_plonk_verifier {
                 )
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `verify` (0x202a4b1b) function
+        ///Calls the contract's `verify` (0x3842ac48) function
         pub fn verify(
             &self,
             verifying_key: VerifyingKey,
@@ -679,7 +681,7 @@ pub mod i_plonk_verifier {
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
                 .method_hash(
-                    [32, 42, 75, 27],
+                    [56, 66, 172, 72],
                     (
                         verifying_key,
                         public_input,
@@ -697,7 +699,7 @@ pub mod i_plonk_verifier {
             Self::new(contract.address(), contract.client())
         }
     }
-    ///Container type for all input parameters for the `batchVerify` function with signature `batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])` and selector `0x830affd6`
+    ///Container type for all input parameters for the `batchVerify` function with signature `batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256)[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])` and selector `0x4b43a27f`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -707,7 +709,7 @@ pub mod i_plonk_verifier {
     )]
     #[ethcall(
         name = "batchVerify",
-        abi = "batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])"
+        abi = "batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256)[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])"
     )]
     pub struct BatchVerifyCall {
         pub verifying_keys: ::std::vec::Vec<VerifyingKey>,
@@ -715,7 +717,7 @@ pub mod i_plonk_verifier {
         pub proofs: ::std::vec::Vec<PlonkProof>,
         pub extra_transcript_init_msgs: ::std::vec::Vec<::ethers::core::types::Bytes>,
     }
-    ///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x202a4b1b`
+    ///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x3842ac48`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -725,7 +727,7 @@ pub mod i_plonk_verifier {
     )]
     #[ethcall(
         name = "verify",
-        abi = "verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)"
+        abi = "verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)"
     )]
     pub struct VerifyCall {
         pub verifying_key: VerifyingKey,
@@ -779,7 +781,7 @@ pub mod i_plonk_verifier {
             Self::Verify(value)
         }
     }
-    ///Container type for all return fields from the `batchVerify` function with signature `batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])` and selector `0x830affd6`
+    ///Container type for all return fields from the `batchVerify` function with signature `batchVerify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256)[],uint256[][],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[],bytes[])` and selector `0x4b43a27f`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -788,7 +790,7 @@ pub mod i_plonk_verifier {
         serde::Deserialize,
     )]
     pub struct BatchVerifyReturn(pub bool);
-    ///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x202a4b1b`
+    ///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x3842ac48`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
