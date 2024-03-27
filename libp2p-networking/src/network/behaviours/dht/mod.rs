@@ -589,7 +589,10 @@ impl NetworkBehaviour for DHTBehaviour {
         }
 
         // retry put/gets if they are ready
-        while let Some(req) = self.queued_get_record_queries.pop_front() {
+        for _i in 0..self.queued_get_record_queries.len() {
+            let Some(req) = self.queued_get_record_queries.pop_front() else {
+                continue;
+            };
             if req.backoff.is_expired() {
                 self.get_record(
                     req.key,
@@ -603,7 +606,10 @@ impl NetworkBehaviour for DHTBehaviour {
             }
         }
 
-        while let Some(req) = self.queued_put_record_queries.pop_front() {
+        for _i in 0..self.queued_put_record_queries.len() {
+            let Some(req) = self.queued_put_record_queries.pop_front() else {
+                continue;
+            };
             if req.backoff.is_expired() {
                 self.put_record(req);
             } else {
