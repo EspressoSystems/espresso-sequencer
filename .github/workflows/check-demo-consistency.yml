@@ -5,7 +5,7 @@ on:
   pull_request:
     paths:
       - 'process-compose.yaml'
-      - 'docker-compose.yml'
+      - 'docker-compose.yaml'
 
 jobs:
   check-edits:
@@ -19,10 +19,10 @@ jobs:
           FILES_CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
 
           # Check if process-compose.yaml is edited
-          if echo "$FILES_CHANGED" | grep -q "process-compose.yaml"; then
+          if echo "$FILES_CHANGED" | grep -q "process-compose.yml"; then
             # Fail if docker-compose.yml is not also edited
-            if ! echo "$FILES_CHANGED" | grep -q "docker-compose.yml"; then
-              echo "process-compose.yaml is edited but not docker-compose.yml"
+            if ! echo "$FILES_CHANGED" | grep -q "docker-compose.yaml"; then
+              echo "process-compose.yaml is edited but not docker-compose.yaml"
               exit 1
             fi
           fi
