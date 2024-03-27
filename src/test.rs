@@ -5,7 +5,6 @@ mod tests {
     use crate::events::{define_api, Error, Options};
     use async_compatibility_layer::art::async_spawn;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::stream::IntoStream;
     use async_std::sync::RwLock;
     use futures::stream::StreamExt;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
@@ -60,23 +59,23 @@ mod tests {
         async_spawn(app.serve(api_url, STATIC_VER_0_1));
 
         // Start a client.
-        let client = Client::<Error, Version01>::new(
+        let client_1 = Client::<Error, Version01>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
                 .unwrap(),
         );
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        assert!(client_1.connect(Some(Duration::from_secs(60))).await);
 
-        tracing::info!("Connected to server");
+        tracing::info!("Client 1 Connected to server");
 
         // client subscrive to hotshot events
-        let mut events = client
+        let mut events = client_1
             .socket("events")
             .subscribe::<BuilderEvent<TestTypes>>()
             .await
             .unwrap();
 
-        tracing::info!("Subscribed to events");
+        tracing::info!("Client 1 Subscribed to events");
 
         // Start a client.
         let client_2 = Client::<Error, Version01>::new(
@@ -86,7 +85,7 @@ mod tests {
         );
         assert!(client_2.connect(Some(Duration::from_secs(60))).await);
 
-        tracing::info!("C2 Connected to server");
+        tracing::info!("Client 2 Connected to server");
 
         // client subscrive to hotshot events
         let mut events_2 = client_2
@@ -95,19 +94,19 @@ mod tests {
             .await
             .unwrap();
 
-        tracing::info!("C2 Subscribed to events");
+        tracing::info!("Client 2 Subscribed to events");
 
         let total_count = 5;
         //let stream = events.into_stream();
         // wait for these events to receive
-        let receive_handle = async_spawn(async move {
+        let receive_handle_1 = async_spawn(async move {
             let mut receive_count = 0;
             loop {
                 let event = events.next().await.unwrap();
-                tracing::info!("Received event: {:?}", event);
+                tracing::info!("Received event in Client 1: {:?}", event);
                 receive_count += 1;
-                if receive_count >= total_count + 1 {
-                    tracing::info!("Received all sent events, exiting loop");
+                if receive_count > total_count {
+                    tracing::info!("Clien1 Received all sent events, exiting loop");
                     break;
                 }
             }
@@ -120,10 +119,10 @@ mod tests {
             let mut receive_count = 0;
             loop {
                 let event = events_2.next().await.unwrap();
-                tracing::info!("Received event: {:?}", event);
+                tracing::info!("Received event in Client 2: {:?}", event);
                 receive_count += 1;
-                if receive_count >= total_count + 1 {
-                    tracing::info!("Received all sent events, exiting loop");
+                if receive_count > total_count {
+                    tracing::info!("Client 2 Received all sent events, exiting loop");
                     break;
                 }
             }
@@ -151,7 +150,7 @@ mod tests {
         });
 
         send_handle.await;
-        receive_handle.await;
+        receive_handle_1.await;
         receive_handle_2.await;
     }
 }

@@ -164,17 +164,25 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
 
     async fn get_event_stream(&self) -> Self::EventStream {
         let recv_channel = self.to_subscribe_clone_recv.clone();
-        let mut starup_event_initialized = false;
+        let starup_event_initialized = false;
         let startup_event = self.get_startup_event().clone();
-        stream::unfold(recv_channel, move |mut recv_channel| async move {
-            let event_res = if starup_event_initialized {
-                recv_channel.recv().await.ok()
-            } else {
-                starup_event_initialized = true;
-                Some(Arc::new(startup_event.clone()))
-            };
-            event_res.map(|event| (event, recv_channel))
-        })
+        stream::unfold(
+            (recv_channel, startup_event, starup_event_initialized),
+            |(mut recv_channel, startup_event, mut starup_event_initialized)| async move {
+                let event_res = if starup_event_initialized {
+                    recv_channel.recv().await.ok()
+                } else {
+                    starup_event_initialized = true;
+                    Some(Arc::new(startup_event.clone()))
+                };
+                event_res.map(|event| {
+                    (
+                        event,
+                        (recv_channel, startup_event, starup_event_initialized),
+                    )
+                })
+            },
+        )
         .boxed()
     }
 }
