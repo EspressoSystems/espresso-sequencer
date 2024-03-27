@@ -211,7 +211,7 @@ jobs:
 
       - name: Generate nasty-client metadata
         uses: docker/metadata-action@v5
-        id: deploy
+        id: nasty-client
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
 
