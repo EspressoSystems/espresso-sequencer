@@ -1774,7 +1774,7 @@ dependencies = [
 [[package]]
 name = "commit"
 version = "0.2.2"
-source = "git+https://github.com/EspressoSystems/commit#30679718efd4ecf870b66950160077125dcb8d93"
+source = "git+https://github.com/EspressoSystems/commit#709f181de703edd5a53dffd47ee9d930911f21c3"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -1785,7 +1785,7 @@ dependencies = [
  "hex",
  "serde",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.4.0",
 ]
 
 [[package]]
@@ -4061,7 +4061,7 @@ dependencies = [
  "hotshot-types",
  "serde",
  "snafu 0.8.2",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "toml",
  "versioned-binary-serialization",
@@ -4196,7 +4196,7 @@ dependencies = [
  "snafu 0.8.2",
  "spin_sleep",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tempfile",
  "tide-disco",
  "time 0.3.34",
@@ -4225,7 +4225,7 @@ dependencies = [
  "jf-primitives",
  "jf-utils",
  "serde",
- "tagged-base64",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -4267,7 +4267,7 @@ dependencies = [
  "serde",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "time 0.3.34",
  "toml",
@@ -4314,7 +4314,7 @@ dependencies = [
  "sha2 0.10.8",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -4398,7 +4398,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.2",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -4909,7 +4909,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -4952,7 +4952,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "typenum",
  "zeroize",
 ]
@@ -4996,7 +4996,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha2 0.10.8",
- "tagged-base64",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -8295,7 +8295,7 @@ dependencies = [
  "sha2 0.10.8",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tempfile",
  "tide-disco",
  "time 0.3.34",
@@ -9414,14 +9414,37 @@ dependencies = [
  "crc-any",
  "serde",
  "snafu 0.7.5",
- "tagged-base64-macros",
+ "tagged-base64-macros 0.3.3",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "tagged-base64"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=v0.4.0#eb449140f2feb597983ebaf0ee2464ed6cee322a"
+dependencies = [
+ "ark-serialize",
+ "ark-std",
+ "base64 0.22.0",
+ "crc-any",
+ "serde",
+ "snafu 0.8.2",
+ "tagged-base64-macros 0.4.0",
 ]
 
 [[package]]
 name = "tagged-base64-macros"
 version = "0.3.3"
 source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+dependencies = [
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "tagged-base64-macros"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=v0.4.0#eb449140f2feb597983ebaf0ee2464ed6cee322a"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -9560,7 +9583,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "surf",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide",
  "tide-websockets",
  "toml",
