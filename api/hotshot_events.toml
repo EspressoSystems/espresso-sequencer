@@ -26,9 +26,9 @@ NAME = "hotshot_events_service"
 DESCRIPTION = ""
 FORMAT_VERSION = "0.1.0"
 
-[route.hotshot_events]
-PATH = ["hotshotevents/:view_number"]
-":view_number" = "Integer"
+[route.events]
+PATH = ["events"]
+METHOD = "SOCKET"
 DOC = """
-Get hotshot events starting from a given view number.
+Get hotshot events starting now.
 """

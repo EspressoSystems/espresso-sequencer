@@ -1,4 +1,4 @@
 mod api;
 pub mod events;
-pub mod events_info;
 pub mod events_source;
+mod test;

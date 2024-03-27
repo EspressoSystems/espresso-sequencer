@@ -1,16 +1,16 @@
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{fmt::Display, path::PathBuf};
-use tagged_base64::TaggedBase64;
+use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{api::load_api, events_source::EventsSource};
 
-#[derive(Args, Default)]
+#[derive(Args, Default, Debug)]
 pub struct Options {
     #[arg(
         long = "hotshot-events-service-api-path",
@@ -80,37 +80,26 @@ impl tide_disco::error::Error for Error {
     }
 }
 
-pub fn define_api<State, Types: NodeType>(options: &Options) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
+    options: &Options,
+) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + EventsSource<Types>,
     Types: NodeType,
-    <<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType:
-        for<'a> TryFrom<&'a TaggedBase64> + Into<TaggedBase64> + Display,
-    for<'a> <<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
 {
-    let mut api = load_api::<State, Error>(
+    let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
         include_str!("../api/hotshot_events.toml"),
         options.extensions.clone(),
     )?;
     api.with_version("0.1.0".parse().unwrap())
-        .stream("hotshot_events", move |req, state| {
+        .stream("events", move |_, state| {
             async move {
-                let view_number = req.integer_param("view_number")?;
-                Ok(state
-                    .read(|state| {
-                        async move {
-                            state
-                                .get_available_hotshot_events(view_number)
-                                .await
-                                .map(Ok)
-                        }
-                        .boxed()
-                    })
-                    .await)
+                tracing::info!("client subscribed to events");
+                state
+                    .read(|state| async move { Ok(state.subscribe_events().await.map(Ok)) }.boxed())
+                    .await
             }
             .try_flatten_stream()
             .boxed()
