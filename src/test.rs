@@ -58,7 +58,7 @@ mod tests {
 
         async_spawn(app.serve(api_url, STATIC_VER_0_1));
 
-        // Start a client.
+        // Start Client 1
         let client_1 = Client::<Error, Version01>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
@@ -69,7 +69,7 @@ mod tests {
         tracing::info!("Client 1 Connected to server");
 
         // client subscrive to hotshot events
-        let mut events = client_1
+        let mut events_1 = client_1
             .socket("events")
             .subscribe::<BuilderEvent<TestTypes>>()
             .await
@@ -77,7 +77,7 @@ mod tests {
 
         tracing::info!("Client 1 Subscribed to events");
 
-        // Start a client.
+        // Start Client 2
         let client_2 = Client::<Error, Version01>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
@@ -87,7 +87,7 @@ mod tests {
 
         tracing::info!("Client 2 Connected to server");
 
-        // client subscrive to hotshot events
+        // client 1  subscrive to hotshot events
         let mut events_2 = client_2
             .socket("events")
             .subscribe::<BuilderEvent<TestTypes>>()
@@ -97,12 +97,11 @@ mod tests {
         tracing::info!("Client 2 Subscribed to events");
 
         let total_count = 5;
-        //let stream = events.into_stream();
-        // wait for these events to receive
+        // wait for these events to receive on client 1
         let receive_handle_1 = async_spawn(async move {
             let mut receive_count = 0;
             loop {
-                let event = events.next().await.unwrap();
+                let event = events_1.next().await.unwrap();
                 tracing::info!("Received event in Client 1: {:?}", event);
                 receive_count += 1;
                 if receive_count > total_count {
@@ -114,7 +113,7 @@ mod tests {
             assert_eq!(receive_count, total_count + 1);
         });
 
-        // wait for these events to receive
+        // wait for these events to receive on client 2
         let receive_handle_2 = async_spawn(async move {
             let mut receive_count = 0;
             loop {
