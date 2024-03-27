@@ -6,10 +6,10 @@ use hotshot_types::{
     error::HotShotError,
     event::{error_adaptor, Event, EventType, LeafChain},
     message::Proposal,
-    traits::node_implementation::NodeType,
+    traits::node_implementation::{ConsensusTime, NodeType},
+    PeerConfig,
 };
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 const RETAINED_EVENTS_COUNT: usize = 4096;
 
@@ -23,47 +23,46 @@ pub struct BuilderEvent<Types: NodeType> {
     /// The underlying event
     pub event: BuilderEventType<Types>,
 }
-pub fn get_builder_event_from_hotshot_event<Types: NodeType>(
-    hotshot_event: Event<Types>,
-    leader: Option<Types::SignatureKey>,
-    vid_nodes: Option<NonZeroUsize>,
-) -> Option<BuilderEvent<Types>> {
-    // match the event and generate the builder event
-    let builder_event = match hotshot_event.event {
-        EventType::Error { error } => BuilderEventType::HotshotError { error },
-        EventType::Transactions { transactions } => {
-            BuilderEventType::HotshotTransactions { transactions }
+
+// impl From event to builder event
+impl<Types: NodeType> From<Event<Types>> for BuilderEvent<Types> {
+    fn from(event: Event<Types>) -> Self {
+        BuilderEvent {
+            view_number: event.view_number,
+            event: match event.event {
+                EventType::Error { error } => BuilderEventType::HotshotError { error },
+                EventType::Transactions { transactions } => {
+                    BuilderEventType::HotshotTransactions { transactions }
+                }
+                EventType::Decide {
+                    leaf_chain,
+                    block_size,
+                    ..
+                } => BuilderEventType::HotshotDecide {
+                    leaf_chain,
+                    block_size,
+                },
+                EventType::DAProposal { proposal, sender } => {
+                    BuilderEventType::HotshotDAProposal { proposal, sender }
+                }
+                EventType::QuorumProposal { proposal, sender } => {
+                    BuilderEventType::HotshotQuorumProposal { proposal, sender }
+                }
+                _ => BuilderEventType::Unknown,
+            },
         }
-        EventType::Decide {
-            leaf_chain,
-            block_size,
-            ..
-        } => BuilderEventType::HotshotDecide {
-            leaf_chain,
-            block_size,
-        },
-        EventType::DAProposal { proposal, sender } => BuilderEventType::HotshotDAProposal {
-            proposal,
-            sender,
-            leader: leader.unwrap(),
-            vid_nodes: vid_nodes.unwrap(),
-        },
-        EventType::QuorumProposal { proposal, sender } => BuilderEventType::HotshotQuorumProposal {
-            proposal,
-            sender,
-            leader: leader.unwrap(),
-        },
-        _ => return None,
-    };
-    Some(BuilderEvent {
-        view_number: hotshot_event.view_number,
-        event: builder_event,
-    })
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound(deserialize = "Types: NodeType"))]
 pub enum BuilderEventType<Types: NodeType> {
+    // Information required by the builder to create a membership to get view leader
+    StarupInfo {
+        known_node_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
+        non_statekd_node_count: usize,
+    },
+    /// Hotshot error
     HotshotError {
         /// The underlying error
         #[serde(with = "error_adaptor")]
@@ -87,10 +86,6 @@ pub enum BuilderEventType<Types: NodeType> {
         proposal: Proposal<Types, DAProposal<Types>>,
         /// Public key of the leader submitting the proposal
         sender: Types::SignatureKey,
-        /// leader for the view
-        leader: Types::SignatureKey,
-        /// nodes in vid calculation
-        vid_nodes: NonZeroUsize,
     },
     /// Quorum proposal was received from the network
     HotshotQuorumProposal {
@@ -98,9 +93,8 @@ pub enum BuilderEventType<Types: NodeType> {
         proposal: Proposal<Types, QuorumProposal<Types>>,
         /// Public key of the leader submitting the proposal
         sender: Types::SignatureKey,
-        /// leader for the view
-        leader: Types::SignatureKey,
     },
+    Unknown,
 }
 
 #[async_trait]
@@ -121,32 +115,45 @@ pub trait EventConsumer<Types>
 where
     Types: NodeType,
 {
-    async fn handle_event(
-        &mut self,
-        event: Event<Types>,
-        leader: Option<Types::SignatureKey>,
-        vid_nodes: Option<NonZeroUsize>,
-    );
+    async fn handle_event(&mut self, event: Event<Types>);
 }
 
 #[derive(Debug)]
 pub struct EventsStreamer<Types: NodeType> {
+    // required for api subscription
     to_subscribe_clone_recv: BroadcastReceiver<Arc<BuilderEvent<Types>>>,
     subscriber_send_channel: BroadcastSender<Arc<BuilderEvent<Types>>>,
+
+    // required for sending startup info
+    known_nodes_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
+    non_staked_node_count: usize,
 }
 
 #[async_trait]
 impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
-    async fn handle_event(
-        &mut self,
-        event: Event<Types>,
-        leader: Option<Types::SignatureKey>,
-        vid_nodes: Option<NonZeroUsize>,
-    ) {
-        let builder_event = get_builder_event_from_hotshot_event(event, leader, vid_nodes);
-        if builder_event.is_some() {
-            let event = Arc::new(builder_event.unwrap().clone());
-            let _status = self.subscriber_send_channel.broadcast(event).await;
+    async fn handle_event(&mut self, event: Event<Types>) {
+        let filter = match event {
+            Event {
+                event: EventType::DAProposal { .. },
+                ..
+            } => true,
+            Event {
+                event: EventType::QuorumProposal { .. },
+                ..
+            } => true,
+            Event {
+                event: EventType::Transactions { .. },
+                ..
+            } => true,
+            Event {
+                event: EventType::Decide { .. },
+                ..
+            } => true,
+            Event { .. } => false,
+        };
+        if filter {
+            let builder_event = Arc::new(BuilderEvent::from(event));
+            let _status = self.subscriber_send_channel.broadcast(builder_event).await;
         }
     }
 }
@@ -156,6 +163,13 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
     type EventStream = BoxStream<'static, Arc<BuilderEvent<Types>>>;
     async fn get_event_stream(&self) -> Self::EventStream {
         let recv_channel = self.to_subscribe_clone_recv.clone();
+
+        let startup_event = self.get_startup_event();
+        self.subscriber_send_channel
+            .broadcast(Arc::new(startup_event))
+            .await
+            .expect("Failed to send startup event");
+
         stream::unfold(recv_channel, move |mut recv_channel| async move {
             let event_res = recv_channel.recv().await;
             if event_res.is_err() {
@@ -166,21 +180,28 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
         .boxed()
     }
 }
-
 impl<Types: NodeType> EventsStreamer<Types> {
-    pub fn new() -> Self {
+    pub fn new(
+        known_nodes_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
+        non_staked_node_count: usize,
+    ) -> Self {
         let (mut subscriber_send_channel, to_subscribe_clone_recv) =
             broadcast::<Arc<BuilderEvent<Types>>>(RETAINED_EVENTS_COUNT);
         subscriber_send_channel.set_overflow(true);
         EventsStreamer {
             subscriber_send_channel,
             to_subscribe_clone_recv,
+            known_nodes_with_stake,
+            non_staked_node_count,
         }
     }
-}
-
-impl<Types: NodeType> Default for EventsStreamer<Types> {
-    fn default() -> Self {
-        Self::new()
+    pub fn get_startup_event(&self) -> BuilderEvent<Types> {
+        BuilderEvent {
+            view_number: Types::Time::genesis(),
+            event: BuilderEventType::StarupInfo {
+                known_node_with_stake: self.known_nodes_with_stake.clone(),
+                non_statekd_node_count: self.non_staked_node_count,
+            },
+        }
     }
 }
