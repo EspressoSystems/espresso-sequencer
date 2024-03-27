@@ -7,10 +7,12 @@ mod tests {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::sync::RwLock;
     use futures::stream::StreamExt;
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::data::ViewNumber;
-    use hotshot_types::event::{Event, EventType};
-    use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        data::ViewNumber,
+        event::{Event, EventType},
+        traits::node_implementation::{ConsensusTime, NodeType},
+    };
 
     use hotshot_example_types::node_types::TestTypes;
     use std::sync::Arc;

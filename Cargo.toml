@@ -18,7 +18,7 @@ derive_more = "0.99"
 derivative = "2.2"
 either = { version = "1.10", features = ["serde"] }
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.27" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
@@ -28,7 +28,6 @@ versioned-binary-serialization = { git = "https://github.com/EspressoSystems/ver
 tracing = "0.1"
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.27" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
 portpicker = "0.1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.5.0" }
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.27" }
