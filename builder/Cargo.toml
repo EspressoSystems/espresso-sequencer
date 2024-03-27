@@ -6,7 +6,8 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "hg/test_builder_executable" }
+#hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "hg/test_builder_executable" }
+hotshot-builder-core = { path = "../../hs-builder-core" }
 anyhow = { workspace = true }
 async-broadcast = "0.7.0"
 async-lock = "2.8"
@@ -23,9 +24,15 @@ hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 # hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+
 hotshot-state-prover = { path = "../hotshot-state-prover" }
+
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.0" }
+#hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", branch = "hg/modify_builder_submit_api" }
+
 sequencer = { path = "../sequencer", features = ["testing"] }
 portpicker = "0.1.1"
 rand = "0.8.5"

@@ -1340,6 +1340,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -4104,7 +4105,6 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hs-builder-core?branch=hg/test_builder_executable#2e913aa6a714d07a3c67ea50ab1ac5f42e1d147d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
@@ -4117,13 +4117,16 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
+ "hotshot-events-service",
  "hotshot-types",
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.2",
+ "surf-disco",
  "tagged-base64",
  "tide-disco",
  "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -4147,6 +4150,31 @@ dependencies = [
  "jf-utils",
  "num-bigint",
  "num-traits",
+]
+
+[[package]]
+name = "hotshot-events-service"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.0#8078f475d3919189c86dbdc54db4c0adc809a06f"
+dependencies = [
+ "async-broadcast",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "derivative",
+ "derive_more",
+ "either",
+ "futures",
+ "hotshot-types",
+ "serde",
+ "snafu 0.8.2",
+ "tagged-base64",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]

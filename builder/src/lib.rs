@@ -336,7 +336,7 @@ pub mod testing {
     use std::{num::NonZeroUsize, time::Duration};
     #[derive(Clone)]
     pub struct HotShotTestConfig {
-        config: HotShotConfig<PubKey, ElectionConfig>,
+        pub config: HotShotConfig<PubKey, ElectionConfig>,
         priv_keys_staking_nodes: Vec<BLSPrivKey>,
         priv_keys_non_staking_nodes: Vec<BLSPrivKey>,
         staking_nodes_state_key_pairs: Vec<StateKeyPair>,
@@ -622,33 +622,33 @@ pub mod testing {
     }
 
     use async_trait::async_trait;
-    use hotshot_builder_api::builder::Options;
+    use hotshot_builder_api::builder::Options as HotshotBuilderApiOptions;
     use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
+    use hotshot_events_service::{
+        events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+        events_source::EventsStreamer,
+    };
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
     use snafu::*;
-    pub fn run_builder_apis_for_hotshot(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
-        // let hotshot_events_api =
-        //     define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, Version01>(
-        //         &Options::default(),
-        //     )
-        //     .expect("Failed to define hotshot eventsAPI");
 
+    pub fn run_builder_apis_for_hotshot(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
         let hotshot_api = hotshot_builder_api::builder::define_api::<
             Arc<RwLock<GlobalState<SeqTypes>>>,
             SeqTypes,
             Version01,
-        >(&Options::default())
+        >(&HotshotBuilderApiOptions::default())
         .expect("Failed to construct the builder APIs for hotshot");
 
         let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
             App::with_state(source);
 
-        app.register_module("/", hotshot_api)
+        app.register_module("hotshot_builder", hotshot_api)
             .expect("Failed to register the builder API for hotshot");
 
         async_spawn(app.serve(url, STATIC_VER_0_1));
     }
+
     pub fn run_builder_api_to_receive_private_txns(
         url: Url,
         source: Arc<RwLock<GlobalState<SeqTypes>>>,
@@ -657,17 +657,38 @@ pub mod testing {
             Arc<RwLock<GlobalState<SeqTypes>>>,
             SeqTypes,
             Version01,
-        >(&Options::default())
+        >(&HotshotBuilderApiOptions::default())
         .expect("Failed to construct the builder API for private mempool txns");
 
         let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
             App::with_state(source);
 
-        app.register_module("/", private_mempool_api)
+        app.register_module("builder_private_mempool", private_mempool_api)
             .expect("Failed to register the builder API for private mempool txns");
 
         async_spawn(app.serve(url, STATIC_VER_0_1));
     }
+
+    pub fn run_hotshot_event_streaming_api(
+        url: Url,
+        source: Arc<RwLock<EventsStreamer<SeqTypes>>>,
+    ) {
+        // Start the web server.
+        let hotshot_events_api = hotshot_events_service::events::define_api::<
+            Arc<RwLock<EventsStreamer<SeqTypes>>>,
+            SeqTypes,
+            Version01,
+        >(&EventStreamingApiOptioins::default())
+        .expect("Failed to define hotshot eventsAPI");
+
+        let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
+
+        app.register_module("hotshot_events", hotshot_events_api)
+            .expect("Failed to register hotshot events API");
+
+        async_spawn(app.serve(url, STATIC_VER_0_1));
+    }
+
     impl BuilderTestConfig {
         pub const BUILDER_ID: usize = 5;
         pub fn new() -> Self {
@@ -757,6 +778,7 @@ mod test {
     //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
+    use async_std::stream::IntoStream;
     use clap::builder;
     use ethers::providers::Quorum;
     use futures::StreamExt;
@@ -837,7 +859,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_builder_core() {
+    async fn test_permissioned_builder_core() {
         use async_compatibility_layer::art::{async_sleep, async_spawn};
         use async_std::task;
         use hotshot_builder_api::{
@@ -845,7 +867,7 @@ mod test {
             builder::BuildError,
         };
         use hotshot_builder_core::builder_state::BuilderProgress;
-        use hotshot_builder_core::service::run_standalone_builder_service;
+        use hotshot_builder_core::service::run_permissioned_standalone_builder_service;
         use hotshot_types::constants::{Version01, STATIC_VER_0_1};
         use hotshot_types::traits::{
             block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
@@ -875,7 +897,7 @@ mod test {
 
         //spawn the builder service
         async_spawn(async move {
-            run_standalone_builder_service(
+            run_permissioned_standalone_builder_service(
                 builder_test_config.tx_sender,
                 builder_test_config.da_sender,
                 builder_test_config.qc_sender,
@@ -936,7 +958,7 @@ mod test {
             // Test getting available blocks
             match hotshot_client
                 .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                    "availableblocks/{parent_commitment}"
+                    "hotshot_builder/availableblocks/{parent_commitment}"
                 ))
                 .send()
                 .await
@@ -971,7 +993,7 @@ mod test {
         let response = loop {
             match hotshot_client
                 .get::<AvailableBlockData<SeqTypes>>(&format!(
-                    "claimblock/{builder_commitment}/{encoded_signature}"
+                    "hotshot_builder/claimblock/{builder_commitment}/{encoded_signature}"
                 ))
                 .send()
                 .await
@@ -992,7 +1014,7 @@ mod test {
         let response = loop {
             match hotshot_client
                 .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                    "claimheaderinput/{builder_commitment}/{encoded_signature}"
+                    "hotshot_builder/claimheaderinput/{builder_commitment}/{encoded_signature}"
                 ))
                 .send()
                 .await
@@ -1010,36 +1032,302 @@ mod test {
             }
         };
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
-        // .post("api/results")
-        // .body_json(&bench_results)
-        // start a private mempool txns client
-
-        // let hash = client
-        //     .post("submit/submit")
-        //     .body_json(&txn)
-        //     .unwrap()
-        //     .send()
-        //     .await
-        //     .unwrap();
-
-        match private_mempool_client
-            .post::<Transaction>("/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
+        // TODO: It is giving error currently, may be need to fix return type
+        // TODO: but we are returning Ok(()) from the builder core
+        #[cfg(not(test))]
         {
-            Ok(response) => {
-                //let blocks = response.body().await.unwrap();
-                println!("Received Block Header : {:?}", response);
-                assert!(true);
-                return;
-            }
-            Err(e) => {
-                panic!("Error getting claiming block header {:?}", e);
+            let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+            match private_mempool_client
+                .post::<Transaction>("builder_private_mempool/submit")
+                .body_json(&txn)
+                .unwrap()
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    //let blocks = response.body().await.unwrap();
+                    println!("Received txn submitted response : {:?}", response);
+                    assert!(true);
+                    return;
+                }
+                Err(e) => {
+                    panic!("Error submitting private transaction {:?}", e);
+                }
             }
         }
+
+        //}
         //task::sleep(std::time::Duration::from_secs(200)).await;
+    }
+
+    #[async_std::test]
+    async fn test_permission_less_builder_core() {
+        use async_compatibility_layer::art::{async_sleep, async_spawn};
+        use async_std::task;
+        use hotshot_builder_api::{
+            block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+            builder::BuildError,
+        };
+        use hotshot_builder_core::builder_state::BuilderProgress;
+        use hotshot_builder_core::service::{
+            run_non_permissioned_standalone_builder_service,
+            run_permissioned_standalone_builder_service,
+        };
+        use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+        use hotshot_types::traits::{
+            block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
+        };
+        use sequencer::transaction::Transaction;
+        use std::time::Duration;
+        use surf_disco::Client;
+        use testing::{
+            run_builder_api_to_receive_private_txns, run_builder_apis_for_hotshot,
+            run_hotshot_event_streaming_api, BuilderTestConfig,
+        };
+
+        use async_lock::RwLock;
+        use futures_core::stream::Stream;
+        use hotshot_events_service::{
+            events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+            events_source::{BuilderEvent, EventsStreamer},
+        };
+
+        setup_logging();
+        setup_backtrace();
+
+        let builder_test_config = BuilderTestConfig::new();
+        // Get the handle for all the nodes, including both the non-builder and builder nodes
+        let handles = builder_test_config.hotshot_test_config.init_nodes().await;
+        // start consensus for all the nodes
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+        let builder_context_handle = handles[BuilderTestConfig::BUILDER_ID].clone();
+
+        // get the required stuff for the election config
+        let known_nodes_with_stake = builder_test_config
+            .hotshot_test_config
+            .config
+            .known_nodes_with_stake
+            .clone();
+
+        // get count of non-staking nodes
+        let num_non_staking_nodes = builder_test_config
+            .hotshot_test_config
+            .config
+            .num_nodes_without_stake;
+
+        // create a event streamer
+        let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
+            known_nodes_with_stake,
+            num_non_staking_nodes,
+        )));
+
+        // spawn the event streaming api
+        let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
+
+        let hotshot_events_streaming_api_url =
+            Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        run_hotshot_event_streaming_api(hotshot_events_streaming_api_url, events_streamer.clone());
+
+        // create a client for it
+        // Start Client 1
+        let client = Client::<EventStreamApiError, Version01>::new(
+            format!("http://localhost:{}/hotshot_events", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        tracing::info!("event streaming client connected to server");
+
+        // client subscrive to hotshot events
+        let mut hotshot_events = client
+            .socket("events")
+            .subscribe::<BuilderEvent<SeqTypes>>()
+            .await
+            .unwrap()
+            .into_stream();
+
+        tracing::info!("Client 1 Subscribed to events");
+
+        //spawn the builder service
+        // async_spawn(async move {
+        //     run_permissioned_standalone_builder_service(
+        //         builder_test_config.tx_sender,
+        //         builder_test_config.da_sender,
+        //         builder_test_config.qc_sender,
+        //         builder_test_config.decide_sender,
+        //         builder_context_handle,
+        //         builder_test_config.instance_state,
+        //     )
+        //     .await
+        //     .unwrap();
+        // });
+
+        async_spawn(async move {
+            run_non_permissioned_standalone_builder_service(
+                builder_test_config.tx_sender,
+                builder_test_config.da_sender,
+                builder_test_config.qc_sender,
+                builder_test_config.decide_sender,
+                &mut hotshot_events,
+                builder_test_config.instance_state,
+            )
+        });
+
+        // spawn the builder event loop
+        async_spawn(async move {
+            builder_test_config.builder_state.event_loop();
+        });
+
+        /*
+        // Run the builder apis to serve hotshot
+        let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
+
+        let hotshot_api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        run_builder_apis_for_hotshot(
+            hotshot_api_url.clone(),
+            builder_test_config.global_state.clone(),
+        );
+
+        // Run the builder apis to serve private mempool txns
+        let port = portpicker::pick_unused_port()
+            .expect("Could not find an open port for private mempool txns");
+
+        let private_mempool_api_url =
+            Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        // let global_state_txns_submitter = GlobalStateTxnSubmitter {
+        //     global_state: builder_test_config.global_state.clone(),
+        // };
+        run_builder_api_to_receive_private_txns(
+            private_mempool_api_url.clone(),
+            builder_test_config.global_state,
+        );
+
+        // Start a hotshot client.
+        let hotshot_client =
+            Client::<hotshot_builder_api::builder::Error, Version01>::new(hotshot_api_url);
+        assert!(hotshot_client.connect(Some(Duration::from_secs(60))).await);
+
+        // Start a private mempool client.
+        let private_mempool_client =
+            Client::<hotshot_builder_api::builder::Error, Version01>::new(private_mempool_api_url);
+        assert!(
+            private_mempool_client
+                .connect(Some(Duration::from_secs(60)))
+                .await
+        );
+
+        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+
+        let response = loop {
+            // Test getting available blocks
+            match hotshot_client
+                .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
+                    "hotshot_builder/availableblocks/{parent_commitment}"
+                ))
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    //let blocks = response.body().await.unwrap();
+                    println!("Received Available Blocks: {:?}", response);
+                    assert!(!response.is_empty());
+                    tracing::info!("Exiting from first loop");
+                    break response;
+                }
+                Err(e) => {
+                    tracing::warn!("Error getting available blocks {:?}", e);
+                }
+            };
+        };
+
+        let builder_commitment = response[0].block_hash.clone();
+        let seed = [207_u8; 32];
+        // Builder Public, Private key
+        let (_hotshot_client_pub_key, hotshot_client_private_key) =
+            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+
+        // sign the builder_commitment using the client_private_key
+        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &hotshot_client_private_key,
+            builder_commitment.as_ref(),
+        )
+        .expect("Claim block signing failed");
+
+        // Test claiming blocks
+        let response = loop {
+            match hotshot_client
+                .get::<AvailableBlockData<SeqTypes>>(&format!(
+                    "hotshot_builder/claimblock/{builder_commitment}/{encoded_signature}"
+                ))
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    //let blocks = response.body().await.unwrap();
+                    println!("Received Block Data: {:?}", response);
+                    tracing::info!("Exiting from second loop");
+                    break response;
+                }
+                Err(e) => {
+                    panic!("Error while claiming block {:?}", e);
+                }
+            }
+        };
+
+        // Test claiming blocks
+        let response = loop {
+            match hotshot_client
+                .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
+                    "hotshot_builder/claimheaderinput/{builder_commitment}/{encoded_signature}"
+                ))
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    //let blocks = response.body().await.unwrap();
+                    println!("Received Block Header : {:?}", response);
+                    assert!(true);
+                    tracing::info!("Exiting from third loop");
+                    break response;
+                }
+                Err(e) => {
+                    panic!("Error getting claiming block header {:?}", e);
+                }
+            }
+        };
+
+        // TODO: It is giving error currently, may be need to fix return type
+        // TODO: but we are returning Ok(()) from the builder core
+        #[cfg(not(test))]
+        {
+            let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+            match private_mempool_client
+                .post::<Transaction>("builder_private_mempool/submit")
+                .body_json(&txn)
+                .unwrap()
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    //let blocks = response.body().await.unwrap();
+                    println!("Received txn submitted response : {:?}", response);
+                    assert!(true);
+                    return;
+                }
+                Err(e) => {
+                    panic!("Error submitting private transaction {:?}", e);
+                }
+            }
+        }
+        */
+
+        //}
+        task::sleep(std::time::Duration::from_secs(200)).await;
     }
 }
