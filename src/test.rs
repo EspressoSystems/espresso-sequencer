@@ -5,6 +5,7 @@ mod tests {
     use crate::events::{define_api, Error, Options};
     use async_compatibility_layer::art::async_spawn;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::stream::IntoStream;
     use async_std::sync::RwLock;
     use futures::stream::StreamExt;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
@@ -64,7 +65,12 @@ mod tests {
         tracing::info!("Connected to server");
 
         // client subscrive to hotshot events
-        let mut events = client
+        let mut events: surf_disco::socket::Connection<
+            Event<TestTypes>,
+            surf_disco::socket::Unsupported,
+            Error,
+            versioned_binary_serialization::version::StaticVersion<0, 1>,
+        > = client
             .socket("events")
             .subscribe::<Event<TestTypes>>()
             .await
@@ -73,7 +79,7 @@ mod tests {
         tracing::info!("Subscribed to events");
 
         let total_count = 5;
-
+        //let stream = events.into_stream();
         // wait for these events to receive
         let receive_handle = async_spawn(async move {
             let mut receive_count = 0;
@@ -94,7 +100,11 @@ mod tests {
             loop {
                 let tx_event = generate_event(send_count);
                 tracing::debug!("Before writing to events_source");
-                events_streamer.write().await.handle_event(&tx_event).await;
+                events_streamer
+                    .write()
+                    .await
+                    .handle_event(tx_event.clone(), None, None)
+                    .await;
                 send_count += 1;
                 tracing::debug!("After writing to events_source");
                 tracing::info!("Event sent: {:?}", tx_event);
