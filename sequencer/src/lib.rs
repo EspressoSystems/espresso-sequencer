@@ -8,6 +8,7 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use anyhow::Context;
 use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
@@ -34,7 +35,9 @@ use derivative::Derivative;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MemoryNetwork, NetworkingMetricsValue, WebServerNetwork},
+        implementations::{
+            KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork, WrappedSignatureKey,
+        },
     },
     types::SignatureKey,
     Networks,
@@ -45,7 +48,6 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    constants::WebServerVersion,
     data::{DAProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -84,16 +86,16 @@ pub mod network {
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
-        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
+        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
+        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
     }
 
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct Web;
+    #[derive(Clone, Copy, Default)]
+    pub struct Cdn;
 
-    impl Type for Web {
-        type DAChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
-        type QuorumChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
+    impl Type for Cdn {
+        type DAChannel = PushCdnNetwork<SeqTypes>;
+        type QuorumChannel = PushCdnNetwork<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -312,8 +314,7 @@ pub enum Error {
 
 #[derive(Clone, Debug)]
 pub struct NetworkParams {
-    pub da_server_url: Url,
-    pub consensus_server_url: Url,
+    pub marshal_url: Url,
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
     pub webserver_poll_interval: Duration,
@@ -340,7 +341,7 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Cdn, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -381,19 +382,22 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     let node_index = config.node_index;
 
     // Initialize networking.
+    let network = Arc::from(
+        PushCdnNetwork::new(
+            network_params.marshal_url.to_string(),
+            vec!["Global".into(), "DA".into()],
+            KeyPair {
+                public_key: WrappedSignatureKey(my_config.public_key),
+                private_key: my_config.private_key,
+            },
+        )
+        .await
+        .with_context(|| "failed to perform initial connection")?,
+    );
+
     let networks = Networks {
-        da_network: Arc::new(WebServerNetwork::create(
-            network_params.da_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            true,
-        )),
-        quorum_network: Arc::new(WebServerNetwork::create(
-            network_params.consensus_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            false,
-        )),
+        da_network: network.clone(),
+        quorum_network: network,
         _pd: Default::default(),
     };
 
