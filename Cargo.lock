@@ -1343,7 +1343,6 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "hotshot-testing",
  "hotshot-types",
  "jf-primitives",
  "portpicker",
@@ -1809,7 +1808,7 @@ dependencies = [
 [[package]]
 name = "commit"
 version = "0.2.2"
-source = "git+https://github.com/EspressoSystems/commit.git#30679718efd4ecf870b66950160077125dcb8d93"
+source = "git+https://github.com/EspressoSystems/commit#30679718efd4ecf870b66950160077125dcb8d93"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -4105,6 +4104,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.1"
+source = "git+https://github.com/EspressoSystems/hs-builder-core?branch=hg/test_builder_executable#2e913aa6a714d07a3c67ea50ab1ac5f42e1d147d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
