@@ -23,7 +23,7 @@ use super::{
 
 use crate::network::behaviours::{
     dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
-    direct_message::{DMBehaviour, DMEvent},
+    direct_message::{DMBehaviour, DMRequest},
     exponential_backoff::ExponentialBackoff,
     request_response::{Request, RequestResponseState, Response},
 };
@@ -87,6 +87,10 @@ pub struct NetworkNode {
     listener_id: Option<ListenerId>,
     /// Handler for requests and response behavior events.
     request_response_state: RequestResponseState,
+    /// Handler for direct messages
+    direct_message_state: DMBehaviour,
+    /// Channel to resend requests, set to Some when we call `spawn_listeners`
+    resend_tx: Option<UnboundedSender<ClientRequest>>,
 }
 
 impl NetworkNode {
@@ -301,7 +305,7 @@ impl NetworkNode {
                         .unwrap_or_else(|| NonZeroUsize::new(4).unwrap()),
                 ),
                 identify,
-                DMBehaviour::new(direct_message),
+                direct_message,
                 request_response,
             );
 
@@ -334,6 +338,8 @@ impl NetworkNode {
             config,
             listener_id: None,
             request_response_state: RequestResponseState::default(),
+            direct_message_state: DMBehaviour::default(),
+            resend_tx: None,
         })
     }
 
@@ -433,7 +439,14 @@ impl NetworkNode {
                         retry_count,
                     } => {
                         info!("pid {:?} adding direct request", self.peer_id);
-                        behaviour.add_direct_request(pid, contents, retry_count);
+                        let id = behaviour.add_direct_request(pid, contents.clone());
+                        let req = DMRequest {
+                            peer_id: pid,
+                            data: contents,
+                            backoff: ExponentialBackoff::default(),
+                            retry_count,
+                        };
+                        self.direct_message_state.add_direct_request(req, id);
                     }
                     ClientRequest::DirectResponse(chan, msg) => {
                         behaviour.add_direct_response(chan, msg);
@@ -603,14 +616,9 @@ impl NetworkNode {
                             None
                         }
                     },
-                    NetworkEventInternal::DMEvent(e) => Some(match e {
-                        DMEvent::DirectRequest(data, pid, chan) => {
-                            NetworkEvent::DirectRequest(data, pid, chan)
-                        }
-                        DMEvent::DirectResponse(data, pid) => {
-                            NetworkEvent::DirectResponse(data, pid)
-                        }
-                    }),
+                    NetworkEventInternal::DMEvent(e) => self
+                        .direct_message_state
+                        .handle_dm_event(e, self.resend_tx.clone()),
                     NetworkEventInternal::RequestResponseEvent(e) => {
                         self.request_response_state.handle_request_response(e)
                     }
@@ -669,6 +677,8 @@ impl NetworkNode {
     > {
         let (s_input, s_output) = unbounded::<ClientRequest>();
         let (r_input, r_output) = unbounded::<NetworkEvent>();
+
+        self.resend_tx = Some(s_input.clone());
 
         async_spawn(
             async move {

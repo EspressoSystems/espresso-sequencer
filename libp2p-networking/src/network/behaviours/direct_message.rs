@@ -1,20 +1,16 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    task::Poll,
-};
-
-use libp2p::request_response::cbor::Behaviour;
-use libp2p::{
-    request_response::{Event, Message, OutboundRequestId, ResponseChannel},
-    swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
-    Multiaddr,
-};
+use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_compatibility_layer::channel::UnboundedSender;
+use libp2p::request_response::{Event, Message, OutboundRequestId, ResponseChannel};
 use libp2p_identity::PeerId;
+use std::collections::HashMap;
 use tracing::{error, info};
+
+use crate::network::{ClientRequest, NetworkEvent};
 
 use super::exponential_backoff::ExponentialBackoff;
 
 /// Request to direct message a peert
+#[derive(Debug)]
 pub struct DMRequest {
     /// the recv-ers peer id
     pub peer_id: PeerId,
@@ -28,15 +24,10 @@ pub struct DMRequest {
 
 /// Wrapper metadata around libp2p's request response
 /// usage: direct message peer
+#[derive(Debug, Default)]
 pub struct DMBehaviour {
-    /// The wrapped behaviour
-    request_response: Behaviour<Vec<u8>, Vec<u8>>,
     /// In progress queries
     in_progress_rr: HashMap<OutboundRequestId, DMRequest>,
-    /// Failed queries to be retried
-    failed_rr: VecDeque<DMRequest>,
-    /// lsit of out events for parent behaviour
-    out_event_queue: Vec<DMEvent>,
 }
 
 /// Lilst of direct message output events
@@ -50,7 +41,11 @@ pub enum DMEvent {
 
 impl DMBehaviour {
     /// handle a direct message event
-    fn handle_dm_event(&mut self, event: Event<Vec<u8>, Vec<u8>>) {
+    pub(crate) fn handle_dm_event(
+        &mut self,
+        event: Event<Vec<u8>, Vec<u8>>,
+        retry_tx: Option<UnboundedSender<ClientRequest>>,
+    ) -> Option<NetworkEvent> {
         match event {
             Event::InboundFailure {
                 peer,
@@ -61,6 +56,7 @@ impl DMBehaviour {
                     "inbound failure to send message to {:?} with error {:?}",
                     peer, error
                 );
+                None
             }
             Event::OutboundFailure {
                 peer,
@@ -72,9 +68,24 @@ impl DMBehaviour {
                     peer, error
                 );
                 if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
-                    req.backoff.start_next(false);
-                    self.failed_rr.push_back(req);
+                    if req.retry_count == 0 {
+                        return None;
+                    }
+                    req.retry_count -= 1;
+                    if let Some(retry_tx) = retry_tx {
+                        async_spawn(async move {
+                            async_sleep(req.backoff.next_timeout(false)).await;
+                            let _ = retry_tx
+                                .send(ClientRequest::DirectRequest {
+                                    pid: peer,
+                                    contents: req.data,
+                                    retry_count: req.retry_count,
+                                })
+                                .await;
+                        });
+                    }
                 }
+                None
             }
             Event::Message { message, peer, .. } => match message {
                 Message::Request {
@@ -85,8 +96,7 @@ impl DMBehaviour {
                     info!("recv-ed DIRECT REQUEST {:?}", msg);
                     // receiver, not initiator.
                     // don't track. If we are disconnected, sender will reinitiate
-                    self.out_event_queue
-                        .push(DMEvent::DirectRequest(msg, peer, channel));
+                    Some(NetworkEvent::DirectRequest(msg, peer, channel))
                 }
                 Message::Response {
                     request_id,
@@ -95,206 +105,32 @@ impl DMBehaviour {
                     // success, finished.
                     if let Some(req) = self.in_progress_rr.remove(&request_id) {
                         info!("recv-ed DIRECT RESPONSE {:?}", msg);
-                        self.out_event_queue
-                            .push(DMEvent::DirectResponse(msg, req.peer_id));
+                        Some(NetworkEvent::DirectResponse(msg, req.peer_id))
                     } else {
                         error!("recv-ed a direct response, but is no longer tracking message!");
+                        None
                     }
                 }
             },
             e @ Event::ResponseSent { .. } => {
                 info!(?e, " sending response");
+                None
             }
         }
-    }
-}
-
-impl NetworkBehaviour for DMBehaviour {
-    type ConnectionHandler = <Behaviour<Vec<u8>, Vec<u8>> as NetworkBehaviour>::ConnectionHandler;
-
-    type ToSwarm = DMEvent;
-
-    fn on_swarm_event(&mut self, event: libp2p::swarm::derive_prelude::FromSwarm<'_>) {
-        self.request_response.on_swarm_event(event);
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        peer_id: PeerId,
-        connection_id: libp2p::swarm::derive_prelude::ConnectionId,
-        event: THandlerOutEvent<Self>,
-    ) {
-        self.request_response
-            .on_connection_handler_event(peer_id, connection_id, event);
-    }
-
-    fn poll(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<ToSwarm<DMEvent, THandlerInEvent<Self>>> {
-        let mut retry_req_indices = Vec::new();
-        for (idx, req) in self.failed_rr.iter().enumerate() {
-            if req.backoff.is_expired() {
-                retry_req_indices.push(idx);
-            }
-        }
-        let _ = retry_req_indices.into_iter().map(|idx| {
-            let req = self.failed_rr.remove(idx).unwrap();
-            self.add_direct_request(req);
-        });
-        while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.request_response, cx) {
-            match ready {
-                // NOTE: this generates request
-                ToSwarm::GenerateEvent(e) => {
-                    self.handle_dm_event(e);
-                }
-                ToSwarm::Dial { opts } => {
-                    return Poll::Ready(ToSwarm::Dial { opts });
-                }
-                ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler,
-                    event,
-                } => {
-                    return Poll::Ready(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler,
-                        event,
-                    });
-                }
-                ToSwarm::CloseConnection {
-                    peer_id,
-                    connection,
-                } => {
-                    return Poll::Ready(ToSwarm::CloseConnection {
-                        peer_id,
-                        connection,
-                    });
-                }
-                ToSwarm::ListenOn { opts } => {
-                    return Poll::Ready(ToSwarm::ListenOn { opts });
-                }
-                ToSwarm::RemoveListener { id } => {
-                    return Poll::Ready(ToSwarm::RemoveListener { id });
-                }
-                ToSwarm::NewExternalAddrCandidate(c) => {
-                    return Poll::Ready(ToSwarm::NewExternalAddrCandidate(c));
-                }
-                ToSwarm::ExternalAddrConfirmed(c) => {
-                    return Poll::Ready(ToSwarm::ExternalAddrConfirmed(c));
-                }
-                ToSwarm::ExternalAddrExpired(c) => {
-                    return Poll::Ready(ToSwarm::ExternalAddrExpired(c));
-                }
-                e => {
-                    error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
-                }
-            }
-        }
-        if !self.out_event_queue.is_empty() {
-            return Poll::Ready(ToSwarm::GenerateEvent(self.out_event_queue.remove(0)));
-        }
-        Poll::Pending
-    }
-
-    fn handle_pending_inbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
-    ) -> Result<(), libp2p::swarm::ConnectionDenied> {
-        self.request_response.handle_pending_inbound_connection(
-            connection_id,
-            local_addr,
-            remote_addr,
-        )
-    }
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        peer: PeerId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
-    ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
-        self.request_response.handle_established_inbound_connection(
-            connection_id,
-            peer,
-            local_addr,
-            remote_addr,
-        )
-    }
-
-    fn handle_pending_outbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: libp2p::core::Endpoint,
-    ) -> Result<Vec<Multiaddr>, libp2p::swarm::ConnectionDenied> {
-        self.request_response.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        )
-    }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        peer: PeerId,
-        addr: &Multiaddr,
-        role_override: libp2p::core::Endpoint,
-    ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
-        self.request_response
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 }
 
 impl DMBehaviour {
-    /// Create new behaviour based on request response
-    #[must_use]
-    pub fn new(request_response: Behaviour<Vec<u8>, Vec<u8>>) -> Self {
-        Self {
-            request_response,
-            in_progress_rr: HashMap::default(),
-            failed_rr: VecDeque::default(),
-            out_event_queue: Vec::default(),
-        }
-    }
-
-    /// Add address to request response behaviour
-    pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
-        self.request_response.add_address(peer_id, address);
-    }
-
-    /// Remove address from request response behaviour
-    pub fn remove_address(&mut self, peer_id: &PeerId, address: &Multiaddr) {
-        self.request_response.remove_address(peer_id, address);
-    }
-
     /// Add a direct request for a given peer
-    pub fn add_direct_request(&mut self, mut req: DMRequest) {
+    pub fn add_direct_request(&mut self, mut req: DMRequest, request_id: OutboundRequestId) {
         if req.retry_count == 0 {
             return;
         }
 
         req.retry_count -= 1;
 
-        let request_id = self
-            .request_response
-            .send_request(&req.peer_id, req.data.clone());
         info!("direct message request with id {:?}", request_id);
 
         self.in_progress_rr.insert(request_id, req);
-    }
-
-    /// Add a direct response for a channel
-    pub fn add_direct_response(&mut self, chan: ResponseChannel<Vec<u8>>, msg: Vec<u8>) {
-        let res = self.request_response.send_response(chan, msg);
-        if let Err(e) = res {
-            error!("Error replying to direct message. {:?}", e);
-        }
     }
 }

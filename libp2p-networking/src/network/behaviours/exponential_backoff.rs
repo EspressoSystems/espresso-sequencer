@@ -52,6 +52,12 @@ impl ExponentialBackoff {
         }
     }
 
+    /// Return the timeout duration and start the next timeout.
+    pub fn next_timeout(&mut self, result: bool) -> Duration {
+        let timeout = self.timeout;
+        self.start_next(result);
+        timeout
+    }
     /// Whether or not the timeout is expired
     #[must_use]
     pub fn is_expired(&self) -> bool {
