@@ -18,6 +18,7 @@ jobs:
       
       - name: Check for file edits
         run: |
+          git fetch origin main
           FILES_CHANGED=$(git diff --name-only origin/main..HEAD)
 
           # Check if process-compose.yaml is edited
