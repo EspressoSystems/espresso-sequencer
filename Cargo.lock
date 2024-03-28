@@ -8358,6 +8358,7 @@ dependencies = [
  "ethers-contract-derive",
  "futures",
  "hotshot",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",

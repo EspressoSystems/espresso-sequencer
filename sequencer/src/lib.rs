@@ -433,6 +433,7 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         metrics,
         node_index,
         bind_version,
+        None,
     )
     .await?;
     if wait_for_orchestrator {
@@ -607,6 +608,7 @@ pub mod testing {
                 metrics,
                 i as u64,
                 bind_version,
+                None,
             )
             .await
             .unwrap()

@@ -17,6 +17,7 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
+    constants::{Version01, STATIC_VER_0_1},
     traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
@@ -29,6 +30,12 @@ use crate::{
     static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 
+use async_std::sync::RwLock;
+use hotshot_events_service::{
+    events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+};
+use tide_disco::{app, method::ReadState, App};
 /// The consensus handle
 pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
@@ -67,6 +74,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
+        events_streaming_server: Option<Url>,
         _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
@@ -92,6 +100,11 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
+        let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
+            config.known_nodes_with_stake.clone(),
+            config.num_nodes_without_stake.clone(),
+        )));
+
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
             config.my_own_validator_config.private_key.clone(),
@@ -111,7 +124,14 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             state_signer = state_signer.with_relay_server(url);
         }
 
-        Ok(Self::new(handle, persistence, node_id, state_signer))
+        Ok(Self::new(
+            handle,
+            persistence,
+            node_id,
+            state_signer,
+            Some(event_streamer),
+            events_streaming_server,
+        ))
     }
 
     /// Constructor
@@ -120,8 +140,11 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         persistence: impl SequencerPersistence,
         node_index: u64,
         state_signer: StateSigner<Ver>,
+        event_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+        events_streaming_server: Option<Url>,
     ) -> Self {
         let events = handle.get_event_stream();
+
         let mut ctx = Self {
             handle,
             node_index,
@@ -132,8 +155,21 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         };
         ctx.spawn(
             "main event handler",
-            handle_events(events, persistence, ctx.state_signer.clone()),
+            handle_events(
+                events,
+                persistence,
+                ctx.state_signer.clone(),
+                event_streamer,
+            ),
         );
+        // spwan the task for running the event streaming api
+        if let Some(event_streamer) = event_streamer {
+            ctx.spawn(
+                "event streaming api",
+                run_hotshot_event_streaming_api(events_streaming_server.unwrap(), event_streamer),
+            );
+        }
+
         ctx
     }
 
@@ -232,6 +268,7 @@ async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     mut persistence: impl SequencerPersistence,
     state_signer: Arc<StateSigner<Ver>>,
+    events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
         tracing::debug!(?event, "consensus event");
@@ -241,5 +278,28 @@ async fn handle_events<Ver: StaticVersionType>(
 
         // Generate state signature.
         state_signer.handle_event(&event).await;
+
+        // Send the event via the event streaming service
+        if let Some(events_streamer) = events_streamer.as_ref() {
+            events_streamer.write().await.handle_event(event).await;
+        }
     }
+}
+
+// run an api service to serve internal hotsthot events to external clients (e.g builders)
+async fn run_hotshot_event_streaming_api(url: Url, source: Arc<RwLock<EventsStreamer<SeqTypes>>>) {
+    // Start the web server.
+    let hotshot_events_api = hotshot_events_service::events::define_api::<
+        Arc<RwLock<EventsStreamer<SeqTypes>>>,
+        SeqTypes,
+        Version01,
+    >(&EventStreamingApiOptioins::default())
+    .expect("Failed to define hotshot eventsAPI");
+
+    let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
+
+    app.register_module("hotshot_events", hotshot_events_api)
+        .expect("Failed to register hotshot events API");
+
+    spawn(app.serve(url, STATIC_VER_0_1));
 }
