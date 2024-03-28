@@ -195,13 +195,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
                 let parent_commitment = parent.commit();
 
-                let leaf: Leaf<_> = Leaf {
-                    view_number: view,
-                    justify_qc: proposal.justify_qc.clone(),
-                    parent_commitment,
-                    block_header: proposal.block_header.clone(),
-                    block_payload: None,
-                };
+                let mut proposed_leaf = Leaf::from_quorum_proposal(proposal);
+                proposed_leaf.set_parent_commitment(parent_commitment);
 
                 // Validate the DAC.
                 let message = if cert.is_valid_cert(self.committee_membership.as_ref()) {
@@ -215,7 +210,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     }
                     if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                         QuorumData {
-                            leaf_commit: leaf.commit(),
+                            leaf_commit: proposed_leaf.commit(),
                         },
                         view,
                         &self.public_key,
@@ -501,7 +496,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     {
                         Some(leaf) => {
                             if let (Some(state), _) =
-                                consensus.get_state_and_delta(leaf.view_number)
+                                consensus.get_state_and_delta(leaf.get_view_number())
                             {
                                 Some((leaf, state.clone()))
                             } else {
@@ -539,13 +534,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
                     );
-                    let leaf = Leaf {
-                        view_number: view,
-                        justify_qc: justify_qc.clone(),
-                        parent_commitment: justify_qc.get_data().leaf_commit,
-                        block_header: proposal.data.block_header.clone(),
-                        block_payload: None,
-                    };
+                    let leaf = Leaf::from_proposal(proposal);
+
                     let state = Arc::new(
                         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(
                             &proposal.data.block_header,
@@ -626,20 +616,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let state = Arc::new(validated_state);
                 let delta = Arc::new(state_delta);
                 let parent_commitment = parent_leaf.commit();
-                let leaf: Leaf<_> = Leaf {
-                    view_number: view,
-                    justify_qc: justify_qc.clone(),
-                    parent_commitment,
-                    block_header: proposal.data.block_header.clone(),
-                    block_payload: None,
-                };
-                let leaf_commitment = leaf.commit();
+
+                let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+                proposed_leaf.set_parent_commitment(parent_commitment);
 
                 // Validate the signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
-                if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, proposed_leaf.commit().as_ref()) {
                     error!(?proposal.signature, "Could not verify proposal.");
                     return;
                 }
+
                 // Create a positive vote if either liveness or safety check
                 // passes.
 
@@ -655,7 +641,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     |leaf, _, _| {
                         // if leaf view no == locked view no then we're done, report success by
                         // returning true
-                        leaf.view_number != consensus.locked_view
+                        leaf.get_view_number() != consensus.locked_view
                     },
                 );
                 let safety_check = outcome.is_ok();
@@ -703,7 +689,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut leafs_decided = Vec::new();
                 let mut included_txns = HashSet::new();
                 let old_anchor_view = consensus.last_decided_view;
-                let parent_view = leaf.justify_qc.get_view_number();
+                let parent_view = proposed_leaf.get_justify_qc().get_view_number();
                 let mut current_chain_length = 0usize;
                 if parent_view + 1 == view {
                     current_chain_length += 1;
@@ -713,17 +699,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         true,
                         |leaf, state, delta| {
                             if !new_decide_reached {
-                                if last_view_number_visited == leaf.view_number + 1 {
-                                    last_view_number_visited = leaf.view_number;
+                                if last_view_number_visited == leaf.get_view_number() + 1 {
+                                    last_view_number_visited = leaf.get_view_number();
                                     current_chain_length += 1;
                                     if current_chain_length == 2 {
-                                        new_locked_view = leaf.view_number;
+                                        new_locked_view = leaf.get_view_number();
                                         new_commit_reached = true;
                                         // The next leaf in the chain, if there is one, is decided, so this
                                         // leaf's justify_qc would become the QC for the decided chain.
-                                        new_decide_qc = Some(leaf.justify_qc.clone());
+                                        new_decide_qc = Some(leaf.get_justify_qc().clone());
                                     } else if current_chain_length == 3 {
-                                        new_anchor_view = leaf.view_number;
+                                        new_anchor_view = leaf.get_view_number();
                                         new_decide_reached = true;
                                     }
                                 } else {
@@ -734,7 +720,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                             if new_decide_reached {
                                 let mut leaf = leaf.clone();
-                                if leaf.view_number == new_anchor_view {
+                                if leaf.get_view_number() == new_anchor_view {
                                     consensus
                                         .metrics
                                         .last_synced_block_height
@@ -768,7 +754,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                                 leaf_views.push(LeafInfo::new(leaf.clone(), state.clone(), delta.clone(), vid));
                                 leafs_decided.push(leaf.clone());
-                                if let Some(ref payload) = leaf.block_payload {
+                                if let Some(ref payload) = leaf.get_block_payload() {
                                     for txn in payload
                                         .transaction_commitments(leaf.get_block_header().metadata())
                                     {
@@ -801,13 +787,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view,
                     View {
                         view_inner: ViewInner::Leaf {
-                            leaf: leaf.commit(),
+                            leaf: proposed_leaf.commit(),
                             state: state.clone(),
                             delta: Some(delta.clone()),
                         },
                     },
                 );
-                consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                consensus
+                    .saved_leaves
+                    .insert(proposed_leaf.commit(), proposed_leaf.clone());
 
                 if let Err(e) = self
                     .storage
@@ -1344,7 +1332,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             error!("Failed to find high QC of parent.");
             return false;
         };
-        if leaf.view_number == consensus.last_decided_view {
+        if leaf.get_view_number() == consensus.last_decided_view {
             reached_decided = true;
         }
 
@@ -1358,10 +1346,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         if !reached_decided {
             debug!("We have not reached decide from view {:?}", self.cur_view);
             while let Some(next_parent_leaf) = consensus.saved_leaves.get(&next_parent_hash) {
-                if next_parent_leaf.view_number <= consensus.last_decided_view {
+                if next_parent_leaf.get_view_number() <= consensus.last_decided_view {
                     break;
                 }
-                next_parent_hash = next_parent_leaf.parent_commitment;
+                next_parent_hash = next_parent_leaf.get_parent_commitment();
             }
             debug!("updated saved leaves");
             // TODO do some sort of sanity check on the view number that it matches decided
@@ -1376,21 +1364,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 commit_and_metadata.metadata.clone(),
             )
             .await;
-            let leaf = Leaf {
-                view_number: view,
-                justify_qc: consensus.high_qc.clone(),
-                parent_commitment: parent_leaf.commit(),
-                block_header: block_header.clone(),
-                block_payload: None,
-            };
-
-            let Ok(signature) =
-                TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref())
-            else {
-                error!("Failed to sign leaf.commit()!");
-                return false;
-            };
-
             let upgrade_cert = if self
                 .upgrade_cert
                 .as_ref()
@@ -1415,11 +1388,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_header,
-                view_number: leaf.view_number,
+                block_header: block_header.clone(),
+                view_number: view,
                 justify_qc: consensus.high_qc.clone(),
                 proposal_certificate,
-                upgrade_certificate: upgrade_cert,
+                upgrade_certificate: upgrade_cert.clone(),
+            };
+
+            let mut new_leaf = Leaf::from_quorum_proposal(&proposal);
+            new_leaf.set_parent_commitment(parent_leaf.commit());
+
+            let Ok(signature) =
+                TYPES::SignatureKey::sign(&self.private_key, new_leaf.commit().as_ref())
+            else {
+                error!("Failed to sign new_leaf.commit()!");
+                return false;
             };
 
             self.proposal_cert = None;
@@ -1428,7 +1411,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 signature,
                 _pd: PhantomData,
             };
-            debug!("Sending proposal for view {:?}", leaf.view_number);
+            debug!("Sending proposal for view {:?}", view);
 
             broadcast_event(
                 Arc::new(HotShotEvent::QuorumProposalSend(

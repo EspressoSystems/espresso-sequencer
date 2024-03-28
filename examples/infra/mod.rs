@@ -604,12 +604,12 @@ pub trait RunDA<
                             // this might be a obob
                             if let Some(leaf_info) = leaf_chain.first() {
                                 let leaf = &leaf_info.leaf;
-                                info!("Decide event for leaf: {}", *leaf.view_number);
+                                info!("Decide event for leaf: {}", *leaf.get_view_number());
 
                                 // iterate all the decided transactions to calculate latency
-                                if let Some(block_payload) = &leaf.block_payload {
-                                    for tx in
-                                        block_payload.get_transactions(leaf.block_header.metadata())
+                                if let Some(block_payload) = &leaf.get_block_payload() {
+                                    for tx in block_payload
+                                        .get_transactions(leaf.get_block_header().metadata())
                                     {
                                         let restored_timestamp_vec =
                                             tx.0[tx.0.len() - 8..].to_vec();
@@ -626,9 +626,9 @@ pub trait RunDA<
                                     }
                                 }
 
-                                let new_anchor = leaf.view_number;
+                                let new_anchor = leaf.get_view_number();
                                 if new_anchor >= anchor_view {
-                                    anchor_view = leaf.view_number;
+                                    anchor_view = leaf.get_view_number();
                                 }
 
                                 // send transactions

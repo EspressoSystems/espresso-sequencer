@@ -240,7 +240,9 @@ async fn build_quorum_proposal_and_signature(
         handle.hotshot.memberships.quorum_membership.total_nodes(),
     );
     let mut parent_state = Arc::new(
-        <TestValidatedState as ValidatedState<TestTypes>>::from_header(&parent_leaf.block_header),
+        <TestValidatedState as ValidatedState<TestTypes>>::from_header(
+            parent_leaf.get_block_header(),
+        ),
     );
     let block_header = TestBlockHeader::new(
         &*parent_state,
@@ -250,17 +252,6 @@ async fn build_quorum_proposal_and_signature(
         (),
     )
     .await;
-    // current leaf that can be re-assigned everytime when entering a new view
-    let mut leaf = Leaf {
-        view_number: ViewNumber::new(1),
-        justify_qc: consensus.high_qc.clone(),
-        parent_commitment: parent_leaf.commit(),
-        block_header: block_header.clone(),
-        block_payload: None,
-    };
-
-    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
-        .expect("Failed to sign leaf commitment!");
     let mut proposal = QuorumProposal::<TestTypes> {
         block_header: block_header.clone(),
         view_number: ViewNumber::new(1),
@@ -268,6 +259,11 @@ async fn build_quorum_proposal_and_signature(
         upgrade_certificate: None,
         proposal_certificate: None,
     };
+    // current leaf that can be re-assigned everytime when entering a new view
+    let mut leaf = Leaf::from_quorum_proposal(&proposal);
+
+    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
+        .expect("Failed to sign leaf commitment!");
 
     // Only view 2 is tested, higher views are not tested
     for cur_view in 2..=view {
@@ -307,17 +303,6 @@ async fn build_quorum_proposal_and_signature(
             private_key,
         );
         // create a new leaf for the current view
-        let parent_leaf = leaf.clone();
-        let leaf_new_view = Leaf {
-            view_number: ViewNumber::new(cur_view),
-            justify_qc: created_qc.clone(),
-            parent_commitment: parent_leaf.commit(),
-            block_header: block_header.clone(),
-            block_payload: None,
-        };
-        let signature_new_view =
-            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
-                .expect("Failed to sign leaf commitment!");
         let proposal_new_view = QuorumProposal::<TestTypes> {
             block_header: block_header.clone(),
             view_number: ViewNumber::new(cur_view),
@@ -325,6 +310,10 @@ async fn build_quorum_proposal_and_signature(
             upgrade_certificate: None,
             proposal_certificate: None,
         };
+        let leaf_new_view = Leaf::from_quorum_proposal(&proposal_new_view);
+        let signature_new_view =
+            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
+                .expect("Failed to sign leaf commitment!");
         proposal = proposal_new_view;
         signature = signature_new_view;
         leaf = leaf_new_view;
@@ -447,39 +436,9 @@ pub async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     proposal: QuorumProposal<TestTypes>,
 ) -> GeneralConsensusMessage<TestTypes> {
-    let consensus_lock = handle.get_consensus();
-    let consensus = consensus_lock.read().await;
-
-    let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
-    let parent = if justify_qc.is_genesis {
-        let Some(genesis_view) = consensus.validated_state_map.get(&ViewNumber::new(0)) else {
-            panic!("Couldn't find genesis view in state map.");
-        };
-        let Some(leaf) = genesis_view.get_leaf_commitment() else {
-            panic!("Genesis view points to a view without a leaf");
-        };
-        let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
-            panic!("Failed to find genesis leaf.");
-        };
-        leaf.clone()
-    } else {
-        consensus
-            .saved_leaves
-            .get(&justify_qc.get_data().leaf_commit)
-            .cloned()
-            .unwrap()
-    };
 
-    let parent_commitment = parent.commit();
-
-    let leaf: Leaf<_> = Leaf {
-        view_number: view,
-        justify_qc: proposal.justify_qc.clone(),
-        parent_commitment,
-        block_header: proposal.block_header,
-        block_payload: None,
-    };
+    let leaf: Leaf<_> = Leaf::from_quorum_proposal(&proposal);
     let vote = QuorumVote::<TestTypes>::create_signed_vote(
         QuorumData {
             leaf_commit: leaf.commit(),

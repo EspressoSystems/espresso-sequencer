@@ -182,7 +182,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let validated_state = match initializer.validated_state {
             Some(state) => state,
             None => Arc::new(TYPES::ValidatedState::from_header(
-                &anchored_leaf.block_header,
+                anchored_leaf.get_block_header(),
             )),
         };
 
