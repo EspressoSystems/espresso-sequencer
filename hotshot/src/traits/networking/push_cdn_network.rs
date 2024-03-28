@@ -1,6 +1,6 @@
 use super::NetworkError;
 #[cfg(feature = "hotshot-testing")]
-use async_compatibility_layer::art::{async_block_on, async_spawn};
+use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use bincode::config::Options;
@@ -20,6 +20,7 @@ use cdn_client::{
 };
 #[cfg(feature = "hotshot-testing")]
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
+use hotshot_types::traits::network::AsyncGenerator;
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
@@ -42,6 +43,7 @@ use rand::{RngCore, SeedableRng};
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 #[cfg(feature = "hotshot-testing")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
 use versioned_binary_serialization::{
@@ -127,7 +129,13 @@ impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
 /// that helps organize them all.
 #[derive(Clone)]
 /// Is generic over both the type of key and the network protocol.
-pub struct PushCdnNetwork<TYPES: NodeType>(Client<WrappedSignatureKey<TYPES::SignatureKey>, Quic>);
+pub struct PushCdnNetwork<TYPES: NodeType> {
+    /// The underlying client
+    client: Client<WrappedSignatureKey<TYPES::SignatureKey>, Quic>,
+    /// Whether or not the underlying network is supposed to be paused
+    #[cfg(feature = "hotshot-testing")]
+    is_paused: Arc<AtomicBool>,
+}
 
 impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// Create a new `PushCdnNetwork` (really a client) from a marshal endpoint, a list of initial
@@ -157,7 +165,12 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
         // Create the client, performing the initial connection
         let client = Client::new(config).await?;
 
-        Ok(Self(client))
+        Ok(Self {
+            client,
+            // Start unpaused
+            #[cfg(feature = "hotshot-testing")]
+            is_paused: Arc::from(AtomicBool::new(false)),
+        })
     }
 
     /// Broadcast a message to members of the particular topic. Does not retry.
@@ -171,6 +184,12 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
         topic: Topic,
         _: Ver,
     ) -> Result<(), NetworkError> {
+        // If we're paused, don't send the message
+        #[cfg(feature = "hotshot-testing")]
+        if self.is_paused.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
         // Bincode the message
         let serialized_message = match Serializer::<Ver>::serialize(&message) {
             Ok(serialized) => serialized,
@@ -183,7 +202,7 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
         // Send the message
         // TODO: check if we need to print this error
         if self
-            .0
+            .client
             .send_broadcast_message(vec![topic], serialized_message)
             .await
             .is_err()
@@ -207,7 +226,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         _is_da: bool,
         _reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
+    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
         // The configuration we are using for testing is 2 brokers & 1 marshal
 
         // A keypair shared between brokers
@@ -270,6 +289,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         let marshal_endpoint = format!("127.0.0.1:{marshal_port}");
         let marshal_config = MarshalConfigBuilder::default()
             .bind_address(marshal_endpoint.clone())
+            .metrics_enabled(false)
             .discovery_endpoint(discovery_endpoint)
             .build()
             .expect("failed to build marshal config");
@@ -287,45 +307,51 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         });
 
         // This function is called for each client we spawn
-        Box::new({
+        Box::pin({
             move |node_id| {
-                // Derive our public and priate keys from our index
-                let private_key =
-                    TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
-                let public_key = TYPES::SignatureKey::from_private(&private_key);
+                // Clone this so we can pin the future
+                let marshal_endpoint = marshal_endpoint.clone();
 
-                // Calculate if we're DA or not
-                let topics = if node_id < da_committee_size as u64 {
-                    vec![Topic::DA, Topic::Global]
-                } else {
-                    vec![Topic::Global]
-                };
+                Box::pin(async move {
+                    // Derive our public and priate keys from our index
+                    let private_key =
+                        TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
+                    let public_key = TYPES::SignatureKey::from_private(&private_key);
 
-                // Configure our client
-                let client_config = ClientConfigBuilder::default()
-                    .keypair(KeyPair {
-                        public_key: WrappedSignatureKey(public_key),
-                        private_key,
-                    })
-                    .subscribed_topics(topics)
-                    .endpoint(marshal_endpoint.clone())
-                    .build()
-                    .expect("failed to build client config");
+                    // Calculate if we're DA or not
+                    let topics = if node_id < da_committee_size as u64 {
+                        vec![Topic::DA, Topic::Global]
+                    } else {
+                        vec![Topic::Global]
+                    };
 
-                // Create our client
-                let client = Arc::new(PushCdnNetwork(
-                    async_block_on(async move { Client::new(client_config).await })
-                        .expect("failed to create client"),
-                ));
+                    // Configure our client
+                    let client_config = ClientConfigBuilder::default()
+                        .keypair(KeyPair {
+                            public_key: WrappedSignatureKey(public_key),
+                            private_key,
+                        })
+                        .subscribed_topics(topics)
+                        .endpoint(marshal_endpoint)
+                        .build()
+                        .expect("failed to build client config");
 
-                (client.clone(), client)
+                    // Create our client
+                    let client = Arc::new(PushCdnNetwork {
+                        client: Client::new(client_config)
+                            .await
+                            .expect("failed to create client"),
+                        #[cfg(feature = "hotshot-testing")]
+                        is_paused: Arc::from(AtomicBool::new(false)),
+                    });
+
+                    (client.clone(), client)
+                })
             }
         })
     }
 
-    /// Get the number of messages in-flight.
-    ///
-    /// Some implementations will not be able to tell how many messages there are in-flight. These implementations should return `None`.
+    /// The PushCDN does not support in-flight message counts
     fn in_flight_message_count(&self) -> Option<usize> {
         None
     }
@@ -335,11 +361,17 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     for PushCdnNetwork<TYPES>
 {
-    /// We do not support pausing the PushCDN network right now, but it is possible.
-    fn pause(&self) {}
+    /// Pause sending and receiving on the PushCDN network.
+    fn pause(&self) {
+        #[cfg(feature = "hotshot-testing")]
+        self.is_paused.store(true, Ordering::Relaxed);
+    }
 
-    /// We do not support resuming the PushCDN network right now, but it is possible.
-    fn resume(&self) {}
+    /// Resumse sending and receiving on the PushCDN network.
+    fn resume(&self) {
+        #[cfg(feature = "hotshot-testing")]
+        self.is_paused.store(false, Ordering::Relaxed);
+    }
 
     /// The clients form an initial connection when created, so we don't have to wait.
     async fn wait_for_ready(&self) {}
@@ -399,6 +431,12 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         recipient: TYPES::SignatureKey,
         _: Ver,
     ) -> Result<(), NetworkError> {
+        // If we're paused, don't send the message
+        #[cfg(feature = "hotshot-testing")]
+        if self.is_paused.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
         // Bincode the message
         let serialized_message = match Serializer::<Ver>::serialize(&message) {
             Ok(serialized) => serialized,
@@ -411,7 +449,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         // Send the message
         // TODO: check if we need to print this error
         if self
-            .0
+            .client
             .send_direct_message(&WrappedSignatureKey(recipient), serialized_message)
             .await
             .is_err()
@@ -429,7 +467,13 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     /// - If we fail to receive messages. Will trigger a retry automatically.
     async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
         // Receive a message
-        let message = self.0.receive_message().await;
+        let message = self.client.receive_message().await;
+
+        // If we're paused, receive but don't process messages
+        #[cfg(feature = "hotshot-testing")]
+        if self.is_paused.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
 
         // If it was an error, wait a bit and retry
         let message = match message {

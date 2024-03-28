@@ -88,7 +88,7 @@ type StaticLibp2pDAComm = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeTy
 type StaticWebDAComm = WebServerNetwork<TestTypes, WebServerVersion>;
 
 /// combined network
-type StaticCombinedDAComm = CombinedNetworks<TestTypes, WebServerVersion>;
+type StaticCombinedDAComm = CombinedNetworks<TestTypes>;
 
 /// memory comm channel
 pub type StaticMemoryQuorumComm =
@@ -102,7 +102,7 @@ type StaticLibp2pQuorumComm =
 type StaticWebQuorumComm = WebServerNetwork<TestTypes, WebServerVersion>;
 
 /// combined network (libp2p + web server)
-type StaticCombinedQuorumComm = CombinedNetworks<TestTypes, WebServerVersion>;
+type StaticCombinedQuorumComm = CombinedNetworks<TestTypes>;
 
 impl NodeImplementation<TestTypes> for PushCdnImpl {
     type QuorumNetwork = StaticPushCdnQuorumComm;

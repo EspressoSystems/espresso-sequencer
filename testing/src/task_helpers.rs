@@ -63,7 +63,7 @@ pub async fn build_system_handle(
 
     let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 
-    let networks = (launcher.resource_generator.channel_generator)(node_id);
+    let networks = (launcher.resource_generator.channel_generator)(node_id).await;
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 

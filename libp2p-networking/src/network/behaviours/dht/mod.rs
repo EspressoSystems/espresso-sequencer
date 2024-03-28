@@ -575,7 +575,7 @@ impl NetworkBehaviour for DHTBehaviour {
                     info!("Starting bootstrap");
                 }
                 Err(e) => {
-                    error!(
+                    warn!(
                         "peer id {:?} FAILED TO START BOOTSTRAP {:?} adding peers {:?}",
                         self.peer_id, e, self.bootstrap_nodes
                     );

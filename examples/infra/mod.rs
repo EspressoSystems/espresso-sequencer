@@ -862,7 +862,7 @@ where
             keypair,
         )
         .await
-        .expect("failed to perform initial connection");
+        .expect("failed to perform initial client connection");
 
         PushCdnDaRun {
             config,
@@ -957,13 +957,13 @@ where
 // Combined network
 
 /// Represents a combined-network-based run
-pub struct CombinedDARun<TYPES: NodeType, NetworkVersion: StaticVersionType> {
+pub struct CombinedDARun<TYPES: NodeType> {
     /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     /// quorum channel
-    quorum_channel: CombinedNetworks<TYPES, NetworkVersion>,
+    quorum_channel: CombinedNetworks<TYPES>,
     /// data availability channel
-    da_channel: CombinedNetworks<TYPES, NetworkVersion>,
+    da_channel: CombinedNetworks<TYPES>,
 }
 
 #[async_trait]
@@ -976,65 +976,67 @@ impl<
         >,
         NODE: NodeImplementation<
             TYPES,
-            QuorumNetwork = CombinedNetworks<TYPES, NetworkVersion>,
-            CommitteeNetwork = CombinedNetworks<TYPES, NetworkVersion>,
+            QuorumNetwork = CombinedNetworks<TYPES>,
+            CommitteeNetwork = CombinedNetworks<TYPES>,
             Storage = TestStorage<TYPES>,
         >,
-        NetworkVersion: StaticVersionType,
-    >
-    RunDA<
-        TYPES,
-        CombinedNetworks<TYPES, NetworkVersion>,
-        CombinedNetworks<TYPES, NetworkVersion>,
-        NODE,
-    > for CombinedDARun<TYPES, NetworkVersion>
+    > RunDA<TYPES, CombinedNetworks<TYPES>, CombinedNetworks<TYPES>, NODE> for CombinedDARun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
-    NetworkVersion: 'static,
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    ) -> CombinedDARun<TYPES, NetworkVersion> {
+    ) -> CombinedDARun<TYPES> {
         // Get our own key
-        let pub_key = config.config.my_own_validator_config.public_key.clone();
+        let key = config.config.my_own_validator_config.clone();
 
         // Create and wait for libp2p network
         let libp2p_underlying_quorum_network =
-            libp2p_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+            libp2p_network_from_config::<TYPES>(config.clone(), key.public_key.clone()).await;
 
         libp2p_underlying_quorum_network.wait_for_ready().await;
-
-        // Extract values from config (for webserver DA network)
-        let WebServerConfig {
-            url,
-            wait_between_polls,
-        }: WebServerConfig = config.clone().da_web_server_config.unwrap();
 
         let CombinedNetworkConfig { delay_duration }: CombinedNetworkConfig =
             config.clone().combined_network_config.unwrap();
 
-        // Create and wait for underlying webserver network
-        let web_quorum_network =
-            webserver_network_from_config::<TYPES, NetworkVersion>(config.clone(), pub_key.clone());
+        // Convert the keys to the CDN-compatible type
+        let keypair = KeyPair {
+            public_key: WrappedSignatureKey(key.public_key),
+            private_key: key.private_key,
+        };
 
-        let web_da_network = WebServerNetwork::create(url, wait_between_polls, pub_key, true);
+        // See if we should be DA
+        let mut topics = vec![Topic::Global];
+        if config.node_index < config.config.da_staked_committee_size as u64 {
+            topics.push(Topic::DA);
+        }
 
-        web_quorum_network.wait_for_ready().await;
+        // Create the network and await the initial connection
+        let cdn_network = PushCdnNetwork::new(
+            config
+                .cdn_marshal_address
+                .clone()
+                .expect("`cdn_marshal_address` needs to be supplied for a CDN run"),
+            topics.iter().map(ToString::to_string).collect(),
+            keypair,
+        )
+        .await
+        .expect("failed to perform intiail client connection");
 
         // Combine the two communication channels
         let da_channel = CombinedNetworks::new(
             Arc::new(UnderlyingCombinedNetworks(
-                web_da_network.clone(),
+                cdn_network.clone(),
                 libp2p_underlying_quorum_network.clone(),
             )),
             delay_duration,
         );
         let quorum_channel = CombinedNetworks::new(
             Arc::new(UnderlyingCombinedNetworks(
-                web_quorum_network.clone(),
+                cdn_network,
                 libp2p_underlying_quorum_network.clone(),
             )),
             delay_duration,
@@ -1047,11 +1049,11 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> CombinedNetworks<TYPES, NetworkVersion> {
+    fn get_da_channel(&self) -> CombinedNetworks<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> CombinedNetworks<TYPES, NetworkVersion> {
+    fn get_quorum_channel(&self) -> CombinedNetworks<TYPES> {
         self.quorum_channel.clone()
     }
 

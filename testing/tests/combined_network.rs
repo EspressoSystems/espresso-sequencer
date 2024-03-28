@@ -10,7 +10,7 @@ use hotshot_testing::{
 use rand::Rng;
 use tracing::instrument;
 
-/// A run with both the webserver and libp2p functioning properly
+/// A run with both the CDN and libp2p functioning properly
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -46,11 +46,11 @@ async fn test_combined_network() {
         .await;
 }
 
-// A run where the webserver crashes part-way through
+// A run where the CDN crashes part-way through
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
-async fn test_combined_network_webserver_crash() {
+async fn test_combined_network_cdn_crash() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let mut metadata: TestMetadata = TestMetadata {
@@ -94,7 +94,7 @@ async fn test_combined_network_webserver_crash() {
         .await;
 }
 
-// A run where the webserver crashes partway through
+// A run where the CDN crashes partway through
 // and then comes back up
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -148,7 +148,7 @@ async fn test_combined_network_reup() {
         .await;
 }
 
-// A run where half of the nodes disconnect from the webserver
+// A run where half of the nodes disconnect from the CDN
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]

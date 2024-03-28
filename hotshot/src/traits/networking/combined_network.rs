@@ -1,11 +1,14 @@
 //! Networking Implementation that has a primary and a fallback newtork.  If the primary
 //! Errors we will use the backup to send or receive
-use super::NetworkError;
-use crate::traits::implementations::{Libp2pNetwork, WebServerNetwork};
+use super::{push_cdn_network::PushCdnNetwork, NetworkError};
+use crate::traits::implementations::Libp2pNetwork;
 use async_lock::RwLock;
-use hotshot_types::constants::{
-    COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
-    COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
+use hotshot_types::{
+    constants::{
+        COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
+        COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
+    },
+    traits::network::AsyncGenerator,
 };
 use lru::LruCache;
 use std::{
@@ -64,10 +67,10 @@ type DelayedTasksLockedMap = Arc<RwLock<BTreeMap<u64, Vec<JoinHandle<Result<(), 
 
 /// A communication channel with 2 networks, where we can fall back to the slower network if the
 /// primary fails
-#[derive(Clone, Debug)]
-pub struct CombinedNetworks<TYPES: NodeType, NetworkVersion: StaticVersionType> {
+#[derive(Clone)]
+pub struct CombinedNetworks<TYPES: NodeType> {
     /// The two networks we'll use for send/recv
-    networks: Arc<UnderlyingCombinedNetworks<TYPES, NetworkVersion>>,
+    networks: Arc<UnderlyingCombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
     message_cache: Arc<RwLock<LruCache<u64, ()>>>,
@@ -82,17 +85,14 @@ pub struct CombinedNetworks<TYPES: NodeType, NetworkVersion: StaticVersionType> 
     delay_duration: Arc<RwLock<Duration>>,
 }
 
-impl<TYPES: NodeType, NetworkVersion: StaticVersionType> CombinedNetworks<TYPES, NetworkVersion> {
+impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     /// Constructor
     ///
     /// # Panics
     ///
     /// Panics if `COMBINED_NETWORK_CACHE_SIZE` is 0
     #[must_use]
-    pub fn new(
-        networks: Arc<UnderlyingCombinedNetworks<TYPES, NetworkVersion>>,
-        delay_duration: Duration,
-    ) -> Self {
+    pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>, delay_duration: Duration) -> Self {
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(LruCache::new(
@@ -106,7 +106,7 @@ impl<TYPES: NodeType, NetworkVersion: StaticVersionType> CombinedNetworks<TYPES,
 
     /// Get a ref to the primary network
     #[must_use]
-    pub fn primary(&self) -> &WebServerNetwork<TYPES, NetworkVersion> {
+    pub fn primary(&self) -> &PushCdnNetwork<TYPES> {
         &self.networks.0
     }
 
@@ -173,19 +173,17 @@ impl<TYPES: NodeType, NetworkVersion: StaticVersionType> CombinedNetworks<TYPES,
     }
 }
 
-/// Wrapper for the tuple of `WebServerNetwork` and `Libp2pNetwork`
+/// Wrapper for the tuple of `PushCdnNetwork` and `Libp2pNetwork`
 /// We need this so we can impl `TestableNetworkingImplementation`
 /// on the tuple
-#[derive(Debug, Clone)]
-pub struct UnderlyingCombinedNetworks<TYPES: NodeType, NetworkVersion: StaticVersionType>(
-    pub WebServerNetwork<TYPES, NetworkVersion>,
+#[derive(Clone)]
+pub struct UnderlyingCombinedNetworks<TYPES: NodeType>(
+    pub PushCdnNetwork<TYPES>,
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
 );
 
 #[cfg(feature = "hotshot-testing")]
-impl<TYPES: NodeType, NetworkVersion: StaticVersionType + 'static>
-    TestableNetworkingImplementation<TYPES> for CombinedNetworks<TYPES, NetworkVersion>
-{
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetworks<TYPES> {
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -194,9 +192,9 @@ impl<TYPES: NodeType, NetworkVersion: StaticVersionType + 'static>
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
+    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
         let generators = (
-            <WebServerNetwork<TYPES, NetworkVersion> as TestableNetworkingImplementation<_>>::generator(
+            <PushCdnNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
@@ -215,38 +213,47 @@ impl<TYPES: NodeType, NetworkVersion: StaticVersionType + 'static>
                 Duration::default(),
             )
         );
-        Box::new(move |node_id| {
-            let (quorum_web, da_web) = generators.0(node_id);
-            let (quorum_p2p, da_p2p) = generators.1(node_id);
-            let da_networks = UnderlyingCombinedNetworks(
-                Arc::<WebServerNetwork<TYPES, NetworkVersion>>::into_inner(da_web).unwrap(),
-                Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(da_p2p),
-            );
-            let quorum_networks = UnderlyingCombinedNetworks(
-                Arc::<WebServerNetwork<TYPES, NetworkVersion>>::into_inner(quorum_web).unwrap(),
-                Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
-                    quorum_p2p,
-                ),
-            );
-            let quorum_net = Self {
-                networks: Arc::new(quorum_networks),
-                message_cache: Arc::new(RwLock::new(LruCache::new(
-                    NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
-                ))),
-                primary_down: Arc::new(AtomicU64::new(0)),
-                delayed_tasks: Arc::default(),
-                delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
-            };
-            let da_net = Self {
-                networks: Arc::new(da_networks),
-                message_cache: Arc::new(RwLock::new(LruCache::new(
-                    NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
-                ))),
-                primary_down: Arc::new(AtomicU64::new(0)),
-                delayed_tasks: Arc::default(),
-                delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
-            };
-            (quorum_net.into(), da_net.into())
+        Box::pin(move |node_id| {
+            let gen0 = generators.0(node_id);
+            let gen1 = generators.1(node_id);
+
+            Box::pin(async move {
+                let (cdn, _) = gen0.await;
+                let cdn = Arc::<PushCdnNetwork<TYPES>>::into_inner(cdn).unwrap();
+
+                let (quorum_p2p, da_p2p) = gen1.await;
+                let da_networks = UnderlyingCombinedNetworks(
+                    cdn.clone(),
+                    Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
+                        da_p2p,
+                    ),
+                );
+                let quorum_networks = UnderlyingCombinedNetworks(
+                    cdn,
+                    Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
+                        quorum_p2p,
+                    ),
+                );
+                let quorum_net = Self {
+                    networks: Arc::new(quorum_networks),
+                    message_cache: Arc::new(RwLock::new(LruCache::new(
+                        NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+                    ))),
+                    primary_down: Arc::new(AtomicU64::new(0)),
+                    delayed_tasks: Arc::default(),
+                    delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
+                };
+                let da_net = Self {
+                    networks: Arc::new(da_networks),
+                    message_cache: Arc::new(RwLock::new(LruCache::new(
+                        NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+                    ))),
+                    primary_down: Arc::new(AtomicU64::new(0)),
+                    delayed_tasks: Arc::default(),
+                    delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
+                };
+                (quorum_net.into(), da_net.into())
+            })
         })
     }
 
@@ -259,9 +266,8 @@ impl<TYPES: NodeType, NetworkVersion: StaticVersionType + 'static>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, NetworkVersion: 'static + StaticVersionType>
-    ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
-    for CombinedNetworks<TYPES, NetworkVersion>
+impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
+    for CombinedNetworks<TYPES>
 {
     async fn request_data<T: NodeType, VER: 'static + StaticVersionType>(
         &self,
@@ -441,7 +447,7 @@ impl<TYPES: NodeType, NetworkVersion: 'static + StaticVersionType>
     }
 
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
-        <WebServerNetwork<_, NetworkVersion> as ConnectedNetwork<
+        <PushCdnNetwork<_> as ConnectedNetwork<
             Message<TYPES>,
             TYPES::SignatureKey,
         >>::inject_consensus_info(self.primary(), event.clone())

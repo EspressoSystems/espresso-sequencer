@@ -6,7 +6,9 @@
 use super::{
     block_contents::{BlockHeader, TestableBlock, Transaction},
     election::ElectionConfig,
-    network::{ConnectedNetwork, NetworkReliability, TestableNetworkingImplementation},
+    network::{
+        AsyncGenerator, ConnectedNetwork, NetworkReliability, TestableNetworkingImplementation,
+    },
     states::TestableState,
     storage::Storage,
     ValidatedState,
@@ -24,8 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
     hash::Hash,
-    ops,
-    ops::{Deref, Sub},
+    ops::{self, Deref, Sub},
     sync::Arc,
     time::Duration,
 };
@@ -93,7 +94,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         da_committee_size: usize,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)>;
+    ) -> AsyncGenerator<(Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)>;
 }
 
 #[async_trait]
@@ -148,7 +149,7 @@ where
         da_committee_size: usize,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)> {
+    ) -> AsyncGenerator<(Arc<Self::QuorumNetwork>, Arc<Self::QuorumNetwork>)> {
         <I::QuorumNetwork as TestableNetworkingImplementation<TYPES>>::generator(
             expected_node_count,
             num_bootstrap,

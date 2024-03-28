@@ -7,7 +7,10 @@ use async_compatibility_layer::art::async_sleep;
 use async_std::future::TimeoutError;
 use derivative::Derivative;
 use dyn_clone::DynClone;
-use futures::channel::{mpsc, oneshot};
+use futures::{
+    channel::{mpsc, oneshot},
+    Future,
+};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
@@ -31,6 +34,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
     hash::Hash,
+    pin::Pin,
     sync::Arc,
     time::Duration,
 };
@@ -416,6 +420,9 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     fn update_view(&self, _view: u64) {}
 }
 
+/// A channel generator for types that need asynchronous execution
+pub type AsyncGenerator<T> = Pin<Box<dyn Fn(u64) -> Pin<Box<dyn Future<Output = T>>>>>;
+
 /// Describes additional functionality needed by the test network implementation
 pub trait TestableNetworkingImplementation<TYPES: NodeType>
 where
@@ -431,7 +438,7 @@ where
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static>;
+    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)>;
 
     /// Get the number of messages in-flight.
     ///

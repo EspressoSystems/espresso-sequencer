@@ -96,6 +96,7 @@ async fn main() {
     let marshal_config = cdn_marshal::ConfigBuilder::default()
         .bind_address(marshal_endpoint.clone())
         .discovery_endpoint("test.sqlite".to_string())
+        .metrics_enabled(false)
         .build()
         .expect("failed to build marshal config");
 

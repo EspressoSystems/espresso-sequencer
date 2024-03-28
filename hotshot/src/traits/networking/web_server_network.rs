@@ -12,6 +12,7 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_trait::async_trait;
 use derive_more::{Deref, DerefMut};
+use hotshot_types::traits::network::AsyncGenerator;
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, VERSION_0_1},
@@ -1209,7 +1210,7 @@ impl<TYPES: NodeType, NetworkVersion: 'static + StaticVersionType>
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
+    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
         let da_gen = Self::single_generator(
             expected_node_count,
             num_bootstrap,
@@ -1227,7 +1228,11 @@ impl<TYPES: NodeType, NetworkVersion: 'static + StaticVersionType>
             &reliability_config,
         );
         // Start each node's web server client
-        Box::new(move |id| (quorum_gen(id).into(), da_gen(id).into()))
+        Box::pin(move |id| {
+            let da_gen = da_gen(id);
+            let quorum_gen = quorum_gen(id);
+            Box::pin(async move { (quorum_gen.into(), da_gen.into()) })
+        })
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {

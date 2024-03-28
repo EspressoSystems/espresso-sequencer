@@ -33,7 +33,7 @@ async fn test_network_task() {
 
     let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 
-    let networks = (launcher.resource_generator.channel_generator)(node_id);
+    let networks = (launcher.resource_generator.channel_generator)(node_id).await;
 
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
     let config = launcher.resource_generator.config.clone();
@@ -99,7 +99,7 @@ async fn test_network_storage_fail() {
 
     let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 
-    let networks = (launcher.resource_generator.channel_generator)(node_id);
+    let networks = (launcher.resource_generator.channel_generator)(node_id).await;
 
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
     storage.write().await.should_return_err = true;

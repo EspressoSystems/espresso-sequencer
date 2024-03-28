@@ -18,7 +18,7 @@ use hotshot_types::{
     constants::Version01,
     message::Message,
     traits::{
-        network::{ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation},
+        network::{AsyncGenerator, ConnectedNetwork, NetworkMsg, TestableNetworkingImplementation},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -189,10 +189,10 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> Box<dyn Fn(u64) -> (Arc<Self>, Arc<Self>) + 'static> {
+    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
         let master: Arc<_> = MasterMap::new();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
-        Box::new(move |node_id| {
+        Box::pin(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
             let net = MemoryNetwork::new(
@@ -201,7 +201,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                 master.clone(),
                 reliability_config.clone(),
             );
-            (net.clone().into(), net.into())
+            Box::pin(async move { (net.clone().into(), net.into()) })
         })
     }
 
