@@ -74,9 +74,7 @@ jobs:
             target/release/nasty-client
 
   build-arm:
-    runs-on: [self-hosted, ARM64]
-    container:
-      image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: buildjet-4vcpu-ubuntu-2204-arm
     steps:
       - name: Fix submodule permissions check
         run: |

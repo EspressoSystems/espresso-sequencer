@@ -19,7 +19,7 @@ processes:
       exec:
         command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
       initial_delay_seconds: 5
-      period_seconds: 5
+      period_seconds: 6
       timeout_seconds: 5
       success_threshold: 1
       failure_threshold: 20
