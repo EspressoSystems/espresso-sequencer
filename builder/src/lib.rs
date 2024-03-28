@@ -892,9 +892,6 @@ mod test {
         }
         let builder_context_handle = handles[BuilderTestConfig::BUILDER_ID].clone();
 
-        // clone the global state for the builder state
-        //let global_state = builder_test_config.global_state.clone();
-
         //spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
@@ -989,7 +986,7 @@ mod test {
         .expect("Claim block signing failed");
 
         // Test claiming blocks
-        let response = loop {
+        let _response = loop {
             match hotshot_client
                 .get::<AvailableBlockData<SeqTypes>>(&format!(
                     "hotshot_builder/claimblock/{builder_commitment}/{encoded_signature}"
@@ -1010,7 +1007,7 @@ mod test {
         };
 
         // Test claiming blocks
-        let response = loop {
+        let _response = loop {
             match hotshot_client
                 .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
                     "hotshot_builder/claimheaderinput/{builder_commitment}/{encoded_signature}"
@@ -1031,29 +1028,26 @@ mod test {
             }
         };
 
-        // TODO: It is giving error currently, may be need to fix return type
-        // TODO: but we are returning Ok(()) from the builder core
-        //#[cfg(not(test))]
+        // Test submitting transactions
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        match private_mempool_client
+            .post::<()>("builder_private_mempool/submit")
+            .body_json(&txn)
+            .unwrap()
+            .send()
+            .await
         {
-            let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
-            match private_mempool_client
-                .post::<Transaction>("builder_private_mempool/submit")
-                .body_json(&txn)
-                .unwrap()
-                .send()
-                .await
-            {
-                Ok(_) => {
-                    //let blocks = response.body().await.unwrap();
-                    println!("Received txn submitted response : {:?}", response);
-                    assert!(true);
-                    return;
-                }
-                Err(e) => {
-                    panic!("Error submitting private transaction {:?}", e);
-                }
+            Ok(response) => {
+                //let blocks = response.body().await.unwrap();
+                println!("Received txn submitted response : {:?}", response);
+                assert!(true);
+                return;
+            }
+            Err(e) => {
+                panic!("Error submitting private transaction {:?}", e);
             }
         }
+
         //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 
@@ -1139,7 +1133,7 @@ mod test {
         tracing::info!("event streaming client connected to server");
 
         // client subscrive to hotshot events
-        let mut subscribed_events: surf_disco::socket::Connection<
+        let subscribed_events: surf_disco::socket::Connection<
             BuilderEvent<SeqTypes>,
             surf_disco::socket::Unsupported,
             EventStreamApiError,
@@ -1257,7 +1251,7 @@ mod test {
         .expect("Claim block signing failed");
 
         // Test claiming blocks
-        let response = loop {
+        let _response = loop {
             match hotshot_client
                 .get::<AvailableBlockData<SeqTypes>>(&format!(
                     "hotshot_builder/claimblock/{builder_commitment}/{encoded_signature}"
@@ -1278,7 +1272,7 @@ mod test {
         };
 
         // Test claiming blocks
-        let response = loop {
+        let _response = loop {
             match hotshot_client
                 .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
                     "hotshot_builder/claimheaderinput/{builder_commitment}/{encoded_signature}"
@@ -1299,29 +1293,25 @@ mod test {
             }
         };
 
-        // TODO: It is giving error currently, may be need to fix return type
-        // TODO: but we are returning Ok(()) from the builder core
-        #[cfg(not(test))]
+        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        match private_mempool_client
+            .post::<()>("builder_private_mempool/submit")
+            .body_json(&txn)
+            .unwrap()
+            .send()
+            .await
         {
-            let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
-            match private_mempool_client
-                .post::<Transaction>("builder_private_mempool/submit")
-                .body_json(&txn)
-                .unwrap()
-                .send()
-                .await
-            {
-                Ok(_) => {
-                    //let blocks = response.body().await.unwrap();
-                    println!("Received txn submitted response : {:?}", response);
-                    assert!(true);
-                    return;
-                }
-                Err(e) => {
-                    panic!("Error submitting private transaction {:?}", e);
-                }
+            Ok(response) => {
+                //let blocks = response.body().await.unwrap();
+                println!("Received txn submitted response : {:?}", response);
+                assert!(true);
+                return;
+            }
+            Err(e) => {
+                panic!("Error submitting private transaction {:?}", e);
             }
         }
+
         //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 }
