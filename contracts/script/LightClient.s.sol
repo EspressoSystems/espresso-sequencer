@@ -55,9 +55,10 @@ contract DeployLightClientContractScript is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)",
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch
+            numBlocksPerEpoch,
+            admin
         );
 
         // our proxy

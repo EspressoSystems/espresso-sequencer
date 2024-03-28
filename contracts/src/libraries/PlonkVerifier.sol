@@ -94,7 +94,7 @@ library PlonkVerifier {
         uint256[] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof,
         bytes memory extraTranscriptInitMsg
-    ) external view returns (bool) {
+    ) internal view returns (bool) {
         _validateProof(proof);
         for (uint256 i = 0; i < publicInput.length; i++) {
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
@@ -115,7 +115,7 @@ library PlonkVerifier {
         uint256[][] memory publicInputs,
         IPlonkVerifier.PlonkProof[] memory proofs,
         bytes[] memory extraTranscriptInitMsgs
-    ) external view returns (bool) {
+    ) internal view returns (bool) {
         if (
             verifyingKeys.length != proofs.length || publicInputs.length != proofs.length
                 || extraTranscriptInitMsgs.length != proofs.length || proofs.length == 0

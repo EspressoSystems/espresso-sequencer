@@ -234,6 +234,7 @@ async fn main() -> anyhow::Result<()> {
         .index(opt.account_index)?
         .build()?
         .with_chain_id(chain_id);
+    let owner = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
 
     contracts
@@ -254,7 +255,7 @@ async fn main() -> anyhow::Result<()> {
                 );
                 let genesis = light_client_genesis(&orchestrator_url).await?;
                 let data = light_client
-                    .initialize(genesis.into(), u32::MAX)
+                    .initialize(genesis.into(), u32::MAX, owner)
                     .calldata()
                     .context("calldata for initialize transaction not available")?;
                 let proxy = ERC1967Proxy::deploy(l1, (light_client.address(), data))?

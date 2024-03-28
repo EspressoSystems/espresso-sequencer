@@ -20,7 +20,7 @@ contract LightClientTest is LC {
 
     /// @dev Directly mutate `finalizedState` variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
-        states[FINALIZED_STATE] = state;
+        states[finalizedState] = state;
     }
 
     /// @dev override the production-implementation with test VK.
