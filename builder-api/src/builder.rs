@@ -1,6 +1,11 @@
 use std::{fmt::Display, path::PathBuf};
 
+use crate::{
+    api::load_api,
+    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+};
 use clap::Args;
+use commit::Committable;
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::{
@@ -16,11 +21,6 @@ use tide_disco::{
     Api, RequestError, StatusCode,
 };
 use versioned_binary_serialization::version::StaticVersionType;
-
-use crate::{
-    api::load_api,
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
-};
 
 #[derive(Args, Default)]
 pub struct Options {
@@ -79,6 +79,11 @@ pub enum Error {
     TxnSubmit {
         source: BuildError,
     },
+    #[snafu(display("error getting builder address: {source}"))]
+    #[from(ignore)]
+    BuilderAddress {
+        source: BuildError,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -105,6 +110,7 @@ impl tide_disco::error::Error for Error {
             Error::TxnUnpack { .. } => StatusCode::BadRequest,
             Error::TxnSubmit { .. } => StatusCode::InternalServerError,
             Error::Custom { .. } => StatusCode::InternalServerError,
+            Error::BuilderAddress { .. } => StatusCode::InternalServerError,
         }
     }
 }
@@ -165,6 +171,15 @@ where
                     })
             }
             .boxed()
+        })?
+        .get("builder_address", |_req, state| {
+            async move {
+                state
+                    .get_builder_address()
+                    .await
+                    .context(BuilderAddressSnafu)
+            }
+            .boxed()
         })?;
     Ok(api)
 }
@@ -188,8 +203,9 @@ where
                 let tx = req
                     .body_auto::<<Types as NodeType>::Transaction, Ver>(Ver::instance())
                     .context(TxnUnpackSnafu)?;
+                let hash = tx.commit();
                 state.submit_txn(tx).await.context(TxnSubmitSnafu)?;
-                Ok(())
+                Ok(hash)
             }
             .boxed()
         })?;

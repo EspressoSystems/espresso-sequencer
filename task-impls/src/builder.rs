@@ -39,9 +39,11 @@ impl From<BuilderApiError> for BuilderClientError {
                     message: source.to_string(),
                 }
             }
-            BuilderApiError::TxnSubmit { source } => Self::Api {
-                message: source.to_string(),
-            },
+            BuilderApiError::TxnSubmit { source } | BuilderApiError::BuilderAddress { source } => {
+                Self::Api {
+                    message: source.to_string(),
+                }
+            }
             BuilderApiError::Custom { message, .. } => Self::Api { message },
             BuilderApiError::BlockAvailable { source, .. }
             | BuilderApiError::BlockClaim { source, .. } => match source {

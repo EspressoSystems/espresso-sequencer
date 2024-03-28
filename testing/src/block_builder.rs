@@ -201,6 +201,12 @@ impl BuilderDataSource<TestTypes> for RandomBuilderSource {
         };
         Ok(header_input)
     }
+
+    async fn get_builder_address(
+        &self,
+    ) -> Result<<TestTypes as NodeType>::SignatureKey, BuildError> {
+        Ok(self.pub_key)
+    }
 }
 
 /// Construct a tide disco app that mocks the builder API.
@@ -295,6 +301,12 @@ impl BuilderDataSource<TestTypes> for SimpleBuilderSource {
         let mut blocks = self.blocks.write().await;
         let entry = blocks.get_mut(block_hash).ok_or(BuildError::NotFound)?;
         entry.header_input.take().ok_or(BuildError::Missing)
+    }
+
+    async fn get_builder_address(
+        &self,
+    ) -> Result<<TestTypes as NodeType>::SignatureKey, BuildError> {
+        Ok(self.pub_key)
     }
 }
 
