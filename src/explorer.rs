@@ -196,7 +196,7 @@ where
     api.with_version("0.0.1".parse().unwrap())
         .get("get_block_detail", move |req, state| {
             async move {
-                let target = match req.opt_integer_param::<str, usize>("from") {
+                let target = match req.opt_integer_param::<str, usize>("height") {
                     Ok(Some(from)) => BlockIdentifier::Height(from),
                     _ => BlockIdentifier::Latest,
                 };
