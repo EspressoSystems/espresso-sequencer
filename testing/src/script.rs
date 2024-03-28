@@ -2,9 +2,10 @@ use crate::predicates::Predicate;
 use async_broadcast::broadcast;
 use hotshot_task_impls::events::HotShotEvent;
 
+use async_compatibility_layer::art::async_timeout;
 use hotshot_task::task::{Task, TaskRegistry, TaskState};
 use hotshot_types::traits::node_implementation::NodeType;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 pub struct TestScriptStage<TYPES: NodeType, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>> {
     pub inputs: Vec<HotShotEvent<TYPES>>,
@@ -107,9 +108,18 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>
         }
 
         for assert in &stage.outputs {
-            if let Ok(received_output) = test_receiver.try_recv() {
+            if let Ok(Ok(received_output)) =
+                async_timeout(Duration::from_millis(250), test_receiver.recv_direct()).await
+            {
                 tracing::debug!("Test received: {:?}", received_output);
                 validate_output_or_panic(stage_number, &received_output, assert);
+                if !task.state_mut().filter(&received_output.clone()) {
+                    tracing::debug!("Test sent: {:?}", received_output.clone());
+
+                    if let Some(res) = S::handle_event(received_output.clone(), &mut task).await {
+                        task.state_mut().handle_result(&res).await;
+                    }
+                }
             } else {
                 panic_missing_output(stage_number, assert);
             }

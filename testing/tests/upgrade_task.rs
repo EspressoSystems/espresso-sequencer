@@ -80,8 +80,8 @@ async fn test_upgrade_task() {
 
     let view_2 = TestScriptStage {
         inputs: vec![
-            VidDisperseRecv(vids[1].0[0].clone()),
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            VidDisperseRecv(vids[1].0[0].clone()),
             DACRecv(dacs[1].clone()),
         ],
         outputs: vec![

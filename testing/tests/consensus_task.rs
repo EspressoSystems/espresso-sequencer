@@ -78,8 +78,8 @@ async fn test_consensus_task() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
-            exact(QuorumProposalValidated(proposals[1].data.clone())),
             quorum_proposal_send(),
+            exact(QuorumProposalValidated(proposals[1].data.clone())),
         ],
         asserts: vec![is_at_view_number(2)],
     };
@@ -347,10 +347,10 @@ async fn test_view_sync_finalize_propose() {
 
     let view_4 = TestScriptStage {
         inputs: vec![
+            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             TimeoutVoteRecv(timeout_vote_view_2),
             TimeoutVoteRecv(timeout_vote_view_3),
             ViewSyncFinalizeCertificate2Recv(cert),
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(4)),
         ],
         outputs: vec![
@@ -454,10 +454,10 @@ async fn test_view_sync_finalize_vote() {
     // Now at view 3 we receive the proposal received response.
     let view_3 = TestScriptStage {
         inputs: vec![
-            // Multiple timeouts in a row, so we call for a view sync
-            ViewSyncFinalizeCertificate2Recv(cert),
             // Receive a proposal for view 4, but with the highest qc being from view 1.
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            // Multiple timeouts in a row, so we call for a view sync
+            ViewSyncFinalizeCertificate2Recv(cert),
         ],
         outputs: vec![
             exact(QuorumProposalValidated(proposals[0].data.clone())),

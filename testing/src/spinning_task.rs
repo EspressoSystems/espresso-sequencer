@@ -17,6 +17,7 @@ use hotshot_types::{
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
     },
+    vote::HasViewNumber,
 };
 use snafu::Snafu;
 use std::collections::BTreeMap;
@@ -97,13 +98,18 @@ where
             block_size: _,
         } = event
         {
-            state.last_decided_leaf = leaf_chain.first().unwrap().leaf.clone();
+            let leaf = leaf_chain.first().unwrap().leaf.clone();
+            if leaf.get_view_number() > state.last_decided_leaf.get_view_number() {
+                state.last_decided_leaf = leaf;
+            }
         } else if let EventType::QuorumProposal {
             proposal,
             sender: _,
         } = event
         {
-            state.high_qc = proposal.data.justify_qc;
+            if proposal.data.justify_qc.get_view_number() > state.high_qc.get_view_number() {
+                state.high_qc = proposal.data.justify_qc;
+            }
         }
         // if we have not seen this view before
         if state.latest_view.is_none() || view_number > state.latest_view.unwrap() {
