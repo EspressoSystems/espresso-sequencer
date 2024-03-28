@@ -23,9 +23,9 @@ use l1_client::L1Client;
 
 use state_signature::static_stake_table_commitment;
 use url::Url;
-mod l1_client;
+pub mod l1_client;
 pub mod persistence;
-mod state;
+pub mod state;
 pub mod transaction;
 use async_trait::async_trait;
 
@@ -316,6 +316,7 @@ pub struct NetworkParams {
     pub consensus_server_url: Url,
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
+    pub hotshot_events_streaming_server_url: Url,
     pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
@@ -432,6 +433,7 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         Some(network_params.state_relay_server_url),
         metrics,
         node_index,
+        None,
         bind_version,
     )
     .await?;
@@ -606,6 +608,7 @@ pub mod testing {
                 None,
                 metrics,
                 i as u64,
+                None,
                 bind_version,
             )
             .await
@@ -732,6 +735,7 @@ mod test {
 
         loop {
             let event = events.next().await.unwrap();
+            tracing::info!("Received event from handle: {event:?}");
             let Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
