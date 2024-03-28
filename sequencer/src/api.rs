@@ -88,8 +88,8 @@ impl<N: network::Type, Ver: StaticVersionType> StateSignatureDataSource<N> for S
     }
 }
 
-#[cfg(test)]
-mod test_helpers {
+#[cfg(any(test, feature = "testing"))]
+pub mod test_helpers {
     use super::*;
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
