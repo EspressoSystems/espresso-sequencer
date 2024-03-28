@@ -19,7 +19,7 @@ processes:
       exec:
         command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
       initial_delay_seconds: 5
-      period_seconds: 5
+      period_seconds: 6
       timeout_seconds: 5
       success_threshold: 1
       failure_threshold: 20
@@ -100,7 +100,7 @@ processes:
         condition: process_completed
 
   sequencer0:
-    command: sequencer -- http -- query -- state -- status -- submit
+    command: sequencer -- http -- query -- catchup -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
@@ -125,7 +125,7 @@ processes:
       failure_threshold: 100
 
   sequencer1:
-    command: sequencer -- http -- query -- state -- status
+    command: sequencer -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
@@ -150,7 +150,7 @@ processes:
       failure_threshold: 100
 
   sequencer2:
-    command: sequencer -- http -- state -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
@@ -174,7 +174,7 @@ processes:
       failure_threshold: 100
 
   sequencer3:
-    command: sequencer -- http -- state -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
@@ -198,7 +198,7 @@ processes:
       failure_threshold: 100
 
   sequencer4:
-    command: sequencer -- http -- state -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
