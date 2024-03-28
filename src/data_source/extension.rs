@@ -17,6 +17,7 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
+    explorer::{self, ExplorerDataSource, ExplorerHeader},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
         UpdateStateData,
@@ -339,6 +340,63 @@ where
         self.data_source
             .insert_merkle_nodes(path, traversal_path, block_number)
             .await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types> ExplorerDataSource<Types> for ExtensibleDataSource<D, U>
+where
+    D: ExplorerDataSource<Types> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: ExplorerHeader<Types>,
+{
+    async fn get_block_detail(
+        &self,
+        request: explorer::data_source::BlockIdentifier<Types>,
+    ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>
+    {
+        self.data_source.get_block_detail(request).await
+    }
+
+    async fn get_block_summaries(
+        &self,
+        request: explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::BlockSummary<Types>>,
+        explorer::data_source::GetBlockSummariesError,
+    > {
+        self.data_source.get_block_summaries(request).await
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: explorer::data_source::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::data_source::TransactionDetailResponse<Types>,
+        explorer::data_source::GetTransactionDetailError,
+    > {
+        self.data_source.get_transaction_detail(request).await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::TransactionSummary<Types>>,
+        explorer::data_source::GetTransactionSummariesError,
+    > {
+        self.data_source.get_transaction_summaries(request).await
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<
+        explorer::data_source::ExplorerSummary<Types>,
+        explorer::data_source::GetExplorerSummaryError,
+    > {
+        self.data_source.get_explorer_summary().await
     }
 }
 
