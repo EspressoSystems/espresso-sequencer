@@ -489,14 +489,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 &handle,
             )
             .await;
+            add_request_network_task(
+                registry.clone(),
+                event_tx.clone(),
+                event_rx.activate_cloned(),
+                &handle,
+            )
+            .await;
         }
-        add_request_network_task(
-            registry.clone(),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
 
         add_network_event_task(
             registry.clone(),
