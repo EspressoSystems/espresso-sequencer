@@ -905,8 +905,7 @@ mod test {
                 builder_context_handle,
                 builder_test_config.instance_state,
             )
-            .await
-            .unwrap();
+            .await;
         });
         // spawn the builder event loop
         async_spawn(async move {
@@ -1086,10 +1085,9 @@ mod test {
         };
 
         use async_lock::RwLock;
-        use futures_core::stream::Stream;
         use hotshot_events_service::{
             events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
-            events_source::{BuilderEvent, EventsStreamer},
+            events_source::{BuilderEvent, EventConsumer, EventsStreamer},
         };
 
         setup_logging();
@@ -1143,12 +1141,16 @@ mod test {
         tracing::info!("event streaming client connected to server");
 
         // client subscrive to hotshot events
-        let mut hotshot_events = client
+        let mut subscribed_events: surf_disco::socket::Connection<
+            BuilderEvent<SeqTypes>,
+            surf_disco::socket::Unsupported,
+            EventStreamApiError,
+            versioned_binary_serialization::version::StaticVersion<0, 1>,
+        > = client
             .socket("events")
             .subscribe::<BuilderEvent<SeqTypes>>()
             .await
-            .unwrap()
-            .into_stream();
+            .unwrap();
 
         tracing::info!("Client 1 Subscribed to events");
 
@@ -1165,6 +1167,18 @@ mod test {
         //     .await
         //     .unwrap();
         // });
+        // put the events onto the channel
+        async_spawn({
+            async move {
+                let mut hotshot_event_stream = builder_context_handle.get_event_stream();
+                loop {
+                    let event = hotshot_event_stream.next().await.unwrap();
+                    tracing::info!("Received event from handle/ before writing: {event:?}");
+                    events_streamer.write().await.handle_event(event).await;
+                    tracing::info!("Event written to the event streamer");
+                }
+            }
+        });
 
         async_spawn(async move {
             run_non_permissioned_standalone_builder_service(
@@ -1172,9 +1186,10 @@ mod test {
                 builder_test_config.da_sender,
                 builder_test_config.qc_sender,
                 builder_test_config.decide_sender,
-                &mut hotshot_events,
+                subscribed_events,
                 builder_test_config.instance_state,
             )
+            .await;
         });
 
         // spawn the builder event loop
