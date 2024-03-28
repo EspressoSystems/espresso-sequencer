@@ -1054,8 +1054,6 @@ mod test {
                 }
             }
         }
-
-        //}
         //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 
@@ -1130,7 +1128,7 @@ mod test {
         run_hotshot_event_streaming_api(hotshot_events_streaming_api_url, events_streamer.clone());
 
         // create a client for it
-        // Start Client 1
+        // Start Client for the event streaming api
         let client = Client::<EventStreamApiError, Version01>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
@@ -1154,20 +1152,7 @@ mod test {
 
         tracing::info!("Client 1 Subscribed to events");
 
-        //spawn the builder service
-        // async_spawn(async move {
-        //     run_permissioned_standalone_builder_service(
-        //         builder_test_config.tx_sender,
-        //         builder_test_config.da_sender,
-        //         builder_test_config.qc_sender,
-        //         builder_test_config.decide_sender,
-        //         builder_context_handle,
-        //         builder_test_config.instance_state,
-        //     )
-        //     .await
-        //     .unwrap();
-        // });
-        // put the events onto the channel
+        // send the events to the event streaming api
         async_spawn({
             async move {
                 let mut hotshot_event_stream = builder_context_handle.get_event_stream();
@@ -1180,6 +1165,7 @@ mod test {
             }
         });
 
+        // spawn the builder service
         async_spawn(async move {
             run_non_permissioned_standalone_builder_service(
                 builder_test_config.tx_sender,
@@ -1197,7 +1183,6 @@ mod test {
             builder_test_config.builder_state.event_loop();
         });
 
-        /*
         // Run the builder apis to serve hotshot
         let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
 
@@ -1215,9 +1200,6 @@ mod test {
         let private_mempool_api_url =
             Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
-        // let global_state_txns_submitter = GlobalStateTxnSubmitter {
-        //     global_state: builder_test_config.global_state.clone(),
-        // };
         run_builder_api_to_receive_private_txns(
             private_mempool_api_url.clone(),
             builder_test_config.global_state,
@@ -1340,9 +1322,6 @@ mod test {
                 }
             }
         }
-        */
-
-        //}
-        task::sleep(std::time::Duration::from_secs(200)).await;
+        //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 }
