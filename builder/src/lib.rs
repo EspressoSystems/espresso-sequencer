@@ -1033,7 +1033,7 @@ mod test {
 
         // TODO: It is giving error currently, may be need to fix return type
         // TODO: but we are returning Ok(()) from the builder core
-        #[cfg(not(test))]
+        //#[cfg(not(test))]
         {
             let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
             match private_mempool_client
