@@ -85,3 +85,4 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           nix develop --accept-flake-config -c forge test -vvv
+          
