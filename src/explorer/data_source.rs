@@ -676,42 +676,24 @@ where
     async fn get_block_detail(
         &self,
         request: BlockIdentifier<Types>,
-    ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
-        let _ = request;
-        Err(GetBlockDetailError::Unimplemented(Unimplemented {}))
-    }
-
+    ) -> Result<BlockDetail<Types>, GetBlockDetailError>;
     async fn get_block_summaries(
         &self,
         request: GetBlockSummariesRequest<Types>,
-    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
-        let _ = request;
-        Err(GetBlockSummariesError::Unimplemented(Unimplemented {}))
-    }
+    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError>;
 
     async fn get_transaction_detail(
         &self,
         request: TransactionIdentifier<Types>,
-    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
-        let _ = request;
-        Err(GetTransactionDetailError::Unimplemented(Unimplemented {}))
-    }
+    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError>;
 
     async fn get_transaction_summaries(
         &self,
         request: GetTransactionSummariesRequest<Types>,
-    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError> {
-        let _ = request;
-        Err(GetTransactionSummariesError::Unimplemented(
-            Unimplemented {},
-        ))
-    }
+    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError>;
 
-    async fn get_explorer_summary(
-        &self,
-    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
-        Err(GetExplorerSummaryError::Unimplemented(Unimplemented {}))
-    }
+    async fn get_explorer_summary(&self)
+        -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
 }
 
 #[async_trait]

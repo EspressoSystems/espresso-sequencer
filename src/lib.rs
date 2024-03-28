@@ -557,7 +557,7 @@ mod test {
             PayloadQueryData, TransactionHash, TransactionIndex, UpdateAvailabilityData,
             VidCommonQueryData,
         },
-        explorer::ExplorerDataSource,
+        explorer::{self, ExplorerDataSource},
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::StatusDataSource,
@@ -670,7 +670,55 @@ mod test {
     }
 
     #[async_trait]
-    impl ExplorerDataSource<MockTypes> for CompositeState {}
+    impl ExplorerDataSource<MockTypes> for CompositeState {
+        async fn get_block_detail(
+            &self,
+            request: explorer::data_source::BlockIdentifier<MockTypes>,
+        ) -> Result<
+            explorer::data_source::BlockDetail<MockTypes>,
+            explorer::data_source::GetBlockDetailError,
+        > {
+            self.hotshot_qs.get_block_detail(request).await
+        }
+        async fn get_block_summaries(
+            &self,
+            request: explorer::data_source::GetBlockSummariesRequest<MockTypes>,
+        ) -> Result<
+            Vec<explorer::data_source::BlockSummary<MockTypes>>,
+            explorer::data_source::GetBlockSummariesError,
+        > {
+            self.hotshot_qs.get_block_summaries(request).await
+        }
+
+        async fn get_transaction_detail(
+            &self,
+            request: explorer::data_source::TransactionIdentifier<MockTypes>,
+        ) -> Result<
+            explorer::data_source::TransactionDetailResponse<MockTypes>,
+            explorer::data_source::GetTransactionDetailError,
+        > {
+            self.hotshot_qs.get_transaction_detail(request).await
+        }
+
+        async fn get_transaction_summaries(
+            &self,
+            request: explorer::data_source::GetTransactionSummariesRequest<MockTypes>,
+        ) -> Result<
+            Vec<explorer::data_source::TransactionSummary<MockTypes>>,
+            explorer::data_source::GetTransactionSummariesError,
+        > {
+            self.hotshot_qs.get_transaction_summaries(request).await
+        }
+
+        async fn get_explorer_summary(
+            &self,
+        ) -> Result<
+            explorer::data_source::ExplorerSummary<MockTypes>,
+            explorer::data_source::GetExplorerSummaryError,
+        > {
+            self.hotshot_qs.get_explorer_summary().await
+        }
+    }
 
     // Imiplement data source trait for node API.
     #[async_trait]
