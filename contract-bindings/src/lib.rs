@@ -40,7 +40,6 @@ pub mod light_client_v2;
 pub mod math;
 pub mod mock_erc20;
 pub mod mock_erc721;
-pub mod options;
 pub mod ownable;
 pub mod ownable_upgradeable;
 pub mod plonk_verifier;
