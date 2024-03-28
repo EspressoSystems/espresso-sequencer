@@ -250,3 +250,16 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
         path: /healthcheck
       failure_threshold: 100
+
+  nasty-client:
+    command: nasty-client
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_NASTY_CLIENT_PORT
+        path: /healthcheck
+      failure_threshold: 100
