@@ -550,7 +550,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use self::explorer::data_source::ExplorerDataSource;
     use super::*;
     use crate::{
         availability::{
@@ -558,6 +557,7 @@ mod test {
             PayloadQueryData, TransactionHash, TransactionIndex, UpdateAvailabilityData,
             VidCommonQueryData,
         },
+        explorer::ExplorerDataSource,
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::StatusDataSource,
@@ -669,6 +669,9 @@ mod test {
         }
     }
 
+    #[async_trait]
+    impl ExplorerDataSource<MockTypes> for CompositeState {}
+
     // Imiplement data source trait for node API.
     #[async_trait]
     impl NodeDataSource<MockTypes> for CompositeState {
@@ -709,9 +712,6 @@ mod test {
             self.hotshot_qs.metrics()
         }
     }
-
-    #[async_trait]
-    impl ExplorerDataSource<MockTypes> for CompositeState {}
 
     #[async_std::test]
     async fn test_composition() {
