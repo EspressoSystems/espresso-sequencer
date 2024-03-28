@@ -33,9 +33,9 @@ use crate::{
 use async_std::sync::RwLock;
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+    events_source::{EventConsumer, EventsStreamer},
 };
-use tide_disco::{app, method::ReadState, App};
+use tide_disco::App;
 /// The consensus handle
 pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
@@ -159,7 +159,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
                 events,
                 persistence,
                 ctx.state_signer.clone(),
-                event_streamer,
+                event_streamer.clone(),
             ),
         );
         // spwan the task for running the event streaming api
