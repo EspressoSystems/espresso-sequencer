@@ -102,7 +102,7 @@ Returns
 """
 
 [route.get_transaction_summaries]
-PATH = ["transactions/latest/:limit", "transaction/from/:height/:offset/:limit", "transaction/hash/:hash/:limit"]
+PATH = ["transactions/latest/:limit", "transactions/from/:height/:offset/:limit", "transactions/hash/:hash/:limit"]
 ":limit" = "Integer"
 ":height" = "Integer"
 ":offset" = "Integer"
