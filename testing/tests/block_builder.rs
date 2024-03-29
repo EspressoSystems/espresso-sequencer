@@ -46,7 +46,20 @@ async fn test_random_block_builder() {
         .await
         .expect("Failed to get available blocks");
 
-    assert!(!blocks.is_empty());
+    {
+        let mut attempt = 0;
+
+        while blocks.is_empty() && attempt < 50 {
+            blocks = client
+                .get_available_blocks(vid_commitment(&vec![], 1))
+                .await
+                .expect("Failed to get available blocks");
+            attempt += 1;
+            async_sleep(Duration::from_millis(100)).await;
+        }
+
+        assert!(!blocks.is_empty());
+    }
 
     // Test claiming available block
     let signature = {
