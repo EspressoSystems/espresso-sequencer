@@ -339,7 +339,7 @@ where
     type Error = TimestampConversionError;
 
     fn try_from(
-        (block, _offset, transaction): (
+        (block, offset, transaction): (
             &BlockQueryData<Types>,
             usize,
             <Types as NodeType>::Transaction,
@@ -351,7 +351,7 @@ where
             hash: transaction.commitment(),
             height: block.height(),
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
-            rollups: vec![],
+            rollups: block.header.namespace_ids_for_offset(offset),
         })
     }
 }

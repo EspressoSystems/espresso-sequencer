@@ -54,4 +54,8 @@ pub trait ExplorerHeader<Types: NodeType>: BlockHeader<Types> {
 
     /// A collection of namespace ids that are contained within the block header.
     fn namespace_ids(&self) -> Vec<Self::NamespaceId>;
+
+    /// A collection of namespace ids that are contained within the individual
+    /// transactions for a block.
+    fn namespace_ids_for_offset(&self, offset: usize) -> Vec<Self::NamespaceId>;
 }

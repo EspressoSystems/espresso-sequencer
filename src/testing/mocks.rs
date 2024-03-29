@@ -80,6 +80,10 @@ impl ExplorerHeader<MockTypes> for MockHeader {
     fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
         vec![0]
     }
+
+    fn namespace_ids_for_offset(&self, _offset: usize) -> Vec<Self::NamespaceId> {
+        vec![0]
+    }
 }
 
 impl HeightIndexed for MockHeader {
