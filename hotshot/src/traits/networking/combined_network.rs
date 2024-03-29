@@ -3,13 +3,11 @@
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
 use crate::traits::implementations::Libp2pNetwork;
 use async_lock::RwLock;
-use hotshot_types::{
-    constants::{
-        COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
-        COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
-    },
-    traits::network::AsyncGenerator,
+use hotshot_types::constants::{
+    COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
+    COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
 };
+
 use lru::LruCache;
 use std::{
     collections::BTreeSet,
@@ -25,7 +23,9 @@ use futures::{channel::mpsc, join, select, FutureExt};
 
 use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
+use hotshot_types::traits::network::{
+    AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
+};
 use hotshot_types::{
     boxed_sync,
     data::ViewNumber,

@@ -66,7 +66,7 @@ mesh_n_low = 4
 mesh_outbound_min = 2
 mesh_n = 4
 online_time = 10
-base_port = 9000
+base_port = 8000
 
 [web_server_config]
 url = "http://localhost:9000"
@@ -74,6 +74,9 @@ url = "http://localhost:9000"
 [da_web_server_config]
 url = "http://localhost:9001"
 
+[combined_network_config.delay_duration]
+secs = 1
+nanos = 0
 
 [web_server_config.wait_between_polls]
 secs = 0

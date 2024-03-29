@@ -20,9 +20,10 @@ use cdn_client::{
 };
 #[cfg(feature = "hotshot-testing")]
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
-use hotshot_types::traits::network::AsyncGenerator;
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
+use hotshot_types::traits::network::{
+    AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
+};
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, VERSION_0_1},
@@ -37,13 +38,12 @@ use hotshot_types::{
     BoxSyncFuture,
 };
 #[cfg(feature = "hotshot-testing")]
-use rand::rngs::StdRng;
-#[cfg(feature = "hotshot-testing")]
-use rand::{RngCore, SeedableRng};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 #[cfg(feature = "hotshot-testing")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "hotshot-testing")]
 use std::{path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
 use versioned_binary_serialization::{

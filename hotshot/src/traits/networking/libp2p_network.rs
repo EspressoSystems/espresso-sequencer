@@ -15,15 +15,15 @@ use futures::{
     FutureExt, StreamExt,
 };
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::NetworkReliability;
+use hotshot_types::traits::network::{AsyncGenerator, NetworkReliability};
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, LOOK_AHEAD, STATIC_VER_0_1, VERSION_0_1},
     data::ViewNumber,
     traits::{
         network::{
-            self, AsyncGenerator, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
-            NetworkError, NetworkMsg, ResponseMessage,
+            self, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu, NetworkError,
+            NetworkMsg, ResponseMessage,
         },
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
