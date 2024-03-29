@@ -21,12 +21,12 @@ contract LightClientCommonTest is Test {
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
 
-    function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
+    function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public virtual {
         lc = new LCTest(_genesis, _blocksPerEpoch);
     }
 
     /// @dev initialized ledger like genesis and system params
-    function init() public {
+    function init() public virtual {
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";

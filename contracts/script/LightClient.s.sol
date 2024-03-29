@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 
 import { LightClient as LC } from "../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
+import "../src/LightClientOptimized.sol";
 
 contract DeployLightClientContractScript is Script {
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
@@ -24,10 +24,10 @@ contract DeployLightClientContractScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch, false);
+        return deployContract(state, numBlocksPerEpoch);
     }
 
-    function runTest(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+    function runOptimized(uint32 numBlocksPerEpoch, uint32 numInitValidators)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -43,7 +43,7 @@ contract DeployLightClientContractScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch, true);
+        return deployContractOptimized(state, numBlocksPerEpoch);
     }
 
     function runDemo(uint32 numBlocksPerEpoch)
@@ -56,14 +56,13 @@ contract DeployLightClientContractScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch, false);
+        return deployContract(state, numBlocksPerEpoch);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
-
-    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch, bool isTest)
+    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
         private
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -71,27 +70,52 @@ contract DeployLightClientContractScript is Script {
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
         LC lightClientContract;
-        if (isTest) {
-            lightClientContract = new LCTest(state, numBlocksPerEpoch);
-            vm.stopBroadcast();
-            return (payable(address(lightClientContract)), admin, state);
-        } else {
-            lightClientContract = new LC();
 
-            // Encode the initializer function call
-            bytes memory data = abi.encodeWithSignature(
-                "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)",
-                state,
-                numBlocksPerEpoch
-            );
+        lightClientContract = new LC();
 
-            // our proxy
-            ERC1967Proxy proxy = new ERC1967Proxy(address(lightClientContract), data);
-            vm.stopBroadcast();
+        // Encode the initializer function call
+        bytes memory data = abi.encodeWithSignature(
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)",
+            state,
+            numBlocksPerEpoch
+        );
 
-            proxyAddress = payable(address(proxy));
+        // our proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(address(lightClientContract), data);
+        vm.stopBroadcast();
 
-            return (proxyAddress, admin, state);
-        }
+        proxyAddress = payable(address(proxy));
+
+        return (proxyAddress, admin, state);
+    }
+
+    /// @notice deploys the impl, proxy & initializes the impl
+    /// @return proxyAddress The address of the proxy
+    /// @return admin The address of the admin
+    function deployContractOptimized(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+        private
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    {
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        (admin,) = deriveRememberKey(seedPhrase, 0);
+        vm.startBroadcast(admin);
+        LC lightClientContract;
+
+        lightClientContract = new LightClientOptimized();
+
+        // Encode the initializer function call
+        bytes memory data = abi.encodeWithSignature(
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32)",
+            state,
+            numBlocksPerEpoch
+        );
+
+        // our proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(address(lightClientContract), data);
+        vm.stopBroadcast();
+
+        proxyAddress = payable(address(proxy));
+
+        return (proxyAddress, admin, state);
     }
 }

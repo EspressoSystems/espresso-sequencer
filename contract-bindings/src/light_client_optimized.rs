@@ -1,4 +1,4 @@
-pub use light_client::*;
+pub use light_client_optimized::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,14 +9,12 @@ pub use light_client::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod light_client {
+pub mod light_client_optimized {
     pub use super::super::shared_types::*;
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
-            constructor: ::core::option::Option::Some(::ethers::core::abi::ethabi::Constructor {
-                inputs: ::std::vec![],
-            }),
+            constructor: ::core::option::Option::None,
             functions: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("MAJOR"),
@@ -800,33 +798,33 @@ pub mod light_client {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static LIGHTCLIENT_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static LIGHTCLIENTOPTIMIZED_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
-    pub struct LightClient<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for LightClient<M> {
+    pub struct LightClientOptimized<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for LightClientOptimized<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for LightClient<M> {
+    impl<M> ::core::ops::Deref for LightClientOptimized<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for LightClient<M> {
+    impl<M> ::core::ops::DerefMut for LightClientOptimized<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for LightClient<M> {
+    impl<M> ::core::fmt::Debug for LightClientOptimized<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(LightClient))
+            f.debug_tuple(::core::stringify!(LightClientOptimized))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> LightClientOptimized<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -835,7 +833,7 @@ pub mod light_client {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                LIGHTCLIENT_ABI.clone(),
+                LIGHTCLIENTOPTIMIZED_ABI.clone(),
                 client,
             ))
         }
@@ -1062,13 +1060,15 @@ pub mod light_client {
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LightClientEvents>
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, LightClientOptimizedEvents>
         {
             self.0
                 .event_with_filter(::core::default::Default::default())
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+        for LightClientOptimized<M>
+    {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -1336,7 +1336,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub enum LightClientErrors {
+    pub enum LightClientOptimizedErrors {
         AddressEmptyCode(AddressEmptyCode),
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
         ERC1967NonPayable(ERC1967NonPayable),
@@ -1356,7 +1356,7 @@ pub mod light_client {
         /// Error(string) -- 0x08c379a0
         RevertString(::std::string::String),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientErrors {
+    impl ::ethers::core::abi::AbiDecode for LightClientOptimizedErrors {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -1432,7 +1432,7 @@ pub mod light_client {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientErrors {
+    impl ::ethers::core::abi::AbiEncode for LightClientOptimizedErrors {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
                 Self::AddressEmptyCode(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -1470,7 +1470,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::ethers::contract::ContractRevert for LightClientErrors {
+    impl ::ethers::contract::ContractRevert for LightClientOptimizedErrors {
         fn valid_selector(selector: [u8; 4]) -> bool {
             match selector {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
@@ -1534,7 +1534,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::fmt::Display for LightClientErrors {
+    impl ::core::fmt::Display for LightClientOptimizedErrors {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::AddressEmptyCode(element) => ::core::fmt::Display::fmt(element, f),
@@ -1562,82 +1562,82 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<::std::string::String> for LightClientErrors {
+    impl ::core::convert::From<::std::string::String> for LightClientOptimizedErrors {
         fn from(value: String) -> Self {
             Self::RevertString(value)
         }
     }
-    impl ::core::convert::From<AddressEmptyCode> for LightClientErrors {
+    impl ::core::convert::From<AddressEmptyCode> for LightClientOptimizedErrors {
         fn from(value: AddressEmptyCode) -> Self {
             Self::AddressEmptyCode(value)
         }
     }
-    impl ::core::convert::From<ERC1967InvalidImplementation> for LightClientErrors {
+    impl ::core::convert::From<ERC1967InvalidImplementation> for LightClientOptimizedErrors {
         fn from(value: ERC1967InvalidImplementation) -> Self {
             Self::ERC1967InvalidImplementation(value)
         }
     }
-    impl ::core::convert::From<ERC1967NonPayable> for LightClientErrors {
+    impl ::core::convert::From<ERC1967NonPayable> for LightClientOptimizedErrors {
         fn from(value: ERC1967NonPayable) -> Self {
             Self::ERC1967NonPayable(value)
         }
     }
-    impl ::core::convert::From<FailedInnerCall> for LightClientErrors {
+    impl ::core::convert::From<FailedInnerCall> for LightClientOptimizedErrors {
         fn from(value: FailedInnerCall) -> Self {
             Self::FailedInnerCall(value)
         }
     }
-    impl ::core::convert::From<InvalidArgs> for LightClientErrors {
+    impl ::core::convert::From<InvalidArgs> for LightClientOptimizedErrors {
         fn from(value: InvalidArgs) -> Self {
             Self::InvalidArgs(value)
         }
     }
-    impl ::core::convert::From<InvalidInitialization> for LightClientErrors {
+    impl ::core::convert::From<InvalidInitialization> for LightClientOptimizedErrors {
         fn from(value: InvalidInitialization) -> Self {
             Self::InvalidInitialization(value)
         }
     }
-    impl ::core::convert::From<InvalidProof> for LightClientErrors {
+    impl ::core::convert::From<InvalidProof> for LightClientOptimizedErrors {
         fn from(value: InvalidProof) -> Self {
             Self::InvalidProof(value)
         }
     }
-    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientErrors {
+    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientOptimizedErrors {
         fn from(value: MissingLastBlockForCurrentEpoch) -> Self {
             Self::MissingLastBlockForCurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<NotInitializing> for LightClientErrors {
+    impl ::core::convert::From<NotInitializing> for LightClientOptimizedErrors {
         fn from(value: NotInitializing) -> Self {
             Self::NotInitializing(value)
         }
     }
-    impl ::core::convert::From<OutdatedState> for LightClientErrors {
+    impl ::core::convert::From<OutdatedState> for LightClientOptimizedErrors {
         fn from(value: OutdatedState) -> Self {
             Self::OutdatedState(value)
         }
     }
-    impl ::core::convert::From<OwnableInvalidOwner> for LightClientErrors {
+    impl ::core::convert::From<OwnableInvalidOwner> for LightClientOptimizedErrors {
         fn from(value: OwnableInvalidOwner) -> Self {
             Self::OwnableInvalidOwner(value)
         }
     }
-    impl ::core::convert::From<OwnableUnauthorizedAccount> for LightClientErrors {
+    impl ::core::convert::From<OwnableUnauthorizedAccount> for LightClientOptimizedErrors {
         fn from(value: OwnableUnauthorizedAccount) -> Self {
             Self::OwnableUnauthorizedAccount(value)
         }
     }
-    impl ::core::convert::From<UUPSUnauthorizedCallContext> for LightClientErrors {
+    impl ::core::convert::From<UUPSUnauthorizedCallContext> for LightClientOptimizedErrors {
         fn from(value: UUPSUnauthorizedCallContext) -> Self {
             Self::UUPSUnauthorizedCallContext(value)
         }
     }
-    impl ::core::convert::From<UUPSUnsupportedProxiableUUID> for LightClientErrors {
+    impl ::core::convert::From<UUPSUnsupportedProxiableUUID> for LightClientOptimizedErrors {
         fn from(value: UUPSUnsupportedProxiableUUID) -> Self {
             Self::UUPSUnsupportedProxiableUUID(value)
         }
     }
-    impl ::core::convert::From<WrongStakeTableUsed> for LightClientErrors {
+    impl ::core::convert::From<WrongStakeTableUsed> for LightClientOptimizedErrors {
         fn from(value: WrongStakeTableUsed) -> Self {
             Self::WrongStakeTableUsed(value)
         }
@@ -1758,7 +1758,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub enum LightClientEvents {
+    pub enum LightClientOptimizedEvents {
         EpochChangedFilter(EpochChangedFilter),
         InitializedFilter(InitializedFilter),
         NewStateFilter(NewStateFilter),
@@ -1766,32 +1766,34 @@ pub mod light_client {
         UpgradeFilter(UpgradeFilter),
         UpgradedFilter(UpgradedFilter),
     }
-    impl ::ethers::contract::EthLogDecode for LightClientEvents {
+    impl ::ethers::contract::EthLogDecode for LightClientOptimizedEvents {
         fn decode_log(
             log: &::ethers::core::abi::RawLog,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
             if let Ok(decoded) = EpochChangedFilter::decode_log(log) {
-                return Ok(LightClientEvents::EpochChangedFilter(decoded));
+                return Ok(LightClientOptimizedEvents::EpochChangedFilter(decoded));
             }
             if let Ok(decoded) = InitializedFilter::decode_log(log) {
-                return Ok(LightClientEvents::InitializedFilter(decoded));
+                return Ok(LightClientOptimizedEvents::InitializedFilter(decoded));
             }
             if let Ok(decoded) = NewStateFilter::decode_log(log) {
-                return Ok(LightClientEvents::NewStateFilter(decoded));
+                return Ok(LightClientOptimizedEvents::NewStateFilter(decoded));
             }
             if let Ok(decoded) = OwnershipTransferredFilter::decode_log(log) {
-                return Ok(LightClientEvents::OwnershipTransferredFilter(decoded));
+                return Ok(LightClientOptimizedEvents::OwnershipTransferredFilter(
+                    decoded,
+                ));
             }
             if let Ok(decoded) = UpgradeFilter::decode_log(log) {
-                return Ok(LightClientEvents::UpgradeFilter(decoded));
+                return Ok(LightClientOptimizedEvents::UpgradeFilter(decoded));
             }
             if let Ok(decoded) = UpgradedFilter::decode_log(log) {
-                return Ok(LightClientEvents::UpgradedFilter(decoded));
+                return Ok(LightClientOptimizedEvents::UpgradedFilter(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData)
         }
     }
-    impl ::core::fmt::Display for LightClientEvents {
+    impl ::core::fmt::Display for LightClientOptimizedEvents {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::EpochChangedFilter(element) => ::core::fmt::Display::fmt(element, f),
@@ -1803,32 +1805,32 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<EpochChangedFilter> for LightClientEvents {
+    impl ::core::convert::From<EpochChangedFilter> for LightClientOptimizedEvents {
         fn from(value: EpochChangedFilter) -> Self {
             Self::EpochChangedFilter(value)
         }
     }
-    impl ::core::convert::From<InitializedFilter> for LightClientEvents {
+    impl ::core::convert::From<InitializedFilter> for LightClientOptimizedEvents {
         fn from(value: InitializedFilter) -> Self {
             Self::InitializedFilter(value)
         }
     }
-    impl ::core::convert::From<NewStateFilter> for LightClientEvents {
+    impl ::core::convert::From<NewStateFilter> for LightClientOptimizedEvents {
         fn from(value: NewStateFilter) -> Self {
             Self::NewStateFilter(value)
         }
     }
-    impl ::core::convert::From<OwnershipTransferredFilter> for LightClientEvents {
+    impl ::core::convert::From<OwnershipTransferredFilter> for LightClientOptimizedEvents {
         fn from(value: OwnershipTransferredFilter) -> Self {
             Self::OwnershipTransferredFilter(value)
         }
     }
-    impl ::core::convert::From<UpgradeFilter> for LightClientEvents {
+    impl ::core::convert::From<UpgradeFilter> for LightClientOptimizedEvents {
         fn from(value: UpgradeFilter) -> Self {
             Self::UpgradeFilter(value)
         }
     }
-    impl ::core::convert::From<UpgradedFilter> for LightClientEvents {
+    impl ::core::convert::From<UpgradedFilter> for LightClientOptimizedEvents {
         fn from(value: UpgradedFilter) -> Self {
             Self::UpgradedFilter(value)
         }
@@ -2178,7 +2180,7 @@ pub mod light_client {
     pub struct VotingThresholdCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
-    pub enum LightClientCalls {
+    pub enum LightClientOptimizedCalls {
         Major(MajorCall),
         Minor(MinorCall),
         Patch(PatchCall),
@@ -2201,7 +2203,7 @@ pub mod light_client {
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
         VotingThreshold(VotingThresholdCall),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientCalls {
+    impl ::ethers::core::abi::AbiDecode for LightClientOptimizedCalls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -2300,7 +2302,7 @@ pub mod light_client {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientCalls {
+    impl ::ethers::core::abi::AbiEncode for LightClientOptimizedCalls {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::Major(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -2335,7 +2337,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::fmt::Display for LightClientCalls {
+    impl ::core::fmt::Display for LightClientOptimizedCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::Major(element) => ::core::fmt::Display::fmt(element, f),
@@ -2362,107 +2364,107 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<MajorCall> for LightClientCalls {
+    impl ::core::convert::From<MajorCall> for LightClientOptimizedCalls {
         fn from(value: MajorCall) -> Self {
             Self::Major(value)
         }
     }
-    impl ::core::convert::From<MinorCall> for LightClientCalls {
+    impl ::core::convert::From<MinorCall> for LightClientOptimizedCalls {
         fn from(value: MinorCall) -> Self {
             Self::Minor(value)
         }
     }
-    impl ::core::convert::From<PatchCall> for LightClientCalls {
+    impl ::core::convert::From<PatchCall> for LightClientOptimizedCalls {
         fn from(value: PatchCall) -> Self {
             Self::Patch(value)
         }
     }
-    impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientCalls {
+    impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientOptimizedCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
         }
     }
-    impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
+    impl ::core::convert::From<BlocksPerEpochCall> for LightClientOptimizedCalls {
         fn from(value: BlocksPerEpochCall) -> Self {
             Self::BlocksPerEpoch(value)
         }
     }
-    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientCalls {
+    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientOptimizedCalls {
         fn from(value: ComputeStakeTableCommCall) -> Self {
             Self::ComputeStakeTableComm(value)
         }
     }
-    impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
+    impl ::core::convert::From<CurrentEpochCall> for LightClientOptimizedCalls {
         fn from(value: CurrentEpochCall) -> Self {
             Self::CurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientOptimizedCalls {
         fn from(value: FrozenStakeTableCommitmentCall) -> Self {
             Self::FrozenStakeTableCommitment(value)
         }
     }
-    impl ::core::convert::From<FrozenThresholdCall> for LightClientCalls {
+    impl ::core::convert::From<FrozenThresholdCall> for LightClientOptimizedCalls {
         fn from(value: FrozenThresholdCall) -> Self {
             Self::FrozenThreshold(value)
         }
     }
-    impl ::core::convert::From<GetFinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<GetFinalizedStateCall> for LightClientOptimizedCalls {
         fn from(value: GetFinalizedStateCall) -> Self {
             Self::GetFinalizedState(value)
         }
     }
-    impl ::core::convert::From<GetGenesisStateCall> for LightClientCalls {
+    impl ::core::convert::From<GetGenesisStateCall> for LightClientOptimizedCalls {
         fn from(value: GetGenesisStateCall) -> Self {
             Self::GetGenesisState(value)
         }
     }
-    impl ::core::convert::From<InitializeCall> for LightClientCalls {
+    impl ::core::convert::From<InitializeCall> for LightClientOptimizedCalls {
         fn from(value: InitializeCall) -> Self {
             Self::Initialize(value)
         }
     }
-    impl ::core::convert::From<NewFinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<NewFinalizedStateCall> for LightClientOptimizedCalls {
         fn from(value: NewFinalizedStateCall) -> Self {
             Self::NewFinalizedState(value)
         }
     }
-    impl ::core::convert::From<OwnerCall> for LightClientCalls {
+    impl ::core::convert::From<OwnerCall> for LightClientOptimizedCalls {
         fn from(value: OwnerCall) -> Self {
             Self::Owner(value)
         }
     }
-    impl ::core::convert::From<ProxiableUUIDCall> for LightClientCalls {
+    impl ::core::convert::From<ProxiableUUIDCall> for LightClientOptimizedCalls {
         fn from(value: ProxiableUUIDCall) -> Self {
             Self::ProxiableUUID(value)
         }
     }
-    impl ::core::convert::From<RenounceOwnershipCall> for LightClientCalls {
+    impl ::core::convert::From<RenounceOwnershipCall> for LightClientOptimizedCalls {
         fn from(value: RenounceOwnershipCall) -> Self {
             Self::RenounceOwnership(value)
         }
     }
-    impl ::core::convert::From<StatesCall> for LightClientCalls {
+    impl ::core::convert::From<StatesCall> for LightClientOptimizedCalls {
         fn from(value: StatesCall) -> Self {
             Self::States(value)
         }
     }
-    impl ::core::convert::From<TransferOwnershipCall> for LightClientCalls {
+    impl ::core::convert::From<TransferOwnershipCall> for LightClientOptimizedCalls {
         fn from(value: TransferOwnershipCall) -> Self {
             Self::TransferOwnership(value)
         }
     }
-    impl ::core::convert::From<UpgradeToAndCallCall> for LightClientCalls {
+    impl ::core::convert::From<UpgradeToAndCallCall> for LightClientOptimizedCalls {
         fn from(value: UpgradeToAndCallCall) -> Self {
             Self::UpgradeToAndCall(value)
         }
     }
-    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientOptimizedCalls {
         fn from(value: VotingStakeTableCommitmentCall) -> Self {
             Self::VotingStakeTableCommitment(value)
         }
     }
-    impl ::core::convert::From<VotingThresholdCall> for LightClientCalls {
+    impl ::core::convert::From<VotingThresholdCall> for LightClientOptimizedCalls {
         fn from(value: VotingThresholdCall) -> Self {
             Self::VotingThreshold(value)
         }

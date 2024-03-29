@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
-import { BN254 } from "bn254/BN254.sol";
+
 import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
 

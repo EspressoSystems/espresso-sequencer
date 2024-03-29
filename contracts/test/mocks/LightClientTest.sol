@@ -5,20 +5,13 @@ pragma solidity ^0.8.0;
 import { LightClient as LC } from "../../src/LightClient.sol";
 import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "../../src/libraries/PlonkVerifier.sol";
+import { PlonkVerifierOptimized } from "../../src/libraries/PlonkVerifierOptimized.sol";
 import { LightClientStateUpdateVKTest as VkLibTest } from "./LightClientStateUpdateVKTest.sol";
-import { LightClientStateUpdateVK as VkLib } from "../../src/libraries/LightClientStateUpdateVK.sol";
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientTest is LC {
-    bool public optimizedTranscript;
-
     constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
         _initializeState(genesis, numBlockPerEpoch);
-        optimizedTranscript = false;
-    }
-
-    function switchToOptimizedTranscript() public {
-        optimizedTranscript = true;
     }
 
     /// @dev Directly mutate `currentEpoch` variable for test
@@ -38,13 +31,32 @@ contract LightClientTest is LC {
         override
     {
         IPlonkVerifier.VerifyingKey memory vk = VkLibTest.getVk();
-        if (optimizedTranscript) {
-            vk.id = VkLib.LIGHTCLIENT_STATE_UPDATE_VK_ID;
-        }
 
         uint256[] memory publicInput = preparePublicInput(state);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+            revert InvalidProof();
+        }
+    }
+}
+
+/// @dev A helper that wraps LightClient contract for testing
+contract LightClientTestOptimized is LC {
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
+        _initializeState(genesis, numBlockPerEpoch);
+    }
+
+    /// @dev override the production-implementation with test VK.
+    function verifyProof(LC.LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
+        internal
+        view
+        override
+    {
+        IPlonkVerifier.VerifyingKey memory vk = VkLibTest.getVk();
+
+        uint256[] memory publicInput = preparePublicInput(state);
+
+        if (!PlonkVerifierOptimized.verify(vk, publicInput, proof, bytes(""))) {
             revert InvalidProof();
         }
     }
