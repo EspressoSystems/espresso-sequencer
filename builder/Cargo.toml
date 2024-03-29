@@ -39,5 +39,6 @@ tide-disco = { workspace = true }
 surf-disco = { workspace = true }
 url = { workspace = true }
 cld = { workspace = true }
+surf = "2.3.1"
 dotenvy = { workspace = true }
 # [[bin]]

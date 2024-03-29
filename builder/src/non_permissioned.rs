@@ -39,6 +39,7 @@ use hotshot_events_service::{
 
 use crate::run_builder_api_service;
 use std::{num::NonZeroUsize, time::Duration};
+use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -143,6 +144,7 @@ impl BuilderConfig {
         // client subscrive to hotshot events
         let subscribed_events = client
             .socket("hotshot_events/events")
+            .header(ACCEPT, "application/octet-stream")
             .subscribe::<BuilderEvent<SeqTypes>>()
             .await
             .unwrap();

@@ -1354,6 +1354,7 @@ dependencies = [
  "sequencer",
  "serde",
  "snafu 0.8.2",
+ "surf",
  "surf-disco",
  "tagged-base64",
  "tide-disco",
