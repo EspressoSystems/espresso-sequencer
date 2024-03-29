@@ -1334,7 +1334,9 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
+ "cld",
  "commit",
+ "dotenvy",
  "es-version",
  "ethers",
  "futures",
@@ -1356,6 +1358,7 @@ dependencies = [
  "tagged-base64",
  "tide-disco",
  "tracing",
+ "url",
  "versioned-binary-serialization",
 ]
 

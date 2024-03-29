@@ -37,4 +37,7 @@ tracing = { workspace = true }
 versioned-binary-serialization = { workspace = true }
 tide-disco = { workspace = true }
 surf-disco = { workspace = true }
+url = { workspace = true }
+cld = { workspace = true }
+dotenvy = { workspace = true }
 # [[bin]]

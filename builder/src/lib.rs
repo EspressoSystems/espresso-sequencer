@@ -65,6 +65,7 @@ use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
 use versioned_binary_serialization::version::StaticVersionType;
+
 pub mod non_permissioned;
 pub mod permissioned;
 
