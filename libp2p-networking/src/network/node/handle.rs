@@ -181,7 +181,7 @@ impl NetworkNodeHandle {
     ///
     /// # Errors
     ///
-    /// Will retrun a networking error if the channel closes before the result
+    /// Will return a networking error if the channel closes before the result
     /// can be sent back
     pub async fn request_data<VER: StaticVersionType>(
         &self,

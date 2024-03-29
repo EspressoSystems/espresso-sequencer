@@ -44,7 +44,7 @@ impl RequestResponseState {
                 } => {
                     let chan = self.request_map.remove(&request_id)?;
                     if chan.send(Some(response)).is_err() {
-                        tracing::warn!("Failed to send resonse to client, channel closed.");
+                        tracing::warn!("Failed to send response to client, channel closed.");
                     }
                     None
                 }
@@ -57,7 +57,7 @@ impl RequestResponseState {
                 tracing::warn!("Error Sending Request {:?}", error);
                 let chan = self.request_map.remove(&request_id)?;
                 if chan.send(None).is_err() {
-                    tracing::warn!("Failed to send resonse to client, channel closed.");
+                    tracing::warn!("Failed to send response to client, channel closed.");
                 }
                 None
             }

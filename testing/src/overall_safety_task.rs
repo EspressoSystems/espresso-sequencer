@@ -52,7 +52,7 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     NotEnoughDecides {
         /// expected number of decides
         expected: usize,
-        /// acutal number of decides
+        /// actual number of decides
         got: usize,
     },
     /// mismatched leaves for a view

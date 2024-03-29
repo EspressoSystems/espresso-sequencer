@@ -100,7 +100,7 @@ pub enum NetworkError {
         /// source of error
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    /// collection of libp2p secific errors
+    /// collection of libp2p specific errors
     Libp2pMulti {
         /// sources of errors
         sources: Vec<Box<dyn std::error::Error + Send + Sync>>,
@@ -275,7 +275,7 @@ pub enum RequestKind<TYPES: NodeType> {
     DAProposal(TYPES::Time),
 }
 
-/// A resopnse for a request.  `SequencingMessage` is the same as other network messages
+/// A response for a request.  `SequencingMessage` is the same as other network messages
 /// The kind of message `M` is is determined by what we requested
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
@@ -604,7 +604,7 @@ impl NetworkReliability for PartiallySynchronousNetwork {
         true
     }
     fn sample_delay(&self) -> Duration {
-        // act asyncronous before gst
+        // act asynchronous before gst
         if self.start.elapsed() < self.gst {
             if self.asynchronous.sample_keep() {
                 self.asynchronous.sample_delay()
@@ -613,7 +613,7 @@ impl NetworkReliability for PartiallySynchronousNetwork {
                 self.synchronous.sample_delay() + self.gst
             }
         } else {
-            // act syncronous after gst
+            // act synchronous after gst
             self.synchronous.sample_delay()
         }
     }

@@ -42,7 +42,7 @@ async fn test_catchup() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        // Make sure we keep commiting rounds after the catchup, but not the full 50.
+        // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
         num_failed_views: 5,
         ..Default::default()
@@ -107,7 +107,7 @@ async fn test_catchup_cdn() {
         .await;
 }
 
-/// Test that one node catches up and has sucessful views after coming back
+/// Test that one node catches up and has successful views after coming back
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -148,7 +148,7 @@ async fn test_catchup_one_node() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        // Make sure we keep commiting rounds after the catchup, but not the full 50.
+        // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
         num_failed_views: 2,
         ..Default::default()
@@ -269,7 +269,7 @@ async fn test_catchup_reload() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        // Make sure we keep commiting rounds after the catchup, but not the full 50.
+        // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
         ..Default::default()
     };

@@ -127,7 +127,7 @@ where
         Storage = TestStorage<TYPES>,
     >,
 {
-    /// excecute test
+    /// execute test
     ///
     /// # Panics
     /// if the test fails

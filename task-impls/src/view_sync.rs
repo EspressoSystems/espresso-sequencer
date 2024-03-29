@@ -70,7 +70,7 @@ pub struct ViewSyncTaskState<
     pub next_view: TYPES::Time,
     /// Network for all nodes
     pub network: Arc<I::QuorumNetwork>,
-    /// Membership for teh quorum
+    /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
@@ -166,7 +166,7 @@ pub struct ViewSyncReplicaTaskState<
 
     /// Network for all nodes
     pub network: Arc<I::QuorumNetwork>,
-    /// Membership for teh quorum
+    /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,

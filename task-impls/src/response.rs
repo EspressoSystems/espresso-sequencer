@@ -111,7 +111,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     }
 
     /// Handle the request contained in the message. Returns the response we should send
-    /// First parses the kind and passes to the appropriate hanlder for the specific type
+    /// First parses the kind and passes to the appropriate handler for the specific type
     /// of the request.
     async fn handle_request(&self, req: DataRequest<TYPES>) -> Message<TYPES> {
         match req.request {

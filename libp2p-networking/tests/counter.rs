@@ -495,7 +495,7 @@ async fn test_coverage_request_response_one_round() {
     .await;
 }
 
-/// stress test of direct messsage
+/// stress test of direct message
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]

@@ -170,7 +170,7 @@ impl<K: Key> MerkleProof<K> {
 
 #[tagged("MERKLE_COMM")]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, CanonicalSerialize, CanonicalDeserialize)]
-/// A succint commitment for Merkle tree
+/// A succinct commitment for Merkle tree
 pub struct MerkleCommitment {
     /// Merkle tree digest
     comm: FieldType,
@@ -203,7 +203,7 @@ impl MerkleCommitment {
 }
 
 impl<K: Key> PersistentMerkleNode<K> {
-    /// Returns the succint commitment of this subtree
+    /// Returns the succinct commitment of this subtree
     pub fn commitment(&self) -> FieldType {
         match self {
             PersistentMerkleNode::Empty => FieldType::from(0),

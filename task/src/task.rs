@@ -32,7 +32,7 @@ use crate::{
 pub trait TaskState: Send {
     /// Type of event sent and received by the task
     type Event: Clone + Send + Sync + 'static;
-    /// The result returned when this task compeltes
+    /// The result returned when this task completes
     type Output: Send;
     /// Handle event and update state.  Return true if the task is finished
     /// false otherwise.  The handler can access the state through `Task::state_mut`
@@ -183,7 +183,7 @@ impl<S: TaskState + Send + 'static> Task<S> {
         &self.state
     }
 
-    /// Spawn a new task adn register it.  It will get all events not seend
+    /// Spawn a new task and register it.  It will get all events not seend
     /// by the task creating it.
     pub async fn run_sub_task(&self, state: S) {
         let task = Task {
@@ -323,7 +323,7 @@ impl TaskRegistry {
     }
     /// Wait for the results of all the tasks registered
     /// # Panics
-    /// Panics if one of the tasks paniced
+    /// Panics if one of the tasks panicked
     pub async fn join_all(self) -> Vec<()> {
         #[cfg(async_executor_impl = "async-std")]
         let ret = join_all(self.task_handles.into_inner()).await;

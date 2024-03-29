@@ -13,7 +13,7 @@ pub type FieldType = ark_ed_on_bn254::Fq;
 
 /// Hashable representation of a key
 /// NOTE: commitment is only used in light client contract.
-/// For this application, we needs only hash the Schnorr verfication key.
+/// For this application, we needs only hash the Schnorr verification key.
 impl ToFields<FieldType> for StateVerKey {
     const SIZE: usize = 2;
 

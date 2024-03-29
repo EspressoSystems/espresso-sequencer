@@ -52,9 +52,9 @@ pub struct DHTBehaviour {
     in_progress_get_record_queries: HashMap<QueryId, KadGetQuery>,
     /// List of in-progress put requests
     in_progress_put_record_queries: HashMap<QueryId, KadPutQuery>,
-    /// List of previously failled get requests
+    /// List of previously failed get requests
     queued_get_record_queries: VecDeque<KadGetQuery>,
-    /// List of previously failled put requests
+    /// List of previously failed put requests
     queued_put_record_queries: VecDeque<KadPutQuery>,
     /// Kademlia behaviour
     pub kadem: KademliaBehaviour<MemoryStore>,
@@ -278,7 +278,7 @@ impl DHTBehaviour {
         };
 
         // if the query has completed and we need to retry
-        // or if the query has enoguh replicas to return to the client
+        // or if the query has enough replicas to return to the client
         // trigger retry or completion logic
         if num >= NUM_REPLICATED_TO_TRUST || last {
             if let Some(KadGetQuery {
@@ -441,7 +441,7 @@ impl DHTBehaviour {
                     info!("Finished bootstrap for peer {:?}", self.peer_id);
                     self.bootstrap_state.state = State::NotStarted;
                     self.event_queue.push(DHTEvent::IsBootstrapped);
-                    // After initial bootstrap suceeds do it every 2 minutes to maintain routing.
+                    // After initial bootstrap succeeds do it every 2 minutes to maintain routing.
                     self.bootstrap_state.backoff =
                         ExponentialBackoff::new(1, Duration::from_secs(120));
                     self.bootstrap_state.backoff.start_next(true);

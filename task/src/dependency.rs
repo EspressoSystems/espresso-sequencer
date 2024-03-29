@@ -77,7 +77,7 @@ impl<T: Clone + Send + Sync + 'static> AndDependency<T> {
     }
 }
 
-/// Defines a dependency that complets when one of it's dependencies compeltes
+/// Defines a dependency that completes when one of it's dependencies completes
 pub struct OrDependency<T> {
     /// Dependencies being combined
     deps: Vec<BoxFuture<'static, Option<T>>>,
@@ -108,16 +108,16 @@ impl<T: Clone + Send + Sync + 'static> OrDependency<T> {
         }
         Self { deps: pinned }
     }
-    /// Add another dependecy
+    /// Add another dependency
     pub fn add_dep(&mut self, dep: impl Dependency<T> + Send + 'static) {
         self.deps.push(dep.completed().boxed());
     }
 }
 
-/// A dependency that listens on a chanel for an event
+/// A dependency that listens on a channel for an event
 /// that matches what some value it wants.
 pub struct EventDependency<T: Clone + Send + Sync> {
-    /// Channel of incomming events
+    /// Channel of incoming events
     pub(crate) event_rx: Receiver<T>,
 
     /// Closure which returns true if the incoming `T` is the

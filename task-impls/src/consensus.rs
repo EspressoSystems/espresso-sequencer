@@ -452,7 +452,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .metrics
                 .current_view
                 .set(usize::try_from(self.cur_view.get_u64()).unwrap());
-            // Do the comparison before the substraction to avoid potential overflow, since
+            // Do the comparison before the subtraction to avoid potential overflow, since
             // `last_decided_view` may be greater than `cur_view` if the node is catching up.
             if usize::try_from(self.cur_view.get_u64()).unwrap()
                 > usize::try_from(consensus.last_decided_view.get_u64()).unwrap()
@@ -564,7 +564,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // SS: It is possible that we may wish to vote against any quorum proposal
                 // if it attaches an upgrade certificate that we cannot support.
                 // But I don't think there's much point in this -- if the UpgradeCertificate
-                // threshhold (90%) has been reached, voting against the QuorumProposal on that basis
+                // threshold (90%) has been reached, voting against the QuorumProposal on that basis
                 // will probably be completely symbolic anyway.
                 //
                 // We should just make sure we don't *sign* an UpgradeCertificate for an upgrade
@@ -726,7 +726,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     return;
                 };
-
                 async_spawn(validate_proposal(
                     proposal.clone(),
                     parent_leaf,
@@ -911,7 +910,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 self.current_proposal = None;
             }
             HotShotEvent::QuorumVoteRecv(ref vote) => {
-                debug!("Received quroum vote: {:?}", vote.get_view_number());
+                debug!("Received quorum vote: {:?}", vote.get_view_number());
                 if self
                     .quorum_membership
                     .get_leader(vote.get_view_number() + 1)

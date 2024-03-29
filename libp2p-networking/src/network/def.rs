@@ -29,7 +29,7 @@ use libp2p_swarm_derive::NetworkBehaviour;
 #[behaviour(to_swarm = "NetworkEventInternal")]
 pub struct NetworkDef {
     /// purpose: broadcasting messages to many peers
-    /// NOTE gossipsub works ONLY for sharing messsages right now
+    /// NOTE gossipsub works ONLY for sharing messages right now
     /// in the future it may be able to do peer discovery and routing
     /// <https://github.com/libp2p/rust-libp2p/issues/2398>
     #[debug(skip)]
@@ -98,14 +98,14 @@ impl NetworkDef {
     /// Subscribe to a given topic
     pub fn subscribe_gossip(&mut self, t: &str) {
         if let Err(e) = self.gossipsub.subscribe(&IdentTopic::new(t)) {
-            error!("Failed to subsribe to topic {:?}. Error: {:?}", t, e);
+            error!("Failed to subscribe to topic {:?}. Error: {:?}", t, e);
         }
     }
 
     /// Unsubscribe from a given topic
     pub fn unsubscribe_gossip(&mut self, t: &str) {
         if let Err(e) = self.gossipsub.unsubscribe(&IdentTopic::new(t)) {
-            error!("Failed to unsubsribe from topic {:?}. Error: {:?}", t, e);
+            error!("Failed to unsubscribe from topic {:?}. Error: {:?}", t, e);
         }
     }
 }

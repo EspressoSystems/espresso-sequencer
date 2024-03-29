@@ -67,7 +67,7 @@ use versioned_binary_serialization::{
     BinarySerializer, Serializer,
 };
 
-/// convienence alias for the type for bootstrap addresses
+/// convenience alias for the type for bootstrap addresses
 /// concurrency primitives are needed for having tests
 pub type BootstrapAddrs = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
 

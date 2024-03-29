@@ -91,7 +91,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Allow an upgrade proposal that is one view older, in case we have voted on a quorum
                 // proposal and updated the view.
                 // `self.cur_view` should be at least 1 since there is a view change before getting
-                // the `UpgradeProposalRecv` event. Otherewise, the view number subtraction below will
+                // the `UpgradeProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO Come back to this - we probably don't need this, but we should also never receive a UpgradeCertificate where this fails, investigate block ready so it doesn't make one for the genesis block
 

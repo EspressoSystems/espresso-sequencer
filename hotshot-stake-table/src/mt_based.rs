@@ -246,7 +246,7 @@ mod tests {
             st.total_stake(SnapshotVersion::LastEpochStart)?,
             U256::from(0)
         );
-        // set to zero for futher sampling test
+        // set to zero for further sampling test
         assert_eq!(
             st.set_value(&keys[1], U256::from(0)).unwrap(),
             U256::from(100)

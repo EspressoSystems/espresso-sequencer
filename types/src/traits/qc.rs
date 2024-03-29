@@ -69,7 +69,7 @@ pub trait QuorumCertificateScheme<
     /// Checks an aggregated signature over some message provided as input
     /// * `qc_vp` - public parameters for validating the QC
     /// * `message` - message to check the aggregated signature against
-    /// * `qc` - quroum certificate
+    /// * `qc` - quorum certificate
     /// * `returns` - the quorum size if the qc is valid, an error otherwise.
     ///
     /// # Errors

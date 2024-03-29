@@ -1,6 +1,6 @@
 # USAGE
 
-Networking library inteded for use with HotShot. Builds upon abstractions from libp2p-rs.
+Networking library intended for use with HotShot. Builds upon abstractions from libp2p-rs.
 
 ## CLI Demo
 

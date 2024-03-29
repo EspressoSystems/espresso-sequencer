@@ -182,7 +182,7 @@ impl AsRef<Sha256Digest> for BuilderCommitment {
 
 /// For the wire format, we use bincode with the following options:
 ///   - No upper size limit
-///   - Litte endian encoding
+///   - Little endian encoding
 ///   - Varint encoding
 ///   - Reject trailing bytes
 #[allow(clippy::type_complexity)]

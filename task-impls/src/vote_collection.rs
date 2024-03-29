@@ -23,7 +23,7 @@ use hotshot_types::{
 };
 use tracing::{debug, error};
 
-/// Task state for collecting votes of one type and emiting a certificate
+/// Task state for collecting votes of one type and emitting a certificate
 pub struct VoteCollectionTaskState<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,

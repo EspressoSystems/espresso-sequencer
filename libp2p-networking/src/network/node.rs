@@ -488,7 +488,7 @@ impl NetworkNode {
         Ok(false)
     }
 
-    /// event handler for events emited from the swarm
+    /// event handler for events emitted from the swarm
     #[allow(clippy::type_complexity)]
     #[instrument(skip(self))]
     async fn handle_swarm_events(

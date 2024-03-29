@@ -79,7 +79,7 @@ async fn libp2p_network_failures_2() {
     metadata.start_nodes = 12;
     // 2 nodes fail triggering view sync, expect no other timeouts
     metadata.overall_safety_properties.num_failed_views = 1;
-    // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+    // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
     metadata.overall_safety_properties.num_successful_views = 15;
 
     metadata

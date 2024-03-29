@@ -90,7 +90,7 @@ cross_tests!(
         };
 
         metadata.overall_safety_properties.num_failed_views = 3;
-        // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+        // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 22;
         metadata
     }
@@ -106,7 +106,7 @@ cross_tests!(
 
         let mut metadata = TestMetadata::default_more_nodes();
         metadata.overall_safety_properties.num_failed_views = 6;
-        // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+        // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 22;
         metadata.num_bootstrap_nodes = 14;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
@@ -183,7 +183,7 @@ cross_tests!(
 
         // 2 nodes fail triggering view sync, expect no other timeouts
         metadata.overall_safety_properties.num_failed_views = 2;
-        // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+        // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 15;
 
         metadata

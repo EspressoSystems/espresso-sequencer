@@ -1,4 +1,4 @@
-//! Networking Implementation that has a primary and a fallback newtork.  If the primary
+//! Networking Implementation that has a primary and a fallback network.  If the primary
 //! Errors we will use the backup to send or receive
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
 use crate::traits::implementations::Libp2pNetwork;

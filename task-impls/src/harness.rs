@@ -40,7 +40,7 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
 /// outputs. Should be `false` in most cases.
 ///
 /// # Panics
-/// Panics if any state the test expects is not set. Panicing causes a test failure
+/// Panics if any state the test expects is not set. Panicking causes a test failure
 #[allow(clippy::implicit_hasher)]
 #[allow(clippy::panic)]
 pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(

@@ -74,7 +74,7 @@ pub const H_256: usize = 32;
 
 /// Bundle of the networks used in consensus
 pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Newtork for reaching all nodes
+    /// Network for reaching all nodes
     pub quorum_network: Arc<I::QuorumNetwork>,
 
     /// Network for reaching the DA committee
@@ -632,13 +632,13 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Optional validated state.
     ///
-    /// If it's given, we'll use it to constrcut the `SystemContext`. Otherwise, we'll construct
+    /// If it's given, we'll use it to construct the `SystemContext`. Otherwise, we'll construct
     /// the state from the block header.
     validated_state: Option<Arc<TYPES::ValidatedState>>,
 
     /// Optional state delta.
     ///
-    /// If it's given, we'll use it to constrcut the `SystemContext`.
+    /// If it's given, we'll use it to construct the `SystemContext`.
     state_delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
 
     /// Starting view number that we are confident won't lead to a double vote after restart.
@@ -677,7 +677,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// # Arguments
     /// *  `start_view` - The minimum view number that we are confident won't lead to a double vote
     /// after restart.
-    /// * `validated_state` - Optional validated state that if given, will be used to constrcut the
+    /// * `validated_state` - Optional validated state that if given, will be used to construct the
     /// `SystemContext`.
     pub fn from_reload(
         anchor_leaf: Leaf<TYPES>,

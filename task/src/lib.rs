@@ -1,6 +1,6 @@
-//! Task primatives for `HotShot`
+//! Task primitives for `HotShot`
 
-/// Simple Dependecy types
+/// Simple Dependency types
 pub mod dependency;
 /// Task which can uses dependencies
 pub mod dependency_task;

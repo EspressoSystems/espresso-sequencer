@@ -46,7 +46,7 @@ pub enum HotShotError<TYPES: NodeType> {
     },
     /// Item was not present in storage
     LeafNotFound {/* TODO we should create a way to to_string */},
-    /// Error accesing storage
+    /// Error accessing storage
     /// Invalid state machine state
     #[snafu(display("Invalid state machine state: {}", context))]
     InvalidState {
@@ -73,7 +73,7 @@ pub enum HotShotError<TYPES: NodeType> {
         /// Threshold of signatures needed for a quorum
         threshold: NonZeroU64,
     },
-    /// Miscelaneous error
+    /// Miscellaneous error
     /// TODO fix this with
     /// #181 <https://github.com/EspressoSystems/HotShot/issues/181>
     Misc {

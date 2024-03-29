@@ -73,7 +73,7 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// Get the vote commitment which the votes commit to
     fn get_data_commitment(&self) -> Commitment<Self::Voteable>;
 }
-/// Mapping of vote commitment to sigatures and bitvec
+/// Mapping of vote commitment to signatures and bitvec
 type SignersMap<COMMITMENT, KEY> = HashMap<
     COMMITMENT,
     (
@@ -87,7 +87,7 @@ pub struct VoteAccumulator<
     VOTE: Vote<TYPES>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 > {
-    /// Map of all signatures accumlated so far
+    /// Map of all signatures accumulated so far
     pub vote_outcomes: VoteMap2<
         Commitment<VOTE::Commitment>,
         TYPES::SignatureKey,

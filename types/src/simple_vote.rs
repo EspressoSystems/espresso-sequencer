@@ -95,7 +95,7 @@ mod sealed {
     /// Only structs in this file can impl `Sealed`
     pub trait Sealed {}
 
-    // TODO: Does the implement for things outside this file that are commitable?
+    // TODO: Does the implement for things outside this file that are committable?
     impl<C: Committable> Sealed for C {}
 }
 
