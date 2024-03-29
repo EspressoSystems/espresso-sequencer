@@ -98,43 +98,18 @@ library PlonkVerifierOptimized {
     ) external view returns (bool) {
         extraTranscriptInitMsg; // To avoid compiler warning
         _validateProof(proof);
-        for (uint256 i = 0; i < publicInput.length; i++) {
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
-        }
-        PcsInfo[] memory pcsInfos = new PcsInfo[](1);
-        pcsInfos[0] = _preparePcsInfo(verifyingKey, publicInput, proof);
-        return _batchVerifyOpeningProofs(pcsInfos);
-    }
 
-    /// @dev Batch verify multiple TurboPlonk proofs.
-    /// @param verifyingKeys An array of verifier keys
-    /// @param publicInputs A two-dimensional array of public inputs.
-    /// @param proofs An array of Plonk proofs
-    function batchVerify(
-        IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-        uint256[][] memory publicInputs,
-        IPlonkVerifier.PlonkProof[] memory proofs
-    ) external view returns (bool) {
-        if (
-            verifyingKeys.length != proofs.length || publicInputs.length != proofs.length
-                || proofs.length == 0
-        ) {
-            revert InvalidPlonkArgs();
-        }
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[0]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[1]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[2]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[3]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[4]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[5]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[6]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[7]));
 
-        PcsInfo[] memory pcsInfos = new PcsInfo[](proofs.length);
-        for (uint256 i = 0; i < proofs.length; i++) {
-            // validate proofs are proper group/field elements
-            _validateProof(proofs[i]);
-            // validate public input are all proper scalar fields
-            for (uint256 j = 0; j < publicInputs[i].length; j++) {
-                BN254.validateScalarField(BN254.ScalarField.wrap(publicInputs[i][j]));
-            }
-            // prepare pcs info
-            pcsInfos[i] = _preparePcsInfo(verifyingKeys[i], publicInputs[i], proofs[i]);
-        }
-
-        return _batchVerifyOpeningProofs(pcsInfos);
+        PcsInfo memory pcsInfo = _preparePcsInfo(verifyingKey, publicInput, proof);
+        return _verifyOpeningProofs(pcsInfo);
     }
 
     /// @dev Validate all group points and scalar fields. Revert if
@@ -444,128 +419,85 @@ library PlonkVerifierOptimized {
         }
     }
 
-    /// @dev Batchly verify multiple PCS opening proofs.
+    /// @dev Verify opening proof
     /// `open_key` has been assembled from BN254.P1(), BN254.P2() and contract variable _betaH
-    /// @param pcsInfos An array of PcsInfo
-    /// @dev Returns true if the entire batch verifiies and false otherwise.
-    function _batchVerifyOpeningProofs(PcsInfo[] memory pcsInfos) internal view returns (bool) {
-        uint256 pcsLen = pcsInfos.length;
+    /// @param pcsInfo A single PcsInfo
+    /// @dev Returns true if the pc opening verifies
+    function _verifyOpeningProofs(PcsInfo memory pcsInfo) internal view returns (bool) {
         uint256 p = BN254.R_MOD;
         // Compute a pseudorandom challenge from the instances
-        uint256 r = 1; // for a single proof, no need to use `r` (`r=1` has no effect)
-        if (pcsLen > 1) {
-            Transcript.TranscriptData memory transcript;
-            for (uint256 i = 0; i < pcsLen; i++) {
-                transcript.appendChallenge(pcsInfos[i].u);
-            }
-            r = transcript.getAndAppendChallenge();
-        }
 
         BN254.G1Point memory a1;
         BN254.G1Point memory b1;
 
-        // Compute A := A0 + r * A1 + ... + r^{m-1} * Am
+        // Compute A
         {
-            BN254.ScalarField[] memory scalars = new BN254.ScalarField[](2 * pcsLen);
-            BN254.G1Point[] memory bases = new BN254.G1Point[](2 * pcsLen);
+            BN254.ScalarField[] memory scalars = new BN254.ScalarField[](2);
+            BN254.G1Point[] memory bases = new BN254.G1Point[](2);
             uint256 rBase = 1;
-            for (uint256 i = 0; i < pcsLen; i++) {
-                scalars[2 * i] = BN254.ScalarField.wrap(rBase);
-                bases[2 * i] = pcsInfos[i].openingProof;
 
-                {
-                    // slither-disable-next-line write-after-write
-                    uint256 tmp;
-                    uint256 u = pcsInfos[i].u;
-                    assembly {
-                        tmp := mulmod(rBase, u, p)
-                    }
-                    scalars[2 * i + 1] = BN254.ScalarField.wrap(tmp);
-                }
-                bases[2 * i + 1] = pcsInfos[i].shiftedOpeningProof;
+            scalars[0] = BN254.ScalarField.wrap(rBase);
+            bases[0] = pcsInfo.openingProof;
 
-                assembly {
-                    rBase := mulmod(rBase, r, p)
-                }
-            }
+            scalars[1] = BN254.ScalarField.wrap(pcsInfo.u);
+
+            bases[1] = pcsInfo.shiftedOpeningProof;
+
             a1 = BN254.multiScalarMul(bases, scalars);
         }
 
-        // Compute B := B0 + r * B1 + ... + r^{m-1} * Bm
+        // Compute B
         {
             BN254.ScalarField[] memory scalars;
             BN254.G1Point[] memory bases;
             {
                 // variable scoping to avoid "Stack too deep"
-                uint256 scalarsLenPerInfo = pcsInfos[0].commScalars.length;
-                uint256 totalScalarsLen = (2 + scalarsLenPerInfo) * pcsInfos.length + 1;
+                uint256 scalarsLenPerInfo = pcsInfo.commScalars.length;
+                uint256 totalScalarsLen = (2 + scalarsLenPerInfo) + 1;
                 scalars = new BN254.ScalarField[](totalScalarsLen);
                 bases = new BN254.G1Point[](totalScalarsLen);
             }
             uint256 sumEvals = 0;
             uint256 idx = 0;
-            uint256 rBase = 1;
-            for (uint256 i = 0; i < pcsInfos.length; i++) {
-                for (uint256 j = 0; j < pcsInfos[0].commScalars.length; j++) {
-                    {
-                        // scalars[idx] = (rBase * pcsInfos[i].commScalars[j]) % BN254.R_MOD;
-                        uint256 s = pcsInfos[i].commScalars[j];
-                        uint256 tmp;
-                        assembly {
-                            // slither-disable-next-line variable-scope
-                            tmp := mulmod(rBase, s, p)
-                        }
-                        scalars[idx] = BN254.ScalarField.wrap(tmp);
-                    }
-                    bases[idx] = pcsInfos[i].commBases[j];
-                    idx += 1;
-                }
 
-                {
-                    // scalars[idx] = (rBase * pcsInfos[i].evalPoint) % BN254.R_MOD;
-                    uint256 evalPoint = pcsInfos[i].evalPoint;
-                    uint256 tmp;
-                    assembly {
-                        // slither-disable-next-line variable-scope
-                        tmp := mulmod(rBase, evalPoint, p)
-                    }
-                    scalars[idx] = BN254.ScalarField.wrap(tmp);
-                }
-                bases[idx] = pcsInfos[i].openingProof;
+            for (uint256 j = 0; j < pcsInfo.commScalars.length; j++) {
+                scalars[idx] = BN254.ScalarField.wrap(pcsInfo.commScalars[j]);
+
+                bases[idx] = pcsInfo.commBases[j];
                 idx += 1;
+            }
 
-                {
-                    // scalars[idx] = (rBase * pcsInfos[i].u * pcsInfos[i].nextEvalPoint) %
-                    // BN254.R_MOD;
-                    uint256 u = pcsInfos[i].u;
-                    uint256 nextEvalPoint = pcsInfos[i].nextEvalPoint;
-                    uint256 tmp;
-                    assembly {
-                        // slither-disable-next-line variable-scope
-                        tmp := mulmod(rBase, mulmod(u, nextEvalPoint, p), p)
-                    }
-                    scalars[idx] = BN254.ScalarField.wrap(tmp);
+            scalars[idx] = BN254.ScalarField.wrap(pcsInfo.evalPoint);
+
+            bases[idx] = pcsInfo.openingProof;
+            idx += 1;
+
+            {
+                uint256 u = pcsInfo.u;
+                uint256 nextEvalPoint = pcsInfo.nextEvalPoint;
+                uint256 tmp;
+                assembly {
+                    // slither-disable-next-line variable-scope
+                    tmp := mulmod(u, nextEvalPoint, p)
                 }
-                bases[idx] = pcsInfos[i].shiftedOpeningProof;
-                idx += 1;
+                scalars[idx] = BN254.ScalarField.wrap(tmp);
+            }
+            bases[idx] = pcsInfo.shiftedOpeningProof;
+            idx += 1;
 
-                {
-                    // sumEvals = (sumEvals + rBase * pcsInfos[i].eval) % BN254.R_MOD;
-                    // rBase = (rBase * r) % BN254.R_MOD;
-                    uint256 eval = pcsInfos[i].eval;
-                    assembly {
-                        sumEvals := addmod(sumEvals, mulmod(rBase, eval, p), p)
-                        rBase := mulmod(rBase, r, p)
-                    }
+            {
+                uint256 eval = pcsInfo.eval;
+                assembly {
+                    sumEvals := addmod(sumEvals, eval, p)
                 }
             }
+
             scalars[idx] = BN254.negate(BN254.ScalarField.wrap(sumEvals));
             bases[idx] = BN254.P1();
             b1 = BN254.negate(BN254.multiScalarMul(bases, scalars));
         }
 
         // Check e(A, [x]2) ?= e(B, [1]2)
-        // TODO the tests pass but it feels wrong.
         BN254.G2Point memory betaH = BN254.G2Point({
             x0: BN254.BaseField.wrap(BETA_H_X1),
             x1: BN254.BaseField.wrap(BETA_H_X0),
