@@ -335,10 +335,9 @@ fn webserver_network_from_config<TYPES: NodeType, NetworkVersion: StaticVersionT
 /// # Panics
 /// If unable to create bootstrap nodes multiaddres or the libp2p config is invalid
 async fn libp2p_network_from_config<TYPES: NodeType>(
-    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    mut config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     pub_key: TYPES::SignatureKey,
 ) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
-    let mut config = config;
     let libp2p_config = config
         .libp2p_config
         .take()
