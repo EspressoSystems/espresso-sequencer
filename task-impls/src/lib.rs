@@ -46,3 +46,6 @@ pub mod response;
 
 /// Task for requesting the network for things
 pub mod request;
+
+/// Task for handling logic for quorum proposals
+pub mod quorum_proposal;

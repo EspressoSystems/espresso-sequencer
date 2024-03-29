@@ -139,4 +139,11 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeVoteSend(UpgradeVote<TYPES>),
     /// Upgrade certificate has been sent to the network
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
+
+    /** Quorum Proposal Task **/
+    /// Dummy quorum proposal to test if the quorum proposal dependency task works.
+    DummyQuorumProposalSend(TYPES::Time),
+    /// All required dependencies of the quorum proposal have been validated and the task is ready
+    /// to propose.
+    QuorumProposalDependenciesValidated(TYPES::Time),
 }

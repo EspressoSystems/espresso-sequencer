@@ -82,10 +82,7 @@ mod test {
     }
 
     fn eq_dep(rx: Receiver<usize>, val: usize) -> EventDependency<usize> {
-        EventDependency {
-            event_rx: rx,
-            match_fn: Box::new(move |v| *v == val),
-        }
+        EventDependency::new(rx, Box::new(move |v| *v == val))
     }
 
     #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
