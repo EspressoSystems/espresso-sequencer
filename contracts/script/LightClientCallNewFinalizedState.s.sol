@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
 import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
+import { LightClientOptimized as LCOpt } from "../src/LightClientOptimized.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
 contract CallNewFinalizedState is Script {
@@ -34,7 +35,7 @@ contract CallNewFinalizedState is Script {
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
 
-        LC lc = LC(lcContractAddress);
+        LCOpt lc = LCOpt(lcContractAddress);
         lc.newFinalizedState(states[0], proofs[0]);
 
         vm.stopBroadcast();

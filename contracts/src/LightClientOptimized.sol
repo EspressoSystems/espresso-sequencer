@@ -5,7 +5,8 @@ pragma experimental ABIEncoderV2;
 
 import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifierOptimized } from "./libraries/PlonkVerifierOptimized.sol";
-import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
+import { LightClientStateUpdateVKTest as VkLibTest } from
+    "../test/mocks/LightClientStateUpdateVKTest.sol";
 import { LightClient } from "./LightClient.sol";
 
 /// @title Optimized version of Light Client Contract
@@ -18,7 +19,8 @@ contract LightClientOptimized is LightClient {
         virtual
         override
     {
-        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
+        // TODO later this key will be hardcoded inside the optimized plonk verifier contract
+        IPlonkVerifier.VerifyingKey memory vk = VkLibTest.getVk();
         uint256[] memory publicInput = preparePublicInput(state);
 
         if (!PlonkVerifierOptimized.verify(vk, publicInput, proof, bytes(""))) {

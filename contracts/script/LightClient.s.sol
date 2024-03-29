@@ -99,7 +99,7 @@ contract DeployLightClientContractScript is Script {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
-        LC lightClientContract;
+        LightClientOptimized lightClientContract;
 
         lightClientContract = new LightClientOptimized();
 

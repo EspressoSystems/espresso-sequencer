@@ -142,13 +142,13 @@ Running the script will save a file with details about the deployment in `contra
 
 1. Deploy the light client contract on Sepolia. Set `SEPOLIA_RPC_URL`, `MNEMONIC` `ETHERSCAN_API_KEY` env vars and run:
    ```
-   forge script contracts/script/LightClient.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" 3 5  --fork-url $SEPOLIA_RPC_URL --broadcast --verify  --chain-id sepolia
+   forge script contracts/script/LightClient.s.sol --sig "runOptimized(uint32 numBlocksPerEpoch, uint32 numInitValidators)" 3 5  --fork-url $SEPOLIA_RPC_URL --broadcast --verify  --chain-id sepolia
    ```
 1. Create an account on [sentio.xyz](https://app.sentio.xyz/).
 1. Create a new project and add a contract with the address displayed by the following command:
 
 ```
-export LC_CONTRACT_ADDRESS=`cat contracts/broadcast/LightClient.s.sol/11155111/runTest-latest.json | jq -r .receipts[-1].contractAddress`
+export LC_CONTRACT_ADDRESS=`cat contracts/broadcast/LightClient.s.sol/11155111/runOptimized-latest.json | jq -r .receipts[-1].contractAddress`
 ```
 
 1. Call the light client contract
