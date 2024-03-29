@@ -65,86 +65,8 @@ use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
 use versioned_binary_serialization::version::StaticVersionType;
-
-type ElectionConfig = StaticElectionConfig;
-
 pub mod non_permissioned;
 pub mod permissioned;
-
-#[allow(clippy::too_many_arguments)]
-async fn init_hotshot<N: network::Type, Ver: StaticVersionType + 'static>(
-    config: HotShotConfig<PubKey, ElectionConfig>,
-    stake_table_entries_for_non_voting_nodes: Option<
-        Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
-    >,
-    instance_state: NodeState,
-    networks: Networks<SeqTypes, Node<N>>,
-    metrics: &dyn Metrics,
-    node_id: u64,
-    state_relay_server: Option<Url>,
-    stake_table_commit: StakeTableCommitmentType,
-    _: Ver,
-) -> (SystemContextHandle<SeqTypes, Node<N>>, StateSigner<Ver>) {
-    let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-        config.num_nodes_with_stake.get() as u64,
-        config.num_nodes_without_stake as u64,
-    );
-    let combined_known_nodes_with_stake = match stake_table_entries_for_non_voting_nodes {
-        Some(stake_table_entries) => {
-            let combined_entries = config
-                .known_nodes_with_stake
-                .iter()
-                .cloned()
-                .chain(stake_table_entries.into_iter())
-                .collect();
-            combined_entries
-        }
-        None => config.known_nodes_with_stake.clone(),
-    };
-    let membership =
-        GeneralStaticCommittee::create_election(combined_known_nodes_with_stake, election_config);
-    tracing::debug!("Before Membership creation");
-    let memberships = Memberships {
-        quorum_membership: membership.clone(),
-        da_membership: membership.clone(),
-        vid_membership: membership.clone(),
-        view_sync_membership: membership,
-    };
-    tracing::debug!("After membershiip creation");
-
-    // let stake_table_commit =
-    //     static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
-
-    tracing::debug!("After statke table commitment");
-
-    let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
-
-    let da_storage = Default::default();
-    tracing::debug!("Before hotshot handle initilisation");
-    let hotshot_handle = SystemContext::init(
-        config.my_own_validator_config.public_key,
-        config.my_own_validator_config.private_key.clone(),
-        node_id as u64,
-        config,
-        memberships,
-        networks,
-        HotShotInitializer::from_genesis(instance_state).unwrap(),
-        ConsensusMetricsValue::new(metrics),
-        da_storage,
-    )
-    .await
-    .unwrap()
-    .0;
-
-    tracing::debug!("Hotshot handle initialized");
-
-    let mut state_signer: StateSigner<Ver> = StateSigner::new(state_key_pair, stake_table_commit);
-
-    if let Some(url) = state_relay_server {
-        state_signer = state_signer.with_relay_server(url);
-    }
-    (hotshot_handle, state_signer)
-}
 
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
@@ -227,7 +149,7 @@ pub mod testing {
     use std::{num::NonZeroUsize, time::Duration};
 
     use crate::non_permissioned::BuilderConfig;
-    use crate::permissioned::BuilderContext;
+    use crate::permissioned::{init_hotshot, BuilderContext};
     use async_trait::async_trait;
     use hotshot_builder_api::builder::Options as HotshotBuilderApiOptions;
     use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
@@ -237,6 +159,7 @@ pub mod testing {
     };
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
+    type ElectionConfig = StaticElectionConfig;
     use snafu::*;
 
     #[derive(Clone)]
