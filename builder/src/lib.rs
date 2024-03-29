@@ -61,6 +61,9 @@ use tide_disco::{app, method::ReadState, App, Url};
 use versioned_binary_serialization::version::StaticVersionType;
 type ElectionConfig = StaticElectionConfig;
 
+pub mod non_permissioned;
+pub mod permissioned;
+
 pub struct BuilderContext<N: network::Type, Ver: StaticVersionType + 'static> {
     /// The consensus handle
     pub hotshot_handle: Consensus<N>,
@@ -107,26 +110,20 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         state_key_pair: state_key_pair.clone(),
     };
 
+    // Wait for orchestrator to start the node
     let wait_for_orchestrator = true;
 
+    // Load the network configuration from the orchestrator
     tracing::info!("loading network config from orchestrator");
-    let mut config: NetworkConfig<VerKey, StaticElectionConfig> =
-        NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
-            .await
-            .0;
+    let config = NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
+        .await
+        .0;
     tracing::info!(
     node_id = config.node_index,
     stake_table = ?config.config.known_nodes_with_stake,
     "loaded config",
     );
 
-    // Get updated config from orchestrator containing all peer's public keys
-    // config = orchestrator_client
-    //     .post_and_wait_all_public_keys(config.node_index, public_staking_key)
-    //     .await;
-
-    // config.config.my_own_validator_config.private_key = private_staking_key.clone();
-    // config.config.my_own_validator_config.public_key = public_staking_key;
     let node_index = config.node_index;
 
     tracing::info!("loaded config, we are node {}", config.node_index);
@@ -176,7 +173,9 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     );
     let stake_table_commit =
         static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
+
     let mut state_signer = StateSigner::new(state_key_pair, stake_table_commit);
+
     let hotshot_handle = init_hotshot(
         config.config,
         None,
@@ -189,16 +188,10 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
 
     let state_relay_server = Some(network_params.state_relay_server_url);
 
+    // TODO: Check if it required for a builder
     if let Some(url) = state_relay_server {
         state_signer = state_signer.with_relay_server(url);
     }
-    // let builder_ctx = BuilderContext {
-    //     hotshot_handle,
-    //     node_index,
-    //     state_signer,
-    //     wait_for_orchestrator: Some(Arc::new(orchestrator_client)),
-    // };
-    // Ok(builder_ctx)
     Ok(BuilderContext::new(
         hotshot_handle,
         node_index,
@@ -309,7 +302,7 @@ async fn handle_events(mut events: impl Stream<Item = Event<SeqTypes>> + Unpin) 
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 pub mod testing {
     use super::*;
     use commit::Committable;
@@ -330,10 +323,44 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     //use sequencer::persistence::NoStorage;
+    use async_broadcast::{
+        broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
+        TryRecvError,
+    };
+    use async_compatibility_layer::channel::unbounded;
+    use async_compatibility_layer::{
+        art::{async_sleep, async_spawn},
+        channel::{UnboundedReceiver, UnboundedSender},
+    };
+    use async_lock::RwLock;
+    use hotshot_builder_core::{
+        builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
+        service::GlobalState,
+    };
     use hotshot_types::event::LeafInfo;
+    use hotshot_types::{
+        data::{fake_commitment, Leaf, ViewNumber},
+        traits::{
+            block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::ConsensusTime,
+        },
+    };
     use sequencer::catchup::StateCatchup;
     use sequencer::{Event, Transaction};
     use std::{num::NonZeroUsize, time::Duration};
+
+    use crate::non_permissioned::BuilderConfig;
+    use async_trait::async_trait;
+    use hotshot_builder_api::builder::Options as HotshotBuilderApiOptions;
+    use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
+    use hotshot_events_service::{
+        events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+        events_source::{EventConsumer, EventsStreamer},
+    };
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use serde::{Deserialize, Serialize};
+    use snafu::*;
+
     #[derive(Clone)]
     pub struct HotShotTestConfig {
         pub config: HotShotConfig<PubKey, ElectionConfig>,
@@ -348,8 +375,8 @@ pub mod testing {
 
     impl Default for HotShotTestConfig {
         fn default() -> Self {
-            let num_nodes_with_stake = Self::NUM_NODES;
-            let num_nodes_without_stake = Self::BUILDER_NODES;
+            let num_nodes_with_stake = Self::NUM_STAKED_NODES;
+            let num_nodes_without_stake = Self::NUM_NON_STAKED_NODES;
 
             // first generate stake table entries for the staking nodes
             let (priv_keys_staking_nodes, staking_nodes_state_key_pairs, known_nodes_with_stake) =
@@ -405,6 +432,7 @@ pub mod testing {
             }
         }
     }
+
     pub fn genereate_stake_table_entries(
         num_nodes: u64,
         stake_value: u64,
@@ -434,8 +462,8 @@ pub mod testing {
     }
 
     impl HotShotTestConfig {
-        pub const NUM_NODES: usize = 4;
-        pub const BUILDER_NODES: usize = 2;
+        pub const NUM_STAKED_NODES: usize = 4;
+        pub const NUM_NON_STAKED_NODES: usize = 2;
 
         pub fn num_staked_nodes(&self) -> usize {
             self.priv_keys_staking_nodes.len()
@@ -447,7 +475,7 @@ pub mod testing {
             self.num_staked_nodes() + self.num_non_staked_nodes()
         }
         pub fn total_nodes() -> usize {
-            Self::NUM_NODES + Self::BUILDER_NODES
+            Self::NUM_STAKED_NODES + Self::NUM_NON_STAKED_NODES
         }
         pub fn get_anvil(&self) -> Arc<AnvilInstance> {
             self.anvil.clone()
@@ -523,8 +551,6 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            //let node_state = NodeState::mock(); //NodeState::new(L1Client::Default())
-            // TODO: I think not every node will have wallet, since only builder nodes
             let wallet = Self::builder_wallet(i);
             tracing::info!("node {i} is builder {:x}", wallet.address());
             let node_state = NodeState::new(
@@ -553,7 +579,70 @@ pub mod testing {
                 .build()
                 .unwrap()
         }
+
+        // url for the hotshot event streaming api
+        pub fn hotshot_event_streaming_api_url() -> Url {
+            // spawn the event streaming api
+            let port = portpicker::pick_unused_port()
+                .expect("Could not find an open port for hotshot event streaming api");
+
+            let hotshot_events_streaming_api_url =
+                Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+            hotshot_events_streaming_api_url
+        }
+
+        // start the server for the hotshot event streaming api
+        pub fn run_hotshot_event_streaming_api(
+            url: Url,
+            source: Arc<RwLock<EventsStreamer<SeqTypes>>>,
+        ) {
+            // Start the web server.
+            let hotshot_events_api = hotshot_events_service::events::define_api::<
+                Arc<RwLock<EventsStreamer<SeqTypes>>>,
+                SeqTypes,
+                Version01,
+            >(&EventStreamingApiOptioins::default())
+            .expect("Failed to define hotshot eventsAPI");
+
+            let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
+
+            app.register_module("hotshot_events", hotshot_events_api)
+                .expect("Failed to register hotshot events API");
+
+            async_spawn(app.serve(url, STATIC_VER_0_1));
+        }
+        // enable hotshot event streaming
+        pub fn enable_hotshot_node_event_streaming(
+            hotshot_events_api_url: Url,
+            known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
+            num_non_staking_nodes: usize,
+            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory>>,
+        ) {
+            // create a event streamer
+            let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
+                known_nodes_with_stake,
+                num_non_staking_nodes,
+            )));
+
+            // serve the hotshot event streaming api with events_streamer state
+            Self::run_hotshot_event_streaming_api(hotshot_events_api_url, events_streamer.clone());
+
+            // send the events to the event streaming state
+            async_spawn({
+                async move {
+                    let mut hotshot_event_stream = hotshot_context_handle.get_event_stream();
+                    loop {
+                        let event = hotshot_event_stream.next().await.unwrap();
+                        tracing::debug!("Befor writing in event streamer: {event:?}");
+                        events_streamer.write().await.handle_event(event).await;
+                        tracing::debug!("Event written to the event streamer");
+                    }
+                }
+            });
+        }
     }
+
     // Wait for decide event, make sure it matches submitted transaction. Return the block number
     // containing the transaction.
     pub async fn wait_for_decide_on_handle(
@@ -588,134 +677,29 @@ pub mod testing {
         }
     }
 
-    use async_broadcast::{
-        broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
-        TryRecvError,
-    };
-    use async_compatibility_layer::channel::unbounded;
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        channel::{UnboundedReceiver, UnboundedSender},
-    };
-    use async_lock::RwLock;
-    use hotshot_builder_core::{
-        builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
-        service::GlobalState,
-    };
-    use hotshot_types::{
-        data::{fake_commitment, Leaf, ViewNumber},
-        traits::{
-            block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::ConsensusTime,
-        },
-    };
-
-    pub struct BuilderTestConfig {
-        pub global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
-        pub builder_state: BuilderState<SeqTypes>,
-        pub hotshot_test_config: HotShotTestConfig,
-        pub tx_sender: BroadcastSender<MessageType<SeqTypes>>,
-        pub da_sender: BroadcastSender<MessageType<SeqTypes>>,
-        pub qc_sender: BroadcastSender<MessageType<SeqTypes>>,
-        pub decide_sender: BroadcastSender<MessageType<SeqTypes>>,
-        pub instance_state: NodeState,
+    pub struct NonPermissionedBuilderTestConfig {
+        pub builder_config: BuilderConfig,
     }
 
-    use async_trait::async_trait;
-    use hotshot_builder_api::builder::Options as HotshotBuilderApiOptions;
-    use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
-    use hotshot_events_service::{
-        events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
-        events_source::EventsStreamer,
-    };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use serde::{Deserialize, Serialize};
-    use snafu::*;
+    impl NonPermissionedBuilderTestConfig {
+        pub const SUBSCRIBED_DA_NODE_ID: usize = 5;
 
-    pub fn run_builder_apis_for_hotshot(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
-        let hotshot_api = hotshot_builder_api::builder::define_api::<
-            Arc<RwLock<GlobalState<SeqTypes>>>,
-            SeqTypes,
-            Version01,
-        >(&HotshotBuilderApiOptions::default())
-        .expect("Failed to construct the builder APIs for hotshot");
-
-        let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
-            App::with_state(source);
-
-        app.register_module("hotshot_builder", hotshot_api)
-            .expect("Failed to register the builder API for hotshot");
-
-        async_spawn(app.serve(url, STATIC_VER_0_1));
-    }
-
-    pub fn run_builder_api_to_receive_private_txns(
-        url: Url,
-        source: Arc<RwLock<GlobalState<SeqTypes>>>,
-    ) {
-        let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-            Arc<RwLock<GlobalState<SeqTypes>>>,
-            SeqTypes,
-            Version01,
-        >(&HotshotBuilderApiOptions::default())
-        .expect("Failed to construct the builder API for private mempool txns");
-
-        let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
-            App::with_state(source);
-
-        app.register_module("builder_private_mempool", private_mempool_api)
-            .expect("Failed to register the builder API for private mempool txns");
-
-        async_spawn(app.serve(url, STATIC_VER_0_1));
-    }
-
-    pub fn run_hotshot_event_streaming_api(
-        url: Url,
-        source: Arc<RwLock<EventsStreamer<SeqTypes>>>,
-    ) {
-        // Start the web server.
-        let hotshot_events_api = hotshot_events_service::events::define_api::<
-            Arc<RwLock<EventsStreamer<SeqTypes>>>,
-            SeqTypes,
-            Version01,
-        >(&EventStreamingApiOptioins::default())
-        .expect("Failed to define hotshot eventsAPI");
-
-        let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
-
-        app.register_module("hotshot_events", hotshot_events_api)
-            .expect("Failed to register hotshot events API");
-
-        async_spawn(app.serve(url, STATIC_VER_0_1));
-    }
-
-    impl BuilderTestConfig {
-        pub const BUILDER_ID: usize = 5;
-        pub fn new() -> Self {
-            let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-            // da channel
-            let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-            // qc channel
-            let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-            // decide channel
-            let (decide_sender, decide_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-
-            // api request channel
-            let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(15);
-            // response channel
-            let (res_sender, res_receiver) = unbounded();
-
-            let config = HotShotTestConfig::default();
-            // Hotshot Test Config
-            let wallet = HotShotTestConfig::builder_wallet(Self::BUILDER_ID);
+        pub async fn init_non_permissioned_builder(
+            hotshot_test_config: &HotShotTestConfig,
+            hotshot_events_streaming_api_url: Url,
+            hotshot_builder_api_url: Url,
+            txn_builder_api_url: Url,
+        ) -> Self {
+            // setup the instance state
+            let wallet = HotShotTestConfig::builder_wallet(Self::SUBSCRIBED_DA_NODE_ID);
             tracing::info!(
                 "node {} is builder {:x}",
-                Self::BUILDER_ID,
+                Self::SUBSCRIBED_DA_NODE_ID,
                 wallet.address()
             );
             let node_state = NodeState::new(
                 L1Client::new(
-                    config.get_anvil().endpoint().parse().unwrap(),
+                    hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
                 wallet,
@@ -723,49 +707,54 @@ pub mod testing {
             )
             .with_genesis(ValidatedState::default());
 
+            // generate builder keys
             let seed = [201_u8; 32];
-            // Builder Public, Private key
             let (builder_pub_key, builder_private_key) =
                 BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-            // create the global state
-            let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-                (builder_pub_key, builder_private_key),
-                req_sender,
-                res_receiver,
-                tx_sender.clone(),
-                node_state.clone(),
-            );
-            let global_state = Arc::new(RwLock::new(global_state));
-            let global_state_clone = global_state.clone();
-
+            // channel capacity for the builder states
+            let channel_capacity = NonZeroUsize::new(100).unwrap();
+            // bootstrapping view number
+            // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
-            let builder_state = BuilderState::<SeqTypes>::new(
-                (
-                    bootstrapped_view,
-                    vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                    fake_commitment(),
-                ),
-                tx_receiver,
-                decide_receiver,
-                da_receiver,
-                qc_receiver,
-                req_receiver,
-                global_state_clone,
-                res_sender,
-                NonZeroUsize::new(1).unwrap(),
+
+            let builder_config = BuilderConfig::init(
+                builder_pub_key,
+                builder_private_key,
                 bootstrapped_view,
-            );
+                channel_capacity,
+                node_state,
+                hotshot_events_streaming_api_url,
+                hotshot_builder_api_url,
+                txn_builder_api_url,
+            )
+            .await
+            .unwrap();
+
             Self {
-                global_state: global_state,
-                builder_state: builder_state,
-                hotshot_test_config: config,
-                tx_sender: tx_sender,
-                da_sender: da_sender,
-                qc_sender: qc_sender,
-                decide_sender: decide_sender,
-                instance_state: node_state,
+                builder_config: builder_config,
             }
+        }
+
+        pub fn hotshot_builder_api_url() -> Url {
+            // spawn the builder api
+            let port = portpicker::pick_unused_port()
+                .expect("Could not find an open port for builder api");
+
+            let hotshot_builder_api_url =
+                Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+            hotshot_builder_api_url
+        }
+        pub fn txn_builder_api_url() -> Url {
+            // spawn the builder api
+            let port = portpicker::pick_unused_port()
+                .expect("Could not find an open port for builder api");
+
+            let builder_txn_api_url =
+                Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+            builder_txn_api_url
         }
     }
 }
@@ -858,6 +847,7 @@ mod test {
         }
     }
 
+    /*
     #[async_std::test]
     async fn test_permissioned_builder_core() {
         use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -1050,268 +1040,5 @@ mod test {
 
         //task::sleep(std::time::Duration::from_secs(200)).await;
     }
-
-    #[async_std::test]
-    async fn test_permission_less_builder_core() {
-        use async_compatibility_layer::art::{async_sleep, async_spawn};
-        use async_std::task;
-        use hotshot_builder_api::{
-            block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-            builder::BuildError,
-        };
-        use hotshot_builder_core::builder_state::BuilderProgress;
-        use hotshot_builder_core::service::{
-            run_non_permissioned_standalone_builder_service,
-            run_permissioned_standalone_builder_service,
-        };
-        use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-        use hotshot_types::traits::{
-            block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-        };
-        use sequencer::transaction::Transaction;
-        use std::time::Duration;
-        use surf_disco::Client;
-        use testing::{
-            run_builder_api_to_receive_private_txns, run_builder_apis_for_hotshot,
-            run_hotshot_event_streaming_api, BuilderTestConfig,
-        };
-
-        use async_lock::RwLock;
-        use hotshot_events_service::{
-            events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
-            events_source::{BuilderEvent, EventConsumer, EventsStreamer},
-        };
-
-        setup_logging();
-        setup_backtrace();
-
-        let builder_test_config = BuilderTestConfig::new();
-        // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let handles = builder_test_config.hotshot_test_config.init_nodes().await;
-        // start consensus for all the nodes
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-        let builder_context_handle = handles[BuilderTestConfig::BUILDER_ID].clone();
-
-        // get the required stuff for the election config
-        let known_nodes_with_stake = builder_test_config
-            .hotshot_test_config
-            .config
-            .known_nodes_with_stake
-            .clone();
-
-        // get count of non-staking nodes
-        let num_non_staking_nodes = builder_test_config
-            .hotshot_test_config
-            .config
-            .num_nodes_without_stake;
-
-        // create a event streamer
-        let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
-            known_nodes_with_stake,
-            num_non_staking_nodes,
-        )));
-
-        // spawn the event streaming api
-        let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
-
-        let hotshot_events_streaming_api_url =
-            Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-
-        run_hotshot_event_streaming_api(hotshot_events_streaming_api_url, events_streamer.clone());
-
-        // create a client for it
-        // Start Client for the event streaming api
-        let client = Client::<EventStreamApiError, Version01>::new(
-            format!("http://localhost:{}/hotshot_events", port)
-                .parse()
-                .unwrap(),
-        );
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
-
-        tracing::info!("event streaming client connected to server");
-
-        // client subscrive to hotshot events
-        let subscribed_events: surf_disco::socket::Connection<
-            BuilderEvent<SeqTypes>,
-            surf_disco::socket::Unsupported,
-            EventStreamApiError,
-            versioned_binary_serialization::version::StaticVersion<0, 1>,
-        > = client
-            .socket("events")
-            .subscribe::<BuilderEvent<SeqTypes>>()
-            .await
-            .unwrap();
-
-        tracing::info!("Client 1 Subscribed to events");
-
-        // send the events to the event streaming api
-        async_spawn({
-            async move {
-                let mut hotshot_event_stream = builder_context_handle.get_event_stream();
-                loop {
-                    let event = hotshot_event_stream.next().await.unwrap();
-                    tracing::info!("Received event from handle/ before writing: {event:?}");
-                    events_streamer.write().await.handle_event(event).await;
-                    tracing::info!("Event written to the event streamer");
-                }
-            }
-        });
-
-        // spawn the builder service
-        async_spawn(async move {
-            run_non_permissioned_standalone_builder_service(
-                builder_test_config.tx_sender,
-                builder_test_config.da_sender,
-                builder_test_config.qc_sender,
-                builder_test_config.decide_sender,
-                subscribed_events,
-                builder_test_config.instance_state,
-            )
-            .await;
-        });
-
-        // spawn the builder event loop
-        async_spawn(async move {
-            builder_test_config.builder_state.event_loop();
-        });
-
-        // Run the builder apis to serve hotshot
-        let port = portpicker::pick_unused_port().expect("Could not find an open port for hotshot");
-
-        let hotshot_api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-
-        run_builder_apis_for_hotshot(
-            hotshot_api_url.clone(),
-            builder_test_config.global_state.clone(),
-        );
-
-        // Run the builder apis to serve private mempool txns
-        let port = portpicker::pick_unused_port()
-            .expect("Could not find an open port for private mempool txns");
-
-        let private_mempool_api_url =
-            Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-
-        run_builder_api_to_receive_private_txns(
-            private_mempool_api_url.clone(),
-            builder_test_config.global_state,
-        );
-
-        // Start a hotshot client.
-        let hotshot_client =
-            Client::<hotshot_builder_api::builder::Error, Version01>::new(hotshot_api_url);
-        assert!(hotshot_client.connect(Some(Duration::from_secs(60))).await);
-
-        // Start a private mempool client.
-        let private_mempool_client =
-            Client::<hotshot_builder_api::builder::Error, Version01>::new(private_mempool_api_url);
-        assert!(
-            private_mempool_client
-                .connect(Some(Duration::from_secs(60)))
-                .await
-        );
-
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
-
-        let response = loop {
-            // Test getting available blocks
-            match hotshot_client
-                .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                    "hotshot_builder/availableblocks/{parent_commitment}"
-                ))
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    //let blocks = response.body().await.unwrap();
-                    println!("Received Available Blocks: {:?}", response);
-                    assert!(!response.is_empty());
-                    tracing::info!("Exiting from first loop");
-                    break response;
-                }
-                Err(e) => {
-                    tracing::warn!("Error getting available blocks {:?}", e);
-                }
-            };
-        };
-
-        let builder_commitment = response[0].block_hash.clone();
-        let seed = [207_u8; 32];
-        // Builder Public, Private key
-        let (_hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
-
-        // sign the builder_commitment using the client_private_key
-        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &hotshot_client_private_key,
-            builder_commitment.as_ref(),
-        )
-        .expect("Claim block signing failed");
-
-        // Test claiming blocks
-        let _response = loop {
-            match hotshot_client
-                .get::<AvailableBlockData<SeqTypes>>(&format!(
-                    "hotshot_builder/claimblock/{builder_commitment}/{encoded_signature}"
-                ))
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    //let blocks = response.body().await.unwrap();
-                    println!("Received Block Data: {:?}", response);
-                    tracing::info!("Exiting from second loop");
-                    break response;
-                }
-                Err(e) => {
-                    panic!("Error while claiming block {:?}", e);
-                }
-            }
-        };
-
-        // Test claiming blocks
-        let _response = loop {
-            match hotshot_client
-                .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                    "hotshot_builder/claimheaderinput/{builder_commitment}/{encoded_signature}"
-                ))
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    //let blocks = response.body().await.unwrap();
-                    println!("Received Block Header : {:?}", response);
-                    assert!(true);
-                    tracing::info!("Exiting from third loop");
-                    break response;
-                }
-                Err(e) => {
-                    panic!("Error getting claiming block header {:?}", e);
-                }
-            }
-        };
-
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
-        match private_mempool_client
-            .post::<()>("builder_private_mempool/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-        {
-            Ok(response) => {
-                //let blocks = response.body().await.unwrap();
-                println!("Received txn submitted response : {:?}", response);
-                assert!(true);
-                return;
-            }
-            Err(e) => {
-                panic!("Error submitting private transaction {:?}", e);
-            }
-        }
-
-        //task::sleep(std::time::Duration::from_secs(200)).await;
-    }
+    */
 }
