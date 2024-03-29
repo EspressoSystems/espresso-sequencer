@@ -175,13 +175,6 @@ impl Options {
         }
     }
 }
-
-#[derive(Parser)]
-struct Args {
-    /// Port to run the server on.
-    #[clap(short, long, env = "HOTSHOT_BUILDER_PORT")]
-    port: u16,
-}
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
