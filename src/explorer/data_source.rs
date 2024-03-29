@@ -464,19 +464,22 @@ where
 
 /// [GetBlockDetailError] represents an error that has occurred in response to
 /// the [GetBlockDetail] request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 
 pub enum GetBlockDetailError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
     #[serde(untagged)]
     BlockNotFound(String),
+    #[serde(untagged)]
+    QueryError(QueryError),
 }
 
 impl GetBlockDetailError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetBlockDetailError::Unimplemented(err) => err.status(),
+            GetBlockDetailError::QueryError(err) => err.status(),
             GetBlockDetailError::BlockNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -486,6 +489,7 @@ impl Display for GetBlockDetailError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetBlockDetailError::Unimplemented(err) => write!(f, "{err}"),
+            GetBlockDetailError::QueryError(err) => write!(f, "{err}"),
             GetBlockDetailError::BlockNotFound(_) => write!(f, "block not found"),
         }
     }
@@ -495,14 +499,25 @@ impl ExplorerAPIError for GetBlockDetailError {
     fn code(&self) -> &str {
         match self {
             GetBlockDetailError::Unimplemented(err) => err.code(),
+            GetBlockDetailError::QueryError(_) => "QUERY_ERROR",
             GetBlockDetailError::BlockNotFound(_) => "BLOCK_NOT_FOUND",
+        }
+    }
+}
+
+impl std::error::Error for GetBlockDetailError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetBlockDetailError::Unimplemented(err) => Some(err),
+            GetBlockDetailError::QueryError(err) => Some(err),
+            _ => None,
         }
     }
 }
 
 /// [GetBlockSummariesError] represents an error that has occurred in response
 /// to the [GetBlockSummaries] request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GetBlockSummariesError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
@@ -510,6 +525,8 @@ pub enum GetBlockSummariesError {
     InvalidLimit(InvalidLimit),
     #[serde(untagged)]
     TargetNotFound(String),
+    #[serde(untagged)]
+    QueryError(QueryError),
 }
 
 impl GetBlockSummariesError {
@@ -517,6 +534,7 @@ impl GetBlockSummariesError {
         match self {
             GetBlockSummariesError::Unimplemented(err) => err.status(),
             GetBlockSummariesError::InvalidLimit(err) => err.status(),
+            GetBlockSummariesError::QueryError(err) => err.status(),
             GetBlockSummariesError::TargetNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -527,6 +545,7 @@ impl Display for GetBlockSummariesError {
         match self {
             GetBlockSummariesError::Unimplemented(err) => write!(f, "{err}"),
             GetBlockSummariesError::InvalidLimit(err) => write!(f, "{err}"),
+            GetBlockSummariesError::QueryError(err) => write!(f, "{err}"),
             GetBlockSummariesError::TargetNotFound(identifier) => {
                 write!(f, "target not found: {}", identifier)
             }
@@ -539,25 +558,40 @@ impl ExplorerAPIError for GetBlockSummariesError {
         match self {
             GetBlockSummariesError::Unimplemented(err) => err.code(),
             GetBlockSummariesError::InvalidLimit(err) => err.code(),
+            GetBlockSummariesError::QueryError(_) => "QUERY_ERROR",
             GetBlockSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
+        }
+    }
+}
+
+impl std::error::Error for GetBlockSummariesError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetBlockSummariesError::Unimplemented(err) => Some(err),
+            GetBlockSummariesError::InvalidLimit(err) => Some(err),
+            GetBlockSummariesError::QueryError(err) => Some(err),
+            _ => None,
         }
     }
 }
 
 /// [GetTransactionDetailError] represents an error that has occurred in
 /// response to the [GetTransactionDetail] request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GetTransactionDetailError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
     #[serde(untagged)]
     TransactionNotFound(String),
+    #[serde(untagged)]
+    QueryError(QueryError),
 }
 
 impl GetTransactionDetailError {
     pub fn status(&self) -> StatusCode {
         match self {
             GetTransactionDetailError::Unimplemented(err) => err.status(),
+            GetTransactionDetailError::QueryError(err) => err.status(),
             GetTransactionDetailError::TransactionNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -567,6 +601,7 @@ impl Display for GetTransactionDetailError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GetTransactionDetailError::Unimplemented(err) => write!(f, "{err}"),
+            GetTransactionDetailError::QueryError(err) => write!(f, "{err}"),
             GetTransactionDetailError::TransactionNotFound(identifier) => {
                 write!(f, "transaction not found: {}", identifier)
             }
@@ -578,14 +613,25 @@ impl ExplorerAPIError for GetTransactionDetailError {
     fn code(&self) -> &str {
         match self {
             GetTransactionDetailError::Unimplemented(err) => err.code(),
+            GetTransactionDetailError::QueryError(_) => "QUERY_ERROR",
             GetTransactionDetailError::TransactionNotFound(_) => "TRANSACTION_NOT_FOUND",
+        }
+    }
+}
+
+impl std::error::Error for GetTransactionDetailError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetTransactionDetailError::Unimplemented(err) => Some(err),
+            GetTransactionDetailError::QueryError(err) => Some(err),
+            _ => None,
         }
     }
 }
 
 /// [GetTransactionSummariesError] represents an error that has occurred in
 /// response to the [GetTransactionSummaries] request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GetTransactionSummariesError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
@@ -593,6 +639,8 @@ pub enum GetTransactionSummariesError {
     InvalidLimit(InvalidLimit),
     #[serde(untagged)]
     TargetNotFound(String),
+    #[serde(untagged)]
+    QueryError(QueryError),
 }
 
 impl GetTransactionSummariesError {
@@ -600,6 +648,7 @@ impl GetTransactionSummariesError {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => err.status(),
             GetTransactionSummariesError::InvalidLimit(err) => err.status(),
+            GetTransactionSummariesError::QueryError(err) => err.status(),
             GetTransactionSummariesError::TargetNotFound(_) => StatusCode::NotFound,
         }
     }
@@ -610,6 +659,7 @@ impl Display for GetTransactionSummariesError {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => write!(f, "{err}"),
             GetTransactionSummariesError::InvalidLimit(err) => write!(f, "{err}"),
+            GetTransactionSummariesError::QueryError(err) => write!(f, "{err}"),
             GetTransactionSummariesError::TargetNotFound(identifier) => {
                 write!(f, "target not found: {}", identifier)
             }
@@ -622,22 +672,37 @@ impl ExplorerAPIError for GetTransactionSummariesError {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => err.code(),
             GetTransactionSummariesError::InvalidLimit(err) => err.code(),
+            GetTransactionSummariesError::QueryError(_) => "QUERY_ERROR",
             GetTransactionSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
+        }
+    }
+}
+
+impl std::error::Error for GetTransactionSummariesError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetTransactionSummariesError::Unimplemented(err) => Some(err),
+            GetTransactionSummariesError::InvalidLimit(err) => Some(err),
+            GetTransactionSummariesError::QueryError(err) => Some(err),
+            _ => None,
         }
     }
 }
 
 /// [GetExplorerSummaryError] represents an error that has occurred in response
 /// to the [GetExplorerSummary] request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GetExplorerSummaryError {
     #[serde(untagged)]
     Unimplemented(Unimplemented),
+    #[serde(untagged)]
+    QueryError(QueryError),
 }
 
 impl GetExplorerSummaryError {
     pub fn status(&self) -> StatusCode {
         match self {
+            GetExplorerSummaryError::QueryError(err) => err.status(),
             GetExplorerSummaryError::Unimplemented(err) => err.status(),
         }
     }
@@ -646,6 +711,7 @@ impl GetExplorerSummaryError {
 impl Display for GetExplorerSummaryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            GetExplorerSummaryError::QueryError(err) => write!(f, "{err}"),
             GetExplorerSummaryError::Unimplemented(err) => write!(f, "{err}"),
         }
     }
@@ -654,7 +720,17 @@ impl Display for GetExplorerSummaryError {
 impl ExplorerAPIError for GetExplorerSummaryError {
     fn code(&self) -> &str {
         match self {
+            GetExplorerSummaryError::QueryError(_) => "QUERY_ERROR",
             GetExplorerSummaryError::Unimplemented(err) => err.code(),
+        }
+    }
+}
+
+impl std::error::Error for GetExplorerSummaryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetExplorerSummaryError::Unimplemented(err) => Some(err),
+            GetExplorerSummaryError::QueryError(err) => Some(err),
         }
     }
 }

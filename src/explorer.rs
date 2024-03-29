@@ -31,7 +31,7 @@ use tide_disco::{api::ApiError, method::ReadState, Api};
 pub use traits::*;
 use versioned_binary_serialization::version::StaticVersionType;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Error {
     #[serde(untagged)]
     GetBlockDetail(GetBlockDetailError),

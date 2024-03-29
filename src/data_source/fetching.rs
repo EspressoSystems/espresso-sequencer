@@ -762,9 +762,7 @@ where
                         request.0.target,
                     ))
                 }
-                _ => explorer::data_source::GetBlockSummariesError::Unimplemented(
-                    explorer::errors::Unimplemented {},
-                ),
+                err => explorer::data_source::GetBlockSummariesError::QueryError(err),
             })
     }
 
@@ -781,9 +779,7 @@ where
                 QueryError::NotFound => explorer::data_source::GetBlockDetailError::BlockNotFound(
                     format!("{:?}", request),
                 ),
-                _ => explorer::data_source::GetBlockDetailError::Unimplemented(
-                    explorer::errors::Unimplemented {},
-                ),
+                err => explorer::data_source::GetBlockDetailError::QueryError(err),
             })
     }
 
@@ -805,9 +801,7 @@ where
                         request.range.target,
                     ))
                 }
-                _ => explorer::data_source::GetTransactionSummariesError::Unimplemented(
-                    explorer::errors::Unimplemented {},
-                ),
+                err => explorer::data_source::GetTransactionSummariesError::QueryError(err),
             })
     }
 
@@ -829,9 +823,7 @@ where
                         request,
                     ))
                 }
-                _ => explorer::data_source::GetTransactionDetailError::Unimplemented(
-                    explorer::errors::Unimplemented {},
-                ),
+                err => explorer::data_source::GetTransactionDetailError::QueryError(err),
             })
     }
 
@@ -845,11 +837,7 @@ where
             .await
             .get_explorer_summary()
             .await
-            .map_err(|_| {
-                explorer::data_source::GetExplorerSummaryError::Unimplemented(
-                    explorer::errors::Unimplemented {},
-                )
-            })
+            .map_err(explorer::data_source::GetExplorerSummaryError::QueryError)
     }
 }
 
