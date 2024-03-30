@@ -294,3 +294,116 @@ where
         })?;
     Ok(api)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        testing::{
+            consensus::{MockNetwork, MockSqlDataSource, TestableDataSourceWithExplorer},
+            mocks::MockTypes,
+            setup_test,
+        },
+        Error,
+    };
+    use async_std::task::sleep;
+    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use portpicker::pick_unused_port;
+    use std::{cmp::min, time::Duration};
+    use surf_disco::Client;
+    use tide_disco::App;
+
+    async fn validate(client: &Client<Error, Version01>) {
+        let explorer_summary_response: ExplorerSummaryResponse<MockTypes> =
+            client.get("explorer-summary").send().await.unwrap();
+
+        let ExplorerSummary {
+            histograms,
+            latest_block,
+            latest_blocks,
+            latest_transactions,
+            genesis_overview,
+            ..
+        } = explorer_summary_response.explorer_summary;
+
+        let GenesisOverview {
+            blocks: num_blocks,
+            transactions: num_transactions,
+            ..
+        } = genesis_overview;
+
+        assert!(num_blocks > 0);
+        assert!(histograms.block_heights.len() == min(num_blocks as usize, 50));
+        assert!(histograms.block_size.len() == min(num_blocks as usize, 50));
+        assert!(histograms.block_time.len() == min(num_blocks as usize, 50));
+        assert!(histograms.block_transactions.len() == min(num_blocks as usize, 50));
+
+        assert!(latest_block.height == num_blocks - 1);
+        assert!(latest_blocks.len() == min(num_blocks as usize, 10));
+        assert!(latest_transactions.len() == min(num_transactions as usize, 10));
+
+        let _block_detail_response: BlockDetailResponse<MockTypes> = client
+            .get(format!("block/{}", num_blocks - 1).as_str())
+            .send()
+            .await
+            .unwrap();
+
+        let _block_summaries_response: BlockSummaryResponse<MockTypes> = client
+            .get(format!("blocks/{}/{}", num_blocks - 1, 20).as_str())
+            .send()
+            .await
+            .unwrap();
+
+        if num_transactions > 0 {
+            let last_transaction = latest_transactions.last().unwrap();
+            let _transaction_detail_response: TransactionDetailResponse<MockTypes> = client
+                .get(format!("transaction/hash/{}", last_transaction.hash).as_str())
+                .send()
+                .await
+                .unwrap();
+
+            let _transaction_summaries_response: TransactionSummariesResponse<MockTypes> = client
+                .get(format!("transactions/hash/{}/{}", last_transaction.hash, 20).as_str())
+                .send()
+                .await
+                .unwrap();
+        }
+    }
+
+    #[async_std::test]
+    async fn test_api() {
+        test_api_helper::<MockSqlDataSource>().await;
+    }
+
+    async fn test_api_helper<D: TestableDataSourceWithExplorer>() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<D>::init().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        app.register_module("explorer", define_api(STATIC_VER_0_1).unwrap())
+            .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+        );
+
+        // Start a client.
+        let client = Client::<Error, Version01>::new(
+            format!("http://localhost:{}/explorer", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // sleep a little bit to give some chance for blocks to be generated.
+        sleep(Duration::from_secs(5)).await;
+        validate(&client).await;
+
+        network.shut_down().await;
+    }
+}
