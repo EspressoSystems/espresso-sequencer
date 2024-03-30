@@ -12,18 +12,16 @@
 
 #![cfg(feature = "no-storage")]
 
-use super::{AvailabilityStorage, ExplorerStorage};
+use super::AvailabilityStorage;
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
-        VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
         VersionedDataSource,
     },
-    explorer,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryError, QueryResult, VidShare,
 };
@@ -186,57 +184,6 @@ where
         _end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         Err(QueryError::Missing)
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType> ExplorerStorage<Types> for NoStorage
-where
-    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
-    Payload<Types>: QueryablePayload,
-{
-    async fn get_block_summaries(
-        &self,
-        _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_block_detail(
-        &self,
-        _request: &explorer::data_source::BlockIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::BlockDetail<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_transaction_summaries(
-        &self,
-        _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_transaction_detail(
-        &self,
-        _request: &explorer::data_source::TransactionIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_explorer_summary(
-        &self,
-    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
     }
 }
 

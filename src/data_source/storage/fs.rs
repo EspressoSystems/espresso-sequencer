@@ -15,7 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage, ExplorerStorage,
+    AvailabilityStorage,
 };
 
 use crate::{
@@ -27,10 +27,9 @@ use crate::{
         },
     },
     data_source::VersionedDataSource,
-    explorer,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidCommitment, VidShare,
+    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -456,57 +455,6 @@ where
         self.vid_storage
             .insert(common.height() as usize, (common, share))?;
         Ok(())
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType> ExplorerStorage<Types> for FileSystemStorage<Types>
-where
-    Payload<Types>: QueryablePayload,
-    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
-{
-    async fn get_block_summaries(
-        &self,
-        _request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_block_detail(
-        &self,
-        _request: &explorer::data_source::BlockIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::BlockDetail<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_transaction_summaries(
-        &self,
-        _request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_transaction_detail(
-        &self,
-        _request: &explorer::data_source::TransactionIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
-    }
-
-    async fn get_explorer_summary(
-        &self,
-    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>> {
-        Err(QueryError::Error {
-            message: "unimplemented".to_string(),
-        })
     }
 }
 
