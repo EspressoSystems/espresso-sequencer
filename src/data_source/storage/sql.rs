@@ -2046,11 +2046,18 @@ where
     ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>> {
         let range = &request.range;
         let target = &range.target;
-        // let filter = &request.filter;
+        let filter = &request.filter;
 
         let (query, params, offset): (String, Vec<Box<dyn ToSql + Send + Sync>>, Option<usize>) =
-            match target {
-                explorer::data_source::TransactionIdentifier::Latest => (
+            match (target, filter) {
+                (_, explorer::data_source::TransactionSummaryFilter::RollUp(_)) => {
+                    // TODO: implement roll-up based filtering
+                    return Ok(vec![]);
+                }
+                (
+                    explorer::data_source::TransactionIdentifier::Latest,
+                    explorer::data_source::TransactionSummaryFilter::None,
+                ) => (
                     format!(
                         "SELECT {BLOCK_COLUMNS}
                            FROM header AS h
@@ -2066,7 +2073,34 @@ where
                     vec![Box::new(range.num_transactions.get() as i64)],
                     Some(0),
                 ),
-                explorer::data_source::TransactionIdentifier::HeightAndOffset(height, offset) => (
+                (
+                    explorer::data_source::TransactionIdentifier::Latest,
+                    explorer::data_source::TransactionSummaryFilter::Block(height),
+                ) => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                           FROM header AS h
+                           JOIN payload AS p ON h.height = p.height
+                           WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $1
+                            )
+                            AND h.height = $2
+                           ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(range.num_transactions.get() as i64),
+                        Box::new(*height as i64),
+                    ],
+                    Some(0),
+                ),
+
+                (
+                    explorer::data_source::TransactionIdentifier::HeightAndOffset(height, offset),
+                    explorer::data_source::TransactionSummaryFilter::None,
+                ) => (
                     format!(
                         "SELECT {BLOCK_COLUMNS}
                             FROM header AS h
@@ -2094,7 +2128,43 @@ where
                     ],
                     Some(*offset),
                 ),
-                explorer::data_source::TransactionIdentifier::Hash(hash) => (
+                (
+                    explorer::data_source::TransactionIdentifier::HeightAndOffset(height, offset),
+                    explorer::data_source::TransactionSummaryFilter::Block(block_height),
+                ) => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE (t1.block_height, t1.index) <= (
+                                        SELECT t2.block_height, t2.index
+                                            FROM transaction AS t2
+                                            WHERE t2.block_height = $1
+                                            ORDER BY (t2.block_height, t2.index) DESC
+                                            OFFSET $2
+                                            LIMIT 1
+                                    )
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $3
+                            )
+                            AND h.height = $4
+                            ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(*height as i64),
+                        Box::new(*offset as i64),
+                        Box::new(range.num_transactions.get() as i64),
+                        Box::new(*block_height as i64),
+                    ],
+                    Some(*offset),
+                ),
+                (
+                    explorer::data_source::TransactionIdentifier::Hash(hash),
+                    explorer::data_source::TransactionSummaryFilter::None,
+                ) => (
                     format!(
                         "SELECT {BLOCK_COLUMNS}
                             FROM header AS h
@@ -2118,6 +2188,40 @@ where
                     vec![
                         Box::new(hash.to_string()),
                         Box::new(range.num_transactions.get() as i64),
+                    ],
+                    // This should be some value... but we have no way of
+                    // telling what that should be at this point.
+                    None,
+                ),
+                (
+                    explorer::data_source::TransactionIdentifier::Hash(hash),
+                    explorer::data_source::TransactionSummaryFilter::Block(height),
+                ) => (
+                    format!(
+                        "SELECT {BLOCK_COLUMNS}
+                            FROM header AS h
+                            JOIN payload AS p ON h.height = p.height
+                            WHERE h.height IN (
+                                SELECT t1.block_height
+                                    FROM transaction AS t1
+                                    WHERE (t1.block_height, t1.index) <= (
+                                        SELECT t2.block_height, t2.index
+                                            FROM transaction AS t2
+                                            WHERE t2.hash = $1
+                                            ORDER BY (t2.block_height, t2.index) DESC
+                                            OFFSET $2
+                                            LIMIT 1
+                                    )
+                                    ORDER BY (t1.block_height, t1.index) DESC
+                                    LIMIT $2
+                            )
+                            AND h.height = $3
+                            ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(hash.to_string()),
+                        Box::new(range.num_transactions.get() as i64),
+                        Box::new(*height as i64),
                     ],
                     // This should be some value... but we have no way of
                     // telling what that should be at this point.

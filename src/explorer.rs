@@ -247,6 +247,15 @@ where
                     .map_err(GetTransactionSummariesError::InvalidLimit)
                     .map_err(Error::GetTransactionSummaries)?;
 
+                let filter = match (
+                    req.opt_integer_param("block"),
+                    req.opt_integer_param("namespace"),
+                ) {
+                    (Ok(Some(block)), _) => TransactionSummaryFilter::Block(block),
+                    (_, Ok(Some(namespace))) => TransactionSummaryFilter::RollUp(namespace),
+                    _ => TransactionSummaryFilter::None,
+                };
+
                 let target = match (
                     req.opt_integer_param::<str, usize>("height"),
                     req.opt_integer_param::<str, usize>("offset"),
@@ -265,7 +274,7 @@ where
                             target,
                             num_transactions,
                         },
-                        filter: TransactionSummaryFilter::None,
+                        filter,
                     })
                     .await
                     .map(TransactionSummariesResponse::from)

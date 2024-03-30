@@ -102,11 +102,13 @@ Returns
 """
 
 [route.get_transaction_summaries]
-PATH = ["transactions/latest/:limit", "transactions/from/:height/:offset/:limit", "transactions/hash/:hash/:limit"]
+PATH = ["transactions/latest/:limit", "transactions/from/:height/:offset/:limit", "transactions/hash/:hash/:limit", "transactions/latest/:limit/block/:block", "transactions/from/:height/:offset/:limit/block/:block", "transactions/hash/:hash/:limit/block/:block", "transactions/latest/:limit/namespace/:namespace", "transactions/from/:height/:offset/:limit/namespace/:namespace", "transactions/hash/:hash/:limit/namespace/:namespace"]
 ":limit" = "Integer"
 ":height" = "Integer"
 ":offset" = "Integer"
 ":hash" = "TaggedBase64"
+":block" = "Integer"
+":namespace" = "Integer"
 DOC = """
 Retrieve up to the desired `limit` of Transaction Summaries. This endpoint will target the `Transaction` that is
 identified by `latest`, the `:height` and `:offset`, or the `:hash`.  It should return up to the previous `:limit`
