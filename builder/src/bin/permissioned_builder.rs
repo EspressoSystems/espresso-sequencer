@@ -18,7 +18,7 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
 
 #[derive(Parser, Clone, Debug)]
-pub struct Options {
+pub struct PermissionedBuilderOptions {
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: u16,
@@ -152,7 +152,7 @@ pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
             reason: err.to_string(),
         })
 }
-impl Options {
+impl PermissionedBuilderOptions {
     pub fn private_keys(&self) -> anyhow::Result<(BLSPrivKey, StateSignKey)> {
         if let Some(path) = &self.key_file {
             let vars = dotenvy::from_path_iter(path)?.collect::<Result<HashMap<_, _>, _>>()?;
@@ -180,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    let opt = Options::parse();
+    let opt = PermissionedBuilderOptions::parse();
 
     let (private_staking_key, private_state_key) = opt.private_keys()?;
 

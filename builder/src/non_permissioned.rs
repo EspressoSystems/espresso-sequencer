@@ -51,10 +51,11 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-fn _get_instance_state<Ver: StaticVersionType + 'static>(
+pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     builder_params: BuilderParams,
-    network_params: NetworkParams,
+    state_peers: Vec<Url>,
+    _: Ver,
 ) -> anyhow::Result<NodeState> {
     // creating the instance state without any builder mnemonic
     let wallet = MnemonicBuilder::<English>::default()
@@ -69,7 +70,7 @@ fn _get_instance_state<Ver: StaticVersionType + 'static>(
     let instance_state = NodeState::new(
         l1_client,
         wallet,
-        Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );
     Ok(instance_state)
 }

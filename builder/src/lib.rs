@@ -662,11 +662,11 @@ mod test {
 
     use es_version::SequencerVersion;
 
-    // Test that a non-voting builder node can participate in consensus and reach a certain height.
-    // It is enabled by keeping the builder(s) in the stake table, but with a stake of 0.
-    // This is useful for testing that the builder can participate in consensus without voting.
+    // Test that a non-voting hotshot node can participate in consensus and reach a certain height.
+    // It is enabled by keeping the node(s) in the stake table, but with a stake of 0.
+    // This is useful for testing that the builder(permissioned node) can participate in consensus without voting.
     #[async_std::test]
-    async fn test_non_voting_builder_node() {
+    async fn test_non_voting_hotshot_node() {
         setup_logging();
         setup_backtrace();
 
@@ -680,7 +680,7 @@ mod test {
         tracing::debug!("Done with init nodes");
         let total_nodes = HotShotTestConfig::total_nodes();
 
-        // try to listen on builder handle as it is the last handle
+        // try to listen on non-voting node handle as it is the last handle
         let mut events = handles[total_nodes - 1].0.get_event_stream();
         for (handle, ..) in handles.iter() {
             handle.hotshot.start_consensus().await;
