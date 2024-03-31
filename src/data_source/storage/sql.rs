@@ -2084,10 +2084,10 @@ where
                            WHERE h.height IN (
                                 SELECT t1.block_height
                                     FROM transaction AS t1
+                                    WHERE t1.block_height = $2
                                     ORDER BY (t1.block_height, t1.index) DESC
                                     LIMIT $1
                             )
-                            AND h.height = $2
                            ORDER BY h.height DESC"
                     ),
                     vec![
@@ -2147,10 +2147,10 @@ where
                                             OFFSET $2
                                             LIMIT 1
                                     )
+                                    AND t1.block_height = $4
                                     ORDER BY (t1.block_height, t1.index) DESC
                                     LIMIT $3
                             )
-                            AND h.height = $4
                             ORDER BY h.height DESC"
                     ),
                     vec![
@@ -2212,10 +2212,10 @@ where
                                             OFFSET $2
                                             LIMIT 1
                                     )
+                                    AND t1.block_height = $3
                                     ORDER BY (t1.block_height, t1.index) DESC
                                     LIMIT $2
                             )
-                            AND h.height = $3
                             ORDER BY h.height DESC"
                     ),
                     vec![
