@@ -425,6 +425,17 @@ impl TestViewGenerator {
         }
     }
 
+    pub fn add_timeout(&mut self, timeout_data: TimeoutData<TestTypes>) {
+        if let Some(ref view) = self.current_view {
+            self.current_view = Some(TestView {
+                timeout_cert_data: Some(timeout_data),
+                ..view.clone()
+            });
+        } else {
+            tracing::error!("Cannot attach timeout cert to the genesis view.")
+        }
+    }
+
     /// Advances to the next view by skipping the current view and not adding it to the state tree.
     /// This is useful when simulating that a timeout has occurred.
     pub fn advance_view_number_by(&mut self, n: u64) {

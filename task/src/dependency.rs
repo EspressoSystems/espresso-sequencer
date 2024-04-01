@@ -152,6 +152,10 @@ impl<T: Clone + Send + Sync + 'static> Dependency<T> for EventDependency<T> {
             return Some(dependency);
         }
         loop {
+            if let Some(dependency) = self.completed_dependency {
+                return Some(dependency);
+            }
+
             match self.event_rx.recv_direct().await {
                 Ok(event) => {
                     if (self.match_fn)(&event) {
