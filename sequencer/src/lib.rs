@@ -477,7 +477,7 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<Ver: StaticVersionType, P: SequencerPersistence + 'static>(
+        pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
             &self,
             i: usize,
             state: ValidatedState,
