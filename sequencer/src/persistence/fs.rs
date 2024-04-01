@@ -51,6 +51,7 @@ impl PersistenceOptions for Options {
 /// File system backed persistence.
 #[derive(Clone, Debug)]
 pub struct Persistence(PathBuf);
+
 impl Persistence {
     fn config_path(&self) -> PathBuf {
         self.0.join("hotshot.cfg")
@@ -266,6 +267,21 @@ impl SequencerPersistence for Persistence {
         let mut file = File::open(path)?;
 
         // The first 8 bytes just contain the height of the leaf. We can skip this.
+        file.seek(SeekFrom::Start(8)).context("seek")?;
+        let bytes = file
+            .bytes()
+            .collect::<Result<Vec<_>, _>>()
+            .context("read")?;
+        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+    }
+
+    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
+        let path = self.high_qc_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let mut file = File::open(path)?;
+
         file.seek(SeekFrom::Start(8)).context("seek")?;
         let bytes = file
             .bytes()

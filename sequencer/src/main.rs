@@ -123,6 +123,7 @@ where
         }
     };
 
+    // Start doing consensus.
     ctx.start_consensus().await;
     ctx.join().await;
 

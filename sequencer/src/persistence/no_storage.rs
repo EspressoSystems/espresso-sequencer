@@ -61,6 +61,10 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
+    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
+        Ok(None)
+    }
+
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
         bail!("state persistence not implemented");
     }

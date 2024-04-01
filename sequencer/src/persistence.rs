@@ -64,6 +64,8 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>>;
 
+    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>>;
+
     /// Load the validated state after block `height`, if available.
     async fn load_validated_state(&self, height: u64) -> anyhow::Result<ValidatedState>;
 
@@ -123,12 +125,17 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
         let view = max(highest_voted_view, leaf.get_view_number());
         tracing::info!(?leaf, ?view, "loaded consensus state");
 
+        let high_qc = self
+            .load_high_qc()
+            .await?
+            .unwrap_or_else(QuorumCertificate::genesis);
+
         Ok(HotShotInitializer::from_reload(
             leaf,
             state,
             validated_state,
             view,
-            QuorumCertificate::genesis(),
+            high_qc,
             Default::default(),
             Default::default(),
         ))
@@ -170,10 +177,12 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
+
     use super::*;
     use crate::NodeState;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use hotshot_types::event::HotShotAction;
+
+    use hotshot_types::{event::HotShotAction, vote::HasViewNumber};
     use testing::TestablePersistence;
 
     #[async_std::test]
@@ -236,5 +245,41 @@ mod persistence_tests {
             .await
             .unwrap();
         assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view2);
+    }
+
+    #[async_std::test]
+    pub async fn test_high_qc<P: TestablePersistence>() {
+        setup_logging();
+        setup_backtrace();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        assert_eq!(storage.load_high_qc().await.unwrap(), None);
+
+        let mut qc = QuorumCertificate::genesis();
+
+        storage.update_high_qc(qc.clone()).await.unwrap();
+        assert_eq!(
+            storage.load_high_qc().await.unwrap().unwrap(),
+            QuorumCertificate::genesis()
+        );
+
+        // store qcs with different view number
+        qc.view_number += 1;
+        storage.update_high_qc(qc.clone()).await.unwrap();
+
+        qc.view_number += 1;
+        storage.update_high_qc(qc.clone()).await.unwrap();
+
+        assert_eq!(
+            storage
+                .load_high_qc()
+                .await
+                .unwrap()
+                .unwrap()
+                .get_view_number(),
+            qc.get_view_number()
+        );
     }
 }

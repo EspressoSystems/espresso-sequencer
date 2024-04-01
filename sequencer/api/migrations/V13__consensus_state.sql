@@ -16,7 +16,8 @@ CREATE TABLE highest_voted_view (
 );
 
 CREATE TABLE high_qc (
-    view BIGINT PRIMARY KEY,
+    id INT PRIMARY KEY,
+    view BIGINT,
     data BYTEA
 );
 

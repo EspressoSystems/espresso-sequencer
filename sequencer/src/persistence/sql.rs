@@ -250,7 +250,7 @@ impl SequencerPersistence for Persistence {
         storage
             .transaction()
             .await?
-            .execute_one_with_retries(stmt1, [sql_param(&(view.get_u64() as i64))])
+            .execute_one_with_retries(stmt1, [&(view.get_u64() as i64)])
             .await?;
 
         let stmt2 = "DELETE FROM da_proposal where view <= $1";
@@ -258,7 +258,7 @@ impl SequencerPersistence for Persistence {
         storage
             .transaction()
             .await?
-            .execute_one_with_retries(stmt2, [sql_param(&(view.get_u64() as i64))])
+            .execute_one_with_retries(stmt2, [&(view.get_u64() as i64)])
             .await?;
         storage.commit().await?;
 
@@ -315,6 +315,19 @@ impl SequencerPersistence for Persistence {
             .await?
             .map(|row| {
                 let bytes: Vec<u8> = row.get("leaf");
+                Ok(bincode::deserialize(&bytes)?)
+            })
+            .transpose()
+    }
+
+    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
+        let storage = self.read().await;
+
+        storage
+            .query_opt_static("SELECT data FROM high_qc WHERE id = 0")
+            .await?
+            .map(|row| {
+                let bytes: Vec<u8> = row.get("data");
                 Ok(bincode::deserialize(&bytes)?)
             })
             .transpose()

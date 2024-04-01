@@ -154,12 +154,12 @@ where
     )?;
     Ok(api)
 }
-pub(super) fn submit<N, Storage, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, P, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
-    Storage: SequencerPersistence,
-    S::State: Send + Sync + SubmitDataSource<N, Storage>,
+    P: SequencerPersistence,
+    S::State: Send + Sync + SubmitDataSource<N, P>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
