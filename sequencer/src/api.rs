@@ -599,10 +599,7 @@ mod api_tests {
 
         // Initialize nodes.
         let storage = join_all((0..TestConfig::NUM_NODES).map(|_| D::create_storage())).await;
-        let persistence = join_all(storage.iter().map(D::connect))
-            .await
-            .try_into()
-            .unwrap();
+        let persistence = join_all(storage.iter().map(D::connect)).await;
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
@@ -659,10 +656,7 @@ mod api_tests {
 
         // Start up again, resuming from the last decided leaf.
         let port = pick_unused_port().expect("No ports free");
-        let persistence = join_all(storage.iter().map(D::connect))
-            .await
-            .try_into()
-            .unwrap();
+        let persistence = join_all(storage.iter().map(D::connect)).await;
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
             Default::default(),

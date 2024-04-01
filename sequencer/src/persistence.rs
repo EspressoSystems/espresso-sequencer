@@ -19,7 +19,9 @@ use hotshot::{
     HotShotInitializer,
 };
 use hotshot_types::{
+    data::{DAProposal, VidDisperseShare},
     event::LeafInfo,
+    message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{node_implementation::ConsensusTime, storage::Storage},
 };
@@ -65,6 +67,13 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>>;
 
     async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>>;
+
+    async fn load_vid_shares(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    async fn load_da_proposals(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
 
     /// Load the validated state after block `height`, if available.
     async fn load_validated_state(&self, height: u64) -> anyhow::Result<ValidatedState>;

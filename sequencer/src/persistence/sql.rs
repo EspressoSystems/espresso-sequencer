@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use anyhow::bail;
-use async_std::sync::RwLock;
+use async_std::{stream::StreamExt, sync::RwLock};
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_query_service::data_source::{
@@ -331,6 +331,46 @@ impl SequencerPersistence for Persistence {
                 Ok(bincode::deserialize(&bytes)?)
             })
             .transpose()
+    }
+
+    async fn load_da_proposals(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        let storage = self.read().await;
+
+        let rows = storage
+            .query_static("SELECT data FROM da_proposals")
+            .await?;
+
+        let da_proposals = rows
+            .map(|row| {
+                let bytes: Vec<u8> = row?.get("data");
+                Ok(bincode::deserialize(&bytes)?)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .await?;
+
+        Ok(da_proposals)
+    }
+
+    async fn load_vid_shares(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        let storage = self.read().await;
+
+        let rows = storage
+            .query_static("SELECT data FROM da_proposal_vid_share")
+            .await?;
+
+        let vid_shares = rows
+            .map(|row| {
+                let bytes: Vec<u8> = row?.get("data");
+                Ok(bincode::deserialize(&bytes)?)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .await?;
+
+        Ok(vid_shares)
     }
 
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {

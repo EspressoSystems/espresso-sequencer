@@ -65,6 +65,18 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
+    async fn load_da_proposals(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        Ok(Vec::new())
+    }
+
+    async fn load_vid_shares(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        Ok(Vec::new())
+    }
+
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
         bail!("state persistence not implemented");
     }

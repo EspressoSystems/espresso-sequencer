@@ -290,6 +290,59 @@ impl SequencerPersistence for Persistence {
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
     }
 
+    async fn load_da_proposals(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        let dir_path = self.da_dir_path();
+
+        if !dir_path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let entries = fs::read_dir(dir_path)?;
+
+        let mut da_proposals = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() {
+                let da_bytes = fs::read(path)?;
+
+                let da_proposal = bincode::deserialize(&da_bytes)?;
+                da_proposals.push(da_proposal);
+            }
+        }
+
+        Ok(da_proposals)
+    }
+
+    async fn load_vid_shares(
+        &self,
+    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        let dir_path = self.vid_dir_path();
+
+        if !dir_path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let entries = fs::read_dir(dir_path)?;
+
+        let mut vids = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() {
+                let vid_share_bytes = fs::read(path)?;
+                let vid = bincode::deserialize(&vid_share_bytes)?;
+                vids.push(vid);
+            }
+        }
+
+        Ok(vids)
+    }
+
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
         bail!("state persistence not implemented");
     }
