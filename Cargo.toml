@@ -71,6 +71,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2" }
 snafu = "0.8"
+strum = { version = "0.26", features = ["derive"] }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.5.0" }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.5.0" }
