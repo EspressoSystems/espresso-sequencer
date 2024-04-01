@@ -19,8 +19,9 @@ use hotshot::{
     HotShotInitializer,
 };
 use hotshot_types::{
-    event::LeafInfo, simple_certificate::QuorumCertificate,
-    traits::node_implementation::ConsensusTime,
+    event::LeafInfo,
+    simple_certificate::QuorumCertificate,
+    traits::{node_implementation::ConsensusTime, storage::Storage},
 };
 use std::cmp::max;
 
@@ -39,7 +40,7 @@ pub trait PersistenceOptions: Clone {
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Send + Sync + 'static {
+pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     /// Load the orchestrator config from storage.
     ///
     /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
@@ -49,10 +50,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     /// Save the orchestrator config to storage.
     async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
-    /// Saves the highest view in which this node has voted.
-    ///
-    /// If the new view is not greater than the previous highest view, storage is not updated.
-    async fn save_voted_view(&mut self, view: ViewNumber) -> anyhow::Result<()>;
+    async fn garbage_collect(&mut self, view: ViewNumber) -> anyhow::Result<()>;
 
     /// Saves the latest decided leaf.
     ///
@@ -138,27 +136,20 @@ pub trait SequencerPersistence: Send + Sync + 'static {
 
     /// Update storage based on an event from consensus.
     async fn handle_event(&mut self, event: &Event<SeqTypes>) {
-        match &event.event {
-            EventType::Decide { leaf_chain, .. } => {
-                if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                    if let Err(err) = self.save_anchor_leaf(leaf).await {
-                        tracing::error!(
-                            ?leaf,
-                            hash = %leaf.commit(),
-                            "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
-                        );
-                    }
-                }
-            }
-            EventType::ViewFinished { view_number, .. } => {
-                if let Err(err) = self.save_voted_view(*view_number).await {
+        if let EventType::Decide { leaf_chain, .. } = &event.event {
+            if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
+                if let Err(err) = self.save_anchor_leaf(leaf).await {
                     tracing::error!(
-                        ?view_number,
-                        "Failed to save highest view. When restarting, make sure view number is at least as recent as this. {err:#}",
+                        ?leaf,
+                        hash = %leaf.commit(),
+                        "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
                     );
                 }
+
+                if let Err(err) = self.garbage_collect(leaf.get_view_number()).await {
+                    tracing::error!("Failed to garbage collect. {err:#}",);
+                }
             }
-            _ => {}
         }
     }
 }
@@ -182,6 +173,7 @@ mod persistence_tests {
     use super::*;
     use crate::NodeState;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use hotshot_types::event::HotShotAction;
     use testing::TestablePersistence;
 
     #[async_std::test]
@@ -217,23 +209,32 @@ mod persistence_tests {
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved view.
         assert_eq!(storage.load_voted_view().await.unwrap(), None);
 
         // Store a view.
         let view1 = ViewNumber::genesis();
-        storage.save_voted_view(view1).await.unwrap();
+        storage
+            .record_action(view1, HotShotAction::Vote)
+            .await
+            .unwrap();
         assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view1);
 
         // Store a newer view, make sure storage gets updated.
         let view2 = view1 + 1;
-        storage.save_voted_view(view2).await.unwrap();
+        storage
+            .record_action(view2, HotShotAction::Vote)
+            .await
+            .unwrap();
         assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view2);
 
         // Store an old view, make sure storage is unchanged.
-        storage.save_voted_view(view1).await.unwrap();
+        storage
+            .record_action(view1, HotShotAction::Vote)
+            .await
+            .unwrap();
         assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view2);
     }
 }

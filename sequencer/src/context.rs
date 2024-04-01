@@ -30,15 +30,19 @@ use crate::{
 };
 
 /// The consensus handle
-pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
+pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> {
+pub struct SequencerContext<
+    N: network::Type,
+    P: SequencerPersistence,
+    Ver: StaticVersionType + 'static,
+> {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
-    handle: Consensus<N>,
+    handle: Consensus<N, P>,
 
     /// Index of this sequencer node
     #[allow(dead_code)]
@@ -57,13 +61,15 @@ pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> 
     detached: bool,
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver> {
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    SequencerContext<N, P, Ver>
+{
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,
-        persistence: impl SequencerPersistence,
-        networks: Networks<SeqTypes, Node<N>>,
+        persistence: P,
+        networks: Networks<SeqTypes, Node<N, P>>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
@@ -87,7 +93,6 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             vid_membership: membership.clone(),
             view_sync_membership: membership,
         };
-        let da_storage = Default::default();
 
         let stake_table_commit =
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -102,7 +107,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             networks,
             initializer,
             ConsensusMetricsValue::new(metrics),
-            da_storage,
+            persistence.clone(),
         )
         .await?
         .0;
@@ -117,8 +122,8 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
 
     /// Constructor
     fn new(
-        handle: Consensus<N>,
-        persistence: impl SequencerPersistence,
+        handle: Consensus<N, P>,
+        persistence: P,
         node_index: u64,
         state_signer: StateSigner<Ver>,
     ) -> Self {
@@ -160,12 +165,12 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
     }
 
     /// Return a reference to the underlying consensus handle.
-    pub fn consensus(&self) -> &Consensus<N> {
+    pub fn consensus(&self) -> &Consensus<N, P> {
         &self.handle
     }
 
     /// Return a mutable reference to the underlying consensus handle.
-    pub fn consensus_mut(&mut self) -> &mut Consensus<N> {
+    pub fn consensus_mut(&mut self) -> &mut Consensus<N, P> {
         &mut self.handle
     }
 
@@ -221,7 +226,9 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static> Drop for SequencerContext<N, Ver> {
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static> Drop
+    for SequencerContext<N, P, Ver>
+{
     fn drop(&mut self) {
         if !self.detached {
             async_std::task::block_on(self.shut_down());

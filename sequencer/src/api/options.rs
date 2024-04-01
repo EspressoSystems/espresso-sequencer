@@ -10,7 +10,8 @@ use super::{
 };
 use crate::{
     context::SequencerContext,
-    network, persistence,
+    network,
+    persistence::{self, SequencerPersistence},
     state::{BlockMerkleTree, FeeMerkleTree},
     SeqTypes,
 };
@@ -107,20 +108,21 @@ impl Options {
     /// The function `init_context` is used to create a sequencer context from a metrics object and
     /// optional saved consensus state. The metrics object is created from the API data source, so
     /// that consensus will populuate metrics that can then be read and served by the API.
-    pub async fn serve<N, F, Ver: StaticVersionType + 'static>(
+    pub async fn serve<N, P, F, Ver: StaticVersionType + 'static>(
         mut self,
         init_context: F,
         bind_version: Ver,
-    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        P: SequencerPersistence,
+        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module_sql::<N, sql::DataSource, Ver>(
+                self.init_with_query_module_sql::<N, P, sql::DataSource, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -128,7 +130,7 @@ impl Options {
                 )
                 .await
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module_fs::<N, fs::DataSource, Ver>(
+                self.init_with_query_module_fs::<N, P, fs::DataSource, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -177,17 +179,18 @@ impl Options {
         }
     }
 
-    async fn init_app_modules<N, D, Ver: StaticVersionType + 'static>(
+    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
         &self,
         ds: D,
-        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
         bind_version: Ver,
     ) -> anyhow::Result<(
-        SequencerContext<N, Ver>,
-        App<Arc<RwLock<StorageState<N, D, Ver>>>, Error, Ver>,
+        SequencerContext<N, P, Ver>,
+        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error, Ver>,
     )>
     where
         N: network::Type,
+        P: SequencerPersistence,
         D: SequencerDataSource + Send + Sync + 'static,
     {
         let metrics = ds.populate_metrics();
@@ -202,14 +205,14 @@ impl Options {
         // the first events emitted by consensus.
         let events = context.get_event_stream();
 
-        let state: endpoints::AvailState<N, D, Ver> = Arc::new(RwLock::new(
+        let state: endpoints::AvailState<N, P, D, Ver> = Arc::new(RwLock::new(
             ExtensibleDataSource::new(ds, (&context).into()),
         ));
         let mut app = App::<_, Error, Ver>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
-            let status_api = status::define_api::<endpoints::AvailState<N, D, Ver>, Ver>(
+            let status_api = status::define_api::<endpoints::AvailState<N, P, D, Ver>, Ver>(
                 &Default::default(),
                 bind_version,
             )?;
@@ -226,15 +229,16 @@ impl Options {
         Ok((context, app))
     }
 
-    async fn init_with_query_module_fs<N, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_fs<N, P, D, Ver: StaticVersionType + 'static>(
         &self,
         query_opt: Query,
         mod_opt: D::Options,
-        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
         bind_version: Ver,
-    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
         N: network::Type,
+        P: SequencerPersistence,
         D: SequencerDataSource + Send + Sync + 'static,
     {
         let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
@@ -250,15 +254,16 @@ impl Options {
         Ok(context)
     }
 
-    async fn init_with_query_module_sql<N, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_sql<N, P, D, Ver: StaticVersionType + 'static>(
         self,
         query_opt: Query,
         mod_opt: D::Options,
-        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
         bind_version: Ver,
-    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
         N: network::Type,
+        P: SequencerPersistence,
         D: SequencerDataSource
             + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
             + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
@@ -275,12 +280,12 @@ impl Options {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "state/blocks",
-                endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
+                endpoints::merklized_state::<N, P, D, BlockMerkleTree, _>(bind_version)?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "state/fees",
-                endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
+                endpoints::merklized_state::<N, P, D, FeeMerkleTree, _>(bind_version)?,
             )?;
         }
 
@@ -296,13 +301,15 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, S, Ver: StaticVersionType + 'static>(
+    fn init_hotshot_modules<N, P, S, Ver: StaticVersionType + 'static>(
         &self,
         app: &mut App<S, Error, Ver>,
     ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
-        S::State: Send + Sync + SubmitDataSource<N> + StateSignatureDataSource<N> + StateDataSource,
+        P: SequencerPersistence,
+        S::State:
+            Send + Sync + SubmitDataSource<N, P> + StateSignatureDataSource<N> + StateDataSource,
         N: network::Type,
     {
         let bind_version = Ver::instance();

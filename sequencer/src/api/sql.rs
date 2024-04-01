@@ -42,11 +42,14 @@ impl SequencerDataSource for DataSource {
 
 #[cfg(test)]
 mod impl_testable_data_source {
+    use std::sync::Arc;
+
     use super::*;
     use crate::{
         api::{self, data_source::testing::TestableSequencerDataSource},
         persistence::PersistenceOptions,
     };
+    use async_std::sync::RwLock;
     use hotshot_query_service::data_source::storage::sql::{testing::TmpDb, SqlStorage};
 
     fn tmp_options(db: &TmpDb) -> Options {
@@ -62,7 +65,7 @@ mod impl_testable_data_source {
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TmpDb;
-        type Persistence = SqlStorage;
+        type Persistence = Arc<RwLock<SqlStorage>>;
 
         async fn create_storage() -> Self::Storage {
             TmpDb::init().await

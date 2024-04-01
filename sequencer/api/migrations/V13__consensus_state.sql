@@ -14,3 +14,18 @@ CREATE TABLE highest_voted_view (
 
     view BIGINT
 );
+
+CREATE TABLE high_qc (
+    view BIGINT PRIMARY KEY,
+    data BYTEA
+);
+
+CREATE TABLE da_proposal (
+    view BIGINT PRIMARY KEY,
+    data BYTEA
+);
+
+CREATE TABLE da_proposal_vid_share (
+    view BIGINT PRIMARY KEY,
+    data BYTEA
+);

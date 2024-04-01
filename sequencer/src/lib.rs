@@ -27,9 +27,7 @@ mod l1_client;
 pub mod persistence;
 mod state;
 pub mod transaction;
-use async_trait::async_trait;
 
-use async_std::sync::RwLock;
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -44,30 +42,23 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::CommitmentMap,
     constants::WebServerVersion,
-    data::{DAProposal, VidDisperseShare, ViewNumber},
-    event::HotShotAction,
+    data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
-    message::Proposal,
     signature_key::{BLSPrivKey, BLSPubKey},
-    simple_certificate::QuorumCertificate,
     traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         states::InstanceState,
-        storage::Storage,
     },
-    utils::View,
     ValidatorConfig,
 };
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use versioned_binary_serialization::version::StaticVersionType;
 
@@ -115,11 +106,11 @@ pub mod network {
     Eq(bound = ""),
     Hash(bound = "")
 )]
-pub struct Node<N: network::Type>(PhantomData<fn(&N)>);
+pub struct Node<N: network::Type, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
 
 // Using derivative to derive Clone triggers the clippy lint
 // https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
-impl<N: network::Type> Clone for Node<N> {
+impl<N: network::Type, P: SequencerPersistence> Clone for Node<N, P> {
     fn clone(&self) -> Self {
         *self
     }
@@ -138,86 +129,10 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 type ElectionConfig = StaticElectionConfig;
 
-#[derive(Clone, Debug)]
-pub struct ToBeReplacedStorageState<TYPES: NodeType> {
-    vids: HashMap<TYPES::Time, Proposal<TYPES, VidDisperseShare<TYPES>>>,
-    das: HashMap<TYPES::Time, Proposal<TYPES, DAProposal<TYPES>>>,
-}
-
-impl<TYPES: NodeType> Default for ToBeReplacedStorageState<TYPES> {
-    fn default() -> Self {
-        Self {
-            vids: HashMap::new(),
-            das: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ToBeReplacedStorage<TYPES: NodeType> {
-    inner: Arc<RwLock<ToBeReplacedStorageState<TYPES>>>,
-}
-
-impl<TYPES: NodeType> Default for ToBeReplacedStorage<TYPES> {
-    fn default() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(ToBeReplacedStorageState::default())),
-        }
-    }
-}
-
-#[async_trait]
-impl Storage<SeqTypes> for ToBeReplacedStorage<SeqTypes> {
-    async fn append_vid(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let mut inner = self.inner.write().await;
-        inner
-            .vids
-            .insert(proposal.data.view_number, proposal.clone());
-        Ok(())
-    }
-
-    async fn append_da(
-        &self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let mut inner = self.inner.write().await;
-        inner
-            .das
-            .insert(proposal.data.view_number, proposal.clone());
-        Ok(())
-    }
-
-    async fn record_action(
-        &self,
-        _view: <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
-        _action: HotShotAction,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        Ok(())
-    }
-    /// Update the currently undecided state of consensus.  This includes the undecided leaf chain,
-    /// and the undecided state.
-    async fn update_undecided_state(
-        &self,
-        _leaves: CommitmentMap<Leaf>,
-        _state: BTreeMap<
-            <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
-            View<SeqTypes>,
-        >,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
+impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
-    type Storage = ToBeReplacedStorage<SeqTypes>;
+    type Storage = P;
 }
 
 #[derive(Debug, Clone)]
@@ -333,14 +248,14 @@ pub struct L1Params {
     pub url: Url,
 }
 
-pub async fn init_node<Ver: StaticVersionType + 'static>(
+pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    mut persistence: impl SequencerPersistence,
+    mut persistence: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Web, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -547,7 +462,7 @@ pub mod testing {
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
-        ) -> Vec<SequencerContext<network::Memory, Ver>> {
+        ) -> Vec<SequencerContext<network::Memory, NoStorage, Ver>> {
             join_all((0..self.num_nodes()).map(|i| async move {
                 self.init_node(
                     i,
@@ -562,15 +477,15 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<Ver: StaticVersionType + 'static>(
+        pub async fn init_node<Ver: StaticVersionType, P: SequencerPersistence + 'static>(
             &self,
             i: usize,
             state: ValidatedState,
-            persistence: impl SequencerPersistence,
+            persistence: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             bind_version: Ver,
-        ) -> SequencerContext<network::Memory, Ver> {
+        ) -> SequencerContext<network::Memory, P, Ver> {
             let mut config = self.config.clone();
             config.my_own_validator_config = ValidatorConfig {
                 public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
