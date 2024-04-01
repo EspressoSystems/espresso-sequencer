@@ -161,7 +161,6 @@ impl Options {
             let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
-            // Initialise only here because Extensivle Data Source doesn't impl the EventsSource trait.
             self.init_hotshot_modules(&mut app)?;
 
             context.spawn(
