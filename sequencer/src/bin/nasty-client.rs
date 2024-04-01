@@ -23,7 +23,7 @@ use commit::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
-    future::FutureExt,
+    future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
 };
 use hotshot_query_service::{
@@ -37,7 +37,9 @@ use hotshot_types::{
 };
 use jf_primitives::vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
-use sequencer::{api::endpoints::NamespaceProofQueryData, Header, SeqTypes};
+use sequencer::{
+    api::endpoints::NamespaceProofQueryData, options::parse_duration, Header, SeqTypes,
+};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use std::{
@@ -52,10 +54,45 @@ use surf_disco::{error::ClientError, socket, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
+use tracing::info_span;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
 struct Options {
+    /// Timeout for HTTP requests.
+    ///
+    /// Requests that take longer than this will fail, causing an error log and an increment of the
+    /// `failed_actions` metric.
+    #[clap(
+        long,
+        env = "ESPRESS_NASTY_CLIENT_HTTP_TIMEOUT",
+        default_value = "30s",
+        value_parser = parse_duration,
+    )]
+    http_timeout: Duration,
+
+    /// Port on which to serve the nasty-client API.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_PORT",
+        default_value = "8080"
+    )]
+    port: u16,
+
+    /// The URL of the query service to connect to.
+    #[clap(env = "ESPRESSO_SEQUENCER_URL")]
+    url: Url,
+
+    #[clap(flatten)]
+    client_config: ClientConfig,
+
+    #[clap(flatten)]
+    distribution: ActionDistribution,
+}
+
+#[derive(Clone, Copy, Debug, Parser)]
+struct ClientConfig {
     /// The maximum number of open WebSockets connections for each resource type at any time.
     #[clap(
         long,
@@ -72,33 +109,22 @@ struct Options {
     )]
     max_blocking_polls: u8,
 
-    /// Timeout for HTTP requests.
-    ///
-    /// Requests that take longer than this will fail, causing an error log and an increment of the
-    /// `failed_actions` metric.
+    /// The maximum number of retries before considering a fallible query failed.
+    #[clap(long, env = "ESPRESSO_NASTY_CLIENT_MAX_RETRIES", default_value = "3")]
+    max_retries: usize,
+
+    /// The amount of time to wait between each retry of a fallible query.
     #[clap(
         long,
-        env = "ESPRESS_NASTY_CLIENT_HTTP_TIMEOUT",
-        default_value = "30s",
-        value_parser = sequencer::options::parse_duration
+        env = "ESPRESSO_NASTY_CLIENT_RETRY_DELAY",
+        default_value = "1s",
+        value_parser = parse_duration,
     )]
-    http_timeout: Duration,
+    retry_delay: Duration,
 
-    #[clap(flatten)]
-    distribution: ActionDistribution,
-
-    /// Port on which to serve the nasty-client API.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_NASTY_CLIENT_PORT",
-        default_value = "8080"
-    )]
-    port: u16,
-
-    /// The URL of the query service to connect to.
-    #[clap(env = "ESPRESSO_SEQUENCER_URL")]
-    url: Url,
+    /// The minimum number of successful tries to consider a failed operation "healed".
+    #[clap(long, env = "ESPRESSO_NASTY_CLIENT_MIN_RETRIES", default_value = "5")]
+    min_retries: usize,
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -300,9 +326,8 @@ struct ResourceManager<T: Queryable> {
     client: surf_disco::Client<ClientError, SequencerVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
-    max_open_streams: usize,
-    max_blocking_polls: u8,
     metrics: Arc<Metrics>,
+    cfg: ClientConfig,
 }
 
 impl<T: Queryable> ResourceManager<T> {
@@ -313,9 +338,8 @@ impl<T: Queryable> ResourceManager<T> {
                 .build(),
             open_streams: BTreeMap::new(),
             next_stream_id: 0,
-            max_open_streams: opt.max_open_streams,
-            max_blocking_polls: opt.max_blocking_polls,
             metrics,
+            cfg: opt.client_config,
         }
     }
 
@@ -327,29 +351,93 @@ impl<T: Queryable> ResourceManager<T> {
         T::RESOURCE.plural()
     }
 
+    /// Retry a fallible operation several times before giving up.
+    ///
+    /// Some queries are allowed to fail occasionally, but should heal themselves quickly. For
+    /// example, we may query the block height from one node and then get routed to another node to
+    /// query an object at that height. The second node may be lagging and return 404, but it should
+    /// catch up quickly and the query should start to succeed. Or, we may query for an object which
+    /// is missing, but the server should quickly heal by fetching the missing object from a peer.
+    ///
+    /// This function will retry a fallible operation a configurable number of times. If the
+    /// operation ever fails, a warning will be logged, but it is not considered a failed action
+    /// unless the operation fails several times in a row.
+    ///
+    /// If the operation fails even once but eventually succeeds, we will retry the operation
+    /// several times to check that all servers are "healed": at this point, the operation should no
+    /// longer fail even once.
+    async fn retry<F: TryFuture<Error = anyhow::Error>>(
+        &self,
+        span: tracing::Span,
+        f: impl Fn() -> F,
+    ) -> anyhow::Result<F::Ok> {
+        let _enter = span.enter();
+        tracing::debug!("starting fallible operation");
+
+        let mut i = 0;
+        loop {
+            match f().into_future().await {
+                Ok(res) if i == 0 => {
+                    // Succeeded on the first try, get on with it.
+                    return Ok(res);
+                }
+                Ok(res) => {
+                    // Succeeded after at least one failure; retry a number of additional times to
+                    // be sure the endpoint is healed.
+                    tracing::info!("succeeded after {i} retries; checking health");
+                    for _ in 0..self.cfg.min_retries {
+                        f().into_future().await.context(
+                            "operation is flaky; succeeded on retry but not fully healed",
+                        )?;
+                    }
+                    return Ok(res);
+                }
+                Err(err) if i < self.cfg.max_retries => {
+                    tracing::warn!("failed, will retry: {err:#}");
+                    i += 1;
+                }
+                Err(err) => {
+                    return Err(err).context("failed too many times");
+                }
+            }
+        }
+    }
+
     async fn query(&self, at: u64) -> anyhow::Result<()> {
         let at = self.adjust_index(at).await?;
-        tracing::debug!("fetching {} {at}", Self::singular());
-        let obj: T = self
-            .client
-            .get(&format!("availability/{}/{at}", Self::singular()))
-            .send()
-            .await
-            .context(format!("fetching {} {at}", Self::singular()))?;
+        let obj = self
+            .retry(
+                info_span!("query", resource = Self::singular(), at),
+                || async {
+                    self.client
+                        .get::<T>(&format!("availability/{}/{at}", Self::singular()))
+                        .send()
+                        .await
+                        .context(format!("fetching {} {at}", Self::singular()))
+                },
+            )
+            .await?;
 
         // Query by hash and check consistency.
         let hash = obj.hash();
+        let by_hash = self
+            .retry(
+                info_span!("query by hash", resource = Self::singular(), at, hash),
+                || async {
+                    self.client
+                        .get(&format!(
+                            "availability/{}/{}/{hash}",
+                            Self::singular(),
+                            T::HASH_URL_SEGMENT,
+                        ))
+                        .send()
+                        .await
+                        .context(format!("fetching {} {hash}", Self::singular()))
+                },
+            )
+            .await?;
         ensure!(
-            obj == self
-                .client
-                .get(&format!(
-                    "availability/{}/{}/{hash}",
-                    Self::singular(),
-                    T::HASH_URL_SEGMENT,
-                ))
-                .send()
-                .await
-                .context(format!("fetching {} {hash}", Self::singular()))?,
+            obj == by_hash,
             format!(
                 "query for {} {at} by hash {hash} is not consistent",
                 Self::singular()
@@ -361,7 +449,7 @@ impl<T: Queryable> ResourceManager<T> {
     }
 
     async fn open_stream(&mut self, from: u64) -> anyhow::Result<()> {
-        if self.open_streams.len() >= self.max_open_streams {
+        if self.open_streams.len() >= self.cfg.max_open_streams {
             tracing::info!(
                 num = self.open_streams.len(),
                 "not opening stream, number of open streams exceeds maximum"
@@ -433,7 +521,7 @@ impl<T: Queryable> ResourceManager<T> {
             // Check if the next item is immediately available or if we're going to block.
             if stream.stream.as_mut().peek().now_or_never().is_none() {
                 blocking += 1;
-                if blocking > self.max_blocking_polls {
+                if blocking > self.cfg.max_blocking_polls {
                     tracing::info!("aborting poll_stream action; exceeded maximum blocking polls");
                     return Ok(());
                 }
@@ -500,13 +588,21 @@ impl ResourceManager<Header> {
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
         let start = from % now;
         let end = start + duration as u64;
-        tracing::debug!("querying timestamp window from {start} to {end}");
-        let window: TimeWindowQueryData<Header> = self
-            .client
-            .get(&format!("node/header/window/{start}/{end}"))
-            .send()
-            .await
-            .context(format!("fetching timestamp window from {start} to {end}"))?;
+
+        let window = self
+            .retry(
+                info_span!("timestamp window", resource = Self::singular(), start, end),
+                || async {
+                    self.client
+                        .get::<TimeWindowQueryData<Header>>(&format!(
+                            "node/header/window/{start}/{end}"
+                        ))
+                        .send()
+                        .await
+                        .context(format!("fetching timestamp window from {start} to {end}"))
+                },
+            )
+            .await?;
 
         // Sanity check the window: prev and next should be correct bookends.
         if let Some(prev) = &window.prev {
@@ -561,36 +657,46 @@ impl ResourceManager<Header> {
 impl ResourceManager<BlockQueryData<SeqTypes>> {
     async fn query_namespace(&self, block: u64, index: usize) -> anyhow::Result<()> {
         let block = self.adjust_index(block).await?;
+        let span = info_span!("query namespace", resource = Self::singular(), block, index);
+        let _enter = span.enter();
 
         // Download the header so we can translate the `namespace` index to a namespace ID using
         // the namespace table.
         let header: Header = self
-            .client
-            .get(&format!("availability/header/{block}"))
-            .send()
-            .await
-            .context(format!("fetching header {block}"))?;
+            .retry(info_span!("fetch header"), || async {
+                self.client
+                    .get(&format!("availability/header/{block}"))
+                    .send()
+                    .await
+                    .context(format!("fetching header {block}"))
+            })
+            .await?;
         if header.ns_table.is_empty() {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
         let ns = header.ns_table.get_table_entry(index).0;
 
-        tracing::debug!("querying namespace {ns} in block {block}");
         let ns_proof: NamespaceProofQueryData = self
-            .client
-            .get(&format!("availability/block/{block}/namespace/{ns}"))
-            .send()
-            .await
-            .context(format!("fetching namespace {block}:{ns}"))?;
+            .retry(info_span!("fetch namespace", %ns), || async {
+                self.client
+                    .get(&format!("availability/block/{block}/namespace/{ns}"))
+                    .send()
+                    .await
+                    .context(format!("fetching namespace {block}:{ns}"))
+            })
+            .await?;
 
         // Verify proof.
         let vid_common: VidCommonQueryData<SeqTypes> = self
-            .client
-            .get(&format!("availability/vid/common/{block}"))
-            .send()
-            .await
-            .context(format!("fetching VID common {block}"))?;
+            .retry(info_span!("fetch VID common"), || async {
+                self.client
+                    .get(&format!("availability/vid/common/{block}"))
+                    .send()
+                    .await
+                    .context(format!("fetching VID common {block}"))
+            })
+            .await?;
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()));
         ensure!(
             ns_proof
