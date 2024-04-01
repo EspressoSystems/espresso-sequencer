@@ -45,7 +45,18 @@ async fn test_da_task() {
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
-    for view in (&mut generator).take(2) {
+
+    for view in (&mut generator).take(1) {
+        proposals.push(view.da_proposal.clone());
+        leaders.push(view.leader_public_key);
+        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        dacs.push(view.da_certificate.clone());
+        vids.push(view.vid_proposal.clone());
+    }
+
+    generator.add_transactions(vec![TestTransaction(vec![0])]);
+
+    for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
@@ -108,7 +119,18 @@ async fn test_da_task_storage_failure() {
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
-    for view in (&mut generator).take(2) {
+
+    for view in (&mut generator).take(1) {
+        proposals.push(view.da_proposal.clone());
+        leaders.push(view.leader_public_key);
+        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        dacs.push(view.da_certificate.clone());
+        vids.push(view.vid_proposal.clone());
+    }
+
+    generator.add_transactions(transactions);
+
+    for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_da_vote(DAData { payload_commit }, &handle));

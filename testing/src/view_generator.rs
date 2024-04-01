@@ -94,7 +94,6 @@ impl TestView {
             proposal_certificate: None,
         };
 
-        let transactions = vec![TestTransaction(vec![0])];
         let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =
@@ -291,7 +290,6 @@ impl TestView {
             _pd: PhantomData,
         };
 
-        let transactions = vec![TestTransaction(vec![0])];
         let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =

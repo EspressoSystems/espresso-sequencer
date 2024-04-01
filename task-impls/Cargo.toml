@@ -20,6 +20,7 @@ hotshot-task = { path = "../task" }
 hotshot-types = { path = "../types" }
 hotshot-builder-api = { path = "../builder-api" }
 jf-primitives = { workspace = true }
+memoize = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }

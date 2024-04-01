@@ -18,7 +18,7 @@ use hotshot_types::{
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
-    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote, UpgradeProposalData},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
@@ -291,6 +291,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     proposal.view_number
                 );
                 return false;
+            }
+
+            if let Some(upgrade_cert) = &self.decided_upgrade_cert {
+                if view_is_between_versions(self.cur_view, &upgrade_cert.data)
+                    && Some(proposal.block_header.payload_commitment())
+                        != null_block::commitment(self.quorum_membership.total_nodes())
+                {
+                    info!("Refusing to vote on proposal because it does not have a null commitment, and we are between versions. Expected:\n\n{:?}\n\nActual:{:?}", null_block::commitment(self.quorum_membership.total_nodes()), Some(proposal.block_header.payload_commitment()));
+                    return false;
+                }
             }
 
             // Only vote if you have the DA cert
@@ -1384,6 +1394,76 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
+        // Special case: if we have a decided upgrade certificate AND it does not apply a version to the current view, we MUST propose with a null block.
+        if let Some(upgrade_cert) = &self.decided_upgrade_cert {
+            if view_is_between_versions(self.cur_view, &upgrade_cert.data) {
+                let Ok((_payload, metadata)) =
+                    <TYPES::BlockPayload as BlockPayload>::from_transactions(Vec::new())
+                else {
+                    error!("Failed to build null block payload and metadata");
+                    return false;
+                };
+
+                let Some(null_block_commitment) =
+                    null_block::commitment(self.quorum_membership.total_nodes())
+                else {
+                    // This should never happen.
+                    error!("Failed to calculate null block commitment");
+                    return false;
+                };
+
+                let block_header = TYPES::BlockHeader::new(
+                    state,
+                    &consensus.instance_state,
+                    &parent_leaf,
+                    null_block_commitment,
+                    metadata,
+                )
+                .await;
+
+                let proposal = QuorumProposal {
+                    block_header,
+                    view_number: view,
+                    justify_qc: consensus.high_qc.clone(),
+                    proposal_certificate: None,
+                    upgrade_certificate: None,
+                };
+
+                let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal);
+                proposed_leaf.set_parent_commitment(parent_leaf.commit());
+
+                let Ok(signature) =
+                    TYPES::SignatureKey::sign(&self.private_key, proposed_leaf.commit().as_ref())
+                else {
+                    // This should never happen.
+                    error!("Failed to sign proposed_leaf.commit()!");
+                    return false;
+                };
+
+                let message = Proposal {
+                    data: proposal,
+                    signature,
+                    _pd: PhantomData,
+                };
+                debug!(
+                    "Sending null proposal for view {:?} \n {:?}",
+                    proposed_leaf.get_view_number(),
+                    ""
+                );
+
+                broadcast_event(
+                    Arc::new(HotShotEvent::QuorumProposalSend(
+                        message.clone(),
+                        self.public_key.clone(),
+                    )),
+                    event_stream,
+                )
+                .await;
+
+                return true;
+            }
+        }
+
         if let Some(commit_and_metadata) = &self.payload_commitment_and_metadata {
             let block_header = TYPES::BlockHeader::new(
                 state,
@@ -1494,4 +1574,36 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     fn should_shutdown(event: &Self::Event) -> bool {
         matches!(event.as_ref(), HotShotEvent::Shutdown)
     }
+}
+
+pub mod null_block {
+    #![allow(missing_docs)]
+    use hotshot_types::vid::{vid_scheme, VidCommitment};
+    use jf_primitives::vid::VidScheme;
+    use memoize::memoize;
+
+    /// The commitment for a null block payload.
+    ///
+    /// Note: the commitment depends on the network (via `num_storage_nodes`),
+    /// and may change (albeit rarely) during execution.
+    ///
+    /// We memoize the result to avoid having to recalculate it.
+    #[memoize(SharedCache, Capacity: 10)]
+    #[must_use]
+    pub fn commitment(num_storage_nodes: usize) -> Option<VidCommitment> {
+        let vid_result = vid_scheme(num_storage_nodes).commit_only(&Vec::new());
+
+        match vid_result {
+            Ok(r) => Some(r),
+            Err(_) => None,
+        }
+    }
+}
+
+/// Test whether a view is in the range defined by an upgrade certificate.
+fn view_is_between_versions<TYPES: NodeType>(
+    view: TYPES::Time,
+    upgrade_data: &UpgradeProposalData<TYPES>,
+) -> bool {
+    view > upgrade_data.old_version_last_block && view < upgrade_data.new_version_first_block
 }
