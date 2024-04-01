@@ -7,8 +7,6 @@ edition = { workspace = true }
 
 [dependencies]
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", rev = "1a677f9ecf7043303fe0decfe613337981e9c292" }
-#branch = "hg/test_builder_executable" }
-#hotshot-builder-core = { path = "../../hs-builder-core" }
 anyhow = { workspace = true }
 async-broadcast = "0.7.0"
 async-lock = "2.8"
