@@ -31,7 +31,7 @@ use tide_disco::{
 };
 use versioned_binary_serialization::version::StaticVersionType;
 
-use hotshot_events_service::{events::Error as EventStreamingError, events_source::EventsSource};
+use hotshot_events_service::events::Error as EventStreamingError;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -163,32 +163,14 @@ impl Options {
 
             self.init_hotshot_modules(&mut app)?;
 
+            if self.hotshot_events.is_some() {
+                self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
+            }
+
             context.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
-
-            // It runs to different port and app because State and Extensible Data source needs to support required
-            // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
-            // hotshot-events-service crate.
-            if self.hotshot_events.is_some() {
-                let event_streamer = context.get_event_streamer();
-
-                let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
-
-                self.init_hotshot_event_streaming_module(&mut app)?;
-
-                context.spawn(
-                    "Hotshot Events Streaming API server",
-                    app.serve(
-                        format!(
-                            "0.0.0.0:{}",
-                            self.hotshot_events.unwrap().events_service_port
-                        ),
-                        bind_version,
-                    ),
-                );
-            }
 
             Ok(context)
         } else {
@@ -204,32 +186,15 @@ impl Options {
 
             self.init_hotshot_modules(&mut app)?;
 
+            if self.hotshot_events.is_some() {
+                self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
+            }
+
             context.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
-            // Start the event streaming API server if it is enabled.
-            // It runs to different port and app because State and Extensible Data source needs to support required
-            // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
-            // hotshot-events-service crate.
-            if self.hotshot_events.is_some() {
-                let event_streamer = context.get_event_streamer();
 
-                let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
-
-                self.init_hotshot_event_streaming_module(&mut app)?;
-
-                context.spawn(
-                    "Hotshot Events Streaming API server",
-                    app.serve(
-                        format!(
-                            "0.0.0.0:{}",
-                            self.hotshot_events.unwrap().events_service_port
-                        ),
-                        bind_version,
-                    ),
-                );
-            }
             Ok(context)
         }
     }
@@ -277,6 +242,8 @@ impl Options {
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
 
+        self.init_hotshot_modules(&mut app)?;
+
         context.spawn("query storage updater", update_loop(state, events));
 
         Ok((context, app))
@@ -298,6 +265,10 @@ impl Options {
         let (mut context, app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
+
+        if self.hotshot_events.is_some() {
+            self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
+        }
 
         context.spawn(
             "API server",
@@ -338,6 +309,10 @@ impl Options {
                 "state/fees",
                 endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
             )?;
+        }
+
+        if self.hotshot_events.is_some() {
+            self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
         }
 
         context.spawn(
@@ -382,19 +357,40 @@ impl Options {
     }
 
     // Enable the events streaming api module
-    fn init_hotshot_event_streaming_module<S, Ver: StaticVersionType + 'static>(
+    fn init_and_spawn_hotshot_event_streaming_module<N, Ver: StaticVersionType + 'static>(
         &self,
-        app: &mut App<S, EventStreamingError, Ver>,
+        context: &mut SequencerContext<N, Ver>,
+        bind_version: Ver,
     ) -> anyhow::Result<()>
     where
-        S: 'static + Send + Sync + ReadState,
-        <S as ReadState>::State: Send + Sync + EventsSource<SeqTypes>,
+        N: network::Type,
     {
+        // Start the event streaming API server if it is enabled.
+        // It runs to different port and app because State and Extensible Data source needs to support required
+        // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
+        // hotshot-events-service crate.
+
+        let event_streamer = context.get_event_streamer();
+
+        let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
+
         tracing::info!("initializing hotshot events API");
         let hotshot_events_api = hotshot_events_service::events::define_api(
             &hotshot_events_service::events::Options::default(),
         )?;
+
         app.register_module("hotshot-events", hotshot_events_api)?;
+
+        context.spawn(
+            "Hotshot Events Streaming API server",
+            app.serve(
+                format!(
+                    "0.0.0.0:{}",
+                    self.hotshot_events.unwrap().events_service_port
+                ),
+                bind_version,
+            ),
+        );
 
         Ok(())
     }

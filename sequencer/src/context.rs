@@ -57,7 +57,7 @@ pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> 
     tasks: Vec<(String, JoinHandle<()>)>,
 
     /// events streamer to stream hotshot events to external clients
-    events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+    events_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
 
     detached: bool,
 }
@@ -126,7 +126,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             persistence,
             node_id,
             state_signer,
-            Some(event_streamer),
+            event_streamer,
         ))
     }
 
@@ -136,7 +136,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         persistence: impl SequencerPersistence,
         node_index: u64,
         state_signer: StateSigner<Ver>,
-        event_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+        event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     ) -> Self {
         let events = handle.get_event_stream();
 
@@ -155,7 +155,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
                 events,
                 persistence,
                 ctx.state_signer.clone(),
-                event_streamer.clone(),
+                Some(event_streamer.clone()),
             ),
         );
 
@@ -185,7 +185,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
 
     /// get event streamer
     pub fn get_event_streamer(&self) -> Arc<RwLock<EventsStreamer<SeqTypes>>> {
-        self.events_streamer.clone().unwrap()
+        self.events_streamer.clone()
     }
 
     /// Return a reference to the underlying consensus handle.
