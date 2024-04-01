@@ -8,6 +8,7 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use anyhow::Context;
 use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
@@ -34,7 +35,10 @@ use derivative::Derivative;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MemoryNetwork, NetworkingMetricsValue, WebServerNetwork},
+        implementations::{
+            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork, MemoryNetwork,
+            NetworkingMetricsValue, PushCdnNetwork, WrappedSignatureKey,
+        },
     },
     types::SignatureKey,
     Networks,
@@ -45,7 +49,6 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    constants::WebServerVersion,
     data::{DAProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -65,10 +68,10 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{collections::BTreeMap, time::Duration};
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 use std::{fmt::Debug, sync::Arc};
-use std::{marker::PhantomData, net::IpAddr};
 use versioned_binary_serialization::version::StaticVersionType;
 
 pub use block::payload::Payload;
@@ -79,21 +82,22 @@ pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
 pub mod network {
+    use hotshot::traits::implementations::CombinedNetworks;
     use hotshot_types::message::Message;
 
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
-        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
+        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
+        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
     }
 
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct Web;
+    #[derive(Clone, Copy, Default)]
+    pub struct Combined;
 
-    impl Type for Web {
-        type DAChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
-        type QuorumChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
+    impl Type for Combined {
+        type DAChannel = CombinedNetworks<SeqTypes>;
+        type QuorumChannel = CombinedNetworks<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -312,14 +316,17 @@ pub enum Error {
 
 #[derive(Clone, Debug)]
 pub struct NetworkParams {
-    pub da_server_url: Url,
-    pub consensus_server_url: Url,
+    /// The address where a CDN marshal is located
+    pub cdn_endpoint: String,
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
-    pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    /// The address to send to other Libp2p nodes to contact us
+    pub libp2p_advertise_address: SocketAddr,
+    /// The address to bind to for Libp2p
+    pub libp2p_bind_address: SocketAddr,
 }
 
 #[derive(Clone, Debug)]
@@ -340,16 +347,14 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Combined, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        public_ip: None,
+        advertise_address: Some(network_params.libp2p_advertise_address),
         network_config_file: None,
     };
-    // This "public" IP only applies to libp2p network configurations, so we can supply any value here
-    let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+    let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
@@ -358,6 +363,11 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         state_key_pair,
     };
 
+    // Derive our Libp2p public key from our private key
+    let libp2p_public_key =
+        derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
+            .with_context(|| "Failed to derive Libp2p peer ID")?;
+
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
@@ -365,10 +375,17 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         }
         None => {
             tracing::info!("loading network config from orchestrator");
-            let config =
-                NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
-                    .await
-                    .0;
+            let config = NetworkConfig::get_complete_config(
+                &orchestrator_client,
+                None,
+                my_config.clone(),
+                // Register in our Libp2p advertise address and public key so other nodes
+                // can contact us on startup
+                Some(network_params.libp2p_advertise_address),
+                Some(libp2p_public_key),
+            )
+            .await?
+            .0;
             tracing::info!(
                 node_id = config.node_index,
                 stake_table = ?config.config.known_nodes_with_stake,
@@ -380,20 +397,46 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     };
     let node_index = config.node_index;
 
-    // Initialize networking.
+    // Initialize the push CDN network (and perform the initial connection)
+    let cdn_network = PushCdnNetwork::new(
+        network_params.cdn_endpoint,
+        vec!["Global".into(), "DA".into()],
+        KeyPair {
+            public_key: WrappedSignatureKey(my_config.public_key),
+            private_key: my_config.private_key.clone(),
+        },
+    )
+    .await
+    .with_context(|| "Failed to create CDN network")?;
+
+    // Initialize the Libp2p network
+    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+        config.clone(),
+        network_params.libp2p_bind_address,
+        &my_config.public_key,
+        // We need the private key so we can derive our Libp2p keypair
+        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+        &my_config.private_key,
+    )
+    .await
+    .with_context(|| "Failed to create libp2p network")?;
+
+    // Combine the two communication channels
+    let da_network = Arc::from(CombinedNetworks::new(
+        cdn_network.clone(),
+        p2p_network.clone(),
+        Duration::from_secs(1),
+    ));
+    let quorum_network = Arc::from(CombinedNetworks::new(
+        cdn_network,
+        p2p_network,
+        Duration::from_secs(1),
+    ));
+
+    // Convert to the sequencer-compatible type
     let networks = Networks {
-        da_network: Arc::new(WebServerNetwork::create(
-            network_params.da_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            true,
-        )),
-        quorum_network: Arc::new(WebServerNetwork::create(
-            network_params.consensus_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            false,
-        )),
+        da_network,
+        quorum_network,
         _pd: Default::default(),
     };
 
@@ -638,7 +681,7 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .block_payload
+                        .get_block_payload()
                         .as_ref()?
                         .transaction_commitments(leaf.get_block_header().metadata())
                         .contains(&commitment)
@@ -740,7 +783,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.block_header.clone();
+                let header = leaf.get_block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

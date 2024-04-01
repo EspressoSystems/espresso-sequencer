@@ -3,6 +3,7 @@ use clap::Parser;
 use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
+use hotshot_orchestrator::config::Libp2pConfig;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
@@ -190,12 +191,33 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
+
+    // The Libp2p configuration
+    let libp2p_config = Libp2pConfig {
+        bootstrap_nodes: Vec::new(),
+        node_index: 0,
+        bootstrap_mesh_n_high: 4,
+        bootstrap_mesh_n_low: 4,
+        bootstrap_mesh_outbound_min: 2,
+        bootstrap_mesh_n: 4,
+        mesh_n_high: 4,
+        mesh_n_low: 4,
+        mesh_outbound_min: 2,
+        mesh_n: 4,
+        next_view_timeout: config.next_view_timeout,
+        propose_min_round_time: config.propose_min_round_time,
+        propose_max_round_time: config.propose_max_round_time,
+        online_time: 10,
+        num_txn_per_round: 0,
+    };
+
     config.config.num_nodes_with_stake = args.num_nodes;
     config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_nodes_without_stake = vec![];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
+    config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;

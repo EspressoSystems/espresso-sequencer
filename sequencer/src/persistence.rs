@@ -122,7 +122,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         // prevents double votes from starting in a view in which we had already voted before the
         // restart, and prevents unnecessary catchup from starting in a view earlier than the anchor
         // leaf.
-        let view = max(highest_voted_view, leaf.view_number);
+        let view = max(highest_voted_view, leaf.get_view_number());
         tracing::info!(?leaf, ?view, "loaded consensus state");
 
         Ok(HotShotInitializer::from_reload(
@@ -202,7 +202,7 @@ mod persistence_tests {
 
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
-        leaf2.block_header.height += 1;
+        leaf2.get_block_header_mut().height += 1;
         storage.save_anchor_leaf(&leaf2).await.unwrap();
         assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf2);
 

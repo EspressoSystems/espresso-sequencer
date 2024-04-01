@@ -1,8 +1,7 @@
 version: "3"
 
 environment:
-  - ESPRESSO_SEQUENCER_DA_SERVER_URL=http://localhost:$ESPRESSO_DA_SERVER_PORT
-  - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL=http://localhost:$ESPRESSO_CONSENSUS_SERVER_PORT
+  - ESPRESSO_SEQUENCER_CDN_ENDPOINT=127.0.0.1:$ESPRESSO_CDN_SERVER_PORT
   - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL=http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
   - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
@@ -48,34 +47,6 @@ processes:
       success_threshold: 1
       failure_threshold: 100
 
-  da-server:
-    command: web-server
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_DA_SERVER_PORT
-    depends_on:
-      orchestrator:
-        condition: process_healthy
-    readiness_probe:
-      http_get:
-        scheme: http
-        host: localhost
-        port: $ESPRESSO_DA_SERVER_PORT
-        path: /healthcheck
-
-  consensus-server:
-    command: web-server
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_CONSENSUS_SERVER_PORT
-    depends_on:
-      orchestrator:
-        condition: process_healthy
-    readiness_probe:
-      http_get:
-        scheme: http
-        host: localhost
-        port: $ESPRESSO_CONSENSUS_SERVER_PORT
-        path: /healthcheck
-
   state-relay-server:
     command: state-relay-server
     readiness_probe:
@@ -103,6 +74,8 @@ processes:
     command: sequencer -- http -- query -- catchup -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=127.0.0.1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
@@ -128,6 +101,8 @@ processes:
     command: sequencer -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=127.0.0.1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
@@ -153,6 +128,8 @@ processes:
     command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=127.0.0.1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
@@ -177,6 +154,8 @@ processes:
     command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=127.0.0.1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
@@ -220,6 +199,29 @@ processes:
         port: $ESPRESSO_SEQUENCER4_API_PORT
         path: /healthcheck
       failure_threshold: 100
+
+  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # different parts of the CDN
+  keydb:
+    command: echo 'requirepass changeme!' | keydb-server - --save "" --appendonly no
+
+  # The CDN system's main entry point; where users contact first.
+  marshal_0:
+    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT
+
+  # A broker is the main message-routing unit of the CDN
+  broker_0:
+    command: cdn-broker -d "redis://:changeme!@localhost:6379"
+
+  # A broker is the main message-routing unit of the CDN
+  # as we're running a local demo, we need to operate on different ports
+  broker_1:
+    command: cdn-broker 
+      --public-bind-address 0.0.0.0:1740
+      --public-advertise-address local_ip:1740
+      --private-bind-address 0.0.0.0:1741
+      --private-advertise-address local_ip:1741
+      -d "redis://:changeme!@localhost:6379"
 
   commitment-task:
     command: commitment-task

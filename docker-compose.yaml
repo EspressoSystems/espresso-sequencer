@@ -46,31 +46,42 @@ services:
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
 
-  da-server:
-    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
-    ports:
-      - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT
-      - RUST_LOG=error
-      - RUST_LOG_FORMAT
-      - ASYNC_STD_THREAD_COUNT
-    depends_on:
-      orchestrator:
-        condition: service_healthy
+  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # different parts of the CDN
+  keydb:
+    image: docker.io/eqalpha/keydb:latest
+    command: ["--requirepass", "changemeplease!!"]
 
-  consensus-server:
-    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
-    ports:
-      - "$ESPRESSO_CONSENSUS_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT
-      - RUST_LOG=error
-      - RUST_LOG_FORMAT
-      - ASYNC_STD_THREAD_COUNT
-    depends_on:
-      orchestrator:
-        condition: service_healthy
+  # The CDN system's main entry point; where users contact first.
+  marshal-0:
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main
+    command:
+      - -d
+      - redis://:changemeplease!!@keydb:6379
+      - --bind-port 
+      - $ESPRESSO_CDN_SERVER_PORT
+
+  # A broker is the main message-routing unit of the CDN
+  broker-0:
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
+    command: 
+    - -d
+    - redis://:changemeplease!!@keydb:6379
+    - --public_advertise_address
+    - broker-0:1738
+    - --private_advertise_address
+    - broker-0:1739
+
+  # A broker is the main message-routing unit of the CDN
+  broker-1:
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
+    command: 
+    - -d
+    - redis://:changemeplease!!@keydb:6379
+    - --public_advertise_address
+    - broker-1:1738
+    - --private_advertise_address
+    - broker-1:1739
 
   state-relay-server:
     image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
@@ -118,8 +129,7 @@ services:
     command: sequencer -- http -- query -- state -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
+      - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -127,6 +137,8 @@ services:
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_0
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=sequencer0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=10
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
@@ -151,8 +163,7 @@ services:
     command: sequencer -- storage-sql -- http -- query -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
+      - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
@@ -163,6 +174,8 @@ services:
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_1
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=sequencer1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=11
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
@@ -185,8 +198,7 @@ services:
     command: sequencer -- storage-fs -- http -- status -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
+      - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer3:$ESPRESSO_SEQUENCER_API_PORT
@@ -194,6 +206,8 @@ services:
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_2
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=sequencer2:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=12
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
@@ -216,14 +230,15 @@ services:
     command: sequencer -- storage-fs -- http -- submit -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
+      - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer4:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_3
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=sequencer3:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=13
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
@@ -246,14 +261,15 @@ services:
     command: sequencer -- http -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
+      - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_4
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_4
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=sequencer4:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_4
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=14
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
