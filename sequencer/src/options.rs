@@ -277,7 +277,7 @@ module!("http", api::options::Http);
 module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
-module!("state", api::options::State, requires: "http, storage-sql");
+module!("state", api::options::State, requires: "http", "storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
 
 #[derive(Clone, Debug, Args)]
