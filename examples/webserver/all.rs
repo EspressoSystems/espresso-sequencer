@@ -9,7 +9,6 @@ use crate::{
     infra::run_orchestrator,
     types::{DANetwork, NodeImpl, QuorumNetwork},
 };
-use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
 /// general infra used for this example
@@ -87,7 +86,7 @@ async fn main() {
             infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
-                    public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    advertise_address: None,
                     network_config_file: None,
                 },
             )

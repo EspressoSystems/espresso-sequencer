@@ -29,7 +29,7 @@ pub struct NetworkNodeConfig {
     pub mesh_params: Option<MeshParams>,
 
     /// list of addresses to connect to at initialization
-    pub to_connect_addrs: HashSet<(Option<PeerId>, Multiaddr)>,
+    pub to_connect_addrs: HashSet<(PeerId, Multiaddr)>,
     /// republication interval in DHT, must be much less than `ttl`
     #[builder(default)]
     pub republication_interval: Option<Duration>,

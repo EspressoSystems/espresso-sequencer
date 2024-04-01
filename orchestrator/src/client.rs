@@ -1,4 +1,4 @@
-use std::{net::IpAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 
 use crate::{config::NetworkConfig, OrchestratorVersion};
 use async_compatibility_layer::art::async_sleep;
@@ -6,17 +6,18 @@ use clap::Parser;
 use futures::{Future, FutureExt};
 
 use hotshot_types::{
+    constants::Version01,
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     PeerConfig,
 };
+use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
+use versioned_binary_serialization::BinarySerializer;
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client
     client: surf_disco::Client<ClientError, OrchestratorVersion>,
-    /// the identity
-    pub identity: String,
 }
 
 /// Struct describing a benchmark result
@@ -115,9 +116,8 @@ pub struct BenchResultsDownloadConfig {
 pub struct ValidatorArgs {
     /// The address the orchestrator runs on
     pub url: Url,
-    /// This node's public IP address, for libp2p
-    /// If no IP address is passed in, it will default to 127.0.0.1
-    pub public_ip: Option<IpAddr>,
+    /// The optional advertise address to use for Libp2p
+    pub advertise_address: Option<SocketAddr>,
     /// An optional network config file to save to/load from
     /// Allows for rejoining the network on a complete state loss
     #[arg(short, long)]
@@ -131,9 +131,8 @@ pub struct MultiValidatorArgs {
     pub num_nodes: u16,
     /// The address the orchestrator runs on
     pub url: Url,
-    /// This node's public IP address, for libp2p
-    /// If no IP address is passed in, it will default to 127.0.0.1
-    pub public_ip: Option<IpAddr>,
+    /// The optional advertise address to use for Libp2p
+    pub advertise_address: Option<SocketAddr>,
     /// An optional network config file to save to/load from
     /// Allows for rejoining the network on a complete state loss
     #[arg(short, long)]
@@ -168,7 +167,7 @@ impl ValidatorArgs {
     pub fn from_multi_args(multi_args: MultiValidatorArgs, node_index: u16) -> Self {
         Self {
             url: multi_args.url,
-            public_ip: multi_args.public_ip,
+            advertise_address: multi_args.advertise_address,
             network_config_file: multi_args
                 .network_config_file
                 .map(|s| format!("{s}-{node_index}")),
@@ -179,10 +178,10 @@ impl ValidatorArgs {
 impl OrchestratorClient {
     /// Creates the client that will connect to the orchestrator
     #[must_use]
-    pub fn new(args: ValidatorArgs, identity: String) -> Self {
+    pub fn new(args: ValidatorArgs) -> Self {
         let client = surf_disco::Client::<ClientError, OrchestratorVersion>::new(args.url);
         // TODO ED: Add healthcheck wait here
-        OrchestratorClient { client, identity }
+        OrchestratorClient { client }
     }
 
     /// Get the config from the orchestrator.
@@ -192,19 +191,43 @@ impl OrchestratorClient {
     /// # Panics
     /// if unable to convert the node index from usize into u64
     /// (only applicable on 32 bit systems)
+    ///
+    /// # Errors
+    /// If we were unable to serialize the Libp2p data
     #[allow(clippy::type_complexity)]
     pub async fn get_config_without_peer<K: SignatureKey, E: ElectionConfig>(
         &self,
-        identity: String,
-    ) -> NetworkConfig<K, E> {
-        // get the node index
-        let identity = identity.as_str();
+        libp2p_address: Option<SocketAddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> anyhow::Result<NetworkConfig<K, E>> {
+        // Get the (possible) Libp2p advertise address from our args
+        let libp2p_address = libp2p_address.map(|f| {
+            Multiaddr::try_from(format!(
+                "/{}/{}/udp/{}/quic-v1",
+                if f.is_ipv4() { "ip4" } else { "ip6" },
+                f.ip(),
+                f.port()
+            ))
+            .expect("failed to create multiaddress")
+        });
+
+        // Serialize our (possible) libp2p-specific data
+        let request_body = versioned_binary_serialization::Serializer::<Version01>::serialize(&(
+            libp2p_address,
+            libp2p_public_key,
+        ))?;
+
         let identity = |client: Client<ClientError, OrchestratorVersion>| {
+            // We need to clone here to move it into the closure
+            let request_body = request_body.clone();
             async move {
                 let node_index: Result<u16, ClientError> = client
-                    .post(&format!("api/identity/{identity}"))
+                    .post("api/identity")
+                    .body_binary(&request_body)
+                    .expect("failed to set request body")
                     .send()
                     .await;
+
                 node_index
             }
             .boxed()
@@ -226,7 +249,7 @@ impl OrchestratorClient {
         let mut config = self.wait_for_fn_from_orchestrator(f).await;
         config.node_index = From::<u16>::from(node_index);
 
-        config
+        Ok(config)
     }
 
     /// Post to the orchestrator and get the latest `node_index`

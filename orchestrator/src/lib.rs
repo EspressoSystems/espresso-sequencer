@@ -8,16 +8,12 @@ pub mod config;
 use async_lock::RwLock;
 use client::{BenchResults, BenchResultsDownloadConfig};
 use hotshot_types::{
+    constants::Version01,
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     PeerConfig,
 };
 use std::fs::OpenOptions;
-use std::{
-    collections::HashSet,
-    io,
-    io::ErrorKind,
-    net::{IpAddr, SocketAddr},
-};
+use std::{collections::HashSet, io, io::ErrorKind};
 use tide_disco::{Api, App, RequestError};
 
 use surf_disco::Url;
@@ -32,11 +28,17 @@ use futures::FutureExt;
 use crate::config::NetworkConfig;
 
 use csv::Writer;
-use libp2p::identity::{
-    ed25519::{Keypair as EdKeypair, SecretKey},
-    Keypair,
+use libp2p::{
+    identity::{
+        ed25519::{Keypair as EdKeypair, SecretKey},
+        Keypair,
+    },
+    Multiaddr, PeerId,
 };
-use versioned_binary_serialization::version::{StaticVersion, StaticVersionType};
+use versioned_binary_serialization::{
+    version::{StaticVersion, StaticVersionType},
+    BinarySerializer,
+};
 
 /// Orchestrator is not, strictly speaking, bound to the network; it can have its own versioning.
 /// Orchestrator Version (major)
@@ -142,10 +144,15 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
 
 /// An api exposed by the orchestrator
 pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
-    /// post endpoint for identity
+    /// Post an identity to the orchestrator. Takes in optional
+    /// arguments so others can identify us on the Libp2p network.
     /// # Errors
-    /// if unable to serve
-    fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
+    /// If we were unable to serve the request
+    fn post_identity(
+        &mut self,
+        libp2p_address: Option<Multiaddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> Result<u16, ServerError>;
     /// post endpoint for each node's config
     /// # Errors
     /// if unable to serve
@@ -192,7 +199,15 @@ where
     KEY: serde::Serialize + Clone + SignatureKey + 'static,
     ELECTION: serde::Serialize + Clone + Send + ElectionConfig + 'static,
 {
-    fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError> {
+    /// Post an identity to the orchestrator. Takes in optional
+    /// arguments so others can identify us on the Libp2p network.
+    /// # Errors
+    /// If we were unable to serve the request
+    fn post_identity(
+        &mut self,
+        libp2p_address: Option<Multiaddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> Result<u16, ServerError> {
         let node_index = self.latest_index;
         self.latest_index += 1;
 
@@ -203,24 +218,19 @@ where
             });
         }
 
+        // If the orchestrator is set up for libp2p and we have supplied the proper
+        // Libp2p data, add our node to the list of bootstrap nodes.
         if self.config.libp2p_config.clone().is_some() {
-            let libp2p_config_clone = self.config.libp2p_config.clone().unwrap();
-            // Designate node as bootstrap node and store its identity information
-            if libp2p_config_clone.bootstrap_nodes.len() < libp2p_config_clone.num_bootstrap_nodes {
-                let port_index = if libp2p_config_clone.index_ports {
-                    node_index
-                } else {
-                    0
-                };
-                let socketaddr =
-                    SocketAddr::new(identity, libp2p_config_clone.base_port + port_index);
-                let keypair = libp2p_generate_indexed_identity(self.config.seed, node_index.into());
+            if let (Some(libp2p_public_key), Some(libp2p_address)) =
+                (libp2p_public_key, libp2p_address)
+            {
+                // Push to our bootstrap nodes
                 self.config
                     .libp2p_config
                     .as_mut()
                     .unwrap()
                     .bootstrap_nodes
-                    .push((socketaddr, keypair.to_protobuf_encoding().unwrap()));
+                    .push((libp2p_public_key, libp2p_address));
             }
         }
         Ok(node_index)
@@ -232,15 +242,6 @@ where
         &mut self,
         _node_index: u16,
     ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError> {
-        if self.config.libp2p_config.is_some() {
-            let libp2p_config = self.config.clone().libp2p_config.unwrap();
-            if libp2p_config.bootstrap_nodes.len() < libp2p_config.num_bootstrap_nodes {
-                return Err(ServerError {
-                    status: tide_disco::StatusCode::BadRequest,
-                    message: "Not enough bootstrap nodes have registered".to_string(),
-                });
-            }
-        }
         Ok(self.config.clone())
     }
 
@@ -397,14 +398,22 @@ where
     let mut api = Api::<State, ServerError, VER>::new(api_toml)?;
     api.post("post_identity", |req, state| {
         async move {
-            let identity = req.string_param("identity")?.parse::<IpAddr>();
-            if identity.is_err() {
+            // Read the bytes from the body
+            let mut body_bytes = req.body_bytes();
+            body_bytes.drain(..12);
+
+            // Decode the libp2p data so we can add to our bootstrap nodes (if supplied)
+            let Ok((libp2p_address, libp2p_public_key)) =
+                versioned_binary_serialization::Serializer::<Version01>::deserialize(&body_bytes)
+            else {
                 return Err(ServerError {
                     status: tide_disco::StatusCode::BadRequest,
-                    message: "Identity is not a properly formed IP address".to_string(),
+                    message: "Malformed body".to_string(),
                 });
-            }
-            state.post_identity(identity.unwrap())
+            };
+
+            // Call our state function to process the request
+            state.post_identity(libp2p_address, libp2p_public_key)
         }
         .boxed()
     })?

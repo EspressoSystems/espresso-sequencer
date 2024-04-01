@@ -19,6 +19,7 @@ use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
+use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use tracing::{error, instrument};
@@ -129,13 +130,20 @@ async fn main() {
 
     // nodes
     let mut nodes = Vec::new();
-    for _ in 0..config.config.num_nodes_with_stake.into() {
+    for i in 0..config.config.num_nodes_with_stake.into() {
+        // Calculate our libp2p advertise address, which we will later derive the
+        // bind address from for example purposes.
+        let advertise_address = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            8000 + (u16::try_from(i).expect("failed to create advertise address")),
+        );
+
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
             infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
-                    public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    advertise_address: Some(advertise_address),
                     network_config_file: None,
                 },
             )

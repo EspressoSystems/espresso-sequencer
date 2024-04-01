@@ -126,7 +126,7 @@ pub enum ClientRequest {
     /// prune a peer
     Prune(PeerId),
     /// add vec of known peers or addresses
-    AddKnownPeers(Vec<(Option<PeerId>, Multiaddr)>),
+    AddKnownPeers(Vec<(PeerId, Multiaddr)>),
     /// Ignore peers. Only here for debugging purposes.
     /// Allows us to have nodes that are never pruned
     IgnorePeers(Vec<PeerId>),

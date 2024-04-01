@@ -5,9 +5,8 @@ FORMAT_VERSION = "0.1.0"
 
 # POST node's identity
 [route.post_identity]
-PATH = ["identity/:identity"]
+PATH = ["identity"]
 METHOD = "POST"
-":identity" = "Literal"
 DOC = """
 POST a node's identity (IP address) to the orchestrator.  Returns the node's node_index.
 """

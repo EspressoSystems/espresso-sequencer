@@ -456,7 +456,7 @@ impl NetworkNodeHandle {
     /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
     pub async fn add_known_peers(
         &self,
-        known_peers: Vec<(Option<PeerId>, Multiaddr)>,
+        known_peers: Vec<(PeerId, Multiaddr)>,
     ) -> Result<(), NetworkNodeHandleError> {
         info!("ADDING KNOWN PEERS TO {:?}", self.peer_id);
         let req = ClientRequest::AddKnownPeers(known_peers);

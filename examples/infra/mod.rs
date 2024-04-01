@@ -1,7 +1,6 @@
 #![allow(clippy::panic)]
 use async_compatibility_layer::art::async_sleep;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_lock::RwLock;
 use async_trait::async_trait;
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use cdn_broker::reexports::message::Topic;
@@ -10,17 +9,18 @@ use clap::Parser;
 use clap::{Arg, Command};
 use futures::StreamExt;
 use hotshot::traits::implementations::{
-    CombinedNetworks, PushCdnNetwork, UnderlyingCombinedNetworks, WrappedSignatureKey,
+    derive_libp2p_peer_id, CombinedNetworks, PushCdnNetwork, WrappedSignatureKey,
 };
 use hotshot::traits::BlockPayload;
 use hotshot::{
     traits::{
-        implementations::{Libp2pNetwork, NetworkingMetricsValue, WebServerNetwork},
+        implementations::{Libp2pNetwork, WebServerNetwork},
         NodeImplementation,
     },
-    types::{SignatureKey, SystemContextHandle},
+    types::SystemContextHandle,
     Memberships, Networks, SystemContext,
 };
+use hotshot_example_types::node_types::{Libp2pImpl, PushCdnImpl};
 use hotshot_example_types::storage_types::TestStorage;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
@@ -46,23 +46,15 @@ use hotshot_types::{
     },
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use libp2p_identity::PeerId;
-use libp2p_identity::{
-    ed25519::{self, SecretKey},
-    Keypair,
-};
-use libp2p_networking::{
-    network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType},
-    reexport::Multiaddr,
-};
+
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::num::NonZeroUsize;
 use std::time::Duration;
-use std::{collections::BTreeSet, sync::Arc};
 use std::{fs, time::Instant};
-use std::{num::NonZeroUsize, str::FromStr};
 use surf_disco::Url;
 use tracing::{debug, error, info, warn};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -328,130 +320,6 @@ fn webserver_network_from_config<TYPES: NodeType, NetworkVersion: StaticVersionT
     WebServerNetwork::create(url, wait_between_polls, pub_key, false)
 }
 
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_lossless)]
-#[allow(clippy::too_many_lines)]
-/// Create a libp2p network from a config file and public key
-/// # Panics
-/// If unable to create bootstrap nodes multiaddres or the libp2p config is invalid
-async fn libp2p_network_from_config<TYPES: NodeType>(
-    mut config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    pub_key: TYPES::SignatureKey,
-) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
-    let libp2p_config = config
-        .libp2p_config
-        .take()
-        .expect("Configuration is not for a Libp2p network");
-    let bs_len = libp2p_config.bootstrap_nodes.len();
-    let bootstrap_nodes: Vec<(PeerId, Multiaddr)> = libp2p_config
-        .bootstrap_nodes
-        .iter()
-        .map(|(addr, pair)| {
-            let kp = Keypair::from_protobuf_encoding(pair).unwrap();
-            let peer_id = PeerId::from_public_key(&kp.public());
-            let multiaddr =
-                Multiaddr::from_str(&format!("/ip4/{}/udp/{}/quic-v1", addr.ip(), addr.port()))
-                    .unwrap();
-            (peer_id, multiaddr)
-        })
-        .collect();
-    let identity = libp2p_generate_indexed_identity(config.seed, config.node_index);
-    let node_type = if (config.node_index as usize) < bs_len {
-        NetworkNodeType::Bootstrap
-    } else {
-        NetworkNodeType::Regular
-    };
-    let node_index = config.node_index;
-    let port_index = if libp2p_config.index_ports {
-        node_index
-    } else {
-        0
-    };
-    let bound_addr: Multiaddr = format!(
-        "/{}/{}/udp/{}/quic-v1",
-        if libp2p_config.public_ip.is_ipv4() {
-            "ip4"
-        } else {
-            "ip6"
-        },
-        libp2p_config.public_ip,
-        libp2p_config.base_port as u64 + port_index
-    )
-    .parse()
-    .unwrap();
-
-    // generate network
-    let mut config_builder = NetworkNodeConfigBuilder::default();
-    assert!(config.config.num_nodes_with_stake.get() > 2);
-    let replicated_nodes = NonZeroUsize::new(config.config.num_nodes_with_stake.get() - 2).unwrap();
-    config_builder.replication_factor(replicated_nodes);
-    config_builder.identity(identity.clone());
-
-    config_builder.bound_addr(Some(bound_addr.clone()));
-
-    let to_connect_addrs = bootstrap_nodes
-        .iter()
-        .map(|(peer_id, multiaddr)| (Some(*peer_id), multiaddr.clone()))
-        .collect();
-
-    config_builder.to_connect_addrs(to_connect_addrs);
-
-    let mesh_params =
-        // NOTE I'm arbitrarily choosing these.
-        match node_type {
-            NetworkNodeType::Bootstrap => MeshParams {
-                mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
-                mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
-                mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
-                mesh_n: libp2p_config.bootstrap_mesh_n,
-            },
-            NetworkNodeType::Regular => MeshParams {
-                mesh_n_high: libp2p_config.mesh_n_high,
-                mesh_n_low: libp2p_config.mesh_n_low,
-                mesh_outbound_min: libp2p_config.mesh_outbound_min,
-                mesh_n: libp2p_config.mesh_n,
-            },
-            NetworkNodeType::Conductor => unreachable!(),
-        };
-    config_builder.mesh_params(Some(mesh_params));
-
-    let mut all_keys = BTreeSet::new();
-    let mut da_keys = BTreeSet::new();
-    for i in 0..config.config.num_nodes_with_stake.get() as u64 {
-        let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
-        let pub_key = TYPES::SignatureKey::from_private(&privkey);
-        if i < config.config.da_staked_committee_size as u64 {
-            da_keys.insert(pub_key.clone());
-        }
-        all_keys.insert(pub_key);
-    }
-    let node_config = config_builder.build().unwrap();
-
-    #[allow(clippy::cast_possible_truncation)]
-    Libp2pNetwork::new(
-        NetworkingMetricsValue::default(),
-        node_config,
-        pub_key.clone(),
-        Arc::new(RwLock::new(
-            bootstrap_nodes
-                .iter()
-                .map(|(peer_id, addr)| (Some(*peer_id), addr.clone()))
-                .collect(),
-        )),
-        bs_len,
-        config.node_index as usize,
-        // NOTE: this introduces an invariant that the keys are assigned using this indexed
-        // function
-        all_keys,
-        #[cfg(feature = "hotshot-testing")]
-        None,
-        da_keys.clone(),
-        da_keys.contains(&pub_key),
-    )
-    .await
-    .unwrap()
-}
-
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
 pub trait RunDA<
@@ -474,6 +342,7 @@ pub trait RunDA<
     /// Initializes networking, returns self
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        libp2p_advertise_address: Option<SocketAddr>,
     ) -> Self;
 
     /// Initializes the genesis state and HotShot instance; does not start HotShot consensus
@@ -761,6 +630,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        _libp2p_advertise_address: Option<SocketAddr>,
     ) -> WebServerDARun<TYPES, NetworkVersion> {
         // Get our own key
         let pub_key = config.config.my_own_validator_config.public_key.clone();
@@ -835,6 +705,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        _libp2p_advertise_address: Option<SocketAddr>,
     ) -> PushCdnDaRun<TYPES> {
         // Get our own key
         let key = config.config.my_own_validator_config.clone();
@@ -924,19 +795,47 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        libp2p_advertise_address: Option<SocketAddr>,
     ) -> Libp2pDARun<TYPES> {
-        let pub_key = config.config.my_own_validator_config.public_key.clone();
+        // Extrapolate keys for ease of use
+        let keys = config.clone().config.my_own_validator_config;
+        let public_key = keys.public_key;
+        let private_key = keys.private_key;
 
-        // create and wait for underlying network
-        let quorum_channel = libp2p_network_from_config::<TYPES>(config.clone(), pub_key).await;
+        // In an example, we can calculate the libp2p bind address as a function
+        // of the advertise address.
+        let bind_address = if let Some(libp2p_advertise_address) = libp2p_advertise_address {
+            // If we have supplied one, use it
+            SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                libp2p_advertise_address.port(),
+            )
+        } else {
+            // If not, index a base port with our node index
+            SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                8000 + (u16::try_from(config.node_index)
+                    .expect("failed to create advertise address")),
+            )
+        };
 
-        let da_channel = quorum_channel.clone();
-        quorum_channel.wait_for_ready().await;
+        // Create the Libp2p network
+        let libp2p_network = Libp2pNetwork::from_config::<TYPES>(
+            config.clone(),
+            bind_address,
+            &public_key,
+            &private_key,
+        )
+        .await
+        .expect("failed to create libp2p network");
+
+        // Wait for the network to be ready
+        libp2p_network.wait_for_ready().await;
 
         Libp2pDARun {
             config,
-            quorum_channel,
-            da_channel,
+            quorum_channel: libp2p_network.clone(),
+            da_channel: libp2p_network,
         }
     }
 
@@ -988,59 +887,47 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        libp2p_advertise_address: Option<SocketAddr>,
     ) -> CombinedDARun<TYPES> {
-        // Get our own key
-        let key = config.config.my_own_validator_config.clone();
+        // Initialize our Libp2p network
+        let libp2p_da_run: Libp2pDARun<TYPES> =
+            <Libp2pDARun<TYPES> as RunDA<
+                TYPES,
+                Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+                Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+                Libp2pImpl,
+            >>::initialize_networking(config.clone(), libp2p_advertise_address)
+            .await;
 
-        // Create and wait for libp2p network
-        let libp2p_underlying_quorum_network =
-            libp2p_network_from_config::<TYPES>(config.clone(), key.public_key.clone()).await;
+        // Initialize our CDN network
+        let cdn_da_run: PushCdnDaRun<TYPES> =
+            <PushCdnDaRun<TYPES> as RunDA<
+                TYPES,
+                PushCdnNetwork<TYPES>,
+                PushCdnNetwork<TYPES>,
+                PushCdnImpl,
+            >>::initialize_networking(config.clone(), libp2p_advertise_address)
+            .await;
 
-        libp2p_underlying_quorum_network.wait_for_ready().await;
-
-        let CombinedNetworkConfig { delay_duration }: CombinedNetworkConfig =
-            config.clone().combined_network_config.unwrap();
-
-        // Convert the keys to the CDN-compatible type
-        let keypair = KeyPair {
-            public_key: WrappedSignatureKey(key.public_key),
-            private_key: key.private_key,
-        };
-
-        // See if we should be DA
-        let mut topics = vec![Topic::Global];
-        if config.node_index < config.config.da_staked_committee_size as u64 {
-            topics.push(Topic::DA);
-        }
-
-        // Create the network and await the initial connection
-        let cdn_network = PushCdnNetwork::new(
-            config
-                .cdn_marshal_address
-                .clone()
-                .expect("`cdn_marshal_address` needs to be supplied for a CDN run"),
-            topics.iter().map(ToString::to_string).collect(),
-            keypair,
-        )
-        .await
-        .expect("failed to perform intiail client connection");
+        // Create our combined network config
+        let CombinedNetworkConfig { delay_duration }: CombinedNetworkConfig = config
+            .clone()
+            .combined_network_config
+            .expect("combined network config not specified");
 
         // Combine the two communication channels
         let da_channel = CombinedNetworks::new(
-            Arc::new(UnderlyingCombinedNetworks(
-                cdn_network.clone(),
-                libp2p_underlying_quorum_network.clone(),
-            )),
+            cdn_da_run.da_channel,
+            libp2p_da_run.da_channel,
             delay_duration,
         );
         let quorum_channel = CombinedNetworks::new(
-            Arc::new(UnderlyingCombinedNetworks(
-                cdn_network,
-                libp2p_underlying_quorum_network.clone(),
-            )),
+            cdn_da_run.quorum_channel,
+            libp2p_da_run.quorum_channel,
             delay_duration,
         );
 
+        // Return the run configuration
         CombinedDARun {
             config,
             quorum_channel,
@@ -1092,19 +979,17 @@ pub async fn main_entry_point<
 
     debug!("Starting validator");
 
-    // see what our public identity will be
-    let public_ip = match args.public_ip {
-        Some(ip) => ip,
-        None => local_ip_address::local_ip().unwrap(),
-    };
-
-    let orchestrator_client: OrchestratorClient =
-        OrchestratorClient::new(args.clone(), public_ip.to_string());
+    let orchestrator_client: OrchestratorClient = OrchestratorClient::new(args.clone());
 
     // We assume one node will not call this twice to generate two validator_config-s with same identity.
     let my_own_validator_config = NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::generate_init_validator_config(
         &orchestrator_client,
     ).await;
+
+    // Derives our Libp2p private key from our private key, and then returns the public key of that key
+    let libp2p_public_key =
+        derive_libp2p_peer_id::<TYPES::SignatureKey>(&my_own_validator_config.private_key)
+            .expect("failed to derive Libp2p keypair");
 
     // conditionally save/load config from file or orchestrator
     // This is a function that will return correct complete config from orchestrator.
@@ -1115,13 +1000,16 @@ pub async fn main_entry_point<
     let (run_config, source) =
         NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::get_complete_config(
             &orchestrator_client,
-            my_own_validator_config,
             args.clone().network_config_file,
+            my_own_validator_config,
+            args.advertise_address,
+            Some(libp2p_public_key),
         )
-        .await;
+        .await
+        .expect("failed to get config");
 
     error!("Initializing networking");
-    let run = RUNDA::initialize_networking(run_config.clone()).await;
+    let run = RUNDA::initialize_networking(run_config.clone(), args.advertise_address).await;
     let hotshot = run.initialize_state_and_hotshot().await;
 
     // pre-generate transactions
@@ -1160,7 +1048,6 @@ pub async fn main_entry_point<
             transactions.push(txn);
         }
     }
-
     if let NetworkConfigSource::Orchestrator = source {
         debug!("Waiting for the start command from orchestrator");
         orchestrator_client
@@ -1178,17 +1065,4 @@ pub async fn main_entry_point<
         )
         .await;
     orchestrator_client.post_bench_results(bench_results).await;
-}
-
-/// generate a libp2p identity based on a seed and idx
-/// # Panics
-/// if unable to create a secret key out of bytes
-#[must_use]
-pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&seed);
-    hasher.update(&index.to_le_bytes());
-    let new_seed = *hasher.finalize().as_bytes();
-    let sk_bytes = SecretKey::try_from_bytes(new_seed).unwrap();
-    <ed25519::Keypair as From<SecretKey>>::from(sk_bytes).into()
 }

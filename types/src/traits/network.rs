@@ -132,6 +132,8 @@ pub enum NetworkError {
     CouldNotDeliver,
     /// Attempted to deliver a message to an unknown node
     NoSuchNode,
+    /// No bootstrap nodes were specified on network creation
+    NoBootstrapNodesSpecified,
     /// Failed to serialize a network message
     FailedToSerialize {
         /// Originating bincode error

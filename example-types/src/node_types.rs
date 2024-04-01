@@ -73,63 +73,32 @@ pub struct CombinedImpl;
 /// static committee type alias
 pub type StaticMembership = StaticCommittee<TestTypes>;
 
-// Push CDN communication channels
-type StaticPushCdnQuorumComm = PushCdnNetwork<TestTypes>;
-type StaticPushCdnDAComm = PushCdnNetwork<TestTypes>;
-
-/// memory network
-pub type StaticMemoryDAComm =
-    MemoryNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
-
-/// libp2p network
-type StaticLibp2pDAComm = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
-
-/// web server network communication channel
-type StaticWebDAComm = WebServerNetwork<TestTypes, WebServerVersion>;
-
-/// combined network
-type StaticCombinedDAComm = CombinedNetworks<TestTypes>;
-
-/// memory comm channel
-pub type StaticMemoryQuorumComm =
-    MemoryNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
-
-/// libp2p comm channel
-type StaticLibp2pQuorumComm =
-    Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
-
-/// web server comm channel
-type StaticWebQuorumComm = WebServerNetwork<TestTypes, WebServerVersion>;
-
-/// combined network (libp2p + web server)
-type StaticCombinedQuorumComm = CombinedNetworks<TestTypes>;
-
-impl NodeImplementation<TestTypes> for PushCdnImpl {
-    type QuorumNetwork = StaticPushCdnQuorumComm;
-    type CommitteeNetwork = StaticPushCdnDAComm;
-    type Storage = TestStorage<TestTypes>;
+impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
+    type QuorumNetwork = PushCdnNetwork<TYPES>;
+    type CommitteeNetwork = PushCdnNetwork<TYPES>;
+    type Storage = TestStorage<TYPES>;
 }
 
-impl NodeImplementation<TestTypes> for Libp2pImpl {
-    type QuorumNetwork = StaticLibp2pQuorumComm;
-    type CommitteeNetwork = StaticLibp2pDAComm;
-    type Storage = TestStorage<TestTypes>;
+impl<TYPES: NodeType> NodeImplementation<TYPES> for MemoryImpl {
+    type QuorumNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type CommitteeNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type Storage = TestStorage<TYPES>;
 }
 
-impl NodeImplementation<TestTypes> for MemoryImpl {
-    type QuorumNetwork = StaticMemoryQuorumComm;
-    type CommitteeNetwork = StaticMemoryDAComm;
-    type Storage = TestStorage<TestTypes>;
+impl<TYPES: NodeType> NodeImplementation<TYPES> for WebImpl {
+    type QuorumNetwork = WebServerNetwork<TYPES, WebServerVersion>;
+    type CommitteeNetwork = WebServerNetwork<TYPES, WebServerVersion>;
+    type Storage = TestStorage<TYPES>;
 }
 
-impl NodeImplementation<TestTypes> for WebImpl {
-    type QuorumNetwork = StaticWebQuorumComm;
-    type CommitteeNetwork = StaticWebDAComm;
-    type Storage = TestStorage<TestTypes>;
+impl<TYPES: NodeType> NodeImplementation<TYPES> for CombinedImpl {
+    type QuorumNetwork = CombinedNetworks<TYPES>;
+    type CommitteeNetwork = CombinedNetworks<TYPES>;
+    type Storage = TestStorage<TYPES>;
 }
 
-impl NodeImplementation<TestTypes> for CombinedImpl {
-    type QuorumNetwork = StaticCombinedQuorumComm;
-    type CommitteeNetwork = StaticCombinedDAComm;
-    type Storage = TestStorage<TestTypes>;
+impl<TYPES: NodeType> NodeImplementation<TYPES> for Libp2pImpl {
+    type QuorumNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type CommitteeNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type Storage = TestStorage<TYPES>;
 }

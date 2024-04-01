@@ -2,15 +2,9 @@ use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use libp2p::{Multiaddr, PeerId};
 use serde_inline_default::serde_inline_default;
-use std::{
-    env,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    num::NonZeroUsize,
-    path::PathBuf,
-    time::Duration,
-    vec,
-};
+use std::{env, net::SocketAddr, num::NonZeroUsize, path::PathBuf, time::Duration, vec};
 use std::{fs, path::Path};
 use surf_disco::Url;
 use thiserror::Error;
@@ -22,18 +16,10 @@ use crate::client::OrchestratorClient;
 /// Configuration describing a libp2p node
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
-    /// bootstrap nodes (socket, serialized public key)
-    pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
-    /// number of bootstrap nodes
-    pub num_bootstrap_nodes: usize,
-    /// public ip of this node
-    pub public_ip: IpAddr,
-    /// port to run libp2p on
-    pub base_port: u16,
+    /// bootstrap nodes (multiaddress, serialized public key)
+    pub bootstrap_nodes: Vec<(PeerId, Multiaddr)>,
     /// global index of node (for testing purposes a uid)
     pub node_index: u64,
-    /// whether or not to index ports
-    pub index_ports: bool,
     /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_high: usize,
     /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
@@ -65,8 +51,6 @@ pub struct Libp2pConfig {
 /// configuration serialized into a file
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfigFile {
-    /// whether or not to index ports
-    pub index_ports: bool,
     /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
     pub bootstrap_mesh_n_high: usize,
     /// corresponds to libp2p DHT parameter of the same name for bootstrap nodes
@@ -85,8 +69,6 @@ pub struct Libp2pConfigFile {
     pub mesh_n: usize,
     /// time node has been running
     pub online_time: u64,
-    /// port to run libp2p on
-    pub base_port: u16,
 }
 
 /// configuration for a web server
@@ -184,7 +166,7 @@ pub enum NetworkConfigSource {
 impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     /// Asynchronously retrieves a `NetworkConfig` either from a file or from an orchestrator.
     ///
-    /// This function takes an `OrchestratorClient`, an identity string, and an optional file path.
+    /// This function takes an `OrchestratorClient`, an optional file path, and Libp2p-specific parameters.
     ///
     /// If a file path is provided, the function will first attempt to load the `NetworkConfig` from the file.
     /// If the file does not exist or cannot be read, the function will fall back to retrieving the `NetworkConfig` from the orchestrator.
@@ -193,61 +175,57 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// If no file path is provided, the function will directly retrieve the `NetworkConfig` from the orchestrator.
     ///
+    /// # Errors
+    /// If we were unable to load the configuration.
+    ///
     /// # Arguments
     ///
     /// * `client` - An `OrchestratorClient` used to retrieve the `NetworkConfig` from the orchestrator.
     /// * `identity` - A string representing the identity for which to retrieve the `NetworkConfig`.
     /// * `file` - An optional string representing the path to the file from which to load the `NetworkConfig`.
+    /// * `libp2p_address` - An optional address specifying where other Libp2p nodes can reach us
+    /// * `libp2p_public_key` - The public key in which other Libp2p nodes can reach us with
     ///
     /// # Returns
     ///
     /// This function returns a tuple containing a `NetworkConfig` and a `NetworkConfigSource`. The `NetworkConfigSource` indicates whether the `NetworkConfig` was loaded from a file or retrieved from the orchestrator.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// # use hotshot_orchestrator::config::NetworkConfig;
-    /// # use hotshot_orchestrator::client::OrchestratorClient;
-    /// let client = OrchestratorClient::new();
-    /// let identity = "my_identity".to_string();
-    /// let file = Some("/path/to/my/config".to_string());
-    /// let (config, source) = NetworkConfig::from_file_or_orchestrator(client, file);
-    /// ```
     pub async fn from_file_or_orchestrator(
         client: &OrchestratorClient,
         file: Option<String>,
-    ) -> (NetworkConfig<K, E>, NetworkConfigSource) {
+        libp2p_address: Option<SocketAddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> anyhow::Result<(NetworkConfig<K, E>, NetworkConfigSource)> {
         if let Some(file) = file {
             error!("Retrieving config from the file");
             // if we pass in file, try there first
             match Self::from_file(file.clone()) {
-                Ok(config) => (config, NetworkConfigSource::File),
+                Ok(config) => Ok((config, NetworkConfigSource::File)),
                 Err(e) => {
                     // fallback to orchestrator
                     error!("{e}, falling back to orchestrator");
 
                     let config = client
-                        .get_config_without_peer(client.identity.clone())
-                        .await;
+                        .get_config_without_peer(libp2p_address, libp2p_public_key)
+                        .await?;
 
                     // save to file if we fell back
                     if let Err(e) = config.to_file(file) {
                         error!("{e}");
                     };
 
-                    (config, NetworkConfigSource::File)
+                    Ok((config, NetworkConfigSource::File))
                 }
             }
         } else {
             error!("Retrieving config from the orchestrator");
 
             // otherwise just get from orchestrator
-            (
+            Ok((
                 client
-                    .get_config_without_peer(client.identity.clone())
-                    .await,
+                    .get_config_without_peer(libp2p_address, libp2p_public_key)
+                    .await?,
                 NetworkConfigSource::Orchestrator,
-            )
+            ))
         }
     }
 
@@ -261,12 +239,19 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
 
     /// Asynchronously retrieves a `NetworkConfig` from an orchestrator.
     /// The retrieved one includes correct `node_index` and peer's public config.
+    ///
+    /// # Errors
+    /// If we are unable to get the configuration from the orchestrator
     pub async fn get_complete_config(
         client: &OrchestratorClient,
-        my_own_validator_config: ValidatorConfig<K>,
         file: Option<String>,
-    ) -> (NetworkConfig<K, E>, NetworkConfigSource) {
-        let (mut run_config, source) = Self::from_file_or_orchestrator(client, file).await;
+        my_own_validator_config: ValidatorConfig<K>,
+        libp2p_address: Option<SocketAddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> anyhow::Result<(NetworkConfig<K, E>, NetworkConfigSource)> {
+        let (mut run_config, source) =
+            Self::from_file_or_orchestrator(client, file, libp2p_address, libp2p_public_key)
+                .await?;
         let node_index = run_config.node_index;
 
         // Assign my_own_validator_config to the run_config if not loading from file
@@ -292,7 +277,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         run_config.config.known_nodes_with_stake = updated_config.config.known_nodes_with_stake;
 
         error!("Retrieved config; our node index is {node_index}.");
-        (run_config, source)
+        Ok((run_config, source))
     }
 
     /// Loads a `NetworkConfig` from a file.
@@ -474,11 +459,7 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkC
             seed: val.seed,
             transaction_size: val.transaction_size,
             libp2p_config: val.libp2p_config.map(|libp2p_config| Libp2pConfig {
-                num_bootstrap_nodes: val.config.num_bootstrap,
-                index_ports: libp2p_config.index_ports,
                 bootstrap_nodes: Vec::new(),
-                public_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                base_port: libp2p_config.base_port,
                 node_index: 0,
                 bootstrap_mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
                 bootstrap_mesh_n_low: libp2p_config.bootstrap_mesh_n_low,

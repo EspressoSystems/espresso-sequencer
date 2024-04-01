@@ -2,6 +2,7 @@
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
 use super::NetworkingMetricsValue;
+use anyhow::anyhow;
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
     channel::{self, bounded, unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
@@ -14,6 +15,7 @@ use futures::{
     future::{join_all, Either},
     FutureExt, StreamExt,
 };
+use hotshot_orchestrator::config::NetworkConfig;
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{AsyncGenerator, NetworkReliability};
 use hotshot_types::{
@@ -35,9 +37,12 @@ use hotshot_types::{
     message::{Message, MessageKind},
     traits::network::{TestableNetworkingImplementation, ViewMessage},
 };
-use libp2p_identity::PeerId;
-#[cfg(feature = "hotshot-testing")]
-use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder};
+use libp2p_identity::{
+    ed25519::{self, SecretKey},
+    Keypair, PeerId,
+};
+use libp2p_networking::network::NetworkNodeConfigBuilder;
+use libp2p_networking::{network::MeshParams, reexport::Multiaddr};
 use libp2p_networking::{
     network::{
         behaviours::request_response::{Request, Response},
@@ -46,10 +51,14 @@ use libp2p_networking::{
         NetworkNodeConfig, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver,
         NetworkNodeType,
     },
-    reexport::{Multiaddr, ResponseChannel},
+    reexport::ResponseChannel,
 };
+use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
 use snafu::ResultExt;
+use std::num::NonZeroUsize;
+#[cfg(feature = "hotshot-testing")]
+use std::str::FromStr;
 use std::{
     collections::BTreeSet,
     fmt::Debug,
@@ -59,8 +68,7 @@ use std::{
     },
     time::Duration,
 };
-#[cfg(feature = "hotshot-testing")]
-use std::{collections::HashSet, num::NonZeroUsize, str::FromStr};
+use std::{collections::HashSet, net::SocketAddr};
 use tracing::{debug, error, info, instrument, warn};
 use versioned_binary_serialization::{
     version::{StaticVersionType, Version},
@@ -69,7 +77,7 @@ use versioned_binary_serialization::{
 
 /// convenience alias for the type for bootstrap addresses
 /// concurrency primitives are needed for having tests
-pub type BootstrapAddrs = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
+pub type BootstrapAddrs = Arc<RwLock<Vec<(PeerId, Multiaddr)>>>;
 
 /// hardcoded topic of QC used
 pub const QC_TOPIC: &str = "global";
@@ -99,7 +107,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Debug for Libp2pNetwork<M, K> {
 type TakeReceiver<M> = Mutex<Option<Receiver<(M, ResponseChannel<Response>)>>>;
 
 /// Type alias for a shared collection of peerid, multiaddrs
-pub type PeerInfoVec = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
+pub type PeerInfoVec = Arc<RwLock<Vec<(PeerId, Multiaddr)>>>;
 
 /// The underlying state of the libp2p network
 #[derive(Debug)]
@@ -271,7 +279,6 @@ where
                             config,
                             pubkey.clone(),
                             bootstrap_addrs_ref,
-                            num_bootstrap,
                             usize::try_from(node_id).unwrap(),
                             keys,
                             #[cfg(feature = "hotshot-testing")]
@@ -298,7 +305,125 @@ where
     }
 }
 
-impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
+/// Derive a Libp2p keypair from a given private key
+///
+/// # Errors
+/// If we are unable to derive a new `SecretKey` from the `blake3`-derived
+/// bytes.
+pub fn derive_libp2p_keypair<K: SignatureKey>(
+    private_key: &K::PrivateKey,
+) -> anyhow::Result<Keypair> {
+    // Derive a secondary key from our primary private key
+    let derived_key = blake3::derive_key("libp2p key", &(bincode::serialize(&private_key)?));
+    let derived_key = SecretKey::try_from_bytes(derived_key)?;
+
+    // Create an `ed25519` keypair from the derived key
+    Ok(ed25519::Keypair::from(derived_key).into())
+}
+
+/// Derive a Libp2p Peer ID from a given private key
+///
+/// # Errors
+/// If we are unable to derive a Libp2p keypair
+pub fn derive_libp2p_peer_id<K: SignatureKey>(
+    private_key: &K::PrivateKey,
+) -> anyhow::Result<PeerId> {
+    // Get the derived keypair
+    let keypair = derive_libp2p_keypair::<K>(private_key)?;
+
+    // Return the PeerID derived from the public key
+    Ok(PeerId::from_public_key(&keypair.public()))
+}
+
+impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
+    /// Create and return a Libp2p network from a network config file
+    /// and various other configuration-specific values.
+    ///
+    /// # Errors
+    /// If we are unable to parse a Multiaddress
+    ///
+    /// # Panics
+    /// If we are unable to calculate the replication factor
+    pub async fn from_config<TYPES: NodeType>(
+        mut config: NetworkConfig<K, TYPES::ElectionConfigType>,
+        bind_address: SocketAddr,
+        pub_key: &K,
+        priv_key: &K::PrivateKey,
+    ) -> anyhow::Result<Self> {
+        // Try to take our Libp2p config from our broader network config
+        let libp2p_config = config
+            .libp2p_config
+            .take()
+            .ok_or(anyhow!("Libp2p config not supplied"))?;
+
+        // Derive our Libp2p keypair from our supplied private key
+        let keypair = derive_libp2p_keypair::<K>(priv_key)?;
+
+        // Convert our bind address to a `Multiaddr`
+        let bind_address: Multiaddr = format!(
+            "/{}/{}/udp/{}/quic-v1",
+            if bind_address.is_ipv4() { "ip4" } else { "ip6" },
+            bind_address.ip(),
+            bind_address.port()
+        )
+        .parse()?;
+
+        // Build our libp2p configuration from our global, network configuration
+        let mut config_builder = NetworkNodeConfigBuilder::default();
+
+        config_builder
+            .replication_factor(
+                NonZeroUsize::new(config.config.num_nodes_with_stake.get() - 2)
+                    .expect("failed to calculate replication factor"),
+            )
+            .identity(keypair)
+            .bound_addr(Some(bind_address.clone()))
+            .mesh_params(Some(MeshParams {
+                mesh_n_high: libp2p_config.mesh_n_high,
+                mesh_n_low: libp2p_config.mesh_n_low,
+                mesh_outbound_min: libp2p_config.mesh_outbound_min,
+                mesh_n: libp2p_config.mesh_n,
+            }));
+
+        // Choose `mesh_n` random nodes to connect to for bootstrap
+        let bootstrap_nodes = libp2p_config
+            .bootstrap_nodes
+            .into_iter()
+            .choose_multiple(&mut StdRng::from_entropy(), libp2p_config.mesh_n);
+        config_builder.to_connect_addrs(HashSet::from_iter(bootstrap_nodes.clone()));
+
+        // Build the node's configuration
+        let node_config = config_builder.build()?;
+
+        // Calculate all keys so we can keep track of direct message recipients
+        let mut all_keys = BTreeSet::new();
+        let mut da_keys = BTreeSet::new();
+
+        // Make a node DA if it is under the staked committee size
+        for (i, node) in config.config.known_nodes_with_stake.into_iter().enumerate() {
+            if i < config.config.da_staked_committee_size {
+                da_keys.insert(K::get_public_key(&node.stake_table_entry));
+            }
+            all_keys.insert(K::get_public_key(&node.stake_table_entry));
+        }
+
+        Ok(Libp2pNetwork::new(
+            NetworkingMetricsValue::default(),
+            node_config,
+            pub_key.clone(),
+            Arc::new(RwLock::new(bootstrap_nodes)),
+            usize::try_from(config.node_index)?,
+            // NOTE: this introduces an invariant that the keys are assigned using this indexed
+            // function
+            all_keys,
+            #[cfg(feature = "hotshot-testing")]
+            None,
+            da_keys.clone(),
+            da_keys.contains(pub_key),
+        )
+        .await?)
+    }
+
     /// Returns when network is ready
     pub async fn wait_for_ready(&self) {
         loop {
@@ -307,7 +432,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
             }
             async_sleep(Duration::from_secs(1)).await;
         }
-        info!("LIBP2P: IS READY GOT TRIGGERED!!");
     }
 
     /// Constructs new network for a node. Note that this network is unconnected.
@@ -328,7 +452,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         config: NetworkNodeConfig,
         pk: K,
         bootstrap_addrs: BootstrapAddrs,
-        bootstrap_addrs_len: usize,
         id: usize,
         // HACK
         committee_pks: BTreeSet<K>,
@@ -336,7 +459,11 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         da_pks: BTreeSet<K>,
         is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
-        assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
+        // Error if there were no bootstrap nodes specified
+        #[cfg(not(feature = "hotshot-testing"))]
+        if bootstrap_addrs.read().await.len() == 0 {
+            return Err(NetworkError::NoBootstrapNodesSpecified);
+        }
         let (mut rx, network_handle) = spawn_network_node(config.clone(), id)
             .await
             .map_err(Into::<NetworkError>::into)?;
@@ -348,7 +475,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
             let addr = network_handle.listen_addr();
             let pid = network_handle.peer_id();
             let mut bs_cp = bootstrap_addrs.write().await;
-            bs_cp.push((Some(pid), addr));
+            bs_cp.push((pid, addr));
             drop(bs_cp);
         }
 

@@ -127,27 +127,17 @@ impl NetworkNode {
     /// the `spawn_listeners` function
     /// will start connecting to peers
     #[instrument(skip(self))]
-    pub fn add_known_peers(&mut self, known_peers: &[(Option<PeerId>, Multiaddr)]) {
+    pub fn add_known_peers(&mut self, known_peers: &[(PeerId, Multiaddr)]) {
         info!("Adding nodes {:?} to {:?}", known_peers, self.peer_id);
         let behaviour = self.swarm.behaviour_mut();
         let mut bs_nodes = HashMap::<PeerId, HashSet<Multiaddr>>::new();
         let mut shuffled = known_peers.iter().collect::<Vec<_>>();
         shuffled.shuffle(&mut thread_rng());
         for (peer_id, addr) in shuffled {
-            match peer_id {
-                Some(peer_id) => {
-                    // if we know the peerid, add address.
-                    if *peer_id != self.peer_id {
-                        behaviour.autonat.add_server(*peer_id, Some(addr.clone()));
-                        behaviour.dht.add_address(peer_id, addr.clone());
-                        bs_nodes.insert(*peer_id, iter::once(addr.clone()).collect());
-                    }
-                }
-                None => {
-                    // <https://github.com/EspressoSystems/hotshot/issues/290>
-                    // TODO actually implement this part
-                    // if we don't know the peerid, dial to find out what the peerid is
-                }
+            if *peer_id != self.peer_id {
+                behaviour.dht.add_address(peer_id, addr.clone());
+                behaviour.autonat.add_server(*peer_id, Some(addr.clone()));
+                bs_nodes.insert(*peer_id, iter::once(addr.clone()).collect());
             }
         }
         behaviour.dht.add_bootstrap_nodes(bs_nodes);
@@ -331,10 +321,8 @@ impl NetworkNode {
                 .build()
         };
         for (peer, addr) in &config.to_connect_addrs {
-            if let Some(peer) = peer {
-                if peer != swarm.local_peer_id() {
-                    swarm.behaviour_mut().add_address(peer, addr.clone());
-                }
+            if peer != swarm.local_peer_id() {
+                swarm.behaviour_mut().add_address(peer, addr.clone());
             }
         }
 

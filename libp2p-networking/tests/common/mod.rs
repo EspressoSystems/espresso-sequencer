@@ -273,12 +273,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send>(
         let to_share = bootstrap_addrs.clone();
         handle
             .handle
-            .add_known_peers(
-                to_share
-                    .iter()
-                    .map(|(a, b)| (Some(*a), b.clone()))
-                    .collect::<Vec<_>>(),
-            )
+            .add_known_peers(to_share)
             .await
             .context(HandleSnafu)?;
     }

@@ -13,7 +13,6 @@ use hotshot::types::SignatureKey;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::net::{IpAddr, Ipv4Addr};
 
 /// The infra implementation
 #[path = "../infra/mod.rs"]
@@ -120,7 +119,7 @@ async fn main() {
             infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
-                    public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    advertise_address: None,
                     network_config_file: None,
                 },
             )

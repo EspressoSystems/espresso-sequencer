@@ -56,7 +56,6 @@ start_delay = 1
 num_bootstrap = 5
 
 [libp2p_config]
-index_ports = true
 bootstrap_mesh_n_high = 4
 bootstrap_mesh_n_low = 4
 bootstrap_mesh_outbound_min = 2
@@ -66,7 +65,6 @@ mesh_n_low = 4
 mesh_outbound_min = 2
 mesh_n = 4
 online_time = 10
-base_port = 8000
 
 [web_server_config]
 url = "http://localhost:9000"

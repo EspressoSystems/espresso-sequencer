@@ -47,14 +47,11 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Create a new `OrchestratorClient` from the supplied URL
-    let orchestrator_client = OrchestratorClient::new(
-        ValidatorArgs {
-            url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
-            public_ip: None,
-            network_config_file: None,
-        },
-        "whitelist-adapter".to_string(),
-    );
+    let orchestrator_client = OrchestratorClient::new(ValidatorArgs {
+        url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
+        advertise_address: None,
+        network_config_file: None,
+    });
 
     // Attempt to get the config from the orchestrator.
     // Loops internally until the config is received.

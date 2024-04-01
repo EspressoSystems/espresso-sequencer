@@ -92,7 +92,17 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     ///
     /// Panics if `COMBINED_NETWORK_CACHE_SIZE` is 0
     #[must_use]
-    pub fn new(networks: Arc<UnderlyingCombinedNetworks<TYPES>>, delay_duration: Duration) -> Self {
+    pub fn new(
+        primary_network: PushCdnNetwork<TYPES>,
+        secondary_network: Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        delay_duration: Duration,
+    ) -> Self {
+        // Create networks from the ones passed in
+        let networks = Arc::from(UnderlyingCombinedNetworks(
+            primary_network,
+            secondary_network,
+        ));
+
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(LruCache::new(
