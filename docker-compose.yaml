@@ -301,6 +301,20 @@ services:
       sequencer0:
         condition: service_healthy
 
+  nasty-client:
+    image: ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
+    ports:
+      - "$ESPRESSO_NASTY_CLIENT_PORT:$ESPRESSO_NASTY_CLIENT_PORT"
+    environment:
+      - ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_NASTY_CLIENT_PORT
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+
   sequencer-db:
     image: postgres
     ports:

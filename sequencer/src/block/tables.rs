@@ -114,7 +114,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
 
     // returns (ns_id, ns_offset)
     // ns_offset is not checked, could be anything
-    fn get_table_entry(&self, ns_index: usize) -> (NamespaceId, usize) {
+    pub fn get_table_entry(&self, ns_index: usize) -> (NamespaceId, usize) {
         // get the range for ns_id bytes in ns table
         // ensure `range` is within range for ns_table_bytes
         let start = std::cmp::min(
