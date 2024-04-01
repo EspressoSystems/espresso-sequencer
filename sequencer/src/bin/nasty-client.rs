@@ -12,7 +12,7 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
-use anyhow::{ensure, Context};
+use anyhow::{bail, ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{
     sync::RwLock,
@@ -41,13 +41,13 @@ use sequencer::{
     api::endpoints::NamespaceProofQueryData, options::parse_duration, Header, SeqTypes,
 };
 use serde::de::DeserializeOwned;
-use std::time::Duration;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     pin::Pin,
     sync::Arc,
+    time::{Duration, Instant},
 };
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Url};
@@ -125,6 +125,19 @@ struct ClientConfig {
     /// The minimum number of successful tries to consider a failed operation "healed".
     #[clap(long, env = "ESPRESSO_NASTY_CLIENT_MIN_RETRIES", default_value = "5")]
     min_retries: usize,
+
+    /// Time after which WebSockets connection failures are allowed.
+    ///
+    /// If there is an error polling a WebSockets connection last used more recently than this
+    /// duration, it is considered an error. If the connection is staler than this, it is only a
+    /// warning, and the connection is automatically refreshed.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_WEB_SOCKET_TIMEOUT",
+        default_value = "60s",
+        value_parser = parse_duration,
+    )]
+    web_socket_timeout: Duration,
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -319,6 +332,7 @@ struct Subscription<T: Queryable> {
     #[derivative(Debug = "ignore")]
     stream: Pin<Box<Peekable<Connection<T>>>>,
     position: u64,
+    refreshed: Instant,
 }
 
 #[derive(Debug)]
@@ -472,12 +486,8 @@ impl<T: Queryable> ResourceManager<T> {
             Subscription {
                 stream: Box::pin(stream.peekable()),
                 position: from,
+                refreshed: Instant::now(),
             },
-        );
-        tracing::info!(
-            "{} open {} streams",
-            self.open_streams.len(),
-            Self::singular()
         );
 
         self.metrics.open_streams[&T::RESOURCE].update(1);
@@ -495,13 +505,8 @@ impl<T: Queryable> ResourceManager<T> {
             .keys()
             .nth(index % self.open_streams.len())
             .unwrap();
-        tracing::info!("closing stream {id}");
+        tracing::info!("closing {} stream {id}", Self::singular());
         self.open_streams.remove(&id);
-        tracing::info!(
-            "{} open {} streams",
-            self.open_streams.len(),
-            Self::singular()
-        );
         self.metrics.open_streams[&T::RESOURCE].update(-1);
         self.metrics.close_stream_actions[&T::RESOURCE].add(1);
     }
@@ -514,10 +519,10 @@ impl<T: Queryable> ResourceManager<T> {
         self.metrics.poll_stream_actions[&T::RESOURCE].add(1);
 
         let index = index % self.open_streams.len();
-        let (id, stream) = self.open_streams.iter_mut().nth(index).unwrap();
-
         let mut blocking = 0;
         for _ in 0..amount {
+            let (id, stream) = self.open_streams.iter_mut().nth(index).unwrap();
+
             // Check if the next item is immediately available or if we're going to block.
             if stream.stream.as_mut().peek().now_or_never().is_none() {
                 blocking += 1;
@@ -528,30 +533,74 @@ impl<T: Queryable> ResourceManager<T> {
             }
 
             let pos = stream.position;
+            let refreshed = stream.refreshed;
             stream.position += 1;
-            tracing::debug!("polling {} stream {id} at position {pos}", Self::singular());
-            let Some(res) = stream.stream.next().await else {
-                tracing::info!("{} stream {id} ended", Self::singular());
-                let id = *id;
-                self.open_streams.remove(&id);
-                tracing::info!(
-                    "{} open {} streams",
-                    self.open_streams.len(),
-                    Self::singular()
-                );
-                self.metrics.open_streams[&T::RESOURCE].update(-1);
-                return Ok(());
+            let span = info_span!(
+                "polling stream",
+                resource = Self::singular(),
+                id,
+                pos,
+                ?refreshed,
+            );
+            let _enter = span.enter();
+            let obj = loop {
+                let Some(res) = stream.stream.next().await else {
+                    let id = *id;
+                    self.open_streams.remove(&id);
+                    self.metrics.open_streams[&T::RESOURCE].update(-1);
+
+                    // All of our streams are supposed to be indefinite.
+                    bail!("{} stream {id} ended", Self::singular());
+                };
+                match res {
+                    Ok(obj) => {
+                        // Successfully polling a WebSockets connection should reset the connection
+                        // timeout, so we don't expect errors from this connection in the near
+                        // future.
+                        stream.refreshed = Instant::now();
+                        break obj;
+                    }
+                    Err(err) if refreshed.elapsed() >= self.cfg.web_socket_timeout => {
+                        // Streams are allowed to fail if the connection is too old. Warn about it,
+                        // but refresh the connection and try again.
+                        tracing::warn!("error in old connection, refreshing connection: {err:#}");
+                        let conn = self
+                            .client
+                            .socket(&format!("availability/stream/{}/{pos}", Self::plural()))
+                            .subscribe()
+                            .await
+                            .context(format!("subscribing to {} from {pos}", Self::plural()))?;
+                        stream.stream = Box::pin(conn.peekable());
+                        stream.refreshed = Instant::now();
+                    }
+                    Err(err) => {
+                        // Errors on a relatively fresh connection are not allowed. Close the stream
+                        // since it is apparently in a bad state, and return an error.
+                        let id = *id;
+                        self.open_streams.remove(&id);
+                        self.metrics.open_streams[&T::RESOURCE].update(-1);
+                        return Err(err).context(format!(
+                            "polling {} stream {id} at {pos}, last refreshed {:?} ago",
+                            Self::singular(),
+                            refreshed.elapsed()
+                        ));
+                    }
+                }
             };
-            let obj = res.context(format!("polling {} stream {id} at {pos}", Self::singular()))?;
 
             // Check consistency against a regular query.
+            let id = *id;
+            let expected = self
+                .retry(info_span!("fetching expected object"), || async {
+                    self.client
+                        .get(&format!("availability/{}/{pos}", Self::singular()))
+                        .send()
+                        .await
+                        .context(format!("fetching {} {pos}", Self::singular()))
+                })
+                .await?;
             ensure!(
-                obj == self
-                    .client
-                    .get(&format!("availability/{}/{pos}", Self::singular()))
-                    .send()
-                    .await
-                    .context(format!("fetching {} {pos}", Self::singular()))?,
+                obj == expected,
                 format!(
                     "{} stream {id} is not consistent with query at {pos}",
                     Self::singular()
