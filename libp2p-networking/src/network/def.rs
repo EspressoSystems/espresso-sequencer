@@ -1,5 +1,6 @@
 use futures::channel::oneshot::Sender;
 use libp2p::{
+    autonat,
     gossipsub::{Behaviour as GossipBehaviour, Event as GossipEvent, IdentTopic},
     identify::{Behaviour as IdentifyBehaviour, Event as IdentifyEvent},
     request_response::{cbor, OutboundRequestId, ResponseChannel},
@@ -51,6 +52,11 @@ pub struct NetworkDef {
     /// Behaviour for requesting and receiving data
     #[debug(skip)]
     pub request_response: libp2p::request_response::cbor::Behaviour<Request, Response>,
+
+    /// Auto NAT behaviour to determine if we are publically reachable and
+    /// by which address
+    #[debug(skip)]
+    pub autonat: libp2p::autonat::Behaviour,
 }
 
 impl NetworkDef {
@@ -62,6 +68,7 @@ impl NetworkDef {
         identify: IdentifyBehaviour,
         direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
         request_response: cbor::Behaviour<Request, Response>,
+        autonat: autonat::Behaviour,
     ) -> NetworkDef {
         Self {
             gossipsub,
@@ -69,6 +76,7 @@ impl NetworkDef {
             identify,
             direct_message,
             request_response,
+            autonat,
         }
     }
 }
@@ -179,5 +187,11 @@ impl From<libp2p::request_response::Event<Vec<u8>, Vec<u8>>> for NetworkEventInt
 impl From<libp2p::request_response::Event<Request, Response>> for NetworkEventInternal {
     fn from(event: libp2p::request_response::Event<Request, Response>) -> Self {
         Self::RequestResponseEvent(event)
+    }
+}
+
+impl From<libp2p::autonat::Event> for NetworkEventInternal {
+    fn from(event: libp2p::autonat::Event) -> Self {
+        Self::AutonatEvent(event)
     }
 }
