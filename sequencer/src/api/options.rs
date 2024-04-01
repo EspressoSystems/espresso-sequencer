@@ -31,7 +31,7 @@ use tide_disco::{
 };
 use versioned_binary_serialization::version::StaticVersionType;
 
-use hotshot_events_service::events_source::EventsSource;
+use hotshot_events_service::{events::Error as EventStreamingError, events_source::EventsSource};
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -168,6 +168,29 @@ impl Options {
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
+
+            // It runs to different port and app because State and Extensible Data source needs to support required
+            // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
+            // hotshot-events-service crate.
+            if self.hotshot_events.is_some() {
+                let event_streamer = context.get_event_streamer();
+
+                let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
+
+                self.init_hotshot_event_streaming_module(&mut app)?;
+
+                context.spawn(
+                    "Hotshot Events Streaming API server",
+                    app.serve(
+                        format!(
+                            "0.0.0.0:{}",
+                            self.hotshot_events.unwrap().events_service_port
+                        ),
+                        bind_version,
+                    ),
+                );
+            }
+
             Ok(context)
         } else {
             // If no status or availability API is requested, we don't need metrics or a query
@@ -182,12 +205,32 @@ impl Options {
 
             self.init_hotshot_modules(&mut app)?;
 
-            self.init_hotshot_event_streaming_module(&mut app)?;
-
             context.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
+            // Start the event streaming API server if it is enabled.
+            // It runs to different port and app because State and Extensible Data source needs to support required
+            // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
+            // hotshot-events-service crate.
+            if self.hotshot_events.is_some() {
+                let event_streamer = context.get_event_streamer();
+
+                let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
+
+                self.init_hotshot_event_streaming_module(&mut app)?;
+
+                context.spawn(
+                    "Hotshot Events Streaming API server",
+                    app.serve(
+                        format!(
+                            "0.0.0.0:{}",
+                            self.hotshot_events.unwrap().events_service_port
+                        ),
+                        bind_version,
+                    ),
+                );
+            }
             Ok(context)
         }
     }
@@ -342,20 +385,17 @@ impl Options {
     // Enable the events streaming api module
     fn init_hotshot_event_streaming_module<S, Ver: StaticVersionType + 'static>(
         &self,
-        app: &mut App<S, Error, Ver>,
+        app: &mut App<S, EventStreamingError, Ver>,
     ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState,
         <S as ReadState>::State: Send + Sync + EventsSource<SeqTypes>,
     {
-        if self.hotshot_events.is_some() {
-            tracing::info!("initializing hotshot events API");
-            let hotshot_events_api = hotshot_events_service::events::define_api(
-                &hotshot_events_service::events::Options::default(),
-            )?;
-
-            app.register_module("hotshot-events", hotshot_events_api)?;
-        }
+        tracing::info!("initializing hotshot events API");
+        let hotshot_events_api = hotshot_events_service::events::define_api(
+            &hotshot_events_service::events::Options::default(),
+        )?;
+        app.register_module("hotshot-events", hotshot_events_api)?;
 
         Ok(())
     }
@@ -398,4 +438,8 @@ pub struct State;
 
 /// Options for the Hotshot events streaming API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct HotshotEvents;
+pub struct HotshotEvents {
+    /// Port that the HTTP Hotshot Event streaming API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT")]
+    pub events_service_port: u16,
+}

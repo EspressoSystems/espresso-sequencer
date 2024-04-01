@@ -4110,7 +4110,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hs-builder-core?branch=hg/test_builder_executable#b96b74e982f33899e4a57272cf146bf4cb5ffe1f"
+source = "git+https://github.com/EspressoSystems/hs-builder-core?rev=1a677f9ecf7043303fe0decfe613337981e9c292#1a677f9ecf7043303fe0decfe613337981e9c292"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
@@ -4161,7 +4161,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=api_test#3f6eea7f422d6982d3ef0314441eb4ac7aaa3c4d"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.0#8078f475d3919189c86dbdc54db4c0adc809a06f"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -4252,7 +4252,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=hg/hotshot_event_streaming#d926c3dbaedd5c0ff506038829b95c2658b7d95f"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.0#c055b33d5bc26cb698567ed4206777513003232d"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4273,7 +4273,6 @@ dependencies = [
  "espresso-macros",
  "futures",
  "hotshot",
- "hotshot-events-service",
  "hotshot-example-types",
  "hotshot-types",
  "include_dir",
