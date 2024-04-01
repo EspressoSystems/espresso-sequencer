@@ -43,6 +43,8 @@ pub enum Error {
     GetTransactionSummaries(GetTransactionSummariesError),
     #[serde(untagged)]
     GetExplorerSummary(GetExplorerSummaryError),
+    #[serde(untagged)]
+    GetSearchResults(GetSearchResultsError),
 }
 
 impl Error {
@@ -53,6 +55,7 @@ impl Error {
             Error::GetTransactionDetail(e) => e.status(),
             Error::GetTransactionSummaries(e) => e.status(),
             Error::GetExplorerSummary(e) => e.status(),
+            Error::GetSearchResults(e) => e.status(),
         }
     }
 }
@@ -65,6 +68,20 @@ impl Display for Error {
             Error::GetTransactionDetail(e) => e.fmt(f),
             Error::GetTransactionSummaries(e) => e.fmt(f),
             Error::GetExplorerSummary(e) => e.fmt(f),
+            Error::GetSearchResults(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::GetBlockDetail(e) => Some(e),
+            Error::GetBlockSummaries(e) => Some(e),
+            Error::GetTransactionDetail(e) => Some(e),
+            Error::GetTransactionSummaries(e) => Some(e),
+            Error::GetExplorerSummary(e) => Some(e),
+            Error::GetSearchResults(e) => Some(e),
         }
     }
 }
@@ -157,7 +174,23 @@ where
     }
 }
 
-impl std::error::Error for Error {}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct SearchResultResponse<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub search_results: SearchResult<Types>,
+}
+
+impl<Types: NodeType> From<SearchResult<Types>> for SearchResultResponse<Types>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    fn from(search_results: SearchResult<Types>) -> Self {
+        Self { search_results }
+    }
+}
 
 fn validate_limit(
     limit: Result<usize, tide_disco::RequestError>,
@@ -291,6 +324,25 @@ where
                     .map_err(Error::GetExplorerSummary)
             }
             .boxed()
+        })?
+        .get("get_search_result", move |req, state| {
+            async move {
+                let query = req
+                    .string_param("query")
+                    .map_err(|err| {
+                        tracing::error!("query param error: {}", err);
+                        GetSearchResultsError::InvalidQuery
+                    })
+                    .map_err(Error::GetSearchResults)?
+                    .to_string();
+
+                state
+                    .get_search_results(query)
+                    .await
+                    .map(SearchResultResponse::from)
+                    .map_err(Error::GetSearchResults)
+            }
+            .boxed()
         })?;
     Ok(api)
 }
@@ -353,6 +405,14 @@ mod test {
             .send()
             .await
             .unwrap();
+
+        let get_search_response: SearchResultResponse<MockTypes> = client
+            .get(format!("search/{}", latest_block.hash).as_str())
+            .send()
+            .await
+            .unwrap();
+
+        assert!(!get_search_response.search_results.blocks.is_empty());
 
         if num_transactions > 0 {
             let last_transaction = latest_transactions.last().unwrap();

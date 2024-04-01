@@ -2492,6 +2492,65 @@ where
             histograms,
         })
     }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> QueryResult<explorer::data_source::SearchResult<Types>> {
+        let block_query = format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.hash LIKE $1 || '%'
+                ORDER BY h.height DESC
+                LIMIT 5"
+        );
+        let block_query_rows = self.query(&block_query, vec![&query]).await?;
+        let block_query_result: Vec<BlockSummary<Types>> = block_query_rows
+            .map(|row| -> Result<BlockSummary<Types>, QueryError> {
+                let block = parse_block::<Types>(row?)?;
+                Ok(BlockSummary::try_from(block)?)
+            })
+            .try_collect()
+            .await?;
+
+        let transactions_query = format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                JOIN transaction AS t ON h.height = t.block_height
+                WHERE t.hash LIKE $1 || '%'
+                ORDER BY h.height DESC
+                LIMIT 5"
+        );
+        let transactions_query_rows = self.query(&transactions_query, vec![&query]).await?;
+        let transactions_query_result: Vec<explorer::data_source::TransactionSummary<Types>> = transactions_query_rows
+            .map(|row| -> Result<Vec<explorer::data_source::TransactionSummary<Types>>, QueryError>{
+                let block = parse_block::<Types>(row?)?;
+                let transactions = block
+                    .enumerate()
+                    .enumerate()
+                    .filter(|(_, (_, txn))| txn.commit().to_string().starts_with(&query))
+                    .map(|(offset, (_, txn))| {
+                        Ok(explorer::data_source::TransactionSummary::try_from((
+                            &block, offset, txn,
+                        ))?)
+                    })
+                    .try_collect::<explorer::data_source::TransactionSummary<Types>, Vec<explorer::data_source::TransactionSummary<Types>>, QueryError>()?;
+
+                Ok(transactions)
+            })
+            .try_collect::<Vec<Vec<explorer::data_source::TransactionSummary<Types>>>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Ok(explorer::data_source::SearchResult {
+            blocks: block_query_result,
+            transactions: transactions_query_result,
+        })
+    }
 }
 
 /// An atomic SQL transaction.

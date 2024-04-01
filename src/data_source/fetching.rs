@@ -839,6 +839,20 @@ where
             .await
             .map_err(explorer::data_source::GetExplorerSummaryError::QueryError)
     }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<
+        explorer::data_source::SearchResult<Types>,
+        explorer::data_source::GetSearchResultsError,
+    > {
+        self.storage()
+            .await
+            .get_search_results(query)
+            .await
+            .map_err(explorer::data_source::GetSearchResultsError::QueryError)
+    }
 }
 
 /// Asynchronous retrieval and storage of [`Fetchable`] resources.

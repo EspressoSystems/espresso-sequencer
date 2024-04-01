@@ -132,3 +132,18 @@ Returns
 }
 ```
 """
+
+[route.get_search_result]
+PATH = ["search/:query"]
+":query" = "Literal"
+DOC = """
+Retrieve search results for blocks or transactions that can be identified in some what by the given string ":query".
+At the moment the only field this matches against is the hash of the Block or Transaction.
+
+Returns
+```
+{
+    "search_result": SearchResult
+}
+```
+"""

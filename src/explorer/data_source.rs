@@ -155,6 +155,7 @@ pub struct BlockDetail<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
 {
+    pub hash: BlockHash<Types>,
     pub height: u64,
     pub time: Timestamp,
     pub num_transactions: u64,
@@ -177,6 +178,7 @@ where
         let seconds = i64::try_from(value.header.timestamp())?;
 
         Ok(Self {
+            hash: value.hash(),
             height: value.height(),
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
             num_transactions: value.num_transactions,
@@ -197,6 +199,7 @@ pub struct BlockSummary<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
 {
+    pub hash: BlockHash<Types>,
     pub height: u64,
     pub proposer_id: ProposerId<Types>,
     pub num_transactions: u64,
@@ -260,6 +263,7 @@ where
         let seconds = i64::try_from(value.header.timestamp())?;
 
         Ok(Self {
+            hash: value.hash(),
             height: value.height(),
             proposer_id: value.header().proposer_id(),
             num_transactions: value.num_transactions,
@@ -460,6 +464,16 @@ where
     pub latest_transactions: Vec<TransactionSummary<Types>>,
     //  Most Active Rollups
     pub histograms: ExplorerHistograms,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct SearchResult<Types: NodeType>
+where
+    Header<Types>: ExplorerHeader<Types>,
+{
+    pub blocks: Vec<BlockSummary<Types>>,
+    pub transactions: Vec<TransactionSummary<Types>>,
 }
 
 /// [GetBlockDetailError] represents an error that has occurred in response to
@@ -735,6 +749,56 @@ impl std::error::Error for GetExplorerSummaryError {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GetSearchResultsError {
+    #[serde(untagged)]
+    Unimplemented(Unimplemented),
+    #[serde(untagged)]
+    QueryError(QueryError),
+    #[serde(untagged)]
+    InvalidQuery,
+}
+
+impl GetSearchResultsError {
+    pub fn status(&self) -> StatusCode {
+        match self {
+            GetSearchResultsError::QueryError(err) => err.status(),
+            GetSearchResultsError::Unimplemented(err) => err.status(),
+            GetSearchResultsError::InvalidQuery => StatusCode::BadRequest,
+        }
+    }
+}
+
+impl Display for GetSearchResultsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GetSearchResultsError::QueryError(err) => write!(f, "{err}"),
+            GetSearchResultsError::Unimplemented(err) => write!(f, "{err}"),
+            GetSearchResultsError::InvalidQuery => write!(f, "invalid query"),
+        }
+    }
+}
+
+impl ExplorerAPIError for GetSearchResultsError {
+    fn code(&self) -> &str {
+        match self {
+            GetSearchResultsError::QueryError(_) => "QUERY_ERROR",
+            GetSearchResultsError::Unimplemented(err) => err.code(),
+            GetSearchResultsError::InvalidQuery => "INVALID_QUERY",
+        }
+    }
+}
+
+impl std::error::Error for GetSearchResultsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GetSearchResultsError::Unimplemented(err) => Some(err),
+            GetSearchResultsError::QueryError(err) => Some(err),
+            GetSearchResultsError::InvalidQuery => None,
+        }
+    }
+}
+
 /// An interface for querying Data and Statistics from the HotShot Blockchain.
 ///
 /// This interface provides methods that allows the enabling of querying data
@@ -770,6 +834,11 @@ where
 
     async fn get_explorer_summary(&self)
         -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<SearchResult<Types>, GetSearchResultsError>;
 }
 
 #[async_trait]

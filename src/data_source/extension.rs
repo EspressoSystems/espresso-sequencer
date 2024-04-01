@@ -398,6 +398,16 @@ where
     > {
         self.data_source.get_explorer_summary().await
     }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<
+        explorer::data_source::SearchResult<Types>,
+        explorer::data_source::GetSearchResultsError,
+    > {
+        self.data_source.get_search_results(query).await
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

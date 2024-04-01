@@ -140,4 +140,9 @@ where
     async fn get_explorer_summary(
         &self,
     ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>>;
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> QueryResult<explorer::data_source::SearchResult<Types>>;
 }
