@@ -31,6 +31,8 @@ use tide_disco::{
 };
 use versioned_binary_serialization::version::StaticVersionType;
 
+use hotshot_events_service::events_source::EventsSource;
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub http: Http,
@@ -39,6 +41,7 @@ pub struct Options {
     pub status: Option<Status>,
     pub catchup: Option<Catchup>,
     pub state: Option<State>,
+    pub hotshot_events: Option<HotshotEvents>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -52,6 +55,7 @@ impl From<Http> for Options {
             status: None,
             catchup: None,
             state: None,
+            hotshot_events: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -94,6 +98,12 @@ impl Options {
     /// Add a state API module.
     pub fn state(mut self, opt: State) -> Self {
         self.state = Some(opt);
+        self
+    }
+
+    /// Add a Hotshot events streaming API module.
+    pub fn hotshot_events(mut self, opt: HotshotEvents) -> Self {
+        self.hotshot_events = Some(opt);
         self
     }
 
@@ -151,7 +161,9 @@ impl Options {
             let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
+            // Initialise only here because Extensivle Data Source doesn't impl the EventsSource trait.
             self.init_hotshot_modules(&mut app)?;
+
             context.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
@@ -169,6 +181,9 @@ impl Options {
                 App::<_, Error, Ver>::with_state(RwLock::new(super::State::from(&context)));
 
             self.init_hotshot_modules(&mut app)?;
+
+            self.init_hotshot_event_streaming_module(&mut app)?;
+
             context.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
@@ -220,7 +235,6 @@ impl Options {
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
 
-        self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
 
         Ok((context, app))
@@ -324,6 +338,27 @@ impl Options {
 
         Ok(())
     }
+
+    // Enable the events streaming api module
+    fn init_hotshot_event_streaming_module<S, Ver: StaticVersionType + 'static>(
+        &self,
+        app: &mut App<S, Error, Ver>,
+    ) -> anyhow::Result<()>
+    where
+        S: 'static + Send + Sync + ReadState,
+        <S as ReadState>::State: Send + Sync + EventsSource<SeqTypes>,
+    {
+        if self.hotshot_events.is_some() {
+            tracing::info!("initializing hotshot events API");
+            let hotshot_events_api = hotshot_events_service::events::define_api(
+                &hotshot_events_service::events::Options::default(),
+            )?;
+
+            app.register_module("hotshot-events", hotshot_events_api)?;
+        }
+
+        Ok(())
+    }
 }
 
 /// The minimal HTTP API.
@@ -360,3 +395,7 @@ pub struct Query {
 /// Options for the state API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct State;
+
+/// Options for the Hotshot events streaming API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct HotshotEvents;

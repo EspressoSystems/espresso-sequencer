@@ -197,13 +197,11 @@ async fn main() -> anyhow::Result<()> {
     // get from the private key
     let builder_pub_key = BLSPubKey::from_private(&private_staking_key);
 
-    // TODO: I don't think this hotshot event streaming server url will go here...
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        hotshot_events_streaming_server_url: opt.hotshot_events_streaming_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: private_staking_key.clone(),
         private_state_key,

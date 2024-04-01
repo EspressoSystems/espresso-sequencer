@@ -4,9 +4,11 @@ use crate::{
     SeqTypes,
 };
 use async_std::sync::Arc;
+use async_std::sync::RwLock;
 use async_trait::async_trait;
 use data_source::{StateDataSource, SubmitDataSource};
 use hotshot::types::SystemContextHandle;
+use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 use versioned_binary_serialization::version::StaticVersionType;
@@ -23,6 +25,7 @@ pub use options::Options;
 struct State<N: network::Type, Ver: StaticVersionType> {
     state_signer: Arc<StateSigner<Ver>>,
     handle: SystemContextHandle<SeqTypes, Node<N>>,
+    events_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
 }
 
 impl<N: network::Type, Ver: StaticVersionType + 'static> From<&SequencerContext<N, Ver>>
@@ -32,7 +35,18 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> From<&SequencerContext<
         Self {
             state_signer: ctx.state_signer(),
             handle: ctx.consensus().clone(),
+            events_streamer: ctx.get_event_streamer(),
         }
+    }
+}
+use futures::stream::BoxStream;
+
+#[async_trait]
+impl<N: network::Type, Ver: StaticVersionType> EventsSource<SeqTypes> for State<N, Ver> {
+    type EventStream = BoxStream<'static, Arc<BuilderEvent<SeqTypes>>>;
+
+    async fn get_event_stream(&self) -> Self::EventStream {
+        self.events_streamer.write().await.get_event_stream().await
     }
 }
 

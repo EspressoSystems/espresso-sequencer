@@ -66,7 +66,6 @@ where
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        hotshot_events_streaming_server_url: opt.hotshot_events_streaming_server_url,
         webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key,
         private_state_key,

@@ -17,7 +17,6 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    constants::{Version01, STATIC_VER_0_1},
     traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
@@ -31,11 +30,7 @@ use crate::{
 };
 
 use async_std::sync::RwLock;
-use hotshot_events_service::{
-    events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
-    events_source::{EventConsumer, EventsStreamer},
-};
-use tide_disco::App;
+use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
 pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
@@ -61,6 +56,9 @@ pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> 
     /// Background tasks to shut down when the node is dropped.
     tasks: Vec<(String, JoinHandle<()>)>,
 
+    /// events streamer to stream hotshot events to external clients
+    events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+
     detached: bool,
 }
 
@@ -74,7 +72,6 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
-        events_streaming_server: Option<Url>,
         _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
@@ -130,7 +127,6 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             node_id,
             state_signer,
             Some(event_streamer),
-            events_streaming_server,
         ))
     }
 
@@ -141,7 +137,6 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         node_index: u64,
         state_signer: StateSigner<Ver>,
         event_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
-        events_streaming_server: Option<Url>,
     ) -> Self {
         let events = handle.get_event_stream();
 
@@ -152,6 +147,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             tasks: vec![],
             detached: false,
             wait_for_orchestrator: None,
+            events_streamer: event_streamer.clone(),
         };
         ctx.spawn(
             "main event handler",
@@ -162,13 +158,6 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
                 event_streamer.clone(),
             ),
         );
-        // spwan the task for running the event streaming api
-        if let Some(event_streamer) = event_streamer {
-            ctx.spawn(
-                "event streaming api",
-                run_hotshot_event_streaming_api(events_streaming_server.unwrap(), event_streamer),
-            );
-        }
 
         ctx
     }
@@ -192,6 +181,11 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
     pub async fn submit_transaction(&self, tx: Transaction) -> anyhow::Result<()> {
         self.handle.submit_transaction(tx).await?;
         Ok(())
+    }
+
+    /// get event streamer
+    pub fn get_event_streamer(&self) -> Arc<RwLock<EventsStreamer<SeqTypes>>> {
+        self.events_streamer.clone().unwrap()
     }
 
     /// Return a reference to the underlying consensus handle.
@@ -284,22 +278,4 @@ async fn handle_events<Ver: StaticVersionType>(
             events_streamer.write().await.handle_event(event).await;
         }
     }
-}
-
-// run an api service to serve internal hotsthot events to external clients (e.g builders)
-async fn run_hotshot_event_streaming_api(url: Url, source: Arc<RwLock<EventsStreamer<SeqTypes>>>) {
-    // Start the web server.
-    let hotshot_events_api = hotshot_events_service::events::define_api::<
-        Arc<RwLock<EventsStreamer<SeqTypes>>>,
-        SeqTypes,
-        Version01,
-    >(&EventStreamingApiOptioins::default())
-    .expect("Failed to define hotshot eventsAPI");
-
-    let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
-
-    app.register_module("hotshot_events", hotshot_events_api)
-        .expect("Failed to register hotshot events API");
-
-    spawn(app.serve(url, STATIC_VER_0_1));
 }
