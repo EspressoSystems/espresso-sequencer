@@ -165,10 +165,6 @@ pub struct Options {
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     pub state_peers: Vec<Url>,
-
-    /// Url we will use to stream hotshot events
-    #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
-    pub hotshot_events_streaming_server_url: Url,
 }
 
 impl Options {
