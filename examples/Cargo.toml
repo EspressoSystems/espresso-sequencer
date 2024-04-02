@@ -19,6 +19,7 @@ docs = []
 doc-images = []
 hotshot-testing = ["hotshot/hotshot-testing"]
 randomized-leader-election = []
+fixed-leader-election = []
 
 # libp2p
 [[example]]

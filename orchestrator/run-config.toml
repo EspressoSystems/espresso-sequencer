@@ -44,6 +44,7 @@ num_nodes_with_stake = 10
 num_nodes_without_stake = 0
 staked_committee_nodes = 10
 non_staked_committee_nodes = 0
+fixed_leader_for_gpuvid = 0
 max_transactions = 1
 min_transactions = 1
 next_view_timeout = 30000

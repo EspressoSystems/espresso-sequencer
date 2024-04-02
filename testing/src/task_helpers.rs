@@ -98,18 +98,22 @@ pub async fn build_system_handle(
         quorum_membership: <TestTypes as NodeType>::Membership::create_election(
             known_nodes_with_stake.clone(),
             quorum_election_config.clone(),
+            config.fixed_leader_for_gpuvid,
         ),
         da_membership: <TestTypes as NodeType>::Membership::create_election(
             known_nodes_with_stake.clone(),
             committee_election_config,
+            config.fixed_leader_for_gpuvid,
         ),
         vid_membership: <TestTypes as NodeType>::Membership::create_election(
             known_nodes_with_stake.clone(),
             quorum_election_config.clone(),
+            config.fixed_leader_for_gpuvid,
         ),
         view_sync_membership: <TestTypes as NodeType>::Membership::create_election(
             known_nodes_with_stake.clone(),
             quorum_election_config,
+            config.fixed_leader_for_gpuvid,
         ),
     };
 

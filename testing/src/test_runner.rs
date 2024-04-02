@@ -346,6 +346,7 @@ where
                 quorum_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     quorum_election_config.clone(),
+                    config.fixed_leader_for_gpuvid,
                 ),
                 da_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
@@ -353,14 +354,17 @@ where
                         config.da_staked_committee_size as u64,
                         config.num_nodes_without_stake as u64,
                     ),
+                    config.fixed_leader_for_gpuvid,
                 ),
                 vid_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     quorum_election_config.clone(),
+                    config.fixed_leader_for_gpuvid,
                 ),
                 view_sync_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     quorum_election_config,
+                    config.fixed_leader_for_gpuvid,
                 ),
             };
             let networks = (self.launcher.resource_generator.channel_generator)(node_id).await;

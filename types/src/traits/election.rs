@@ -48,6 +48,7 @@ pub trait Membership<TYPES: NodeType>:
     fn create_election(
         entries: Vec<PeerConfig<TYPES::SignatureKey>>,
         config: TYPES::ElectionConfigType,
+        fixed_leader_for_gpuvid: usize,
     ) -> Self;
 
     /// Clone the public key and corresponding stake table for current elected committee

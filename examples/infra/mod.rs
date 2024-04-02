@@ -56,7 +56,7 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 use std::{fs, time::Instant};
 use surf_disco::Url;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use versioned_binary_serialization::version::StaticVersionType;
 
 #[derive(Debug, Clone)]
@@ -180,6 +180,14 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
                 .help("Sets the url of the da webserver")
                 .required(false),
         )
+        .arg(
+            Arg::new("fixed_leader_for_gpuvid")
+                .short('f')
+                .long("fixed_leader_for_gpuvid")
+                .value_name("BOOL")
+                .help("Sets the number of fixed leader for gpu vid, only be used when leaders running on gpu")
+                .required(false),
+        )
         .get_matches();
 
     if let Some(config_file_string) = matches.get_one::<String>("config_file") {
@@ -203,6 +211,12 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
     }
     if let Some(da_committee_size_string) = matches.get_one::<String>("da_committee_size") {
         config.config.da_staked_committee_size = da_committee_size_string.parse::<usize>().unwrap();
+    }
+    if let Some(fixed_leader_for_gpuvid_string) =
+        matches.get_one::<String>("fixed_leader_for_gpuvid")
+    {
+        config.config.fixed_leader_for_gpuvid =
+            fixed_leader_for_gpuvid_string.parse::<usize>().unwrap();
     }
     if let Some(transactions_per_round_string) = matches.get_one::<String>("transactions_per_round")
     {
@@ -385,18 +399,22 @@ pub trait RunDA<
             quorum_membership: <TYPES as NodeType>::Membership::create_election(
                 known_nodes_with_stake.clone(),
                 quorum_election_config.clone(),
+                config.config.fixed_leader_for_gpuvid,
             ),
             da_membership: <TYPES as NodeType>::Membership::create_election(
                 known_nodes_with_stake.clone(),
                 committee_election_config,
+                config.config.fixed_leader_for_gpuvid,
             ),
             vid_membership: <TYPES as NodeType>::Membership::create_election(
                 known_nodes_with_stake.clone(),
                 quorum_election_config.clone(),
+                config.config.fixed_leader_for_gpuvid,
             ),
             view_sync_membership: <TYPES as NodeType>::Membership::create_election(
                 known_nodes_with_stake.clone(),
                 quorum_election_config,
+                config.config.fixed_leader_for_gpuvid,
             ),
         };
 
@@ -439,10 +457,10 @@ pub trait RunDA<
         let mut total_latency = 0;
         let mut num_latency = 0;
 
-        debug!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
+        info!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
         async_sleep(Duration::from_secs(start_delay_seconds)).await;
 
-        debug!("Starting HotShot example!");
+        info!("Starting HotShot example!");
         let start = Instant::now();
 
         let mut event_stream = context.get_event_stream();
@@ -977,7 +995,7 @@ pub async fn main_entry_point<
     setup_logging();
     setup_backtrace();
 
-    debug!("Starting validator");
+    info!("Starting validator");
 
     let orchestrator_client: OrchestratorClient = OrchestratorClient::new(args.clone());
 
@@ -1008,7 +1026,7 @@ pub async fn main_entry_point<
         .await
         .expect("failed to get config");
 
-    error!("Initializing networking");
+    info!("Initializing networking");
     let run = RUNDA::initialize_networking(run_config.clone(), args.advertise_address).await;
     let hotshot = run.initialize_state_and_hotshot().await;
 
@@ -1049,13 +1067,13 @@ pub async fn main_entry_point<
         }
     }
     if let NetworkConfigSource::Orchestrator = source {
-        debug!("Waiting for the start command from orchestrator");
+        info!("Waiting for the start command from orchestrator");
         orchestrator_client
             .wait_for_all_nodes_ready(run_config.clone().node_index)
             .await;
     }
 
-    println!("Starting HotShot");
+    info!("Starting HotShot");
     let bench_results = run
         .run_hotshot(
             hotshot,

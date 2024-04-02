@@ -24,6 +24,8 @@ pub struct GeneralStaticCommittee<T, PUBKEY: SignatureKey> {
     committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
     /// builder nodes
     committee_nodes_without_stake: Vec<PUBKEY>,
+    /// the number of fixed leader for gpuvid
+    fixed_leader_for_gpuvid: usize,
     /// Node type phantom
     _type_phantom: PhantomData<T>,
 }
@@ -38,11 +40,13 @@ impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
         _nodes: &[PUBKEY],
         nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
         nodes_without_stake: Vec<PUBKEY>,
+        fixed_leader_for_gpuvid: usize,
     ) -> Self {
         Self {
             nodes_with_stake: nodes_with_stake.clone(),
             committee_nodes_with_stake: nodes_with_stake,
             committee_nodes_without_stake: nodes_without_stake,
+            fixed_leader_for_gpuvid,
             _type_phantom: PhantomData,
         }
     }
@@ -69,10 +73,22 @@ where
         self.committee_nodes_with_stake.clone()
     }
 
-    #[cfg(not(feature = "randomized-leader-election"))]
+    #[cfg(not(any(
+        feature = "randomized-leader-election",
+        feature = "fixed-leader-election"
+    )))]
     /// Index the vector of public keys with the current view number
     fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
         let index = usize::try_from(*view_number % self.nodes_with_stake.len() as u64).unwrap();
+        let res = self.nodes_with_stake[index].clone();
+        TYPES::SignatureKey::get_public_key(&res)
+    }
+
+    #[cfg(feature = "fixed-leader-election")]
+    /// Only get leader in fixed set
+    /// Index the fixed vector (first fixed_leader_for_gpuvid element) of public keys with the current view number
+    fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
+        let index = usize::try_from(*view_number % self.fixed_leader_for_gpuvid as u64).unwrap();
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
@@ -117,6 +133,7 @@ where
     fn create_election(
         entries: Vec<PeerConfig<PUBKEY>>,
         config: TYPES::ElectionConfigType,
+        fixed_leader_for_gpuvid: usize,
     ) -> Self {
         let nodes_with_stake: Vec<PUBKEY::StakeTableEntry> = entries
             .iter()
@@ -135,7 +152,7 @@ where
             }
         }
         debug!("Election Membership Size: {}", config.num_nodes_with_stake);
-        // truncate committee_nodes_with_stake to only `num_nodes`
+        // truncate committee_nodes_with_stake to only `num_nodes` with lower index
         // since the `num_nodes_without_stake` are not part of the committee,
         committee_nodes_with_stake.truncate(config.num_nodes_with_stake.try_into().unwrap());
         committee_nodes_without_stake.truncate(config.num_nodes_without_stake.try_into().unwrap());
@@ -143,6 +160,7 @@ where
             nodes_with_stake,
             committee_nodes_with_stake,
             committee_nodes_without_stake,
+            fixed_leader_for_gpuvid,
             _type_phantom: PhantomData,
         }
     }
