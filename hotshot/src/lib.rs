@@ -29,7 +29,8 @@ use futures::join;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_task_impls::helpers::broadcast_event;
 use hotshot_task_impls::network;
-use hotshot_types::constants::{EVENT_CHANNEL_SIZE, STATIC_VER_0_1};
+use hotshot_types::constants::{BASE_VERSION, EVENT_CHANNEL_SIZE, STATIC_VER_0_1};
+use versioned_binary_serialization::version::Version;
 
 use hotshot_task::task::TaskRegistry;
 use hotshot_types::{
@@ -135,6 +136,9 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES>>>,
 
+    /// The network version
+    version: Arc<RwLock<Version>>,
+
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
     pub output_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
@@ -239,6 +243,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             metrics: consensus_metrics.clone(),
         };
         let consensus = Arc::new(RwLock::new(consensus));
+        let version = Arc::new(RwLock::new(BASE_VERSION));
 
         let (internal_tx, internal_rx) = broadcast(EVENT_CHANNEL_SIZE);
         let (mut external_tx, external_rx) = broadcast(EVENT_CHANNEL_SIZE);
@@ -253,6 +258,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             public_key,
             private_key,
             config,
+            version,
             networks: Arc::new(networks),
             memberships: Arc::new(memberships),
             _metrics: consensus_metrics.clone(),
@@ -503,8 +509,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             event_tx.clone(),
             event_rx.activate_cloned(),
             quorum_network.clone(),
-            quorum_membership,
+            quorum_membership.clone(),
             network::quorum_filter,
+            handle.get_storage().clone(),
+        )
+        .await;
+        add_network_event_task(
+            registry.clone(),
+            event_tx.clone(),
+            event_rx.activate_cloned(),
+            quorum_network.clone(),
+            quorum_membership,
+            network::upgrade_filter,
             handle.get_storage().clone(),
         )
         .await;

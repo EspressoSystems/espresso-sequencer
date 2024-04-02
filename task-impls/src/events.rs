@@ -16,6 +16,7 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, BlockPayload},
     vid::VidCommitment,
 };
+use versioned_binary_serialization::version::Version;
 
 /// Marker that the task completed
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
@@ -132,14 +133,15 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Upgrade proposal has been received from the network
     UpgradeProposalRecv(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade proposal has been sent to the network
-    UpgradeProposalSend(UpgradeProposal<TYPES>),
+    UpgradeProposalSend(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade vote has been received from the network
     UpgradeVoteRecv(UpgradeVote<TYPES>),
     /// Upgrade vote has been sent to the network
     UpgradeVoteSend(UpgradeVote<TYPES>),
     /// Upgrade certificate has been sent to the network
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
-
+    /// HotShot was upgraded, with a new network version.
+    VersionUpgrade(Version),
     /** Quorum Proposal Task **/
     /// Dummy quorum proposal to test if the quorum proposal dependency task works.
     DummyQuorumProposalSend(TYPES::Time),

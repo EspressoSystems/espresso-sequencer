@@ -81,10 +81,10 @@ pub enum WebServerNetworkError {
 }
 
 /// the type of transmission
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum TransmitType {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransmitType<TYPES: NodeType> {
     /// directly transmit
-    Direct,
+    Direct(TYPES::SignatureKey),
     /// broadcast the message to all
     Broadcast,
     /// broadcast to DA committee
@@ -167,8 +167,12 @@ pub enum NetworkError {
 pub enum ConsensusIntentEvent<K: SignatureKey> {
     /// Poll for votes for a particular view
     PollForVotes(u64),
+    /// Poll for upgrade votes for a particular view
+    PollForUpgradeVotes(u64),
     /// Poll for a proposal for a particular view
     PollForProposal(u64),
+    /// Poll for an upgrade proposal for a particular view
+    PollForUpgradeProposal(u64),
     /// Poll for VID disperse data for a particular view
     PollForVIDDisperse(u64),
     /// Poll for the most recent [quorum/da] proposal the webserver has
@@ -212,6 +216,8 @@ impl<K: SignatureKey> ConsensusIntentEvent<K> {
         match &self {
             ConsensusIntentEvent::PollForVotes(view_number)
             | ConsensusIntentEvent::PollForProposal(view_number)
+            | ConsensusIntentEvent::PollForUpgradeVotes(view_number)
+            | ConsensusIntentEvent::PollForUpgradeProposal(view_number)
             | ConsensusIntentEvent::PollForDAC(view_number)
             | ConsensusIntentEvent::PollForViewSyncVotes(view_number)
             | ConsensusIntentEvent::CancelPollForViewSyncVotes(view_number)

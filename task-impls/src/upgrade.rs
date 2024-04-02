@@ -22,7 +22,7 @@ use hotshot_types::{
 
 use crate::vote_collection::HandleVoteEvent;
 use std::sync::Arc;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Alias for Optional type for Vote Collectors
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
@@ -72,21 +72,30 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
             HotShotEvent::UpgradeProposalRecv(proposal, sender) => {
-                let should_vote = self.should_vote;
+                info!("Received upgrade proposal: {:?}", proposal);
+
                 // If the proposal does not match our upgrade target, we immediately exit.
-                if !should_vote(proposal.data.upgrade_proposal.clone()) {
-                    warn!("Received unexpected upgrade proposal:\n{:?}", proposal.data);
+                if !(self.should_vote)(proposal.data.upgrade_proposal.clone()) {
+                    info!("Received unexpected upgrade proposal:\n{:?}", proposal.data);
                     return None;
                 }
 
                 // If we have an upgrade target, we validate that the proposal is relevant for the current view.
-
-                debug!(
+                info!(
                     "Upgrade proposal received for view: {:?}",
                     proposal.data.get_view_number()
                 );
-                // NOTE: Assuming that the next view leader is the one who sends an upgrade proposal for this view
+
                 let view = proposal.data.get_view_number();
+
+                // At this point, we could choose to validate
+                // that the proposal was issued by the correct leader
+                // for the indiciated view.
+                //
+                // We choose not to, because we don't gain that much from it.
+                // The certificate itself is only useful to the leader for that view anyway,
+                // and from the node's perspective it doesn't matter who the sender is.
+                // All we'd save is the cost of signing the vote, and we'd lose some flexibility.
 
                 // Allow an upgrade proposal that is one view older, in case we have voted on a quorum
                 // proposal and updated the view.
@@ -94,7 +103,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // the `UpgradeProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO Come back to this - we probably don't need this, but we should also never receive a UpgradeCertificate where this fails, investigate block ready so it doesn't make one for the genesis block
-
                 if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Discarding old upgrade proposal; the proposal is for view {:?}, but the current view is {:?}.",
                       view,
@@ -113,7 +121,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // At this point, we've checked that:
                 //   * the proposal was expected,
                 //   * the proposal is valid, and
-                //   * the proposal is recent,
                 // so we notify the application layer
                 self.api
                     .send_event(Event {
@@ -140,16 +147,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
             HotShotEvent::UpgradeVoteRecv(ref vote) => {
                 debug!("Upgrade vote recv, Main Task {:?}", vote.get_view_number());
+
                 // Check if we are the leader.
-                let view = vote.get_view_number();
-                if self.quorum_membership.get_leader(view) != self.public_key {
-                    error!(
-                        "We are not the leader for view {} are we leader for next view? {}",
-                        *view,
-                        self.quorum_membership.get_leader(view + 1) == self.public_key
-                    );
-                    return None;
+                {
+                    let view = vote.get_view_number();
+                    if self.quorum_membership.get_leader(view) != self.public_key {
+                        error!(
+                            "We are not the leader for view {} are we leader for next view? {}",
+                            *view,
+                            self.quorum_membership.get_leader(view + 1) == self.public_key
+                        );
+                        return None;
+                    }
                 }
+
                 let mut collector = self.vote_collector.write().await;
 
                 if collector.is_none() || vote.get_view_number() > collector.as_ref().unwrap().view
@@ -181,6 +192,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     }
                 }
             }
+            HotShotEvent::VersionUpgrade(version) => {
+                error!("The network was upgraded to {:?}. This instance of HotShot did not expect an upgrade.", version);
+            }
             HotShotEvent::ViewChange(view) => {
                 let view = *view;
                 if *self.cur_view >= *view {
@@ -191,6 +205,55 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
+
+                #[cfg(feature = "example-upgrade")]
+                {
+                    use commit::Committable;
+                    use std::marker::PhantomData;
+
+                    use hotshot_types::{
+                        data::UpgradeProposal, message::Proposal,
+                        traits::node_implementation::ConsensusTime,
+                    };
+                    use versioned_binary_serialization::version::Version;
+
+                    if *view == 5 && self.quorum_membership.get_leader(view + 5) == self.public_key
+                    {
+                        let upgrade_proposal_data = UpgradeProposalData {
+                            old_version: Version { major: 0, minor: 1 },
+                            new_version: Version { major: 1, minor: 0 },
+                            new_version_hash: vec![1, 1, 0, 0, 1],
+                            old_version_last_block: TYPES::Time::new(15),
+                            new_version_first_block: TYPES::Time::new(18),
+                        };
+
+                        let upgrade_proposal = UpgradeProposal {
+                            upgrade_proposal: upgrade_proposal_data.clone(),
+                            view_number: view + 5,
+                        };
+
+                        let signature = TYPES::SignatureKey::sign(
+                            &self.private_key,
+                            upgrade_proposal_data.commit().as_ref(),
+                        )
+                        .expect("Failed to sign upgrade proposal commitment!");
+
+                        let message = Proposal {
+                            data: upgrade_proposal,
+                            signature,
+                            _pd: PhantomData,
+                        };
+
+                        broadcast_event(
+                            Arc::new(HotShotEvent::UpgradeProposalSend(
+                                message,
+                                self.public_key.clone(),
+                            )),
+                            &tx,
+                        )
+                        .await;
+                    }
+                }
 
                 return None;
             }
@@ -234,6 +297,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 | HotShotEvent::UpgradeVoteRecv(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::ViewChange(_)
+                | HotShotEvent::VersionUpgrade(_)
         )
     }
 }

@@ -29,6 +29,9 @@ pub const VERSION_0_1: Version = Version {
     minor: VERSION_MIN,
 };
 
+/// Constant for the base protocol version in this instance of HotShot.
+pub const BASE_VERSION: Version = VERSION_0_1;
+
 /// Type for protocol static version 0.1.
 pub type Version01 = StaticVersion<VERSION_MAJ, VERSION_MIN>;
 

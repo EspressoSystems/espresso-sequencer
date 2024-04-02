@@ -105,9 +105,6 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.
-    ///
-    /// # Panics
-    /// Panics if the vote comes from a node not in the stake table
     pub fn accumulate(&mut self, vote: &VOTE, membership: &TYPES::Membership) -> Either<(), CERT> {
         let key = vote.get_signing_key();
 
@@ -121,10 +118,12 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
             return Either::Left(());
         };
         let stake_table = membership.get_committee_qc_stake_table();
-        let vote_node_id = stake_table
+        let Some(vote_node_id) = stake_table
             .iter()
             .position(|x| *x == stake_table_entry.clone())
-            .unwrap();
+        else {
+            return Either::Left(());
+        };
 
         let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             vote.get_signature();

@@ -25,6 +25,7 @@ use hotshot_task_impls::{
     vid::VIDTaskState,
     view_sync::ViewSyncTaskState,
 };
+use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::{
     constants::Version01,
     message::Message,
@@ -133,6 +134,7 @@ pub async fn add_network_event_task<
     let network_state: NetworkEventTaskState<_, _, _> = NetworkEventTaskState {
         channel,
         view: TYPES::Time::genesis(),
+        version: VERSION_0_1,
         membership,
         filter,
         storage,
@@ -153,6 +155,18 @@ pub async fn inject_consensus_polls<
     consensus_state
         .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForLatestProposal)
+        .await;
+
+    // Poll (forever) for upgrade proposals
+    consensus_state
+        .quorum_network
+        .inject_consensus_info(ConsensusIntentEvent::PollForUpgradeProposal(0))
+        .await;
+
+    // Poll (forever) for upgrade votes
+    consensus_state
+        .quorum_network
+        .inject_consensus_info(ConsensusIntentEvent::PollForUpgradeVotes(0))
         .await;
 
     // See if we're in the DA committee

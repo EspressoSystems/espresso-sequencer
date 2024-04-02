@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::events::HotShotEvent;
 use async_broadcast::Receiver;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use either::Either::Right;
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
@@ -26,8 +26,6 @@ use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
-
-use crate::events::HotShotEvent;
 
 /// Type alias for consensus state wrapped in a lock.
 type LockedConsensusState<TYPES> = Arc<RwLock<Consensus<TYPES>>>;
@@ -143,9 +141,10 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         if !proposals_map.contains_key(key) {
             return self.make_msg(ResponseMessage::NotFound);
         }
-        let seq_msg = SequencingMessage(Right(CommitteeConsensusMessage::VidDisperseMsg(
+
+        let seq_msg = SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(
             proposals_map.get(key).unwrap().clone(),
-        )));
+        ));
         self.make_msg(ResponseMessage::Found(seq_msg))
     }
 

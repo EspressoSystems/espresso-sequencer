@@ -7,7 +7,6 @@ use hotshot_task_impls::{
     transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VIDTaskState,
     view_sync::ViewSyncTaskState,
 };
-use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::traits::{
     consensus_api::ConsensusApi,
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -64,7 +63,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             cur_view: handle.get_cur_view().await,
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_network: handle.hotshot.networks.quorum_network.clone(),
+            #[cfg(not(feature = "example-upgrade"))]
             should_vote: |_upgrade_proposal| false,
+            #[cfg(feature = "example-upgrade")]
+            should_vote: |_upgrade_proposal| true,
             vote_collector: None.into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -184,6 +186,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
         ConsensusTaskState {
             consensus,
             timeout: handle.hotshot.config.next_view_timeout,
+            round_start_delay: handle.hotshot.config.round_start_delay,
             cur_view: handle.get_cur_view().await,
             payload_commitment_and_metadata: None,
             api: handle.clone(),
@@ -194,7 +197,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             upgrade_cert: None,
             proposal_cert: None,
             decided_upgrade_cert: None,
-            current_network_version: VERSION_0_1,
+            version: handle.hotshot.version.clone(),
             output_event_stream: handle.hotshot.output_event_stream.0.clone(),
             current_proposal: None,
             id: handle.hotshot.id,

@@ -11,6 +11,14 @@ DOC = """
 Return the proposal for a given view number
 """
 
+# GET an upgrade proposal for a view, where the view is passed as an argument
+[route.get_upgrade_proposal]
+PATH = ["upgrade_proposal/:view_number"]
+":view_number" = "Integer"
+DOC = """
+Return the upgrade proposal for a given view number
+"""
+
 # POST a VID disperse, where the view is passed as an argument
 [route.getviddisperse]
 PATH = ["vid_disperse/:view_number"]
@@ -40,6 +48,15 @@ METHOD = "POST"
 ":view_number" = "Integer"
 DOC = """
 Post the proposal for a given view_number
+"""
+
+# POST an upgrade proposal, where the view is passed as an argument
+[route.post_upgrade_proposal]
+PATH = ["upgrade_proposal/:view_number"]
+METHOD = "POST"
+":view_number" = "Integer"
+DOC = """
+Post the upgrade proposal for a given view_number
 """
 
 # POST a VID disperse, where the view is passed as an argument
@@ -80,6 +97,16 @@ DOC = """
 Get all votes for a view number
 """
 
+# GET all the upgrade votes from a given index for a given view number
+[route.get_upgrade_votes]
+PATH = ["upgrade_votes/:view_number/:index"]
+":view_number" = "Integer"
+":index" = "Integer"
+METHOD = "GET"
+DOC = """
+Get all upgrade votes for a view number
+"""
+
 
 # POST a vote, where the view number is passed as an argument
 [route.postvote]
@@ -88,6 +115,15 @@ PATH = ["votes/:view_number"]
 METHOD = "POST"
 DOC = """
 Send a vote
+"""
+
+# POST an upgrade vote, where the view number is passed as an argument
+[route.post_upgrade_vote]
+PATH = ["upgrade_votes/:view_number"]
+":view_number" = "Integer"
+METHOD = "POST"
+DOC = """
+Send an upgrade vote
 """
 
 

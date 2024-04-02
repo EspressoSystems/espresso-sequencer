@@ -1,4 +1,4 @@
-rounds = 10
+rounds = 100
 transactions_per_round = 10
 transaction_size = 1000
 node_index = 0

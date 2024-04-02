@@ -7,7 +7,6 @@ use crate::{
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
 use async_lock::RwLock;
-use either::Either;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
@@ -269,13 +268,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
 
     /// Transform a response into a `HotShotEvent`
     async fn handle_response_message(&self, message: SequencingMessage<TYPES>) {
-        let event = match message.0 {
-            Either::Right(CommitteeConsensusMessage::VidDisperseMsg(prop)) => {
-                Arc::new(HotShotEvent::VidDisperseRecv(prop))
+        let event = match message {
+            SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(prop)) => {
+                HotShotEvent::VidDisperseRecv(prop)
             }
             _ => return,
         };
-        broadcast_event(event, &self.sender).await;
+        broadcast_event(Arc::new(event), &self.sender).await;
     }
 }
 

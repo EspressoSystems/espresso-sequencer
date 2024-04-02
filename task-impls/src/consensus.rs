@@ -35,7 +35,6 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 use hotshot_types::{constants::LOOK_AHEAD, data::ViewChangeEvidence};
-use tracing::warn;
 use versioned_binary_serialization::version::Version;
 
 use crate::vote_collection::HandleVoteEvent;
@@ -48,7 +47,7 @@ use std::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Alias for the block payload commitment and the associated metadata.
 pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {
@@ -200,6 +199,8 @@ pub struct ConsensusTaskState<
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
     /// View timeout from config.
     pub timeout: u64,
+    /// Round start delay from config, in milliseconds.
+    pub round_start_delay: u64,
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
@@ -247,9 +248,8 @@ pub struct ConsensusTaskState<
     /// most recent decided upgrade certificate
     pub decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
 
-    /// The current version of the network.
-    /// Updated on view change based on the most recent decided upgrade certificate.
-    pub current_network_version: Version,
+    /// Globally shared reference to the current network version.
+    pub version: Arc<RwLock<Version>>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -1102,6 +1102,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Update our current upgrade_cert as long as it's still relevant.
                 if cert.view_number >= self.cur_view {
+                    debug!("Updating current upgrade_cert");
                     self.upgrade_cert = Some(cert.clone());
                 }
             }
@@ -1192,21 +1193,34 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     ))
                     .await;
 
-                // update the view in state to the one in the message
-                // Publish a view change event to the application
-                if !self.update_view(new_view, &event_stream).await {
-                    debug!("view not updated");
-                    return;
-                }
-
                 // If we have a decided upgrade certificate,
                 // we may need to upgrade the protocol version on a view change.
                 if let Some(ref cert) = self.decided_upgrade_cert {
                     if new_view >= cert.data.new_version_first_block {
-                        self.current_network_version = cert.data.new_version;
+                        warn!(
+                            "Updating version based on a decided upgrade cert: {:?}",
+                            cert
+                        );
+                        let mut version = self.version.write().await;
+                        *version = cert.data.new_version;
+
+                        broadcast_event(
+                            Arc::new(HotShotEvent::VersionUpgrade(cert.data.new_version)),
+                            &event_stream,
+                        )
+                        .await;
+
                         // Discard the old upgrade certificate, which is no longer relevant.
                         self.decided_upgrade_cert = None;
                     }
+                }
+
+                // update the view in state to the one in the message
+                // Publish a view change event to the application
+                // Returns if the view does not need updating.
+                if !self.update_view(new_view, &event_stream).await {
+                    debug!("view not updated");
+                    return;
                 }
 
                 broadcast_event(
@@ -1498,6 +1512,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .as_ref()
                 .is_some_and(|cert| cert.view_number == view)
             {
+                debug!("Attaching upgrade certificate to proposal.");
                 // If the cert view number matches, set upgrade_cert to self.upgrade_cert
                 // and set self.upgrade_cert to None.
                 //
@@ -1542,6 +1557,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             };
             debug!("Sending proposal for view {:?}", view);
 
+            async_sleep(Duration::from_millis(self.round_start_delay)).await;
             broadcast_event(
                 Arc::new(HotShotEvent::QuorumProposalSend(
                     message.clone(),

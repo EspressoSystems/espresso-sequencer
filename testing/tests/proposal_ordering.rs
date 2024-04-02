@@ -82,8 +82,8 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     } else {
         vec![
             exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_send(),
             exact(QuorumProposalValidated(proposals[1].data.clone())),
+            quorum_proposal_send(),
         ]
     };
 

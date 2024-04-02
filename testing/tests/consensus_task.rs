@@ -78,8 +78,8 @@ async fn test_consensus_task() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_send(),
             exact(QuorumProposalValidated(proposals[1].data.clone())),
+            quorum_proposal_send(),
         ],
         asserts: vec![is_at_view_number(2)],
     };
