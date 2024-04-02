@@ -110,7 +110,7 @@ pub struct PlonkProof {
     pub sigma_eval_3: ::ethers::core::types::U256,
     pub prod_perm_zeta_omega_eval: ::ethers::core::types::U256,
 }
-///`VerifyingKey(uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256)`
+///`VerifyingKey(uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))`
 #[derive(
     Clone,
     ::ethers::contract::EthAbiType,
@@ -144,7 +144,6 @@ pub struct VerifyingKey {
     pub q_h3: G1Point,
     pub q_h4: G1Point,
     pub q_ecc: G1Point,
-    pub id: ::ethers::core::types::U256,
 }
 ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
 #[derive(

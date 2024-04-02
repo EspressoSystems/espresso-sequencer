@@ -150,7 +150,6 @@ pub struct ParsedVerifyingKey {
     pub q_h_3: ParsedG1Point,
     pub q_h_4: ParsedG1Point,
     pub q_ecc: ParsedG1Point,
-    pub id: U256,
 }
 
 impl FromStr for ParsedVerifyingKey {
@@ -184,7 +183,6 @@ impl From<VerifyingKey<Bn254>> for ParsedVerifyingKey {
             q_o: vk.selector_comms[10].0.into(),
             q_c: vk.selector_comms[11].0.into(),
             q_ecc: vk.selector_comms[12].0.into(),
-            id: Default::default(),
         }
     }
 }

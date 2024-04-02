@@ -20,8 +20,6 @@ import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 /* solhint-disable no-inline-assembly */
 
 library LightClientStateUpdateVK {
-    uint256 constant LIGHTCLIENT_STATE_UPDATE_VK_ID = 123;
-
     function getVk() internal pure returns (IPlonkVerifier.VerifyingKey memory vk) {
         assembly {
             // domain size
@@ -194,8 +192,6 @@ library LightClientStateUpdateVK {
                 add(mload(add(vk, 0x260)), 0x20),
                 20309550876545766116130682111350015544103338784776768395329281357767924326613
             )
-            // ID
-            mstore(add(vk, 0x280), LIGHTCLIENT_STATE_UPDATE_VK_ID)
         }
     }
 }

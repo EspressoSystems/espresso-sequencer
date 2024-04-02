@@ -82,8 +82,6 @@ interface IPlonkVerifier {
         BN254.G1Point qH4; // 0x240
         // elliptic curve selector
         BN254.G1Point qEcc; // 0x260
-        // Key Identifier
-        uint256 id; // 0x280
     }
 
     /// @dev Verify a single TurboPlonk proofs.
