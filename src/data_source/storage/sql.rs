@@ -1523,7 +1523,7 @@ where
             Some(MerkleNode::Empty) => State::T::default(),
             Some(_) => {
                 return Err(QueryError::Error {
-                    message: "First node in the proof should be leaf or empty".to_string(),
+                    message: "Missing State ".to_string(),
                 })
             }
             None => return Err(QueryError::Missing),
