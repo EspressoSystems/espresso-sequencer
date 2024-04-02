@@ -65,10 +65,9 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
         validate_task_state_or_panic_in_script,
     };
 
-    use hotshot_testing::predicates::Predicate;
+    use hotshot_testing::{predicates::Predicate, script::RECV_TIMEOUT};
     use async_broadcast::broadcast;
     use hotshot_task_impls::events::HotShotEvent;
-    use std::time::Duration;
     use async_compatibility_layer::art::async_timeout;
     use hotshot_task::task::{Task, TaskRegistry, TaskState};
     use hotshot_types::traits::node_implementation::NodeType;
@@ -131,7 +130,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                         #task_names.state().handle_result(&res).await;
                     }
 
-                    while let Ok(Ok(received_output)) = async_timeout(Duration::from_millis(250), test_receiver.recv_direct()).await {
+                    while let Ok(Ok(received_output)) = async_timeout(RECV_TIMEOUT, test_receiver.recv_direct()).await {
                         tracing::debug!("Test received: {:?}", received_output);
 
                         let output_asserts = &mut #task_expectations[stage_number].output_asserts;

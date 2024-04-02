@@ -1,13 +1,12 @@
 use crate::predicates::{Predicate, PredicateResult};
 use async_broadcast::broadcast;
-use hotshot_task_impls::events::HotShotEvent;
-
 use async_compatibility_layer::art::async_timeout;
 use hotshot_task::task::{Task, TaskRegistry, TaskState};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::{sync::Arc, time::Duration};
 
-const RECV_TIMEOUT_SEC: Duration = Duration::from_secs(1);
+pub const RECV_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub struct TestScriptStage<TYPES: NodeType, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>> {
     pub inputs: Vec<HotShotEvent<TYPES>>,
@@ -122,7 +121,7 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>
             let mut result = PredicateResult::Incomplete;
 
             while let Ok(Ok(received_output)) =
-                async_timeout(RECV_TIMEOUT_SEC, from_task.recv_direct()).await
+                async_timeout(RECV_TIMEOUT, from_task.recv_direct()).await
             {
                 tracing::debug!("Test received: {:?}", received_output);
 

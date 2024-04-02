@@ -26,15 +26,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::warn;
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument, warn};
 
 /// Vote dependency types.
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum VoteDependency {
     /// For the `QuorumProposalRecv` event.
     QuorumProposal,
-    /// For the `DACRecv` event.
+    /// For the `DACertificateRecv` event.
     Dac,
     /// For the `VidDisperseRecv` event.
     Vid,
@@ -95,16 +94,18 @@ impl<TYPES: NodeType> HandleDepOutput for VoteDependencyHandle<TYPES> {
                     let proposal_payload_comm = proposal.block_header.payload_commitment();
                     if let Some(comm) = payload_commitment {
                         if proposal_payload_comm != comm {
+                            error!("Quorum proposal and DAC have inconsistent payload commitment.");
                             return;
                         }
                     } else {
                         payload_commitment = Some(proposal_payload_comm);
                     }
                 }
-                HotShotEvent::DACValidated(cert) => {
+                HotShotEvent::DACertificateValidated(cert) => {
                     let cert_payload_comm = cert.get_data().payload_commit;
                     if let Some(comm) = payload_commitment {
                         if cert_payload_comm != comm {
+                            error!("Quorum proposal and DAC have inconsistent payload commitment.");
                             return;
                         }
                     } else {
@@ -174,32 +175,37 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                         }
                     }
                     VoteDependency::Dac => {
-                        if let HotShotEvent::DACValidated(cert) = event {
+                        if let HotShotEvent::DACertificateValidated(cert) = event {
                             cert.view_number
                         } else {
                             return false;
                         }
                     }
                     VoteDependency::Vid => {
-                        if let HotShotEvent::VidDisperseValidated(disperse) = event {
+                        if let HotShotEvent::VIDShareValidated(disperse) = event {
                             disperse.view_number
                         } else {
                             return false;
                         }
                     }
                 };
-                event_view == view_number
+                if event_view == view_number {
+                    debug!("Vote dependency {:?} completed", dependency_type);
+                    return true;
+                }
+                false
             }),
         )
     }
 
     /// Create and store an [`AndDependency`] combining [`EventDependency`]s associated with the
     /// given view number if it doesn't exist.
+    #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote crete dependency task if new", level = "error")]
     fn create_dependency_task_if_new(
         &mut self,
         view_number: TYPES::Time,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
         if self.vote_dependencies.get(&view_number).is_some() {
             return;
@@ -218,7 +224,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             vote_dependency,
             VoteDependencyHandle {
                 view_number,
-                sender: event_sender,
+                sender: event_sender.clone(),
             },
         );
         self.vote_dependencies
@@ -238,6 +244,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             for view in (*self.latest_voted_view + 1)..=(*new_view) {
                 if let Some(dependency) = self.vote_dependencies.remove(&TYPES::Time::new(view)) {
                     cancel_task(dependency).await;
+                    debug!("Vote dependency removed for view {:?}", view);
                 }
             }
 
@@ -248,7 +255,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
         false
     }
 
-    /// Handles a consensus event received on the event stream
+    /// Handle a vote dependent event received on the event stream
     #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote handle", level = "error")]
     pub async fn handle(
         &mut self,
@@ -259,10 +266,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
         match event.as_ref() {
             HotShotEvent::QuorumProposalRecv(proposal, _sender) => {
                 let view = proposal.data.view_number;
+                debug!("Received Quorum Proposal for view {}", *view);
                 if view <= self.latest_voted_view {
                     return;
                 }
-                debug!("Received Quorum Proposal for view {}", *view);
 
                 // stop polling for the received proposal
                 self.quorum_network
@@ -277,11 +284,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, event_sender);
+                self.create_dependency_task_if_new(view, event_receiver, &event_sender);
             }
-            HotShotEvent::DACRecv(cert) => {
-                debug!("DAC Received for view {}!", *cert.view_number);
+            HotShotEvent::DACertificateRecv(cert) => {
                 let view = cert.view_number;
+                debug!("Received DAC for view {}", *view);
                 if view <= self.latest_voted_view {
                     return;
                 }
@@ -298,14 +305,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     return;
                 }
                 broadcast_event(
-                    Arc::new(HotShotEvent::DACValidated(cert.clone())),
+                    Arc::new(HotShotEvent::DACertificateValidated(cert.clone())),
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, event_sender);
+                self.create_dependency_task_if_new(view, event_receiver, &event_sender);
             }
             HotShotEvent::VidDisperseRecv(disperse) => {
                 let view = disperse.data.get_view_number();
+                debug!("Received VID share for view {}", *view);
                 if view <= self.latest_voted_view {
                     return;
                 }
@@ -321,13 +329,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     return;
                 }
                 broadcast_event(
-                    Arc::new(HotShotEvent::VidDisperseValidated(disperse.data.clone())),
+                    Arc::new(HotShotEvent::VIDShareValidated(disperse.data.clone())),
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, event_sender);
+                self.create_dependency_task_if_new(view, event_receiver, &event_sender);
             }
             HotShotEvent::QuorumVoteDependenciesValidated(view) => {
+                debug!("All vote dependencies verified for view {:?}", view);
                 if !self.update_latest_voted_view(*view).await {
                     debug!("view not updated");
                     return;
@@ -335,7 +344,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             }
             HotShotEvent::ViewChange(new_view) => {
                 let new_view = *new_view;
-                debug!("View Change event for view {} in consensus task", *new_view);
+                debug!(
+                    "View Change event for view {} in quorum vote task",
+                    *new_view
+                );
 
                 let old_voted_view = self.latest_voted_view;
 
@@ -358,7 +370,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for QuorumVoteTask
         !matches!(
             event.as_ref(),
             HotShotEvent::QuorumProposalRecv(_, _)
-                | HotShotEvent::DACRecv(_)
+                | HotShotEvent::DACertificateRecv(_)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::VidDisperseRecv(..)
                 | HotShotEvent::QuorumVoteDependenciesValidated(_)

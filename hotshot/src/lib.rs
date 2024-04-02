@@ -561,6 +561,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             &handle,
         )
         .await;
+        // TODO: [CX_CLEANUP] - Integrate QuorumVoteTask with other tasks.
+        // <https://github.com/EspressoSystems/HotShot/issues/2712>
+        // add_quorum_vote_task(
+        //     registry.clone(),
+        //     event_tx.clone(),
+        //     event_rx.activate_cloned(),
+        //     &handle,
+        // )
+        // .await;
         add_da_task(
             registry.clone(),
             event_tx.clone(),
