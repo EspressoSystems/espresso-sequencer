@@ -1293,15 +1293,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "capnpc"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c75ba30e0f08582d53c2f3710cf4bb65ff562614b1ba86906d7391adffe189ec"
-dependencies = [
- "capnp",
-]
-
-[[package]]
 name = "cbor4ii"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1322,19 +1313,20 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.11#c854b7c106f72f21c94a1235e8222f76f78e47e6"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19#b9b6424db150aee7f78db8172f1324ecc757cc74"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
  "dashmap",
  "derivative",
- "derive_builder 0.13.1",
+ "derive_builder",
  "jf-primitives",
  "lazy_static",
  "local-ip-address",
  "parking_lot",
  "prometheus",
+ "rand 0.8.5",
  "rkyv",
  "tokio",
  "tracing",
@@ -1344,12 +1336,12 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.11#c854b7c106f72f21c94a1235e8222f76f78e47e6"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19#b9b6424db150aee7f78db8172f1324ecc757cc74"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
- "derive_builder 0.13.1",
+ "derive_builder",
  "jf-primitives",
  "rand 0.8.5",
  "tokio",
@@ -1360,12 +1352,12 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.11#c854b7c106f72f21c94a1235e8222f76f78e47e6"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19#b9b6424db150aee7f78db8172f1324ecc757cc74"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
- "derive_builder 0.13.1",
+ "derive_builder",
  "jf-primitives",
  "tokio",
  "tracing",
@@ -1375,14 +1367,13 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.11#c854b7c106f72f21c94a1235e8222f76f78e47e6"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19#b9b6424db150aee7f78db8172f1324ecc757cc74"
 dependencies = [
  "anyhow",
  "ark-serialize",
  "async-std",
  "async-trait",
  "capnp",
- "capnpc",
  "derivative",
  "jf-primitives",
  "kanal",
@@ -1916,6 +1907,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "csv"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac574ff4d437a7b5ad237ef331c17ccca63c46479e5b5453eb8e10bb99a759fe"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5efa2b3d7902f4b634a20cae3c9c4e6209dc4779feb6863329607560143efa70"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "ctr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2038,7 +2050,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f731440b39c73910e253cb465ec1fac97732b3c7af215639881ec0c2a38f4f69"
 dependencies = [
- "darling 0.20.8",
+ "darling",
  "itertools 0.12.1",
  "proc-macro2",
  "quote",
@@ -2048,36 +2060,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
-dependencies = [
- "darling_core 0.14.4",
- "darling_macro 0.14.4",
-]
-
-[[package]]
-name = "darling"
 version = "0.20.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54e36fcd13ed84ffdfda6f5be89b31287cbb80c439841fe69e04841435464391"
 dependencies = [
- "darling_core 0.20.8",
- "darling_macro 0.20.8",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "109c1ca6e6b7f82cc233a97004ea8ed7ca123a9af07a8230878fcfda9b158bf0"
-dependencies = [
- "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "strsim 0.10.0",
- "syn 1.0.109",
+ "darling_core",
+ "darling_macro",
 ]
 
 [[package]]
@@ -2096,22 +2084,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
-dependencies = [
- "darling_core 0.14.4",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "darling_macro"
 version = "0.20.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a668eda54683121533a393014d8692171709ff57a7d61f187b6e782719f8933f"
 dependencies = [
- "darling_core 0.20.8",
+ "darling_core",
  "quote",
  "syn 2.0.48",
 ]
@@ -2214,32 +2191,11 @@ dependencies = [
 
 [[package]]
 name = "derive_builder"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f59169f400d8087f238c5c0c7db6a28af18681717f3b623227d92f397e938c7"
-dependencies = [
- "derive_builder_macro 0.13.1",
-]
-
-[[package]]
-name = "derive_builder"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0350b5cb0331628a5916d6c5c0b72e97393b8b6b03b47a9284f4e7f5a405ffd7"
 dependencies = [
- "derive_builder_macro 0.20.0",
-]
-
-[[package]]
-name = "derive_builder_core"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ec317cc3e7ef0928b0ca6e4a634a4d6c001672ae210438cf114a83e56b018d"
-dependencies = [
- "darling 0.14.4",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
+ "derive_builder_macro",
 ]
 
 [[package]]
@@ -2248,20 +2204,10 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d48cda787f839151732d396ac69e3473923d54312c070ee21e9effcaa8ca0b1d"
 dependencies = [
- "darling 0.20.8",
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.48",
-]
-
-[[package]]
-name = "derive_builder_macro"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "870368c3fb35b8031abb378861d4460f573b92238ec2152c927a21f77e3e0127"
-dependencies = [
- "derive_builder_core 0.13.1",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -2270,7 +2216,7 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "206868b8242f27cecce124c19fd88157fbd0dd334df2587f36417bafbc85097b"
 dependencies = [
- "derive_builder_core 0.20.0",
+ "derive_builder_core",
  "syn 2.0.48",
 ]
 
@@ -3234,7 +3180,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3244,6 +3190,7 @@ dependencies = [
  "async-trait",
  "bimap",
  "bincode",
+ "blake3",
  "cdn-broker",
  "cdn-client",
  "cdn-marshal",
@@ -3254,6 +3201,7 @@ dependencies = [
  "either",
  "ethereum-types",
  "futures",
+ "hotshot-orchestrator",
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
@@ -3261,7 +3209,7 @@ dependencies = [
  "jf-primitives",
  "libp2p-identity",
  "libp2p-networking",
- "lru",
+ "lru 0.12.3",
  "portpicker",
  "rand 0.8.5",
  "serde",
@@ -3276,10 +3224,11 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.6"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "async-trait",
  "clap",
+ "commit",
  "derive_more",
  "futures",
  "hotshot-types",
@@ -3294,7 +3243,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3319,6 +3268,35 @@ dependencies = [
  "time 0.3.34",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "hotshot-orchestrator"
+version = "0.5.26"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
+dependencies = [
+ "anyhow",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
+ "async-lock 2.8.0",
+ "async-std",
+ "bincode",
+ "blake3",
+ "clap",
+ "csv",
+ "futures",
+ "hotshot-types",
+ "libp2p",
+ "multiaddr",
+ "serde",
+ "serde-inline-default",
+ "serde_json",
+ "surf-disco",
+ "thiserror",
+ "tide-disco",
+ "tokio",
+ "toml",
+ "tracing",
+ "versioned-binary-serialization",
 ]
 
 [[package]]
@@ -3379,7 +3357,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -3392,7 +3370,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -3409,6 +3387,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-types",
  "jf-primitives",
+ "memoize",
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
@@ -3424,7 +3403,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -3472,7 +3451,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
  "async-lock 2.8.0",
@@ -4310,7 +4289,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
- "lru",
+ "lru 0.12.3",
  "quick-protobuf",
  "quick-protobuf-codec 0.3.1",
  "smallvec",
@@ -4416,7 +4395,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.28#db3fcfafccdc909845de47e2dd241662c3849b77"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.30#14d3b2658cf77771425a586770f0c0fa76d8ee75"
 dependencies = [
  "anyhow",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -4425,7 +4404,7 @@ dependencies = [
  "async-trait",
  "blake3",
  "custom_debug 0.5.1",
- "derive_builder 0.20.0",
+ "derive_builder",
  "either",
  "futures",
  "hotshot-types",
@@ -4852,9 +4831,9 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "local-ip-address"
-version = "0.5.7"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "612ed4ea9ce5acfb5d26339302528a5e1e59dfed95e9e11af3c083236ff1d15d"
+checksum = "136ef34e18462b17bf39a7826f8f3bbc223341f8e83822beb8b77db9a3d49696"
 dependencies = [
  "libc",
  "neli",
@@ -4879,6 +4858,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 dependencies = [
  "value-bag",
+]
+
+[[package]]
+name = "lru"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e999beba7b6e8345721bd280141ed958096a2e4abdf74f67ff4ce49b4b54e47a"
+dependencies = [
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -4977,6 +4965,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "memoize"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5df4051db13d0816cf23196d3baa216385ae099339f5d0645a8d9ff2305e82b8"
+dependencies = [
+ "lazy_static",
+ "lru 0.7.8",
+ "memoize-inner",
+]
+
+[[package]]
+name = "memoize-inner"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27bdece7e91f0d1e33df7b46ec187a93ea0d4e642113a1039ac8bfdd4a3273ac"
+dependencies = [
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6303,6 +6314,7 @@ dependencies = [
  "pem",
  "ring 0.17.7",
  "time 0.3.34",
+ "x509-parser",
  "yasna",
 ]
 
@@ -6869,6 +6881,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-inline-default"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa824cde50b5f01ff28a955114d8152a07cd62d81f53459dad0f2610136be844"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "serde_bytes"
 version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6899,9 +6922,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.114"
+version = "1.0.115"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
+checksum = "12dc5c46daa8e9fdf4f5e71b6cf9a53f2487da0e86e55808e2d35539666497dd"
 dependencies = [
  "itoa",
  "ryu",
@@ -6964,7 +6987,7 @@ version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6561dc161a9224638a31d876ccdfefbc1df91d3f3a8342eddb35f055d48c7655"
 dependencies = [
- "darling 0.20.8",
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.48",
@@ -7363,6 +7386,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24ba59a9342a3d9bab6c56c118be528b27c9b60e490080e9711a04dccac83ef6"
 dependencies = [
  "ahash 0.8.7",
+ "async-io 1.13.0",
+ "async-std",
  "atoi",
  "byteorder",
  "bytes 1.5.0",
@@ -7415,6 +7440,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5833ef53aaa16d860e92123292f1f6a3d53c34ba8b1969f152ef1a7bb803f3c8"
 dependencies = [
+ "async-std",
  "dotenvy",
  "either",
  "heck 0.4.1",
@@ -9199,6 +9225,7 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry",
+ "ring 0.16.20",
  "rusticata-macros",
  "thiserror",
  "time 0.3.34",

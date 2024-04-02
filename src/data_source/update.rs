@@ -102,7 +102,10 @@ where
 
                 if let Some(vid) = vid {
                     self.insert_vid(
-                        VidCommonQueryData::new(leaf.block_header.clone(), vid.common.clone()),
+                        VidCommonQueryData::new(
+                            leaf.get_block_header().clone(),
+                            vid.common.clone(),
+                        ),
                         // TODO we should get just a single share from VID dispersal, but currently
                         // HotShot sends us _all_ shares, and we don't know which one is for us. For
                         // no we arbitrarily take the first share, this should be fixed in HotShot
@@ -110,7 +113,7 @@ where
                         Some(vid.shares.first_key_value().unwrap().1.clone()),
                     )
                     .await?;
-                } else if leaf.view_number.get_u64() == 0 {
+                } else if leaf.get_view_number().get_u64() == 0 {
                     // HotShot does not run VID in consensus for the genesis block). In
                     // this case, the block payload is guaranteed to always be empty, so VID isn't
                     // really necessary. But for consistency, we will still store the VID dispersal
@@ -119,17 +122,17 @@ where
                 } else {
                     tracing::error!(
                         "VID info for block {} not available at decide",
-                        leaf.block_header.block_number()
+                        leaf.get_block_header().block_number()
                     );
                 }
 
                 if let Some(block) = leaf.get_block_payload() {
-                    self.insert_block(BlockQueryData::new(leaf.block_header.clone(), block))
+                    self.insert_block(BlockQueryData::new(leaf.get_block_header().clone(), block))
                         .await?;
                 } else {
                     tracing::error!(
                         "block {} not available at decide",
-                        leaf.block_header.block_number()
+                        leaf.get_block_header().block_number()
                     );
                 }
 
@@ -158,17 +161,17 @@ async fn store_genesis_vid<Types: NodeType>(
         }
     };
     match vid_scheme(GENESIS_VID_NUM_STORAGE_NODES).disperse(bytes) {
-        Ok(disperse) if disperse.commit != leaf.block_header.payload_commitment() => {
+        Ok(disperse) if disperse.commit != leaf.get_block_header().payload_commitment() => {
             tracing::error!(
                 computed = %disperse.commit,
-                header = %leaf.block_header.payload_commitment(),
+                header = %leaf.get_block_header().payload_commitment(),
                 "computed VID commit for genesis block does not match header",
             );
         }
         Ok(mut disperse) => {
             if let Err(err) = storage
                 .insert_vid(
-                    VidCommonQueryData::new(leaf.block_header.clone(), disperse.common),
+                    VidCommonQueryData::new(leaf.get_block_header().clone(), disperse.common),
                     Some(disperse.shares.remove(0)),
                 )
                 .await

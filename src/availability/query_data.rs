@@ -237,7 +237,7 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn header(&self) -> &Header<Types> {
-        &self.leaf.block_header
+        self.leaf.get_block_header()
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
@@ -288,7 +288,10 @@ impl<Types: NodeType> BlockQueryData<Types> {
         Payload<Types>: QueryablePayload,
     {
         let leaf = Leaf::<Types>::genesis(instance_state);
-        Self::new(leaf.block_header, leaf.block_payload.unwrap())
+        Self::new(
+            leaf.get_block_header().clone(),
+            leaf.get_block_payload().unwrap(),
+        )
     }
 
     pub fn header(&self) -> &Header<Types> {
@@ -437,13 +440,13 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
 
     pub fn genesis(instance_state: &Types::InstanceState) -> Self {
         let leaf = Leaf::<Types>::genesis(instance_state);
-        let payload = leaf.block_payload.unwrap();
+        let payload = leaf.get_block_payload().unwrap();
         let bytes = payload.encode().unwrap().collect::<Vec<_>>();
         let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
             .disperse(bytes)
             .unwrap();
 
-        Self::new(leaf.block_header, disperse.common)
+        Self::new(leaf.get_block_header().clone(), disperse.common)
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
