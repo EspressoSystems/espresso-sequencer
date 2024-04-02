@@ -15,9 +15,6 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout Repository
 
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
-
       - uses: styfle/cancel-workflow-action@0.12.1
         name: Cancel Outdated Builds
         with:
