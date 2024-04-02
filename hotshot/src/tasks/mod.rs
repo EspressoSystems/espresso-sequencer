@@ -69,13 +69,15 @@ pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: RequestReceiver<TYPES>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let state = NetworkResponseState::new(
+    let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.get_consensus(),
         rx,
         handle.hotshot.memberships.quorum_membership.clone(),
         handle.public_key().clone(),
     );
-    task_reg.register(run_response_task(state, hs_rx)).await;
+    task_reg
+        .register(run_response_task::<TYPES, Version01>(state, hs_rx))
+        .await;
 }
 /// Add the network task to handle messages and publish events.
 pub async fn add_network_message_task<

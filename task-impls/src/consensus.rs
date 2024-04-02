@@ -481,6 +481,34 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         false
     }
 
+    /// Validates whether the VID Dispersal Proposal is correctly signed
+    fn validate_disperse(&self, disperse: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> bool {
+        let view = disperse.data.get_view_number();
+        let payload_commitment = disperse.data.payload_commitment;
+        // Check whether the data comes from the right leader for this view
+        if self
+            .quorum_membership
+            .get_leader(view)
+            .validate(&disperse.signature, payload_commitment.as_ref())
+        {
+            return true;
+        }
+        // or the data was calculated and signed by the current node
+        if self
+            .public_key
+            .validate(&disperse.signature, payload_commitment.as_ref())
+        {
+            return true;
+        }
+        // or the data was signed by one of the staked DA committee members
+        for da_member in self.committee_membership.get_staked_committee(view) {
+            if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Handles a consensus event received on the event stream
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error")]
     pub async fn handle(
@@ -1117,16 +1145,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 debug!("VID disperse data is not more than one view older.");
-                let payload_commitment = disperse.data.payload_commitment;
 
-                // Check whether the data comes from the right leader for this view or
-                // the data was calculated and signed by the current node
-                let view_leader_key = self.quorum_membership.get_leader(view);
-                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref())
-                    && !self
-                        .public_key
-                        .validate(&disperse.signature, payload_commitment.as_ref())
-                {
+                if !self.validate_disperse(disperse) {
                     warn!("Could not verify VID dispersal/share sig.");
                     return;
                 }

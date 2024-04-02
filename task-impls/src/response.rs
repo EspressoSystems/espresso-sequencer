@@ -6,7 +6,6 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use bincode::config::Options;
 use either::Either::Right;
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
@@ -22,11 +21,11 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    utils::bincode_opts,
 };
 use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
+use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
 
 use crate::events::HotShotEvent;
 
@@ -68,13 +67,16 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 
     /// Run the request response loop until a `HotShotEvent::Shutdown` is received.
     /// Or the stream is closed.
-    async fn run_loop(mut self, shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>) {
+    async fn run_loop<Ver: StaticVersionType>(
+        mut self,
+        shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>,
+    ) {
         let mut shutdown = Box::pin(shutdown.completed().fuse());
         loop {
             futures::select! {
                 req = self.receiver.next() => {
                     match req {
-                        Some((msg, chan)) => self.handle_message(msg, chan).await,
+                        Some((msg, chan)) => self.handle_message::<Ver>(msg, chan).await,
                         None => return,
                     }
                 },
@@ -87,7 +89,11 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 
     /// Handle an incoming message.  First validates the sender, then handles the contained request.
     /// Sends the response via `chan`
-    async fn handle_message(&self, req: Message<TYPES>, chan: ResponseChannel<Message<TYPES>>) {
+    async fn handle_message<Ver: StaticVersionType>(
+        &self,
+        req: Message<TYPES>,
+        chan: ResponseChannel<Message<TYPES>>,
+    ) {
         let sender = req.sender.clone();
         if !self.valid_sender(&sender) {
             let _ = chan.0.send(self.make_msg(ResponseMessage::Denied));
@@ -96,7 +102,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 
         match req.kind {
             MessageKind::Data(DataMessage::RequestData(req)) => {
-                if !valid_signature(&req, &sender) {
+                if !valid_signature::<TYPES, Ver>(&req, &sender) {
                     let _ = chan.0.send(self.make_msg(ResponseMessage::Denied));
                     return;
                 }
@@ -158,11 +164,11 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 }
 
 /// Check the signature
-fn valid_signature<TYPES: NodeType>(
+fn valid_signature<TYPES: NodeType, Ver: StaticVersionType>(
     req: &DataRequest<TYPES>,
     sender: &TYPES::SignatureKey,
 ) -> bool {
-    let Ok(data) = bincode_opts().serialize(&req.request) else {
+    let Ok(data) = Serializer::<Ver>::serialize(&req.request) else {
         return false;
     };
     sender.validate(&req.signature, &Sha256::digest(data))
@@ -171,7 +177,7 @@ fn valid_signature<TYPES: NodeType>(
 /// Spawn the network response task to handle incoming request for data
 /// from other nodes.  It will shutdown when it gets `HotshotEvent::Shutdown`
 /// on the `event_stream` arg.
-pub fn run_response_task<TYPES: NodeType>(
+pub fn run_response_task<TYPES: NodeType, Ver: StaticVersionType + 'static>(
     task_state: NetworkResponseState<TYPES>,
     event_stream: Receiver<Arc<HotShotEvent<TYPES>>>,
 ) -> JoinHandle<()> {
@@ -179,5 +185,5 @@ pub fn run_response_task<TYPES: NodeType>(
         event_stream,
         Box::new(|e| matches!(e.as_ref(), HotShotEvent::Shutdown)),
     );
-    async_spawn(task_state.run_loop(dep))
+    async_spawn(task_state.run_loop::<Ver>(dep))
 }

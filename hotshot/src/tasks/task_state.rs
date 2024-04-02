@@ -47,6 +47,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: StaticVersionType> Create
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             _phantom: PhantomData,
+            id: handle.hotshot.id,
         }
     }
 }

@@ -17,11 +17,14 @@ use futures::{
 };
 use hotshot_orchestrator::config::NetworkConfig;
 #[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::{AsyncGenerator, NetworkReliability};
+use hotshot_types::traits::network::{
+    AsyncGenerator, NetworkReliability, TestableNetworkingImplementation, ViewMessage,
+};
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, LOOK_AHEAD, STATIC_VER_0_1, VERSION_0_1},
     data::ViewNumber,
+    message::{DataMessage::DataResponse, Message, MessageKind},
     traits::{
         network::{
             self, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu, NetworkError,
@@ -31,11 +34,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     BoxSyncFuture,
-};
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::{
-    message::{Message, MessageKind},
-    traits::network::{TestableNetworkingImplementation, ViewMessage},
 };
 use libp2p_identity::{
     ed25519::{self, SecretKey},
@@ -820,9 +818,15 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         {
             Ok(response) => match response {
                 Some(msg) => {
-                    let res = Serializer::<VER>::deserialize(&msg.0)
+                    let res: Message<TYPES> = Serializer::<VER>::deserialize(&msg.0)
                         .map_err(|e| NetworkError::FailedToDeserialize { source: e })?;
-                    Ok(ResponseMessage::Found(res))
+                    let DataResponse(res) = (match res.kind {
+                        MessageKind::Data(data) => data,
+                        MessageKind::Consensus(_) => return Ok(ResponseMessage::NotFound),
+                    }) else {
+                        return Ok(ResponseMessage::NotFound);
+                    };
+                    Ok(res)
                 }
                 None => Ok(ResponseMessage::NotFound),
             },

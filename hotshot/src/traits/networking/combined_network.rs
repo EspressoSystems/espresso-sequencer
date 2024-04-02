@@ -36,7 +36,7 @@ use hotshot_types::{
     },
     BoxSyncFuture,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::{collections::hash_map::DefaultHasher, sync::Arc};
 
@@ -408,6 +408,17 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             },
         )
         .await
+    }
+
+    async fn vid_broadcast_message<VER: StaticVersionType + 'static>(
+        &self,
+        messages: HashMap<TYPES::SignatureKey, Message<TYPES>>,
+        bind_version: VER,
+    ) -> Result<(), NetworkError> {
+        self.networks
+            .0
+            .vid_broadcast_message(messages, bind_version)
+            .await
     }
 
     /// Receive one or many messages from the underlying network.
