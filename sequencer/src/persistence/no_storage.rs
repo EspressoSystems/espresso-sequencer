@@ -42,14 +42,14 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
-    async fn save_config(&mut self, _: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, _: &NetworkConfig) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn garbage_collect(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&self, _view: ViewNumber) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn save_anchor_leaf(&mut self, _: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(&self, _: &Leaf) -> anyhow::Result<()> {
         Ok(())
     }
 

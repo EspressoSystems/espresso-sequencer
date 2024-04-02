@@ -89,7 +89,7 @@ impl Storage<SeqTypes> for Persistence {
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
-        let file_path = dir_path.join(view_number.to_string());
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
 
         let mut file = fs::OpenOptions::new()
             .append(true)
@@ -111,7 +111,7 @@ impl Storage<SeqTypes> for Persistence {
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
 
-        let file_path = dir_path.join(view_number.to_string());
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
 
         let mut file = fs::OpenOptions::new()
             .append(true)
@@ -185,13 +185,13 @@ impl SequencerPersistence for Persistence {
         Ok(Some(NetworkConfig::from_file(path.display().to_string())?))
     }
 
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         let path = self.config_path();
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
     }
 
-    async fn garbage_collect(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
         let view_number = view.get_u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
@@ -199,9 +199,9 @@ impl SequencerPersistence for Persistence {
                 let entry = entry?;
                 let path = entry.path();
 
-                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if let Ok(integer) = file_name.parse::<u64>() {
-                        if integer <= view_number {
+                if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
+                    if let Ok(v) = file.parse::<u64>() {
+                        if v <= view_number {
                             fs::remove_file(&path)?;
                         }
                     }
@@ -226,7 +226,7 @@ impl SequencerPersistence for Persistence {
         Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
     }
 
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()> {
         let mut file = OpenOptions::new()
             .read(true)
             .append(true)
@@ -309,10 +309,12 @@ impl SequencerPersistence for Persistence {
             if path.is_file() {
                 let da_bytes = fs::read(path)?;
 
-                let da_proposal = bincode::deserialize(&da_bytes)?;
+                let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
+                    bincode::deserialize(&da_bytes)?;
                 da_proposals.push(da_proposal);
             }
         }
+        da_proposals.sort_by_key(|da| da.data.get_view_number());
 
         Ok(da_proposals)
     }
@@ -335,11 +337,13 @@ impl SequencerPersistence for Persistence {
 
             if path.is_file() {
                 let vid_share_bytes = fs::read(path)?;
-                let vid = bincode::deserialize(&vid_share_bytes)?;
+                let vid: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+                    bincode::deserialize(&vid_share_bytes)?;
                 vids.push(vid);
             }
         }
 
+        vids.sort_by_key(|v| v.data.get_view_number());
         Ok(vids)
     }
 

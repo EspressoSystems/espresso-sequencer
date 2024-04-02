@@ -251,7 +251,7 @@ pub struct L1Params {
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    mut persistence: P,
+    persistence: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,

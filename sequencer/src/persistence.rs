@@ -50,15 +50,15 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
 
     /// Save the orchestrator config to storage.
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
-    async fn garbage_collect(&mut self, view: ViewNumber) -> anyhow::Result<()>;
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()>;
 
     /// Saves the latest decided leaf.
     ///
     /// If the height of the new leaf is not greater than the height of the previous decided leaf,
     /// storage is not updated.
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()>;
+    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()>;
 
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
@@ -151,7 +151,7 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event<SeqTypes>) {
+    async fn handle_event(&self, event: &Event<SeqTypes>) {
         if let EventType::Decide { leaf_chain, .. } = &event.event {
             if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
                 if let Err(err) = self.save_anchor_leaf(leaf).await {
@@ -162,7 +162,7 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
                     );
                 }
 
-                if let Err(err) = self.garbage_collect(leaf.get_view_number()).await {
+                if let Err(err) = self.collect_garbage(leaf.get_view_number()).await {
                     tracing::error!("Failed to garbage collect. {err:#}",);
                 }
             }
@@ -188,10 +188,15 @@ mod testing {
 mod persistence_tests {
 
     use super::*;
-    use crate::NodeState;
+    use crate::{NodeState, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
-    use hotshot_types::{event::HotShotAction, vote::HasViewNumber};
+    use hotshot::types::SignatureKey;
+    use hotshot::{traits::BlockPayload, types::BLSPubKey};
+    use hotshot_types::{event::HotShotAction, vid::vid_scheme, vote::HasViewNumber};
+    use jf_primitives::vid::VidScheme;
+    use rand::{RngCore, SeedableRng};
+    use sha2::{Digest, Sha256};
     use testing::TestablePersistence;
 
     #[async_std::test]
@@ -200,7 +205,7 @@ mod persistence_tests {
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved leaf.
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
@@ -289,6 +294,101 @@ mod persistence_tests {
                 .unwrap()
                 .get_view_number(),
             qc.get_view_number()
+        );
+    }
+
+    #[async_std::test]
+    pub async fn test_append_and_collect_garbageion<P: TestablePersistence>() {
+        setup_logging();
+        setup_backtrace();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        // Test append VID
+        assert_eq!(storage.load_vid_shares().await.unwrap(), vec![]);
+
+        let leaf = Leaf::genesis(&NodeState::mock());
+        let payload = leaf.get_block_payload().unwrap();
+        let bytes = payload.encode().unwrap().collect::<Vec<_>>();
+        let disperse = vid_scheme(2).disperse(bytes).unwrap();
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let mut vid = VidDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(1),
+            payload_commitment: Default::default(),
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        };
+
+        let vid_proposal1 = vid.clone().to_proposal(&privkey).unwrap().clone();
+
+        storage.append_vid(&vid_proposal1).await.unwrap();
+        vid.view_number = ViewNumber::new(2);
+
+        let vid_proposal2 = vid.clone().to_proposal(&privkey).unwrap().clone();
+        storage.append_vid(&vid_proposal2).await.unwrap();
+
+        vid.view_number = ViewNumber::new(3);
+
+        let vid_proposal3 = vid.to_proposal(&privkey).unwrap().clone();
+        storage.append_vid(&vid_proposal3).await.unwrap();
+
+        assert_eq!(
+            storage.load_vid_shares().await.unwrap(),
+            vec![vid_proposal1, vid_proposal2, vid_proposal3.clone()]
+        );
+
+        // Test append DA proposals
+        assert_eq!(storage.load_da_proposals().await.unwrap(), vec![]);
+
+        let mut seed = [0u8; 32];
+        let mut rng = rand_chacha::ChaChaRng::from_entropy();
+        rng.fill_bytes(&mut seed);
+
+        let tx = Transaction::random(&mut rng);
+        let tx_hash = Sha256::digest(&tx.payload());
+        let block_payload_signature =
+            BLSPubKey::sign(&privkey, &tx_hash).expect("Failed to sign tx hash");
+
+        let da_proposal_inner = DAProposal::<SeqTypes> {
+            encoded_transactions: tx_hash.to_vec(),
+            metadata: Default::default(),
+            view_number: ViewNumber::new(1),
+        };
+
+        let da_proposal = Proposal {
+            data: da_proposal_inner,
+            signature: block_payload_signature,
+            _pd: Default::default(),
+        };
+
+        storage.append_da(&da_proposal).await.unwrap();
+
+        let mut da_proposal2 = da_proposal.clone();
+        da_proposal2.data.view_number = ViewNumber::new(2);
+        storage.append_da(&da_proposal2).await.unwrap();
+
+        let mut da_proposal3 = da_proposal2.clone();
+        da_proposal3.data.view_number = ViewNumber::new(3);
+        storage.append_da(&da_proposal3).await.unwrap();
+
+        assert_eq!(
+            storage.load_da_proposals().await.unwrap(),
+            vec![da_proposal, da_proposal2, da_proposal3.clone()]
+        );
+
+        // Test garbage collection
+        // Deleting da proposals and vid shares with view number <=2
+        storage.collect_garbage(ViewNumber::new(2)).await.unwrap();
+        assert_eq!(
+            storage.load_da_proposals().await.unwrap(),
+            vec![da_proposal3]
+        );
+
+        assert_eq!(
+            storage.load_vid_shares().await.unwrap(),
+            vec![vid_proposal3]
         );
     }
 }

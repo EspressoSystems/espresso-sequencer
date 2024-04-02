@@ -228,7 +228,7 @@ impl SequencerPersistence for Persistence {
         Ok(serde_json::from_value(config)?)
     }
 
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
 
@@ -242,7 +242,7 @@ impl SequencerPersistence for Persistence {
         Ok(())
     }
 
-    async fn garbage_collect(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
         let stmt1 = "DELETE FROM da_proposal_vid_share where view <= $1";
 
         let mut storage = self.write().await;
@@ -250,7 +250,7 @@ impl SequencerPersistence for Persistence {
         storage
             .transaction()
             .await?
-            .execute_one_with_retries(stmt1, [&(view.get_u64() as i64)])
+            .execute_many_with_retries(stmt1, [&(view.get_u64() as i64)])
             .await?;
 
         let stmt2 = "DELETE FROM da_proposal where view <= $1";
@@ -258,14 +258,14 @@ impl SequencerPersistence for Persistence {
         storage
             .transaction()
             .await?
-            .execute_one_with_retries(stmt2, [&(view.get_u64() as i64)])
+            .execute_many_with_retries(stmt2, [&(view.get_u64() as i64)])
             .await?;
         storage.commit().await?;
 
         Ok(())
     }
 
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()> {
         let stmt = "
             INSERT INTO anchor_leaf (id, height, leaf) VALUES (0, $1, $2)
             ON CONFLICT (id) DO UPDATE SET (height, leaf) = ROW (
@@ -339,7 +339,7 @@ impl SequencerPersistence for Persistence {
         let storage = self.read().await;
 
         let rows = storage
-            .query_static("SELECT data FROM da_proposals")
+            .query_static("SELECT data FROM da_proposal order by view")
             .await?;
 
         let da_proposals = rows
@@ -359,7 +359,7 @@ impl SequencerPersistence for Persistence {
         let storage = self.read().await;
 
         let rows = storage
-            .query_static("SELECT data FROM da_proposal_vid_share")
+            .query_static("SELECT data FROM da_proposal_vid_share order by view")
             .await?;
 
         let vid_shares = rows
@@ -386,7 +386,7 @@ impl Storage<SeqTypes> for Persistence {
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.get_view_number().get_u64();
-        let data_bytes = bincode::serialize(data).unwrap();
+        let data_bytes = bincode::serialize(proposal).unwrap();
 
         let mut storage = self.write().await;
 
@@ -398,7 +398,7 @@ impl Storage<SeqTypes> for Persistence {
                 [sql_param(&(view as i64)), sql_param(&data_bytes)],
             )
             .await?;
-
+        storage.commit().await?;
         Ok(())
     }
     async fn append_da(
@@ -407,7 +407,7 @@ impl Storage<SeqTypes> for Persistence {
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.get_view_number().get_u64();
-        let data_bytes = bincode::serialize(data).unwrap();
+        let data_bytes = bincode::serialize(proposal).unwrap();
 
         let mut storage = self.write().await;
 
@@ -419,7 +419,7 @@ impl Storage<SeqTypes> for Persistence {
                 [sql_param(&(view as i64)), sql_param(&data_bytes)],
             )
             .await?;
-
+        storage.commit().await?;
         Ok(())
     }
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {

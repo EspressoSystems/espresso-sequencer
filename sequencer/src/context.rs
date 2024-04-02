@@ -238,7 +238,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
 async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
-    mut persistence: impl SequencerPersistence,
+    persistence: impl SequencerPersistence,
     state_signer: Arc<StateSigner<Ver>>,
 ) {
     while let Some(event) = events.next().await {
