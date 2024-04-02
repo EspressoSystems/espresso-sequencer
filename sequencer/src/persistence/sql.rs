@@ -243,7 +243,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
-        let stmt1 = "DELETE FROM da_proposal_vid_share where view <= $1";
+        let stmt1 = "DELETE FROM vid_proposal where view <= $1";
 
         let mut storage = self.write().await;
 
@@ -359,7 +359,7 @@ impl SequencerPersistence for Persistence {
         let storage = self.read().await;
 
         let rows = storage
-            .query_static("SELECT data FROM da_proposal_vid_share order by view")
+            .query_static("SELECT data FROM vid_proposal order by view")
             .await?;
 
         let vid_shares = rows
@@ -394,7 +394,7 @@ impl Storage<SeqTypes> for Persistence {
             .transaction()
             .await?
             .execute_one_with_retries(
-                "INSERT INTO da_proposal_vid_share (view, data) VALUES ($1, $2)",
+                "INSERT INTO vid_proposal (view, data) VALUES ($1, $2)",
                 [sql_param(&(view as i64)), sql_param(&data_bytes)],
             )
             .await?;

@@ -26,7 +26,7 @@ CREATE TABLE da_proposal (
     data BYTEA
 );
 
-CREATE TABLE da_proposal_vid_share (
+CREATE TABLE vid_proposal (
     view BIGINT PRIMARY KEY,
     data BYTEA
 );
