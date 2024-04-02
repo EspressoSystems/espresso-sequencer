@@ -1,6 +1,6 @@
 pragma solidity ^0.8.20;
 
-import { Script, console2 } from "forge-std/Script.sol";
+import { Script } from "forge-std/Script.sol";
 import {
     ProposeUpgradeResponse,
     Defender,
@@ -8,7 +8,6 @@ import {
 } from "openzeppelin-foundry-upgrades/Defender.sol";
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
 contract FeeContractDefenderDeployScript is Script {

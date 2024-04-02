@@ -1,12 +1,10 @@
 pragma solidity ^0.8.20;
 
-import { Script, console2 } from "forge-std/Script.sol";
-import { Vm } from "forge-std/Vm.sol";
+import { Script } from "forge-std/Script.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
-import { Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract UtilsScript is Script {
-    string constant SALT_HISTORY_FILE_NAME = "saltHistory.json";
+    string public constant SALT_HISTORY_FILE_NAME = "saltHistory.json";
 
     function readFile(string memory path) external returns (bool, string memory) {
         if (vm.exists(path)) {

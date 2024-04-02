@@ -209,6 +209,7 @@ mod test {
 
     use super::*;
     use crate::NodeState;
+    use contract_bindings::fee_contract::FeeContract;
     use ethers::utils::{parse_ether, Anvil};
 
     #[async_std::test]
@@ -253,6 +254,7 @@ mod test {
     async fn test_get_finalized_deposits() -> anyhow::Result<()> {
         // how many deposits will we make
         let deposits = 5;
+        let deploy_txn_count = 2;
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
@@ -266,20 +268,46 @@ mod test {
         let client = Arc::new(client);
 
         // Initialize a contract with some deposits
-        let contract = contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client), ())
-            .unwrap()
-            .send()
-            .await?;
 
-        // Anvil will produce a block for every transaction.
+        // deploy the fee contract
+        let fee_contract =
+            contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client.clone()), ())
+                .unwrap()
+                .send()
+                .await?;
+
+        // prepare the initialization data to be sent with the proxy when the proxy is deployed
+        let initialize_data = fee_contract
+            .initialize(wallet_address) // Here, you simulate the call to get the transaction data without actually sending it.
+            .calldata()
+            .expect("Failed to encode initialization data");
+
+        // deploy the proxy contract and set the implementation address as the address of the fee contract and send the initialization data
+        let proxy_contract = contract_bindings::erc1967_proxy::ERC1967Proxy::deploy(
+            client.clone(),
+            (fee_contract.address(), initialize_data),
+        )
+        .unwrap()
+        .send()
+        .await?;
+
+        // cast the proxy to be of type fee contract so that we can interact with the implementation methods via the proxy
+        let fee_contract_proxy = FeeContract::new(proxy_contract.address(), client.clone());
+
+        // confirm that the owner of the contract is the address that was sent as part of the initialization data
+        let owner = fee_contract_proxy.owner().await;
+        assert_eq!(owner.unwrap(), wallet_address.clone());
+
+        // Anvil will produce a bock for every transaction.
         let head = l1_client.get_block_number().await;
-        assert_eq!(1, head);
+        // there are two transactions, deploying the implementation contract, FeeContract, and deploying the proxy contract
+        assert_eq!(deploy_txn_count, head);
 
         // make some deposits.
         for n in 1..=deposits {
             // Varied amounts are less boring.
             let amount = n as f32 / 10.0;
-            let receipt = contract
+            let receipt = fee_contract_proxy
                 .deposit(wallet_address)
                 .value(parse_ether(amount).unwrap())
                 .send()
@@ -287,15 +315,18 @@ mod test {
                 .await?;
 
             // Successful transactions have `status` of `1`.
-            assert_eq!(Some(U64::from(1)), receipt.unwrap().status)
+            assert_eq!(Some(U64::from(1)), receipt.clone().unwrap().status);
         }
 
         let head = l1_client.get_block_number().await;
         // Anvil will produce a block for every transaction.
-        assert_eq!(deposits + 1, head);
+        assert_eq!(deposits + deploy_txn_count, head);
 
         // Use non-signing `L1Client` to retrieve data.
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), contract.address());
+        let l1_client = L1Client::new(
+            anvil.endpoint().parse().unwrap(),
+            fee_contract_proxy.address(),
+        );
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).

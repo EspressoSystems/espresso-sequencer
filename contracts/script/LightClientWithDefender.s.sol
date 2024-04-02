@@ -9,14 +9,12 @@ import {
 } from "openzeppelin-foundry-upgrades/Defender.sol";
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientV2 as LC2 } from "../test/LightClientV2.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
 contract LightClientDefenderDeployScript is Script {
-    string contractName = "LightClient.sol";
-    UtilsScript utils = new UtilsScript();
-    uint256 contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
+    string public contractName = "LightClient.sol";
+    UtilsScript public utils = new UtilsScript();
+    uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
 
     function run()
         public
@@ -77,10 +75,10 @@ contract LightClientDefenderDeployScript is Script {
 }
 
 contract LightClientDefenderUpgradeScript is Script {
-    string originalContractName = "LightClient.sol";
-    string upgradeContractName = vm.envString("LIGHT_CLIENT_UPGRADE_NAME");
-    uint256 contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
-    UtilsScript utils = new UtilsScript();
+    string public originalContractName = "LightClient.sol";
+    string public upgradeContractName = vm.envString("LIGHT_CLIENT_UPGRADE_NAME");
+    uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
+    UtilsScript public utils = new UtilsScript();
 
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment
