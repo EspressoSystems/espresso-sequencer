@@ -347,7 +347,7 @@ mod persistence_tests {
         rng.fill_bytes(&mut seed);
 
         let tx = Transaction::random(&mut rng);
-        let tx_hash = Sha256::digest(&tx.payload());
+        let tx_hash = Sha256::digest(tx.payload());
         let block_payload_signature =
             BLSPubKey::sign(&privkey, &tx_hash).expect("Failed to sign tx hash");
 
