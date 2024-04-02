@@ -106,13 +106,13 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                     while let Ok(received_output) = test_receiver.try_recv() {
                         tracing::debug!("Test received: {:?}", received_output);
 
-                        let output_asserts = &#task_expectations[stage_number].output_asserts;
+                        let output_asserts = &mut #task_expectations[stage_number].output_asserts;
 
                         if #output_index_names >= output_asserts.len() {
                             panic_extra_output_in_script(stage_number, #script_names.to_string(), &received_output);
                         };
 
-                        let assert = &output_asserts[#output_index_names];
+                        let assert = &mut output_asserts[#output_index_names];
 
                         validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, assert);
 
@@ -134,13 +134,13 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                     while let Ok(Ok(received_output)) = async_timeout(Duration::from_millis(250), test_receiver.recv_direct()).await {
                         tracing::debug!("Test received: {:?}", received_output);
 
-                        let output_asserts = &#task_expectations[stage_number].output_asserts;
+                        let output_asserts = &mut #task_expectations[stage_number].output_asserts;
 
                         if #output_index_names >= output_asserts.len() {
                             panic_extra_output_in_script(stage_number, #script_names.to_string(), &received_output);
                         };
 
-                        let assert = &output_asserts[#output_index_names];
+                        let mut assert = &mut output_asserts[#output_index_names];
 
                         validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, assert);
 
@@ -157,7 +157,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                 panic_missing_output_in_script(stage_number, #script_names.to_string(), &output_asserts[#output_index_names]);
             }
 
-            let task_state_asserts = &#task_expectations[stage_number].task_state_asserts;
+            let task_state_asserts = &mut #task_expectations[stage_number].task_state_asserts;
 
             for assert in task_state_asserts {
                 validate_task_state_or_panic_in_script(stage_number, #script_names.to_string(), #task_names.state(), assert);
