@@ -105,11 +105,11 @@ async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
-bimap = "0.6.3"
-clap = { version = "4.5", features = ["derive", "env"], optional = true }
+bimap = "0.6"
+clap = { workspace = true, optional = true }
 commit = { workspace = true }
 custom_debug = { workspace = true }
-dashmap = "5.5.1"
+dashmap = "5"
 either = { workspace = true }
 futures = { workspace = true }
 hotshot-web-server = { version = "0.5.26", path = "../web_server", default-features = false }
@@ -123,9 +123,9 @@ serde = { workspace = true, features = ["rc"] }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
-derive_more = "0.99.17"
-portpicker = "0.1.1"
-lru = "0.12.3"
+derive_more = "0.99"
+portpicker = "0.1"
+lru = "0.12"
 hotshot-task = { path = "../task" }
 hotshot = { path = "../hotshot" }
 hotshot-example-types = { path = "../example-types" }
@@ -156,11 +156,11 @@ cdn-broker = { workspace = true, features = [
 cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
 
 [dev-dependencies]
-clap = { version = "4.5", features = ["derive", "env"] }
+clap.workspace = true
 toml = { workspace = true }
 blake3 = { workspace = true }
 anyhow.workspace = true
-tracing-subscriber = "0.3.18"
+tracing-subscriber = "0.3"
 
 [lints]
 workspace = true

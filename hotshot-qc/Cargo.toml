@@ -7,10 +7,10 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-ark-bls12-377 = "0.4.0"
-ark-bn254 = "0.4.0"
+ark-bls12-377 = "0.4"
+ark-bn254 = "0.4"
 ark-ec = { workspace = true }
-ark-ff = "0.4.0"
+ark-ff = "0.4"
 ark-std = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }

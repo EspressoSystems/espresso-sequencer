@@ -8,7 +8,7 @@ edition = { workspace = true }
 [dependencies]
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
-clap = { version = "4.0", features = ["derive", "env"], optional = false }
+clap.workspace = true
 futures = { workspace = true }
 hotshot-types = { path = "../types" }
 tide-disco = { workspace = true }

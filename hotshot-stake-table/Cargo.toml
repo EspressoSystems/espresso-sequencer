@@ -7,9 +7,9 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-ark-bn254 = "0.4.0"
-ark-ed-on-bn254 = "0.4.0"
-ark-ff = "0.4.0"
+ark-bn254 = "0.4"
+ark-ed-on-bn254 = "0.4"
+ark-ff = "0.4"
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 digest = { workspace = true }

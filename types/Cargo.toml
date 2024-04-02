@@ -41,7 +41,7 @@ snafu = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 typenum = { workspace = true }
-derivative = "2.2.0"
+derivative = "2"
 jf-primitives = { workspace = true }
 jf-plonk = { workspace = true }
 jf-utils = { workspace = true }

@@ -24,10 +24,10 @@ snafu = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 # proc macro stuff
-quote = "1.0.33"
-syn = { version = "2.0.57", features = ["full", "extra-traits"] }
-proc-macro2 = "1.0.79"
-derive_builder = "0.20.0"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+proc-macro2 = "1"
+derive_builder = "0.20"
 
 [dev-dependencies]
 async-lock = { workspace = true }
