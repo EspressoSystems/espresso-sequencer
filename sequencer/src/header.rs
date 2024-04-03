@@ -231,7 +231,7 @@ impl Header {
 impl BlockHeader<SeqTypes> for Header {
     #[tracing::instrument(
         skip_all,
-        fields(view = ?parent_leaf.view_number, height = parent_leaf.block_header.height),
+        fields(view = ?parent_leaf.get_view_number(), height = parent_leaf.get_block_header().height),
     )]
     async fn new(
         parent_state: &ValidatedState,
@@ -416,7 +416,7 @@ mod test_headers {
             parent.l1_finalized = self.parent_l1_finalized;
 
             let mut parent_leaf = genesis.leaf.clone();
-            parent_leaf.block_header = parent.clone();
+            *parent_leaf.get_block_header_mut() = parent.clone();
 
             let block_merkle_tree =
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
@@ -644,7 +644,7 @@ mod test_headers {
 
         let mut parent_header = genesis.header.clone();
         let mut parent_leaf = genesis.leaf.clone();
-        parent_leaf.block_header = parent_header.clone();
+        *parent_leaf.get_block_header_mut() = parent_header.clone();
 
         // Populate the tree with an initial `push`.
         block_merkle_tree.push(genesis.header.commit()).unwrap();
@@ -713,12 +713,12 @@ mod test_headers {
         parent_header.fee_merkle_tree_root = fee_merkle_tree_root;
 
         let mut parent_leaf = genesis.leaf.clone();
-        parent_leaf.block_header = parent_header.clone();
+        *parent_leaf.get_block_header_mut() = parent_header.clone();
 
         // Forget the state to trigger lookups in Header::new
         let forgotten_state = parent_state.forget();
         genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
-            parent_leaf.view_number,
+            parent_leaf.get_view_number(),
             Arc::new(parent_state.clone()),
         )]));
         // Get a proposal from a parent

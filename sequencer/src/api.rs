@@ -349,7 +349,7 @@ mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.block_header.height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.get_block_header().height > 2)
                 {
                     break;
                 }
@@ -383,7 +383,7 @@ mod test_helpers {
 
         // Undecided fee state: absent account.
         let leaf = network.server.consensus().get_decided_leaf().await;
-        let view = leaf.view_number + 1;
+        let view = leaf.get_view_number() + 1;
         let res = client
             .get::<AccountQueryData>(&format!(
                 "catchup/{}/account/{:x}",
@@ -636,7 +636,7 @@ mod api_tests {
             .try_collect()
             .await
             .unwrap();
-        let decided_view = chain.last().unwrap().leaf().view_number;
+        let decided_view = chain.last().unwrap().leaf().get_view_number();
 
         // Get the most recent state, for catchup.
         let state = network.server.consensus().get_decided_state().await;
@@ -688,7 +688,7 @@ mod api_tests {
             .unwrap()
             .unwrap();
         assert_eq!(new_leaf.height(), height as u64 + 1);
-        assert_eq!(new_leaf.leaf().parent_commitment, chain[height - 1].hash());
+        assert_eq!(new_leaf.leaf().get_parent_commitment(), chain[height - 1].hash());
 
         // Ensure the new chain is consistent with the old chain.
         let new_chain: Vec<LeafQueryData<SeqTypes>> = client
@@ -815,8 +815,8 @@ mod test {
                 continue;
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let height = leaf.block_header.height;
-                let leaf_builder = leaf.block_header.fee_info.account();
+                let height = leaf.get_block_header().height;
+                let leaf_builder = leaf.get_block_header().fee_info.account();
                 tracing::info!(
                     "waiting for block from {builder}, block {height} is from {leaf_builder}",
                 );
