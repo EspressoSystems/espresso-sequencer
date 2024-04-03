@@ -258,7 +258,10 @@ mod test {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            for LeafInfo { leaf, vid_share, .. } in leaf_chain.iter().rev() {
+            for LeafInfo {
+                leaf, vid_share, ..
+            } in leaf_chain.iter().rev()
+            {
                 headers.push(leaf.get_block_header().clone());
                 if leaf.get_block_header().block_number >= block_height as u64 {
                     break 'outer;
