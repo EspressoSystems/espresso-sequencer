@@ -220,6 +220,7 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
+                fixed_leader_for_gpuvid: 0,
             };
 
             Self {
@@ -487,7 +488,7 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .block_payload
+                        .get_block_payload()
                         .as_ref()?
                         .transaction_commitments(leaf.get_block_header().metadata())
                         .contains(&commitment)
@@ -712,7 +713,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.block_header.clone();
+                let header = leaf.get_block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

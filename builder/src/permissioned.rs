@@ -131,13 +131,13 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
 ) -> anyhow::Result<BuilderContext<network::Web, Ver>> {
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        public_ip: None,
+        advertise_address: None,
         network_config_file: None,
     };
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     // Orchestrator client
-    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+    let orchestrator_client = OrchestratorClient::new(validator_args);
 
     let private_staking_key = network_params.private_staking_key.clone();
     let public_staking_key = BLSPubKey::from_private(&private_staking_key);
@@ -155,9 +155,16 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
 
     // Load the network configuration from the orchestrator
     tracing::info!("loading network config from orchestrator");
-    let config = NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
-        .await
-        .0;
+    let config = NetworkConfig::get_complete_config(
+        &orchestrator_client,
+        None,
+        my_config.clone(),
+        None,
+        None,
+    )
+    .await?
+    .0;
+
     tracing::info!(
     node_id = config.node_index,
     stake_table = ?config.config.known_nodes_with_stake,
@@ -274,8 +281,11 @@ pub async fn init_hotshot<N: network::Type, Ver: StaticVersionType + 'static>(
         }
         None => config.known_nodes_with_stake.clone(),
     };
-    let membership =
-        GeneralStaticCommittee::create_election(combined_known_nodes_with_stake, election_config);
+    let membership = GeneralStaticCommittee::create_election(
+        combined_known_nodes_with_stake,
+        election_config,
+        0,
+    );
     tracing::debug!("Before Membership creation");
     let memberships = Memberships {
         quorum_membership: membership.clone(),

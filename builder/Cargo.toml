@@ -25,11 +25,9 @@ hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "hg/test_builder_executable" }
 hotshot-events-service = { workspace = true }
-#hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", rev = "1a677f9ecf7043303fe0decfe613337981e9c292" }
-#hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", rev = "6c85e8798dcf30c032f3650ae149848b0d3d8aab" }
-hotshot-builder-core = { path = "../../hs-builder-core" }
 portpicker = "0.1.1"
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
