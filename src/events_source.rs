@@ -58,9 +58,9 @@ impl<Types: NodeType> From<Event<Types>> for BuilderEvent<Types> {
 #[serde(bound(deserialize = "Types: NodeType"))]
 pub enum BuilderEventType<Types: NodeType> {
     // Information required by the builder to create a membership to get view leader
-    StarupInfo {
+    StartupInfo {
         known_node_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
-        non_statekd_node_count: usize,
+        non_staked_node_count: usize,
     },
     /// Hotshot error
     HotshotError {
@@ -204,9 +204,9 @@ impl<Types: NodeType> EventsStreamer<Types> {
     pub fn get_startup_event(&self) -> BuilderEvent<Types> {
         BuilderEvent {
             view_number: Types::Time::genesis(),
-            event: BuilderEventType::StarupInfo {
+            event: BuilderEventType::StartupInfo {
                 known_node_with_stake: self.known_nodes_with_stake.clone(),
-                non_statekd_node_count: self.non_staked_node_count,
+                non_staked_node_count: self.non_staked_node_count,
             },
         }
     }
