@@ -802,10 +802,6 @@ pub mod node_tests {
         assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
     }
 
-    // This test is currently ignored, as all nodes are temporarily storing the same share, so
-    // recovery is not possible. This will be fixed when HotShot is updated to send a unique share
-    // to each node. See https://github.com/EspressoSystems/HotShot/issues/1696.
-    #[ignore]
     #[async_std::test]
     pub async fn test_vid_recovery<D: TestableDataSource>() {
         setup_test();

@@ -258,7 +258,7 @@ mod test {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            for LeafInfo { leaf, vid, .. } in leaf_chain.iter().rev() {
+            for LeafInfo { leaf, vid_share, .. } in leaf_chain.iter().rev() {
                 headers.push(leaf.get_block_header().clone());
                 if leaf.get_block_header().block_number >= block_height as u64 {
                     break 'outer;
@@ -276,8 +276,8 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                if let Some(vid) = vid.as_ref() {
-                    assert_eq!(share, *vid.shares.first_key_value().unwrap().1);
+                if let Some(vid_share) = vid_share.as_ref() {
+                    assert_eq!(share, vid_share.share);
                 }
 
                 // Query various other ways.

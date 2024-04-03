@@ -89,7 +89,7 @@ where
                     leaf,
                     state,
                     delta,
-                    vid,
+                    vid_share,
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
@@ -100,17 +100,17 @@ where
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
                 self.insert_leaf(leaf_data.clone()).await?;
 
-                if let Some(vid) = vid {
+                if let Some(vid_share) = vid_share {
                     self.insert_vid(
                         VidCommonQueryData::new(
                             leaf.get_block_header().clone(),
-                            vid.common.clone(),
+                            vid_share.common.clone(),
                         ),
                         // TODO we should get just a single share from VID dispersal, but currently
                         // HotShot sends us _all_ shares, and we don't know which one is for us. For
                         // no we arbitrarily take the first share, this should be fixed in HotShot
                         // soon.
-                        Some(vid.shares.first_key_value().unwrap().1.clone()),
+                        Some(vid_share.share.clone()),
                     )
                     .await?;
                 } else if leaf.get_view_number().get_u64() == 0 {
