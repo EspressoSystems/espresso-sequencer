@@ -202,8 +202,11 @@ processes:
 
   # We use KeyDB (a Redis variant) to maintain consistency between 
   # different parts of the CDN
+  # Cheating a bit here too, but KeyDB is not available as a Nix package.
+  # Could do local (SQLite) discovery, but removes some of the spirit
+  # from the local demo.
   keydb:
-    command: echo 'requirepass changeme!' | keydb-server - --save "" --appendonly no
+    command: docker run -p 127.0.0.1:6379:6379 eqalpha/keydb --requirepass changeme!
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
