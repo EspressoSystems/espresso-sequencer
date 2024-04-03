@@ -26,7 +26,7 @@ contract LightClientUpgradeTest is Test {
         lcV1Proxy = LCV1(proxy);
     }
 
-    function testCorrectInitialization() public {
+    function testCorrectInitialization() public view {
         assert(lcV1Proxy.blocksPerEpoch() == 10);
         assert(lcV1Proxy.currentEpoch() == 0);
 

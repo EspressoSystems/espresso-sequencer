@@ -190,7 +190,7 @@ contract FeeContractUpgradabilityTest is Test {
     }
 
     // test that new users have a zero balance
-    function testFuzz_newUserHasZeroBalance(address user) public {
+    function testFuzz_newUserHasZeroBalance(address user) public view {
         vm.assume(user != address(0));
 
         uint256 balance = feeContractProxy.balances(user);
