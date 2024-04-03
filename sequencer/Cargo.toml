@@ -61,6 +61,7 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 lazy_static = "1.4"
 num-traits = "0.2.18"
+portpicker = "0.1.1"
 rand = "0.8.5"
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
@@ -85,7 +86,6 @@ typenum = { version = "1.15.0", default-features = false, features = [
 ] }
 url = { workspace = true }
 versioned-binary-serialization = { workspace = true }
-portpicker = "0.1.1"
 
 # CDN imports
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
