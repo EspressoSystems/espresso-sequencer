@@ -5,17 +5,14 @@ use async_trait::async_trait;
 use clap::Parser;
 
 use hotshot_types::{
-    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::ConsensusTime, storage::Storage},
-    utils::View,
+    traits::node_implementation::ConsensusTime,
     vote::HasViewNumber,
 };
 use std::{
-    collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::PathBuf,
@@ -79,101 +76,6 @@ impl Persistence {
 }
 
 #[async_trait]
-impl Storage<SeqTypes> for Persistence {
-    async fn append_vid(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
-        let dir_path = self.vid_dir_path();
-
-        fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
-
-        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(file_path)?;
-
-        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
-
-        file.write_all(&proposal_bytes)?;
-
-        Ok(())
-    }
-    async fn append_da(
-        &self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
-        let dir_path = self.da_dir_path();
-
-        fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
-
-        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(file_path)?;
-
-        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
-
-        file.write_all(&proposal_bytes)?;
-
-        Ok(())
-    }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        if let HotShotAction::Vote = action {
-            if let Some(prev) = self.load_voted_view().await? {
-                if prev >= view {
-                    return Ok(());
-                }
-            }
-            fs::write(self.voted_view_path(), view.get_u64().to_le_bytes())?;
-        }
-
-        Ok(())
-    }
-
-    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .append(true)
-            .create(true)
-            .open(self.high_qc_path())?;
-
-        if file.metadata()?.len() > 0 {
-            let mut view = [0; 8];
-            file.read_exact(&mut view).context("read view")?;
-            let view = u64::from_le_bytes(view);
-            if view >= high_qc.get_view_number().get_u64() {
-                return Ok(());
-            }
-        }
-
-        file.set_len(0).context("truncate")?;
-        file.write_all(&high_qc.get_view_number().get_u64().to_le_bytes())
-            .context("write view")?;
-
-        let bytes = bincode::serialize(&high_qc).context("serialize high qc")?;
-        file.write_all(&bytes).context("write high qc ")?;
-
-        Ok(())
-    }
-    /// Update the currently undecided state of consensus.  This includes the undecided leaf chain,
-    /// and the undecided state.
-    async fn update_undecided_state(
-        &self,
-        _leafs: CommitmentMap<Leaf>,
-        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-#[async_trait]
 impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         let path = self.config_path();
@@ -185,13 +87,13 @@ impl SequencerPersistence for Persistence {
         Ok(Some(NetworkConfig::from_file(path.display().to_string())?))
     }
 
-    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         let path = self.config_path();
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
     }
 
-    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
         let view_number = view.get_u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
@@ -215,7 +117,7 @@ impl SequencerPersistence for Persistence {
         delete_files(self.vid_dir_path())
     }
 
-    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
         let path = self.voted_view_path();
         if !path.is_file() {
             return Ok(None);
@@ -226,7 +128,7 @@ impl SequencerPersistence for Persistence {
         Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
     }
 
-    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
         let mut file = OpenOptions::new()
             .read(true)
             .append(true)
@@ -290,61 +192,152 @@ impl SequencerPersistence for Persistence {
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
     }
 
-    async fn load_da_proposals(
+    async fn load_da_proposal(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
         if !dir_path.exists() {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let entries = fs::read_dir(dir_path)?;
+        let view = view.get_u64();
 
-        let mut da_proposals = Vec::new();
         for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
+            let path = entry.map(|entry| entry.path())?;
 
-            if path.is_file() {
-                let da_bytes = fs::read(path)?;
-
-                let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
-                    bincode::deserialize(&da_bytes)?;
-                da_proposals.push(da_proposal);
+            if let Some(file_stem) = path.file_stem() {
+                if let Ok(v) = file_stem.to_str().context("file not found")?.parse::<u64>() {
+                    if v == view {
+                        let da_bytes = fs::read(path)?;
+                        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
+                            bincode::deserialize(&da_bytes)?;
+                        return Ok(Some(da_proposal));
+                    }
+                }
             }
         }
-        da_proposals.sort_by_key(|da| da.data.get_view_number());
 
-        Ok(da_proposals)
+        Ok(None)
     }
 
-    async fn load_vid_shares(
+    async fn load_vid_share(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
         if !dir_path.exists() {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let entries = fs::read_dir(dir_path)?;
+        let view = view.get_u64();
 
-        let mut vids = Vec::new();
         for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
+            let path = entry.map(|entry| entry.path())?;
 
-            if path.is_file() {
-                let vid_share_bytes = fs::read(path)?;
-                let vid: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
-                    bincode::deserialize(&vid_share_bytes)?;
-                vids.push(vid);
+            if let Some(file_stem) = path.file_stem() {
+                if let Ok(v) = file_stem.to_str().context("invalid file")?.parse::<u64>() {
+                    if v == view {
+                        let vid_share_bytes = fs::read(path)?;
+                        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+                            bincode::deserialize(&vid_share_bytes)?;
+                        return Ok(Some(vid_share));
+                    }
+                }
             }
         }
 
-        vids.sort_by_key(|v| v.data.get_view_number());
-        Ok(vids)
+        Ok(None)
+    }
+
+    async fn append_vid(
+        &mut self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.get_view_number().get_u64();
+        let dir_path = self.vid_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+
+        tracing::info!("file path {:?}", file_path);
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(file_path)?;
+
+        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+        file.write_all(&proposal_bytes)?;
+
+        Ok(())
+    }
+    async fn append_da(
+        &mut self,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.get_view_number().get_u64();
+        let dir_path = self.da_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(file_path)?;
+
+        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+        file.write_all(&proposal_bytes)?;
+
+        Ok(())
+    }
+    async fn record_action(
+        &mut self,
+        view: ViewNumber,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        if let Some(prev) = self.load_latest_acted_view().await? {
+            if prev >= view {
+                return Ok(());
+            }
+        }
+        fs::write(self.voted_view_path(), view.get_u64().to_le_bytes())?;
+        Ok(())
+    }
+
+    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(self.high_qc_path())?;
+
+        if file.metadata()?.len() > 0 {
+            let mut view = [0; 8];
+            file.read_exact(&mut view).context("read view")?;
+            let view = u64::from_le_bytes(view);
+            if view >= high_qc.get_view_number().get_u64() {
+                return Ok(());
+            }
+        }
+
+        file.set_len(0).context("truncate")?;
+        file.write_all(&high_qc.get_view_number().get_u64().to_le_bytes())
+            .context("write view")?;
+
+        let bytes = bincode::serialize(&high_qc).context("serialize high qc")?;
+        file.write_all(&bytes).context("write high qc ")?;
+
+        Ok(())
     }
 
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {

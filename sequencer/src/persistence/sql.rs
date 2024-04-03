@@ -1,7 +1,6 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::time::Duration;
 
 use anyhow::bail;
-use async_std::{stream::StreamExt, sync::RwLock};
 use async_trait::async_trait;
 use clap::Parser;
 use hotshot_query_service::data_source::{
@@ -12,13 +11,11 @@ use hotshot_query_service::data_source::{
     VersionedDataSource,
 };
 use hotshot_types::{
-    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::ConsensusTime, storage::Storage},
-    utils::View,
+    traits::node_implementation::ConsensusTime,
     vote::HasViewNumber,
 };
 
@@ -196,8 +193,7 @@ impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        let storage = SqlStorage::connect(self.try_into()?).await?;
-        Ok(Arc::new(RwLock::new(storage)))
+        SqlStorage::connect(self.try_into()?).await
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -207,17 +203,15 @@ impl PersistenceOptions for Options {
 }
 
 /// Postgres-backed persistence.
-pub type Persistence = Arc<RwLock<SqlStorage>>;
+pub type Persistence = SqlStorage;
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         tracing::info!("loading config from Postgres");
 
-        let storage = self.read().await;
-
         // Select the most recent config (although there should only be one).
-        let Some(row) = storage
+        let Some(row) = self
             .query_opt_static("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
             .await?
         else {
@@ -228,44 +222,38 @@ impl SequencerPersistence for Persistence {
         Ok(serde_json::from_value(config)?)
     }
 
-    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
 
-        let mut storage = self.write().await;
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", [&json])
             .await?;
-        storage.commit().await?;
+        self.commit().await?;
         Ok(())
     }
 
-    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
-        let stmt1 = "DELETE FROM vid_proposal where view <= $1";
+    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+        let stmt1 = "DELETE FROM vid_share where view <= $1";
 
-        let mut storage = self.write().await;
-
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_many_with_retries(stmt1, [&(view.get_u64() as i64)])
             .await?;
 
         let stmt2 = "DELETE FROM da_proposal where view <= $1";
 
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_many_with_retries(stmt2, [&(view.get_u64() as i64)])
             .await?;
-        storage.commit().await?;
+        self.commit().await?;
 
         Ok(())
     }
 
-    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
         let stmt = "
             INSERT INTO anchor_leaf (id, height, leaf) VALUES (0, $1, $2)
             ON CONFLICT (id) DO UPDATE SET (height, leaf) = ROW (
@@ -278,10 +266,7 @@ impl SequencerPersistence for Persistence {
         ";
         let leaf_bytes = bincode::serialize(leaf)?;
 
-        let mut storage = self.write().await;
-
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_one_with_retries(
                 stmt,
@@ -291,14 +276,12 @@ impl SequencerPersistence for Persistence {
                 ],
             )
             .await?;
-        storage.commit().await?;
+        self.commit().await?;
         Ok(())
     }
 
-    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
-        let storage = self.read().await;
-
-        Ok(storage
+    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+        Ok(self
             .query_opt_static("SELECT view FROM highest_voted_view WHERE id = 0")
             .await?
             .map(|row| {
@@ -308,10 +291,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
-        let storage = self.read().await;
-
-        storage
-            .query_opt_static("SELECT leaf FROM anchor_leaf WHERE id = 0")
+        self.query_opt_static("SELECT leaf FROM anchor_leaf WHERE id = 0")
             .await?
             .map(|row| {
                 let bytes: Vec<u8> = row.get("leaf");
@@ -321,10 +301,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
-        let storage = self.read().await;
-
-        storage
-            .query_opt_static("SELECT data FROM high_qc WHERE id = 0")
+        self.query_opt_static("SELECT data FROM high_qc WHERE id = 0")
             .await?
             .map(|row| {
                 let bytes: Vec<u8> = row.get("data");
@@ -333,121 +310,102 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
-    async fn load_da_proposals(
+    async fn load_da_proposal(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
-        let storage = self.read().await;
-
-        let rows = storage
-            .query_static("SELECT data FROM da_proposal order by view")
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        let result = self
+            .query_opt(
+                "SELECT data FROM da_proposal where view = $1",
+                [&(view.get_u64() as i64)],
+            )
             .await?;
 
-        let da_proposals = rows
+        result
             .map(|row| {
-                let bytes: Vec<u8> = row?.get("data");
-                Ok(bincode::deserialize(&bytes)?)
+                let bytes: Vec<u8> = row.get("data");
+                anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
             })
-            .collect::<anyhow::Result<Vec<_>>>()
-            .await?;
-
-        Ok(da_proposals)
+            .transpose()
     }
 
-    async fn load_vid_shares(
+    async fn load_vid_share(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        let storage = self.read().await;
-
-        let rows = storage
-            .query_static("SELECT data FROM vid_proposal order by view")
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        let result = self
+            .query_opt(
+                "SELECT data FROM vid_share where view = $1",
+                [&(view.get_u64() as i64)],
+            )
             .await?;
 
-        let vid_shares = rows
+        result
             .map(|row| {
-                let bytes: Vec<u8> = row?.get("data");
-                Ok(bincode::deserialize(&bytes)?)
+                let bytes: Vec<u8> = row.get("data");
+                anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
             })
-            .collect::<anyhow::Result<Vec<_>>>()
-            .await?;
-
-        Ok(vid_shares)
+            .transpose()
     }
 
-    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
-        bail!("state persistence not implemented");
-    }
-}
-
-#[async_trait]
-impl Storage<SeqTypes> for Persistence {
     async fn append_vid(
-        &self,
+        &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.get_view_number().get_u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        let mut storage = self.write().await;
-
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_one_with_retries(
-                "INSERT INTO vid_proposal (view, data) VALUES ($1, $2)",
+                "INSERT INTO vid_share (view, data) VALUES ($1, $2)",
                 [sql_param(&(view as i64)), sql_param(&data_bytes)],
             )
             .await?;
-        storage.commit().await?;
+        self.commit().await?;
         Ok(())
     }
     async fn append_da(
-        &self,
+        &mut self,
         proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.get_view_number().get_u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        let mut storage = self.write().await;
-
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_one_with_retries(
                 "INSERT INTO da_proposal (view, data) VALUES ($1, $2)",
                 [sql_param(&(view as i64)), sql_param(&data_bytes)],
             )
             .await?;
-        storage.commit().await?;
+        self.commit().await?;
         Ok(())
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        if let HotShotAction::Vote = action {
-            let stmt = "
-                       INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
-                       ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
+    async fn record_action(
+        &mut self,
+        view: ViewNumber,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        let stmt = "
+        INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
+        ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
-            let mut storage = self.write().await;
-
-            storage
-                .transaction()
-                .await?
-                .execute_one_with_retries(stmt, [view.get_u64() as i64])
-                .await?;
-            storage.commit().await?;
-        };
+        self.transaction()
+            .await?
+            .execute_one_with_retries(stmt, [view.get_u64() as i64])
+            .await?;
+        self.commit().await?;
 
         Ok(())
     }
-    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
         let view = high_qc.view_number.get_u64();
         let data_bytes = bincode::serialize(&high_qc).unwrap();
 
-        let mut storage = self.write().await;
-
-        storage
-            .transaction()
+        self.transaction()
             .await?
             .execute_one_with_retries(
                 "INSERT INTO high_qc (id, view, data) VALUES (0, $1, $2) 
@@ -464,12 +422,8 @@ impl Storage<SeqTypes> for Persistence {
         Ok(())
     }
 
-    async fn update_undecided_state(
-        &self,
-        _leafs: CommitmentMap<Leaf>,
-        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
+    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }
 

@@ -20,10 +20,10 @@ use hotshot::{
 };
 use hotshot_types::{
     data::{DAProposal, VidDisperseShare},
-    event::LeafInfo,
+    event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::ConsensusTime, storage::Storage},
+    traits::node_implementation::ConsensusTime,
 };
 use std::cmp::max;
 
@@ -42,7 +42,7 @@ pub trait PersistenceOptions: Clone {
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
+pub trait SequencerPersistence: Send + Sync + 'static {
     /// Load the orchestrator config from storage.
     ///
     /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
@@ -50,30 +50,32 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
 
     /// Save the orchestrator config to storage.
-    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()>;
+    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
-    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()>;
+    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
 
     /// Saves the latest decided leaf.
     ///
     /// If the height of the new leaf is not greater than the height of the previous decided leaf,
     /// storage is not updated.
-    async fn save_anchor_leaf(&self, leaf: &Leaf) -> anyhow::Result<()>;
+    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()>;
 
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
-    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
+    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
 
     /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
     async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>>;
 
     async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>>;
 
-    async fn load_vid_shares(
+    async fn load_vid_share(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
-    async fn load_da_proposals(
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    async fn load_da_proposal(
         &self,
-    ) -> anyhow::Result<Vec<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
 
     /// Load the validated state after block `height`, if available.
     async fn load_validated_state(&self, height: u64) -> anyhow::Result<ValidatedState>;
@@ -87,7 +89,7 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
         state: NodeState,
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
         let highest_voted_view = match self
-            .load_voted_view()
+            .load_latest_acted_view()
             .await
             .context("loading last voted view")?
         {
@@ -151,7 +153,7 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&self, event: &Event<SeqTypes>) {
+    async fn handle_event(&mut self, event: &Event<SeqTypes>) {
         if let EventType::Decide { leaf_chain, .. } = &event.event {
             if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
                 if let Err(err) = self.save_anchor_leaf(leaf).await {
@@ -168,6 +170,21 @@ pub trait SequencerPersistence: Send + Sync + Storage<SeqTypes> + 'static {
             }
         }
     }
+
+    async fn append_vid(
+        &mut self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn append_da(
+        &mut self,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn record_action(
+        &mut self,
+        view: ViewNumber,
+        action: HotShotAction,
+    ) -> anyhow::Result<()>;
+    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
@@ -205,7 +222,7 @@ mod persistence_tests {
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let storage = P::connect(&tmp).await;
+        let mut storage = P::connect(&tmp).await;
 
         // Initially, there is no saved leaf.
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
@@ -232,10 +249,10 @@ mod persistence_tests {
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let storage = P::connect(&tmp).await;
+        let mut storage = P::connect(&tmp).await;
 
         // Initially, there is no saved view.
-        assert_eq!(storage.load_voted_view().await.unwrap(), None);
+        assert_eq!(storage.load_latest_acted_view().await.unwrap(), None);
 
         // Store a view.
         let view1 = ViewNumber::genesis();
@@ -243,7 +260,10 @@ mod persistence_tests {
             .record_action(view1, HotShotAction::Vote)
             .await
             .unwrap();
-        assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view1);
+        assert_eq!(
+            storage.load_latest_acted_view().await.unwrap().unwrap(),
+            view1
+        );
 
         // Store a newer view, make sure storage gets updated.
         let view2 = view1 + 1;
@@ -251,14 +271,20 @@ mod persistence_tests {
             .record_action(view2, HotShotAction::Vote)
             .await
             .unwrap();
-        assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view2);
+        assert_eq!(
+            storage.load_latest_acted_view().await.unwrap().unwrap(),
+            view2
+        );
 
         // Store an old view, make sure storage is unchanged.
         storage
             .record_action(view1, HotShotAction::Vote)
             .await
             .unwrap();
-        assert_eq!(storage.load_voted_view().await.unwrap().unwrap(), view2);
+        assert_eq!(
+            storage.load_latest_acted_view().await.unwrap().unwrap(),
+            view2
+        );
     }
 
     #[async_std::test]
@@ -267,7 +293,7 @@ mod persistence_tests {
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let storage = P::connect(&tmp).await;
+        let mut storage = P::connect(&tmp).await;
 
         assert_eq!(storage.load_high_qc().await.unwrap(), None);
 
@@ -298,15 +324,18 @@ mod persistence_tests {
     }
 
     #[async_std::test]
-    pub async fn test_append_and_collect_garbageion<P: TestablePersistence>() {
+    pub async fn test_append_and_collect_garbage<P: TestablePersistence>() {
         setup_logging();
         setup_backtrace();
 
         let tmp = P::tmp_storage().await;
-        let storage = P::connect(&tmp).await;
+        let mut storage = P::connect(&tmp).await;
 
         // Test append VID
-        assert_eq!(storage.load_vid_shares().await.unwrap(), vec![]);
+        assert_eq!(
+            storage.load_vid_share(ViewNumber::new(0)).await.unwrap(),
+            None
+        );
 
         let leaf = Leaf::genesis(&NodeState::mock());
         let payload = leaf.get_block_payload().unwrap();
@@ -321,26 +350,34 @@ mod persistence_tests {
             recipient_key: pubkey,
         };
 
-        let vid_proposal1 = vid.clone().to_proposal(&privkey).unwrap().clone();
+        let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
 
-        storage.append_vid(&vid_proposal1).await.unwrap();
+        storage.append_vid(&vid_share1).await.unwrap();
+
+        assert_eq!(
+            storage.load_vid_share(ViewNumber::new(1)).await.unwrap(),
+            Some(vid_share1)
+        );
+
         vid.view_number = ViewNumber::new(2);
 
-        let vid_proposal2 = vid.clone().to_proposal(&privkey).unwrap().clone();
-        storage.append_vid(&vid_proposal2).await.unwrap();
+        let vid_share2 = vid.clone().to_proposal(&privkey).unwrap().clone();
+        storage.append_vid(&vid_share2).await.unwrap();
+
+        assert_eq!(
+            storage.load_vid_share(vid.view_number).await.unwrap(),
+            Some(vid_share2)
+        );
 
         vid.view_number = ViewNumber::new(3);
 
-        let vid_proposal3 = vid.to_proposal(&privkey).unwrap().clone();
-        storage.append_vid(&vid_proposal3).await.unwrap();
+        let vid_share3 = vid.clone().to_proposal(&privkey).unwrap().clone();
+        storage.append_vid(&vid_share3).await.unwrap();
 
         assert_eq!(
-            storage.load_vid_shares().await.unwrap(),
-            vec![vid_proposal1, vid_proposal2, vid_proposal3.clone()]
+            storage.load_vid_share(vid.view_number).await.unwrap(),
+            Some(vid_share3.clone())
         );
-
-        // Test append DA proposals
-        assert_eq!(storage.load_da_proposals().await.unwrap(), vec![]);
 
         let mut seed = [0u8; 32];
         let mut rng = rand_chacha::ChaChaRng::from_entropy();
@@ -365,30 +402,59 @@ mod persistence_tests {
 
         storage.append_da(&da_proposal).await.unwrap();
 
+        assert_eq!(
+            storage.load_da_proposal(ViewNumber::new(1)).await.unwrap(),
+            Some(da_proposal.clone())
+        );
+
         let mut da_proposal2 = da_proposal.clone();
         da_proposal2.data.view_number = ViewNumber::new(2);
-        storage.append_da(&da_proposal2).await.unwrap();
+        storage.append_da(&da_proposal2.clone()).await.unwrap();
+
+        assert_eq!(
+            storage
+                .load_da_proposal(da_proposal2.data.view_number)
+                .await
+                .unwrap(),
+            Some(da_proposal2.clone())
+        );
 
         let mut da_proposal3 = da_proposal2.clone();
         da_proposal3.data.view_number = ViewNumber::new(3);
-        storage.append_da(&da_proposal3).await.unwrap();
+        storage.append_da(&da_proposal3.clone()).await.unwrap();
 
         assert_eq!(
-            storage.load_da_proposals().await.unwrap(),
-            vec![da_proposal, da_proposal2, da_proposal3.clone()]
+            storage
+                .load_da_proposal(da_proposal3.data.view_number)
+                .await
+                .unwrap(),
+            Some(da_proposal3.clone())
         );
 
         // Test garbage collection
         // Deleting da proposals and vid shares with view number <=2
         storage.collect_garbage(ViewNumber::new(2)).await.unwrap();
+
+        for i in 0..=2 {
+            assert_eq!(
+                storage.load_da_proposal(ViewNumber::new(i)).await.unwrap(),
+                None
+            );
+
+            assert_eq!(
+                storage.load_vid_share(ViewNumber::new(i)).await.unwrap(),
+                None
+            );
+        }
+
         assert_eq!(
-            storage.load_da_proposals().await.unwrap(),
-            vec![da_proposal3]
+            storage.load_da_proposal(ViewNumber::new(3)).await.unwrap(),
+            Some(da_proposal3)
         );
 
         assert_eq!(
-            storage.load_vid_shares().await.unwrap(),
-            vec![vid_proposal3]
+            storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
+            Some(vid_share3)
         );
     }
 }

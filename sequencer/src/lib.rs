@@ -8,6 +8,8 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use async_std::sync::RwLock;
+use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
@@ -42,24 +44,28 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
+    consensus::CommitmentMap,
     constants::WebServerVersion,
-    data::ViewNumber,
+    data::{DAProposal, VidDisperseShare, ViewNumber},
+    event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
+    message::Proposal,
     signature_key::{BLSPrivKey, BLSPubKey},
+    simple_certificate::QuorumCertificate,
     traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         states::InstanceState,
+        storage::Storage,
     },
+    utils::View,
     ValidatorConfig,
 };
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::marker::PhantomData;
-use std::time::Duration;
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
 use versioned_binary_serialization::version::StaticVersionType;
 
 pub use block::payload::Payload;
@@ -132,7 +138,38 @@ type ElectionConfig = StaticElectionConfig;
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
     type CommitteeNetwork = N::DAChannel;
-    type Storage = P;
+    type Storage = Arc<RwLock<P>>;
+}
+
+#[async_trait]
+impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
+    async fn append_vid(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.write().await.append_vid(proposal).await
+    }
+
+    async fn append_da(
+        &self,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.write().await.append_da(proposal).await
+    }
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+        self.write().await.record_action(view, action).await
+    }
+    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        self.write().await.update_high_qc(high_qc).await
+    }
+
+    async fn update_undecided_state(
+        &self,
+        _leafs: CommitmentMap<Leaf>,
+        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -251,7 +288,7 @@ pub struct L1Params {
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    persistence: P,
+    mut persistence: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
