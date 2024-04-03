@@ -152,6 +152,7 @@ async fn init_consensus(
         .collect::<Vec<_>>();
 
     let config = HotShotConfig {
+        fixed_leader_for_gpuvid: 0,
         num_nodes_with_stake: NonZeroUsize::new(pub_keys.len()).unwrap(),
         num_nodes_without_stake: 0,
         known_nodes_with_stake: known_nodes_with_stake.clone(),
@@ -199,6 +200,7 @@ async fn init_consensus(
                 let membership = MockMembership::create_election(
                     known_nodes_with_stake.clone(),
                     election_config,
+                    0,
                 );
                 let memberships = Memberships {
                     quorum_membership: membership.clone(),
