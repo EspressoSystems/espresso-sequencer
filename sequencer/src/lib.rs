@@ -204,7 +204,7 @@ impl Storage<SeqTypes> for ToBeReplacedStorage<SeqTypes> {
     /// and the undecided state.
     async fn update_undecided_state(
         &self,
-        _leafs: CommitmentMap<Leaf>,
+        _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<
             <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
             View<SeqTypes>,
