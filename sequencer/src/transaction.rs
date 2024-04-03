@@ -66,6 +66,10 @@ impl Transaction {
         &self.payload
     }
 
+    pub fn into_payload(self) -> Vec<u8> {
+        self.payload
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn random(rng: &mut dyn rand::RngCore) -> Self {
         use rand::Rng;

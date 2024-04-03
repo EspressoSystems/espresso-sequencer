@@ -9,8 +9,8 @@ use snafu::OptionExt;
 use std::fmt::Display;
 
 pub mod entry;
-mod ns_table;
 pub mod payload;
+mod payload2;
 pub mod queryable;
 pub mod tables;
 pub mod tx_iterator;

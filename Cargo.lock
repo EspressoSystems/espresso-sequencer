@@ -3388,6 +3388,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fluent-asserter"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62cd2a1243f15c8c9d37acc8ab4ba837e50823561cb124af8406a6f676d04341"
+dependencies = [
+ "lazy_static",
+ "num",
+]
+
+[[package]]
 name = "flume"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6329,6 +6339,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6354,6 +6378,15 @@ dependencies = [
  "rand 0.8.5",
  "smallvec",
  "zeroize",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -6390,6 +6423,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d869c01cc0c455284163fd0092f1f93835385ccab5a98a0dcc497b2f8bf055a9"
 dependencies = [
  "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-bigint",
  "num-integer",
  "num-traits",
 ]
@@ -8269,6 +8314,7 @@ dependencies = [
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
+ "fluent-asserter",
  "futures",
  "hotshot",
  "hotshot-orchestrator",
