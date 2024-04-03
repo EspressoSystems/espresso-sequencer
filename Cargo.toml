@@ -56,6 +56,7 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag =
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.1.19" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.1.19" }
+
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2", features = [
   "test-apis",
   "test-srs",
