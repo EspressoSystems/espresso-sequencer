@@ -8,9 +8,9 @@ import { LightClient as LC } from "../../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientTestScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+    function run(uint32 numBlocksPerEpoch, uint64 numInitValidators)
         external
-        returns (address payable proxyAddress, address admin, LCTest.LightClientState memory)
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         // TODO for a production deployment provide the right genesis state and value
 
@@ -21,7 +21,7 @@ contract DeployLightClientTestScript is Script {
         cmds[3] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LCTest.LightClientState memory state,,) =
+        (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         return deployContract(state, numBlocksPerEpoch);
@@ -29,13 +29,13 @@ contract DeployLightClientTestScript is Script {
 
     function runDemo(uint32 numBlocksPerEpoch)
         external
-        returns (address payable proxyAddress, address admin, LCTest.LightClientState memory)
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         string[] memory cmds = new string[](1);
         cmds[0] = "gen-demo-genesis";
 
         bytes memory result = vm.ffi(cmds);
-        LCTest.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
         return deployContract(state, numBlocksPerEpoch);
     }
@@ -44,9 +44,9 @@ contract DeployLightClientTestScript is Script {
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LCTest.LightClientState memory state, uint32 numBlocksPerEpoch)
-        private
-        returns (address payable proxyAddress, address admin, LCTest.LightClientState memory)
+    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+        public
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
