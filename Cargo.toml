@@ -6,28 +6,28 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-broadcast = "0.7.0"
-clap = { version = "4.4", features = ["derive", "env"] }
-async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.2", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
     "logging-utils",
 ] }
+async-broadcast = "0.7.0"
+async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-lock = "2.8"
 async-trait = "0.1"
+clap = { version = "4.4", features = ["derive", "env"] }
 derive_more = "0.99"
 derivative = "2.2"
 either = { version = "1.10", features = ["serde"] }
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.5.0" }
 toml = "0.8"
-versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization", tag = "0.1.2" }
 tracing = "0.1"
+versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization", tag = "0.1.2" }
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.28" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
 portpicker = "0.1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.5.0" }
