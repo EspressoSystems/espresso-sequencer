@@ -326,6 +326,8 @@ where
     pub hash: TransactionHash<Types>,
     pub rollups: Vec<NamespaceId<Types>>,
     pub height: u64,
+    pub offset: u64,
+    pub num_transactions: u64,
     pub time: Timestamp,
 }
 
@@ -354,6 +356,8 @@ where
         Ok(Self {
             hash: transaction.commitment(),
             height: block.height(),
+            offset: offset as u64,
+            num_transactions: block.num_transactions,
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
             rollups: block.header.namespace_ids_for_offset(offset),
         })
