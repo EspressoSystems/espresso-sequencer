@@ -89,7 +89,7 @@ portpicker = "0.1.1"
 
 # CDN imports
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
-tokio.version = "1"
+tokio = { version = "1" }
 cdn-broker = { workspace = true, features = [
     "runtime-tokio",
     "strong_consistency",
