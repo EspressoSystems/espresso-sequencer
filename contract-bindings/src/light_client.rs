@@ -83,6 +83,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("approvedProver"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("approvedProver"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
@@ -502,6 +518,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("updateApprovedProver"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("updateApprovedProver",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("_prover"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address"),
+                            ),
+                        },],
+                        outputs: ::std::vec![],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("upgradeToAndCall"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("upgradeToAndCall"),
@@ -694,6 +726,13 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("InvalidAddress"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("InvalidAddress"),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("InvalidArgs"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("InvalidArgs"),
@@ -788,6 +827,13 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("UnapprovedProver"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("UnapprovedProver"),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("WrongStakeTableUsed",),
@@ -869,6 +915,14 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, ::std::string::String> {
             self.0
                 .method_hash([173, 60, 177, 204], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `approvedProver` (0x62a04b22) function
+        pub fn approved_prover(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
+            self.0
+                .method_hash([98, 160, 75, 34], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `blocksPerEpoch` (0xf0682054) function
@@ -992,6 +1046,15 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([242, 253, 227, 139], new_owner)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `updateApprovedProver` (0x3d8030c3) function
+        pub fn update_approved_prover(
+            &self,
+            prover: ::ethers::core::types::Address,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([61, 128, 48, 195], prover)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `upgradeToAndCall` (0x4f1ef286) function
@@ -1140,6 +1203,21 @@ pub mod light_client {
     )]
     #[etherror(name = "FailedInnerCall", abi = "FailedInnerCall()")]
     pub struct FailedInnerCall;
+    ///Custom Error type `InvalidAddress` with signature `InvalidAddress()` and selector `0xe6c4247b`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(name = "InvalidAddress", abi = "InvalidAddress()")]
+    pub struct InvalidAddress;
     ///Custom Error type `InvalidArgs` with signature `InvalidArgs()` and selector `0xa1ba07ee`
     #[derive(
         Clone,
@@ -1310,6 +1388,21 @@ pub mod light_client {
     pub struct UUPSUnsupportedProxiableUUID {
         pub slot: [u8; 32],
     }
+    ///Custom Error type `UnapprovedProver` with signature `UnapprovedProver()` and selector `0x073e12eb`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(name = "UnapprovedProver", abi = "UnapprovedProver()")]
+    pub struct UnapprovedProver;
     ///Custom Error type `WrongStakeTableUsed` with signature `WrongStakeTableUsed()` and selector `0x51618089`
     #[derive(
         Clone,
@@ -1341,6 +1434,7 @@ pub mod light_client {
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
         ERC1967NonPayable(ERC1967NonPayable),
         FailedInnerCall(FailedInnerCall),
+        InvalidAddress(InvalidAddress),
         InvalidArgs(InvalidArgs),
         InvalidInitialization(InvalidInitialization),
         InvalidProof(InvalidProof),
@@ -1351,6 +1445,7 @@ pub mod light_client {
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
         UUPSUnauthorizedCallContext(UUPSUnauthorizedCallContext),
         UUPSUnsupportedProxiableUUID(UUPSUnsupportedProxiableUUID),
+        UnapprovedProver(UnapprovedProver),
         WrongStakeTableUsed(WrongStakeTableUsed),
         /// The standard solidity revert string, with selector
         /// Error(string) -- 0x08c379a0
@@ -1381,6 +1476,9 @@ pub mod light_client {
             }
             if let Ok(decoded) = <FailedInnerCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::FailedInnerCall(decoded));
+            }
+            if let Ok(decoded) = <InvalidAddress as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::InvalidAddress(decoded));
             }
             if let Ok(decoded) = <InvalidArgs as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::InvalidArgs(decoded));
@@ -1424,6 +1522,10 @@ pub mod light_client {
             {
                 return Ok(Self::UUPSUnsupportedProxiableUUID(decoded));
             }
+            if let Ok(decoded) = <UnapprovedProver as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::UnapprovedProver(decoded));
+            }
             if let Ok(decoded) =
                 <WrongStakeTableUsed as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -1441,6 +1543,7 @@ pub mod light_client {
                 }
                 Self::ERC1967NonPayable(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FailedInnerCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::InvalidAddress(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::InvalidArgs(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::InvalidInitialization(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -1463,6 +1566,7 @@ pub mod light_client {
                 Self::UUPSUnsupportedProxiableUUID(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::UnapprovedProver(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::WrongStakeTableUsed(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -1488,6 +1592,10 @@ pub mod light_client {
                 }
                 _ if selector
                     == <FailedInnerCall as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InvalidAddress as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ if selector
@@ -1527,6 +1635,10 @@ pub mod light_client {
                     true
                 }
                 _ if selector
+                    == <UnapprovedProver as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
                     == <WrongStakeTableUsed as ::ethers::contract::EthError>::selector() => {
                     true
                 }
@@ -1543,6 +1655,7 @@ pub mod light_client {
                 }
                 Self::ERC1967NonPayable(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FailedInnerCall(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidAddress(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidArgs(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidInitialization(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
@@ -1557,6 +1670,7 @@ pub mod light_client {
                 Self::UUPSUnsupportedProxiableUUID(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::UnapprovedProver(element) => ::core::fmt::Display::fmt(element, f),
                 Self::WrongStakeTableUsed(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
@@ -1585,6 +1699,11 @@ pub mod light_client {
     impl ::core::convert::From<FailedInnerCall> for LightClientErrors {
         fn from(value: FailedInnerCall) -> Self {
             Self::FailedInnerCall(value)
+        }
+    }
+    impl ::core::convert::From<InvalidAddress> for LightClientErrors {
+        fn from(value: InvalidAddress) -> Self {
+            Self::InvalidAddress(value)
         }
     }
     impl ::core::convert::From<InvalidArgs> for LightClientErrors {
@@ -1635,6 +1754,11 @@ pub mod light_client {
     impl ::core::convert::From<UUPSUnsupportedProxiableUUID> for LightClientErrors {
         fn from(value: UUPSUnsupportedProxiableUUID) -> Self {
             Self::UUPSUnsupportedProxiableUUID(value)
+        }
+    }
+    impl ::core::convert::From<UnapprovedProver> for LightClientErrors {
+        fn from(value: UnapprovedProver) -> Self {
+            Self::UnapprovedProver(value)
         }
     }
     impl ::core::convert::From<WrongStakeTableUsed> for LightClientErrors {
@@ -1896,6 +2020,21 @@ pub mod light_client {
         abi = "UPGRADE_INTERFACE_VERSION()"
     )]
     pub struct UpgradeInterfaceVersionCall;
+    ///Container type for all input parameters for the `approvedProver` function with signature `approvedProver()` and selector `0x62a04b22`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "approvedProver", abi = "approvedProver()")]
+    pub struct ApprovedProverCall;
     ///Container type for all input parameters for the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,
@@ -2125,6 +2264,23 @@ pub mod light_client {
     pub struct TransferOwnershipCall {
         pub new_owner: ::ethers::core::types::Address,
     }
+    ///Container type for all input parameters for the `updateApprovedProver` function with signature `updateApprovedProver(address)` and selector `0x3d8030c3`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "updateApprovedProver", abi = "updateApprovedProver(address)")]
+    pub struct UpdateApprovedProverCall {
+        pub prover: ::ethers::core::types::Address,
+    }
     ///Container type for all input parameters for the `upgradeToAndCall` function with signature `upgradeToAndCall(address,bytes)` and selector `0x4f1ef286`
     #[derive(
         Clone,
@@ -2183,6 +2339,7 @@ pub mod light_client {
         Minor(MinorCall),
         Patch(PatchCall),
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
+        ApprovedProver(ApprovedProverCall),
         BlocksPerEpoch(BlocksPerEpochCall),
         ComputeStakeTableComm(ComputeStakeTableCommCall),
         CurrentEpoch(CurrentEpochCall),
@@ -2197,6 +2354,7 @@ pub mod light_client {
         RenounceOwnership(RenounceOwnershipCall),
         States(StatesCall),
         TransferOwnership(TransferOwnershipCall),
+        UpdateApprovedProver(UpdateApprovedProverCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
         VotingThreshold(VotingThresholdCall),
@@ -2219,6 +2377,11 @@ pub mod light_client {
                 <UpgradeInterfaceVersionCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeInterfaceVersion(decoded));
+            }
+            if let Ok(decoded) =
+                <ApprovedProverCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ApprovedProver(decoded));
             }
             if let Ok(decoded) =
                 <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2283,6 +2446,11 @@ pub mod light_client {
                 return Ok(Self::TransferOwnership(decoded));
             }
             if let Ok(decoded) =
+                <UpdateApprovedProverCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::UpdateApprovedProver(decoded));
+            }
+            if let Ok(decoded) =
                 <UpgradeToAndCallCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeToAndCall(decoded));
@@ -2309,6 +2477,7 @@ pub mod light_client {
                 Self::UpgradeInterfaceVersion(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::ApprovedProver(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::ComputeStakeTableComm(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -2327,6 +2496,9 @@ pub mod light_client {
                 Self::RenounceOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::States(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TransferOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::UpdateApprovedProver(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::UpgradeToAndCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VotingStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -2342,6 +2514,7 @@ pub mod light_client {
                 Self::Minor(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Patch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ApprovedProver(element) => ::core::fmt::Display::fmt(element, f),
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
@@ -2356,6 +2529,7 @@ pub mod light_client {
                 Self::RenounceOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::States(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
+                Self::UpdateApprovedProver(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingThreshold(element) => ::core::fmt::Display::fmt(element, f),
@@ -2380,6 +2554,11 @@ pub mod light_client {
     impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
+        }
+    }
+    impl ::core::convert::From<ApprovedProverCall> for LightClientCalls {
+        fn from(value: ApprovedProverCall) -> Self {
+            Self::ApprovedProver(value)
         }
     }
     impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
@@ -2450,6 +2629,11 @@ pub mod light_client {
     impl ::core::convert::From<TransferOwnershipCall> for LightClientCalls {
         fn from(value: TransferOwnershipCall) -> Self {
             Self::TransferOwnership(value)
+        }
+    }
+    impl ::core::convert::From<UpdateApprovedProverCall> for LightClientCalls {
+        fn from(value: UpdateApprovedProverCall) -> Self {
+            Self::UpdateApprovedProver(value)
         }
     }
     impl ::core::convert::From<UpgradeToAndCallCall> for LightClientCalls {
@@ -2523,6 +2707,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct UpgradeInterfaceVersionReturn(pub ::std::string::String);
+    ///Container type for all return fields from the `approvedProver` function with signature `approvedProver()` and selector `0x62a04b22`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ApprovedProverReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `blocksPerEpoch` function with signature `blocksPerEpoch()` and selector `0xf0682054`
     #[derive(
         Clone,

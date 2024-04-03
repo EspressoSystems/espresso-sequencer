@@ -75,6 +75,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
+    /// @notice updating the finalized state is permissioned to one approved prover for this release
+    address public approvedProver;
+
     // === Data Structure ===
     //
     /// @notice The finalized HotShot state (as the digest of the entire HotShot state)
@@ -113,6 +116,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidProof();
     /// @notice Wrong stake table used, should match `finalizedState`
     error WrongStakeTableUsed();
+    /// @notice Invalid address
+    error InvalidAddress();
+    /// @notice Only an approved prover can perform this actionx
+    error UnapprovedProver();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -183,6 +190,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
     ) external {
+        if (msg.sender != approvedProver) {
+            revert UnapprovedProver();
+        }
         if (
             newState.viewNum <= getFinalizedState().viewNum
                 || newState.blockHeight <= getFinalizedState().blockHeight
@@ -285,5 +295,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 state.stakeTableAmountComm
             )
         );
+    }
+
+    function updateApprovedProver(address _prover) public onlyOwner {
+        if (_prover == address(0)) {
+            revert InvalidAddress();
+        }
+        approvedProver = _prover;
     }
 }
