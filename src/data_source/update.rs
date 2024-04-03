@@ -106,10 +106,6 @@ where
                             leaf.get_block_header().clone(),
                             vid_share.common.clone(),
                         ),
-                        // TODO we should get just a single share from VID dispersal, but currently
-                        // HotShot sends us _all_ shares, and we don't know which one is for us. For
-                        // no we arbitrarily take the first share, this should be fixed in HotShot
-                        // soon.
                         Some(vid_share.share.clone()),
                     )
                     .await?;
