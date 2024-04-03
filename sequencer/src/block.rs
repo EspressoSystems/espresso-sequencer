@@ -6,8 +6,10 @@ use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
+use std::fmt::Display;
 
 pub mod entry;
+mod ns_table;
 pub mod payload;
 pub mod queryable;
 pub mod tables;
@@ -17,6 +19,90 @@ use entry::TxTableEntryWord;
 use payload::Payload;
 use tables::NameSpaceTable;
 
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct Payload2 {
+    // Sequence of bytes representing the concatenated payloads for each namespace
+    #[serde(with = "base64_bytes")]
+    payload: Vec<u8>,
+
+    // Sequence of bytes representing the namespace table
+    ns_table: Vec<u8>,
+    // TODO(X) Revisit caching of frequently used items
+    //
+    // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`.
+    // We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
+    // #[derivative(Hash = "ignore")]
+    // #[derivative(PartialEq = "ignore")]
+    // #[serde(skip)]
+    // pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
+}
+
+impl Display for Payload2 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
+    }
+}
+
+impl Committable for Payload2 {
+    fn commit(&self) -> commit::Commitment<Self> {
+        todo!()
+    }
+}
+
+impl BlockPayload for Payload2 {
+    type Error = crate::Error;
+    type Transaction = Transaction;
+    type Metadata = Vec<u8>; // namespace table bytes
+
+    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
+    // https://github.com/EspressoSystems/HotShot/issues/2115
+    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+
+    // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
+    fn from_transactions(
+        _transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        todo!()
+    }
+
+    fn from_bytes<I>(_encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        todo!()
+    }
+
+    // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
+    fn genesis() -> (Self, Self::Metadata) {
+        todo!()
+    }
+
+    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
+    // https://github.com/EspressoSystems/HotShot/issues/2115
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(self.payload.iter().cloned())
+    }
+
+    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
+    fn transaction_commitments(
+        &self,
+        _metadata: &Self::Metadata,
+    ) -> Vec<Commitment<Self::Transaction>> {
+        todo!()
+    }
+
+    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
+    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+        todo!()
+    }
+
+    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
+    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
+        todo!()
+    }
+}
+
+// OLD: DELETE
 pub type NsTable = NameSpaceTable<TxTableEntryWord>;
 
 impl BlockPayload for Payload<TxTableEntryWord> {
