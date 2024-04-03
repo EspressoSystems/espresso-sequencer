@@ -222,7 +222,7 @@ where
                     tracing::warn!("failed to store fetched leaf {height}: {err}");
                 }
             }
-            Self::Continuation { callback } => callback.run(leaf.leaf.block_header),
+            Self::Continuation { callback } => callback.run(leaf.leaf.get_block_header().clone()),
         }
     }
 }

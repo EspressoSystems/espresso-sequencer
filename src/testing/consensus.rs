@@ -91,6 +91,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         state_key_pair: state_key_pairs[node_id].clone(),
                     };
                     let config = HotShotConfig {
+                        fixed_leader_for_gpuvid: 0,
                         num_nodes_with_stake: num_staked_nodes,
                         num_nodes_without_stake: 0,
                         known_nodes_with_stake: known_nodes_with_stake.clone(),
@@ -140,6 +141,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         let membership = MockMembership::create_election(
                             known_nodes_with_stake.clone(),
                             election_config.clone(),
+                            0,
                         );
 
                         let memberships = Memberships {

@@ -715,7 +715,7 @@ mod test {
 
         // Mock up some data and add a block to the store.
         let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
-        let block = BlockQueryData::new(leaf.block_header.clone(), MockPayload::genesis());
+        let block = BlockQueryData::new(leaf.get_block_header().clone(), MockPayload::genesis());
         hotshot_qs.insert_block(block.clone()).await.unwrap();
 
         let module_state =
