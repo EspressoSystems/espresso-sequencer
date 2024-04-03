@@ -208,7 +208,7 @@ impl Storage<SeqTypes> for ToBeReplacedStorage<SeqTypes> {
     /// and the undecided state.
     async fn update_undecided_state(
         &self,
-        _leafs: CommitmentMap<Leaf>,
+        _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<
             <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
             View<SeqTypes>,
@@ -543,6 +543,7 @@ pub mod testing {
             let master_map = MasterMap::new();
 
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+                fixed_leader_for_gpuvid: 0,
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 num_nodes_without_stake: 0,

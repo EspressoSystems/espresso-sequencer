@@ -26,7 +26,7 @@ import { PlonkVerifier as V } from "../src/libraries/PlonkVerifier.sol";
 /// @dev Common helpers/utils for PlonkVerifier tests
 contract PlonkVerifierCommonTest is Test {
     /// @dev Sanitize a single value to be valid scalar field Bn254::Fr.
-    function sanitizeScalarField(uint256 a) public view returns (uint256) {
+    function sanitizeScalarField(uint256 a) public pure returns (uint256) {
         a = bound(a, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(a));
         return a;
@@ -34,7 +34,7 @@ contract PlonkVerifierCommonTest is Test {
 
     /// @dev Sanitize all values in `a` to be valid scalar fields Bn254::Fr.
     /// This is helpful to sanitize fuzzer-generated random `uint[]` values.
-    function sanitizeScalarFields(uint256[] memory a) public view returns (uint256[] memory) {
+    function sanitizeScalarFields(uint256[] memory a) public pure returns (uint256[] memory) {
         for (uint256 i = 0; i < a.length; i++) {
             a[i] = sanitizeScalarField(a[i]);
         }

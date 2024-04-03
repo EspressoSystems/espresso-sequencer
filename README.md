@@ -110,7 +110,7 @@ forge doc
 
 #### Deployment
 
-To deploy the contracts to a local testnet, first run a dev chain (e. g. `anvil`), then run
+To deploy the contracts to a local testnet, first run a dev chain (e.g. `anvil`), then run
 
     forge script DeployHotShot --broadcast --rpc-url local
 
