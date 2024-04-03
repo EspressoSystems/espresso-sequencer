@@ -28,7 +28,7 @@ ark-ed-on-bn254 = "0.4"
 ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.2", features = [
   "logging-utils",
 ] }
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
@@ -51,7 +51,8 @@ hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.0" }
+#hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.0" }
+hotshot-events-service = { path = "../hotshot-events-service" }
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2", features = [
   "test-apis",
   "test-srs",
