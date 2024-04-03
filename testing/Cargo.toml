@@ -12,6 +12,7 @@ slow-tests = []
 gpu-vid = ["hotshot-types/gpu-vid"]
 
 [dependencies]
+automod = "1.0.14"
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }

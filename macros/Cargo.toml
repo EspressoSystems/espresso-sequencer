@@ -1,7 +1,7 @@
 [package]
 name = "hotshot-macros"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+edition = { workspace = true }
 description = "Macros for hotshot tests"
 
 [dependencies]
@@ -9,6 +9,7 @@ description = "Macros for hotshot tests"
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
 proc-macro2 = "1"
+derive_builder = "0.20"
 
 [lib]
 proc-macro = true

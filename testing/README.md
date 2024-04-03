@@ -1,6 +1,6 @@
 # Purpose
 
-Infrastructure and integration tests for hotshot.
+Infrastructure and integration tests for hotshot. Since a lot of our tests can take a while to run, they've been split into groups to allow for parallelization in CI.
 
 # Usage
 
