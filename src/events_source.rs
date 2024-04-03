@@ -1,5 +1,6 @@
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
 use hotshot_types::{
     data::{DAProposal, QuorumProposal},
@@ -11,6 +12,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tide_disco::method::ReadState;
 const RETAINED_EVENTS_COUNT: usize = 4096;
 
 /// A builder event
@@ -209,5 +211,17 @@ impl<Types: NodeType> EventsStreamer<Types> {
                 non_staked_node_count: self.non_staked_node_count,
             },
         }
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType> ReadState for EventsStreamer<Types> {
+    type State = Self;
+
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(self).await
     }
 }
