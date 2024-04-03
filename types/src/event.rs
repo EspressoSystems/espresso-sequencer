@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -34,8 +34,8 @@ pub struct LeafInfo<TYPES: NodeType> {
     pub state: Arc<<TYPES as NodeType>::ValidatedState>,
     /// Optional application-specific state delta.
     pub delta: Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
-    /// Optional VID disperse data.
-    pub vid: Option<VidDisperse<TYPES>>,
+    /// Optional VID share data.
+    pub vid_share: Option<VidDisperseShare<TYPES>>,
 }
 
 impl<TYPES: NodeType> LeafInfo<TYPES> {
@@ -44,13 +44,13 @@ impl<TYPES: NodeType> LeafInfo<TYPES> {
         leaf: Leaf<TYPES>,
         state: Arc<<TYPES as NodeType>::ValidatedState>,
         delta: Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
-        vid: Option<VidDisperse<TYPES>>,
+        vid_share: Option<VidDisperseShare<TYPES>>,
     ) -> Self {
         Self {
             leaf,
             state,
             delta,
-            vid,
+            vid_share,
         }
     }
 }
