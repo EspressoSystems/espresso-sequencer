@@ -65,10 +65,10 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::{collections::BTreeMap, time::Duration};
-use std::{collections::HashMap, net::Ipv4Addr};
 use std::{fmt::Debug, sync::Arc};
-use std::{marker::PhantomData, net::IpAddr};
 use versioned_binary_serialization::version::StaticVersionType;
 
 pub use block::payload::Payload;
@@ -204,7 +204,7 @@ impl Storage<SeqTypes> for ToBeReplacedStorage<SeqTypes> {
     /// and the undecided state.
     async fn update_undecided_state(
         &self,
-        _leafs: CommitmentMap<Leaf>,
+        _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<
             <SeqTypes as hotshot_types::traits::node_implementation::NodeType>::Time,
             View<SeqTypes>,
@@ -344,12 +344,11 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        public_ip: None,
+        advertise_address: None,
         network_config_file: None,
     };
-    // This "public" IP only applies to libp2p network configurations, so we can supply any value here
-    let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string());
+
+    let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
@@ -365,10 +364,15 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         }
         None => {
             tracing::info!("loading network config from orchestrator");
-            let config =
-                NetworkConfig::get_complete_config(&orchestrator_client, my_config.clone(), None)
-                    .await
-                    .0;
+            let config = NetworkConfig::get_complete_config(
+                &orchestrator_client,
+                None,
+                my_config.clone(),
+                None,
+                None,
+            )
+            .await?
+            .0;
             tracing::info!(
                 node_id = config.node_index,
                 stake_table = ?config.config.known_nodes_with_stake,
@@ -500,6 +504,7 @@ pub mod testing {
             let master_map = MasterMap::new();
 
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+                fixed_leader_for_gpuvid: 0,
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 num_nodes_without_stake: 0,
@@ -638,7 +643,7 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .block_payload
+                        .get_block_payload()
                         .as_ref()?
                         .transaction_commitments(leaf.get_block_header().metadata())
                         .contains(&commitment)
@@ -741,7 +746,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.block_header.clone();
+                let header = leaf.get_block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

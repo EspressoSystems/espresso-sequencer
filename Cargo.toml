@@ -32,7 +32,7 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
   "logging-utils",
 ] }
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
-async-trait = "0.1.77"
+async-trait = "0.1"
 base64 = "0.22"
 base64-bytes = "0.1"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
@@ -42,10 +42,10 @@ es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch
 dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.0" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.32" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.32" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.1" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.32" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.28" }
@@ -66,6 +66,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2" }
 snafu = "0.8"
+strum = { version = "0.26", features = ["derive"] }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.5.0" }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.5.0" }
