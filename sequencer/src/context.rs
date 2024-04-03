@@ -79,7 +79,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         let membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
             election_config,
-            0
+            0,
         );
         let memberships = Memberships {
             quorum_membership: membership.clone(),

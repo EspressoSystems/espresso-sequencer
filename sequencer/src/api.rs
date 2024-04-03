@@ -688,7 +688,10 @@ mod api_tests {
             .unwrap()
             .unwrap();
         assert_eq!(new_leaf.height(), height as u64 + 1);
-        assert_eq!(new_leaf.leaf().get_parent_commitment(), chain[height - 1].hash());
+        assert_eq!(
+            new_leaf.leaf().get_parent_commitment(),
+            chain[height - 1].hash()
+        );
 
         // Ensure the new chain is consistent with the old chain.
         let new_chain: Vec<LeafQueryData<SeqTypes>> = client
