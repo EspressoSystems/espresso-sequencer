@@ -1,5 +1,5 @@
 [route.account]
-PATH = ["/catchup/:view/account/:address", "/account/:address"]
+PATH = ["/:view/account/:address", "/account/:address"]
 ":view" = "Integer"
 ":address" = "Literal"
 DOC = """
@@ -23,7 +23,7 @@ Merkle _non-membership_ proof.
 """
 
 [route.blocks]
-PATH = ["/catchup/:view/blocks", "/blocks"]
+PATH = ["/:view/blocks", "/blocks"]
 ":view" = "Integer"
 DOC = """
 Get the blocks Merkle tree frontier.

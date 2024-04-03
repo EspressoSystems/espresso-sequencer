@@ -5,7 +5,7 @@
 ## Install system dependencies
 
     sudo apt-get update
-    sudo apt-get install -y curl cmake pkg-config libssl-dev protobuf-compiler git postgresql-client lsb-release gpg
+    sudo apt-get install -y curl cmake pkg-config libssl-dev protobuf-compiler git postgresql-client lsb-release gpg capnproto
 
 ## Install just
 

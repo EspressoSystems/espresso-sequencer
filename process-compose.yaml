@@ -7,9 +7,7 @@ environment:
   - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
-  - ESPRESSO_SEQUENCER_L1_WS_PROVIDER=ws://localhost:$ESPRESSO_SEQUENCER_L1_WS_PORT
   - ESPRESSO_DEMO_L1_HTTP_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
-  - ESPRESSO_DEMO_L1_WS_PROVIDER=$ESPRESSO_SEQUENCER_L1_WS_PROVIDER
   - ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:$ESPRESSO_STATE_RELAY_SERVER_PORT
 
 processes:
@@ -21,10 +19,20 @@ processes:
       exec:
         command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
       initial_delay_seconds: 5
-      period_seconds: 5
+      period_seconds: 6
       timeout_seconds: 5
       success_threshold: 1
       failure_threshold: 20
+
+  deploy-contracts:
+    # The contract addresses are implicitly inherited from .env. We need to unset these or else the
+    # script will think they're already deployed.
+    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
+    depends_on:
+      demo-l1-network:
+        condition: process_healthy
+      orchestrator:
+        condition: process_healthy
 
   orchestrator:
     command: orchestrator
@@ -70,9 +78,6 @@ processes:
 
   state-relay-server:
     command: state-relay-server
-    environment:
-      - ESPRESSO_STATE_RELAY_SERVER_PORT
-      - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
     readiness_probe:
       http_get:
         scheme: http
@@ -81,15 +86,8 @@ processes:
         path: /healthcheck
 
   prover-service:
-    command: ./scripts/launch-prover-service
+    command: state-prover -d
     environment:
-      - ESPRESSO_STATE_RELAY_SERVER_URL
-      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL
-      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
-      - ESPRESSO_SEQUENCER_DEPLOY_LIGHTCLIENT_CONTRACT
-      - ESPRESSO_SEQUENCER_HOTSHOT_NUM_BLOCKS_PER_EPOCH
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
     depends_on:
       orchestrator:
@@ -98,9 +96,11 @@ processes:
         condition: process_healthy
       demo-l1-network:
         condition: process_healthy
+      deploy-contracts:
+        condition: process_completed
 
   sequencer0:
-    command: sequencer -- http -- query -- status -- submit
+    command: sequencer -- http -- query -- catchup -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
@@ -108,10 +108,7 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_0
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=10
-      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -128,7 +125,7 @@ processes:
       failure_threshold: 100
 
   sequencer1:
-    command: sequencer -- http -- query -- status
+    command: sequencer -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
@@ -136,10 +133,7 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_1
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=11
-      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -156,17 +150,14 @@ processes:
       failure_threshold: 100
 
   sequencer2:
-    command: sequencer -- http -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_2
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=12
-      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -183,17 +174,14 @@ processes:
       failure_threshold: 100
 
   sequencer3:
-    command: sequencer -- http -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_3
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=13
-      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -210,17 +198,14 @@ processes:
       failure_threshold: 100
 
   sequencer4:
-    command: sequencer -- http -- status
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_4
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=14
-      - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -237,12 +222,14 @@ processes:
       failure_threshold: 100
 
   commitment-task:
-    command: commitment-task --deploy
+    command: commitment-task
     depends_on:
       sequencer0:
         condition: process_healthy
       demo-l1-network:
         condition: process_healthy
+      deploy-contracts:
+        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
@@ -253,9 +240,6 @@ processes:
 
   submit-transactions:
     command: submit-transactions
-    environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
-      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -264,5 +248,18 @@ processes:
         scheme: http
         host: localhost
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  nasty-client:
+    command: nasty-client
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_NASTY_CLIENT_PORT
         path: /healthcheck
       failure_threshold: 100

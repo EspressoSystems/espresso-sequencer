@@ -10,16 +10,17 @@ use std::{sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
 #[derive(Debug, Clone)]
-struct Client<ServerError> {
-    inner: surf_disco::Client<ServerError>,
+struct Client<ServerError, Ver: StaticVersionType> {
+    inner: surf_disco::Client<ServerError, Ver>,
     url: Url,
 }
 
-impl Client<ServerError> {
+impl<Ver: StaticVersionType> Client<ServerError, Ver> {
     pub fn new(url: Url) -> Self {
         Self {
             inner: surf_disco::Client::new(url.clone()),
@@ -27,7 +28,7 @@ impl Client<ServerError> {
         }
     }
 
-    pub fn get<T: DeserializeOwned>(&self, route: &str) -> Request<T, ServerError> {
+    pub fn get<T: DeserializeOwned>(&self, route: &str) -> Request<T, ServerError, Ver> {
         self.inner.get(route)
     }
 }
@@ -45,12 +46,12 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct StatePeers {
-    clients: Vec<Client<ServerError>>,
+pub struct StatePeers<Ver: StaticVersionType> {
+    clients: Vec<Client<ServerError, Ver>>,
     interval: Duration,
 }
 
-impl StatePeers {
+impl<Ver: StaticVersionType> StatePeers<Ver> {
     pub fn from_urls(urls: Vec<Url>) -> Self {
         if urls.is_empty() {
             panic!("Cannot create StatePeers with no peers");
@@ -79,7 +80,7 @@ impl StatePeers {
                 );
                 match client
                     .get::<AccountQueryData>(&format!(
-                        "state/catchup/{}/account/{account}",
+                        "catchup/{}/account/{account}",
                         view.get_u64(),
                     ))
                     .send()
@@ -101,7 +102,7 @@ impl StatePeers {
 }
 
 #[async_trait]
-impl StateCatchup for StatePeers {
+impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
     async fn fetch_accounts(
         &self,
         view: ViewNumber,
@@ -127,7 +128,7 @@ impl StateCatchup for StatePeers {
             for client in self.clients.iter() {
                 tracing::info!("Fetching frontier for view {view:?} from {}", client.url);
                 match client
-                    .get::<BlocksFrontier>(&format!("state/catchup/{}/blocks", view.get_u64()))
+                    .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
                     .send()
                     .await
                 {

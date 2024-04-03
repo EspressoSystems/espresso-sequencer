@@ -370,7 +370,7 @@ mod test_headers {
     use crate::{
         catchup::mock::MockStateCatchup,
         l1_client::L1Client,
-        state::{validate_and_apply_proposal, BlockMerkleTree, FeeMerkleTree},
+        state::{validate_and_apply_proposal, BlockMerkleTree, Delta, FeeMerkleTree},
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -391,36 +391,12 @@ mod test_headers {
         l1_head: u64,
         l1_finalized: Option<L1BlockInfo>,
         timestamp: u64,
+        l1_deposits: Vec<FeeInfo>,
 
         // Expected new header info.
         expected_timestamp: u64,
         expected_l1_head: u64,
         expected_l1_finalized: Option<L1BlockInfo>,
-    }
-
-    struct GenesisForTest {
-        pub instance_state: NodeState,
-        pub validated_state: ValidatedState,
-        pub leaf: Leaf,
-        pub header: Header,
-        pub ns_table: NameSpaceTable<TxTableEntryWord>,
-    }
-
-    impl Default for GenesisForTest {
-        fn default() -> Self {
-            let instance_state = NodeState::mock();
-            let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf = Leaf::genesis(&instance_state);
-            let header = leaf.get_block_header().clone();
-            let ns_table = leaf.get_block_payload().unwrap().get_ns_table().clone();
-            Self {
-                instance_state,
-                validated_state,
-                leaf,
-                header,
-                ns_table,
-            }
-        }
     }
 
     impl TestCase {
@@ -451,7 +427,7 @@ mod test_headers {
                 Vec::from([(fee_info.account(), fee_info.amount())]),
             )
             .unwrap();
-            let validated_state = ValidatedState {
+            let mut validated_state = ValidatedState {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
             };
@@ -464,7 +440,7 @@ mod test_headers {
                     head: self.l1_head,
                     finalized: self.l1_finalized,
                 },
-                &[], // TODO: l1 deposits
+                &self.l1_deposits,
                 self.timestamp,
                 &validated_state,
                 genesis.instance_state.builder_address,
@@ -473,6 +449,15 @@ mod test_headers {
             assert_eq!(header.timestamp, self.expected_timestamp);
             assert_eq!(header.l1_head, self.expected_l1_head);
             assert_eq!(header.l1_finalized, self.expected_l1_finalized);
+
+            // Check deposits were inserted before computing the fee merkle tree root.
+            for fee_info in self.l1_deposits {
+                validated_state.insert_fee_deposit(fee_info).unwrap();
+            }
+            assert_eq!(
+                validated_state.fee_merkle_tree.commitment(),
+                header.fee_merkle_tree_root,
+            );
 
             assert_eq!(
                 block_merkle_tree,
@@ -601,6 +586,56 @@ mod test_headers {
     }
 
     #[test]
+    fn test_new_header_deposits_one() {
+        TestCase {
+            l1_deposits: vec![FeeInfo::new(Address::default(), 1)],
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_deposits_many() {
+        TestCase {
+            l1_deposits: [
+                (Address::default(), 1),
+                (Address::default(), 2),
+                (Address::random(), 3),
+            ]
+            .iter()
+            .map(|(address, amount)| FeeInfo::new(*address, *amount))
+            .collect(),
+            ..Default::default()
+        }
+        .run()
+    }
+
+    struct GenesisForTest {
+        pub instance_state: NodeState,
+        pub validated_state: ValidatedState,
+        pub leaf: Leaf,
+        pub header: Header,
+        pub ns_table: NameSpaceTable<TxTableEntryWord>,
+    }
+
+    impl Default for GenesisForTest {
+        fn default() -> Self {
+            let instance_state = NodeState::mock();
+            let validated_state = ValidatedState::genesis(&instance_state).0;
+            let leaf = Leaf::genesis(&instance_state);
+            let header = leaf.get_block_header().clone();
+            let ns_table = leaf.get_block_payload().unwrap().get_ns_table().clone();
+            Self {
+                instance_state,
+                validated_state,
+                leaf,
+                header,
+                ns_table,
+            }
+        }
+    }
+
+    #[test]
     fn test_validate_proposal_error_cases() {
         let genesis = GenesisForTest::default();
 
@@ -617,11 +652,17 @@ mod test_headers {
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
+        let mut delta = Delta::default();
 
         // Advance `proposal.height` to trigger validation error.
-        let result =
-            validate_and_apply_proposal(&mut validated_state, &parent_leaf, &proposal, vec![])
-                .unwrap_err();
+        let result = validate_and_apply_proposal(
+            &mut validated_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal,
+            vec![],
+        )
+        .unwrap_err();
         assert_eq!(
             format!("{}", result.root_cause()),
             "Invalid Height Error: 0, 0"
@@ -630,9 +671,14 @@ mod test_headers {
         // proposed `Header` root should include parent +
         // parent.commit
         proposal.height += 1;
-        let result =
-            validate_and_apply_proposal(&mut validated_state, &parent_leaf, &proposal, vec![])
-                .unwrap_err();
+        let result = validate_and_apply_proposal(
+            &mut validated_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal,
+            vec![],
+        )
+        .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
         assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
@@ -699,8 +745,16 @@ mod test_headers {
 
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
-        validate_and_apply_proposal(&mut proposal_state, &parent_leaf, &proposal.clone(), vec![])
-            .unwrap();
+
+        let mut delta = Delta::default();
+        validate_and_apply_proposal(
+            &mut proposal_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal.clone(),
+            vec![],
+        )
+        .unwrap();
         assert_eq!(
             proposal_state.block_merkle_tree.commitment(),
             proposal.block_merkle_tree_root

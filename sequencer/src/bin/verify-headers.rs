@@ -11,6 +11,7 @@ use std::cmp::max;
 use std::process::exit;
 use std::time::Duration;
 use surf_disco::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Utility program to verify properties of headers sequenced by HotShot.
 #[derive(Clone, Debug, Parser)]
@@ -50,11 +51,11 @@ struct Options {
     url: Url,
 }
 
-type SequencerClient = surf_disco::Client<hotshot_query_service::Error>;
+type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
 
-async fn verify_header(
+async fn verify_header<Ver: StaticVersionType>(
     opt: &Options,
-    seq: &SequencerClient,
+    seq: &SequencerClient<Ver>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -113,7 +114,7 @@ async fn verify_header(
     (header, ok)
 }
 
-async fn get_header(seq: &SequencerClient, height: usize) -> Header {
+async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: usize) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))
@@ -167,7 +168,9 @@ async fn main() {
     setup_backtrace();
 
     let opt = Arc::new(Options::parse());
-    let seq = Arc::new(SequencerClient::new(opt.url.clone()));
+    let seq = Arc::new(SequencerClient::<es_version::SequencerVersion>::new(
+        opt.url.clone(),
+    ));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

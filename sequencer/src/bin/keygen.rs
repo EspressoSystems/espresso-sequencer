@@ -1,56 +1,106 @@
 //! Utility program to generate keypairs
 
-use async_compatibility_layer::logging::setup_logging;
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
-use anyhow::{self, bail, Context};
+use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
+use ethers::utils::hex;
 use hotshot::types::SignatureKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
+use tracing::info_span;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {
     #[default]
+    #[display(fmt = "all")]
+    All,
     #[display(fmt = "bls")]
     Bls,
     #[display(fmt = "schnorr")]
     Schnorr,
 }
 
+impl Scheme {
+    fn gen(self, seed: [u8; 32], index: u64, env_file: &mut impl Write) -> anyhow::Result<()> {
+        match self {
+            Self::All => {
+                Self::Bls.gen(seed, index, env_file)?;
+                Self::Schnorr.gen(seed, index, env_file)?;
+            }
+            Self::Bls => {
+                let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index);
+                writeln!(
+                    env_file,
+                    "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY={priv_key}"
+                )?;
+                tracing::info!(%pub_key, "generated staking key")
+            }
+            Self::Schnorr => {
+                let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index);
+                writeln!(
+                    env_file,
+                    "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={}",
+                    key_pair.sign_key_ref()
+                )?;
+                tracing::info!(pub_key = %key_pair.ver_key(), "generated state key");
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Utility program to generate keypairs
+///
+/// With no options, this program generates the keys needed to run a single instance of the Espresso
+/// sequencer. Options can be given to control the number or type of keys generated.
+///
+/// Generated secret keys are written to a file in .env format, which can directly be used to
+/// configure a sequencer node. Public information about the generated keys is printed to stdout.
 #[derive(Clone, Debug, Parser)]
 struct Options {
-    /// Seed for generating keypair.
-    /// If not provided, a random seed will be generated.
+    /// Seed for generating keys.
+    ///
+    /// If not provided, a random seed will be generated using system entropy.
     #[clap(long, short = 's', value_parser = parse_seed)]
     seed: Option<[u8; 32]>,
 
     /// Signature scheme to generate.
-    #[clap(long, default_value = "bls")]
+    ///
+    /// Sequencer nodes require both a BLS key (called the staking key) and a Schnorr key (called
+    /// the state key). By default, this program generates these keys in pairs, to make it easy to
+    /// configure sequencer nodes, but this option can be specified to generate keys for only one of
+    /// the signature schemes.
+    #[clap(long, default_value = "all")]
     scheme: Scheme,
 
-    /// Number of keypairs to generate.
+    /// Number of setups to generate.
+    ///
     /// Default is 1.
-    #[clap(long, short = 'n', default_value = "1")]
+    #[clap(long, short = 'n', name = "N", default_value = "1")]
     num: usize,
+
+    /// Write private keys to .env files under DIR.
+    ///
+    /// DIR must be a directory. If it does not exist, one will be created. Private key setups will
+    /// be written to files immediately under DIR, with names like 0.env, 1.env, etc. for 0 through
+    /// N - 1. The random seed used to generate the keys will also be written to a file in DIR
+    /// called .seed.
+    #[clap(short, long, name = "OUT")]
+    out: PathBuf,
 }
 
 fn parse_seed(s: &str) -> Result<[u8; 32], anyhow::Error> {
-    // Remove the leading and trailing brackets if present
-    let s = s.trim_start_matches('[').trim_end_matches(']');
-
-    // Split the string by comma and parse each element as u8
-    let mut seed: [u8; 32] = [0; 32];
-    let parts: Vec<&str> = s.split(',').collect();
-    if parts.len() != 32 {
-        bail!("Invalid seed length: {}", parts.len());
-    }
-
-    for (i, part) in parts.iter().enumerate() {
-        seed[i] = part.trim().parse().context("Failed to parse seed")?;
-    }
-    Ok(seed)
+    let bytes = hex::decode(s)?;
+    bytes
+        .try_into()
+        .map_err(|bytes: Vec<u8>| anyhow!("invalid seed length: {} (expected 32)", bytes.len()))
 }
 
 fn gen_default_seed() -> [u8; 32] {
@@ -61,33 +111,38 @@ fn gen_default_seed() -> [u8; 32] {
     seed
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     setup_logging();
+    setup_backtrace();
 
     let opts = Options::parse();
 
-    tracing::info!("Generating {} {} keypairs", opts.num, opts.scheme);
+    tracing::debug!(
+        "Generating {} keypairs with scheme {}",
+        opts.num,
+        opts.scheme
+    );
+
+    // Create output dir if necessary.
+    fs::create_dir_all(&opts.out)?;
 
     let seed = opts.seed.unwrap_or_else(|| {
-        tracing::info!("No seed provided, generating a random seed");
+        tracing::debug!("No seed provided, generating a random seed");
         gen_default_seed()
     });
+    fs::write(opts.out.join(".seed"), hex::encode(seed))?;
 
-    println!("Seed: {:?}\n", seed);
     for index in 0..opts.num {
-        match opts.scheme {
-            Scheme::Bls => {
-                let (pubkey, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index as u64);
-                println!("PrivateKey: {} PublicKey: {}\n", priv_key, pubkey);
-            }
-            Scheme::Schnorr => {
-                let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index as u64);
-                println!(
-                    "PrivateKey: {} PublicKey: {}\n",
-                    key_pair.sign_key_ref(),
-                    key_pair.ver_key()
-                );
-            }
-        }
+        let span = info_span!("gen", index);
+        let _enter = span.enter();
+        tracing::info!("generating new key set");
+
+        let path = opts.out.join(format!("{index}.env"));
+        let mut file = File::options().write(true).create(true).open(&path)?;
+        opts.scheme.gen(seed, index as u64, &mut file)?;
+
+        tracing::info!("private keys written to {}", path.display());
     }
+
+    Ok(())
 }

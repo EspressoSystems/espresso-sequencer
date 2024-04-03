@@ -21,7 +21,7 @@ env:
 
 jobs:
   contracts:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - name: Install Nix
@@ -85,8 +85,4 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           nix develop --accept-flake-config -c forge test -vvv
-
-      - name: Gas Report
-        run: |
-          nix develop --accept-flake-config -c forge test --mt testFuzz_ConsecutiveUpdate --gas-report
-          nix develop --accept-flake-config -c forge test --mc PlonkVerifier_verify_Test --mt test_verify_succeeds -vvvv
+          

@@ -47,6 +47,9 @@ jobs:
         with:
           prefix-key: v1-rust
 
+      - name: Install capnproto
+        uses: ./.github/actions/install-capnp
+
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
@@ -61,17 +64,17 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
-            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
+            target/release/deploy
+            target/release/keygen
+            target/release/nasty-client
 
   build-arm:
-    runs-on: [self-hosted, ARM64]
-    container:
-      image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: buildjet-4vcpu-ubuntu-2204-arm
     steps:
       - name: Fix submodule permissions check
         run: |
@@ -84,6 +87,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Install Capn Proto
+        run: |
+          apt-get update && apt-get install -y capnproto
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -101,12 +108,14 @@ jobs:
             target/release/web-server
             target/release/state-relay-server
             target/release/state-prover
-            target/release/gen-demo-genesis
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
+            target/release/deploy
+            target/release/keygen
+            target/release/nasty-client
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -119,6 +128,8 @@ jobs:
       orchestrator-tag: ${{ steps.orchestrator.outputs.tags }}
       commitment-task-tag: ${{ steps.commitment-task.outputs.tags }}
       submit-transactions-tag: ${{ steps.submit-transactions.outputs.tags }}
+      deploy-tag: ${{ steps.deploy.outputs.tags }}
+      nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -190,11 +201,17 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/submit-transactions
 
-      - name: Generate example rollup metadata
+      - name: Generate deploy metadata
         uses: docker/metadata-action@v5
-        id: example-rollup
+        id: deploy
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
+          images: ghcr.io/espressosystems/espresso-sequencer/deploy
+
+      - name: Generate nasty-client metadata
+        uses: docker/metadata-action@v5
+        id: nasty-client
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
@@ -266,6 +283,26 @@ jobs:
           tags: ${{ steps.submit-transactions.outputs.tags }}
           labels: ${{ steps.submit-transactions.outputs.labels }}
 
+      - name: Build and push deploy docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/deploy.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.deploy.outputs.tags }}
+          labels: ${{ steps.deploy.outputs.labels }}
+
+      - name: Build and push nasty-client docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/nasty-client.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.nasty-client.outputs.tags }}
+          labels: ${{ steps.nasty-client.outputs.labels }}
+
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -288,6 +325,8 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.orchestrator-tag }}
           docker pull ${{ needs.build-dockers.outputs.commitment-task-tag }}
           docker pull ${{ needs.build-dockers.outputs.submit-transactions-tag }}
+          docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
+          docker pull ${{ needs.build-dockers.outputs.nasty-client-tag }}
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -297,6 +336,8 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.orchestrator-tag }} ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
           docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
           docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+          docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
+          docker tag ${{ needs.build-dockers.outputs.nasty-client-tag }} ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
 
       - name: Test docker demo
         run: |

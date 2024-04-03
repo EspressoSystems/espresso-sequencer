@@ -18,7 +18,10 @@ use hotshot::{
     types::{Event, EventType},
     HotShotInitializer,
 };
-use hotshot_types::{event::LeafInfo, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    event::LeafInfo, simple_certificate::QuorumCertificate,
+    traits::node_implementation::ConsensusTime,
+};
 use std::cmp::max;
 
 pub mod fs;
@@ -127,6 +130,9 @@ pub trait SequencerPersistence: Send + Sync + 'static {
             state,
             validated_state,
             view,
+            QuorumCertificate::genesis(),
+            Default::default(),
+            Default::default(),
         ))
     }
 

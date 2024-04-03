@@ -6,14 +6,21 @@ use super::{
     },
     endpoints, fs, sql,
     update::update_loop,
+    StorageState,
 };
-use crate::{context::SequencerContext, network, persistence};
+use crate::{
+    context::SequencerContext,
+    network, persistence,
+    state::{BlockMerkleTree, FeeMerkleTree},
+    SeqTypes,
+};
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
 use futures::future::BoxFuture;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
+    merklized_state::MerklizedStateDataSource,
     status::{self, UpdateStatusData},
     Error,
 };
@@ -22,6 +29,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     App, Url,
 };
+use versioned_binary_serialization::version::StaticVersionType;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -29,6 +37,7 @@ pub struct Options {
     pub query: Option<Query>,
     pub submit: Option<Submit>,
     pub status: Option<Status>,
+    pub catchup: Option<Catchup>,
     pub state: Option<State>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
@@ -41,6 +50,7 @@ impl From<Http> for Options {
             query: None,
             submit: None,
             status: None,
+            catchup: None,
             state: None,
             storage_fs: None,
             storage_sql: None,
@@ -75,6 +85,12 @@ impl Options {
         self
     }
 
+    /// Add a catchup API module.
+    pub fn catchup(mut self, opt: Catchup) -> Self {
+        self.catchup = Some(opt);
+        self
+    }
+
     /// Add a state API module.
     pub fn state(mut self, opt: State) -> Self {
         self.state = Some(opt);
@@ -91,20 +107,34 @@ impl Options {
     /// The function `init_context` is used to create a sequencer context from a metrics object and
     /// optional saved consensus state. The metrics object is created from the API data source, so
     /// that consensus will populuate metrics that can then be read and served by the API.
-    pub async fn serve<N, F>(mut self, init_context: F) -> anyhow::Result<SequencerContext<N>>
+    pub async fn serve<N, F, Ver: StaticVersionType + 'static>(
+        mut self,
+        init_context: F,
+        bind_version: Ver,
+    ) -> anyhow::Result<SequencerContext<N, Ver>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
+        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module::<N, sql::DataSource>(query_opt, opt, init_context)
-                    .await
+                self.init_with_query_module_sql::<N, sql::DataSource, Ver>(
+                    query_opt,
+                    opt,
+                    init_context,
+                    bind_version,
+                )
+                .await
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module::<N, fs::DataSource>(query_opt, opt, init_context)
-                    .await
+                self.init_with_query_module_fs::<N, fs::DataSource, Ver>(
+                    query_opt,
+                    opt,
+                    init_context,
+                    bind_version,
+                )
+                .await
             } else {
                 bail!("query module requested but not storage provided");
             }
@@ -113,18 +143,18 @@ impl Options {
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
             let mut context = init_context(ds.populate_metrics()).await;
-            let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
+            let mut app = App::<_, Error, Ver>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, super::State::from(&context)),
             )));
 
             // Initialize status API.
-            let status_api = status::define_api(&Default::default())?;
+            let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
             self.init_hotshot_modules(&mut app)?;
             context.spawn(
                 "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port)),
+                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
             Ok(context)
         } else {
@@ -135,28 +165,31 @@ impl Options {
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
             let mut context = init_context(Box::new(NoMetrics)).await;
-            let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
+            let mut app =
+                App::<_, Error, Ver>::with_state(RwLock::new(super::State::from(&context)));
 
             self.init_hotshot_modules(&mut app)?;
             context.spawn(
                 "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port)),
+                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
             );
             Ok(context)
         }
     }
 
-    async fn init_with_query_module<N, D>(
-        self,
-        query_opt: Query,
-        mod_opt: D::Options,
-        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N>>,
-    ) -> anyhow::Result<SequencerContext<N>>
+    async fn init_app_modules<N, D, Ver: StaticVersionType + 'static>(
+        &self,
+        ds: D,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        bind_version: Ver,
+    ) -> anyhow::Result<(
+        SequencerContext<N, Ver>,
+        App<Arc<RwLock<StorageState<N, D, Ver>>>, Error, Ver>,
+    )>
     where
         N: network::Type,
         D: SequencerDataSource + Send + Sync + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers), false).await?;
         let metrics = ds.populate_metrics();
 
         // Start up handle
@@ -169,31 +202,92 @@ impl Options {
         // the first events emitted by consensus.
         let events = context.get_event_stream();
 
-        let state: endpoints::AvailState<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(
-            ds,
-            (&context).into(),
-        )));
-        let mut app = App::<_, Error>::with_state(state.clone());
+        let state: endpoints::AvailState<N, D, Ver> = Arc::new(RwLock::new(
+            ExtensibleDataSource::new(ds, (&context).into()),
+        ));
+        let mut app = App::<_, Error, Ver>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
-            let status_api =
-                status::define_api::<endpoints::AvailState<N, D>>(&Default::default())?;
+            let status_api = status::define_api::<endpoints::AvailState<N, D, Ver>, Ver>(
+                &Default::default(),
+                bind_version,
+            )?;
             app.register_module("status", status_api)?;
         }
 
         // Initialize availability and node APIs (these both use the same data source).
-        let availability_api = endpoints::availability::<N, D>()?;
-        app.register_module("availability", availability_api)?;
-        app.register_module("node", endpoints::node::<N, D>()?)?;
+        app.register_module("availability", endpoints::availability(bind_version)?)?;
+        app.register_module("node", endpoints::node(bind_version)?)?;
 
         self.init_hotshot_modules(&mut app)?;
         context.spawn("query storage updater", update_loop(state, events));
+
+        Ok((context, app))
+    }
+
+    async fn init_with_query_module_fs<N, D, Ver: StaticVersionType + 'static>(
+        &self,
+        query_opt: Query,
+        mod_opt: D::Options,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        bind_version: Ver,
+    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    where
+        N: network::Type,
+        D: SequencerDataSource + Send + Sync + 'static,
+    {
+        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+
+        let (mut context, app) = self
+            .init_app_modules(ds, init_context, bind_version)
+            .await?;
+
         context.spawn(
             "API server",
-            app.serve(format!("0.0.0.0:{}", self.http.port)),
+            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
         );
+        Ok(context)
+    }
 
+    async fn init_with_query_module_sql<N, D, Ver: StaticVersionType + 'static>(
+        self,
+        query_opt: Query,
+        mod_opt: D::Options,
+        init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, Ver>>,
+        bind_version: Ver,
+    ) -> anyhow::Result<SequencerContext<N, Ver>>
+    where
+        N: network::Type,
+        D: SequencerDataSource
+            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
+            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+        let (mut context, mut app) = self
+            .init_app_modules(ds, init_context, bind_version)
+            .await?;
+
+        if self.state.is_some() {
+            // Initialize merklized state module for block merkle tree
+            app.register_module(
+                "state/blocks",
+                endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
+            )?;
+            // Initialize merklized state module for fee merkle tree
+            app.register_module(
+                "state/fees",
+                endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
+            )?;
+        }
+
+        context.spawn(
+            "API server",
+            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+        );
         Ok(context)
     }
 
@@ -202,12 +296,16 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
+    fn init_hotshot_modules<N, S, Ver: StaticVersionType + 'static>(
+        &self,
+        app: &mut App<S, Error, Ver>,
+    ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         S::State: Send + Sync + SubmitDataSource<N> + StateSignatureDataSource<N> + StateDataSource,
         N: network::Type,
     {
+        let bind_version = Ver::instance();
         // Initialize submit API
         if self.submit.is_some() {
             let submit_api = endpoints::submit()?;
@@ -215,13 +313,13 @@ impl Options {
         }
 
         // Initialize state API.
-        if self.state.is_some() {
+        if self.catchup.is_some() {
             tracing::info!("initializing state API");
-            let state_api = endpoints::state()?;
-            app.register_module("state", state_api)?;
+            let catchup_api = endpoints::catchup(bind_version)?;
+            app.register_module("catchup", catchup_api)?;
         }
 
-        let state_signature_api = endpoints::state_signature()?;
+        let state_signature_api = endpoints::state_signature(bind_version)?;
         app.register_module("state-signature", state_signature_api)?;
 
         Ok(())
@@ -247,9 +345,9 @@ pub struct Submit;
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Status;
 
-/// Options for the state API module.
+/// Options for the catchup API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct State;
+pub struct Catchup;
 
 /// Options for the query API module.
 #[derive(Parser, Clone, Debug, Default)]
@@ -258,3 +356,7 @@ pub struct Query {
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
     pub peers: Vec<Url>,
 }
+
+/// Options for the state API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct State;

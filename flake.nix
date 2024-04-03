@@ -162,6 +162,7 @@
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
+              excludes = [ "contract-bindings/artifacts" ];
             };
             nixpkgs-fmt.enable = true;
           };
@@ -188,6 +189,7 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
             jq
+            capnproto
 
             # Rust tools
             cargo-audit
@@ -250,6 +252,7 @@
             curl
             protobuf # to compile libp2p-autonat
             toolchain
+            capnproto
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
         };
@@ -264,13 +267,14 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
+            capnproto
             toolchain
             grcov
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
           CARGO_INCREMENTAL = "0";
           shellHook = ''
-           RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
+            RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
           '';
           RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
         };
@@ -288,6 +292,7 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
+            capnproto
             stableToolchain
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;

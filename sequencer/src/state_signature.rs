@@ -28,6 +28,7 @@ use jf_primitives::{
 use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -36,7 +37,7 @@ pub mod relay_server;
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 #[derive(Debug)]
-pub struct StateSigner {
+pub struct StateSigner<Ver: StaticVersionType> {
     /// Key pair for signing a new light client state
     key_pair: StateKeyPair,
 
@@ -47,10 +48,10 @@ pub struct StateSigner {
     stake_table_comm: StakeTableCommitmentType,
 
     /// The state relay server url
-    relay_server_client: Option<Client<ServerError>>,
+    relay_server_client: Option<Client<ServerError, Ver>>,
 }
 
-impl StateSigner {
+impl<Ver: StaticVersionType> StateSigner<Ver> {
     pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
         Self {
             key_pair,

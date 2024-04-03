@@ -8,7 +8,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{election::static_committee::GeneralStaticCommittee, implementations::MemoryStorage},
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
@@ -22,6 +22,7 @@ use hotshot_types::{
 };
 use std::fmt::Display;
 use url::Url;
+use versioned_binary_serialization::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
@@ -34,7 +35,7 @@ pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct SequencerContext<N: network::Type> {
+pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
     handle: Consensus<N>,
@@ -44,7 +45,7 @@ pub struct SequencerContext<N: network::Type> {
     node_index: u64,
 
     /// Context for generating state signatures.
-    state_signer: Arc<StateSigner>,
+    state_signer: Arc<StateSigner<Ver>>,
 
     /// An orchestrator to wait for before starting consensus.
     #[derivative(Debug = "ignore")]
@@ -56,7 +57,8 @@ pub struct SequencerContext<N: network::Type> {
     detached: bool,
 }
 
-impl<N: network::Type> SequencerContext<N> {
+impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver> {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,
@@ -65,6 +67,7 @@ impl<N: network::Type> SequencerContext<N> {
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
+        _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
         let initializer = persistence.load_consensus_state(instance_state).await?;
@@ -83,6 +86,7 @@ impl<N: network::Type> SequencerContext<N> {
             vid_membership: membership.clone(),
             view_sync_membership: membership,
         };
+        let da_storage = Default::default();
 
         let stake_table_commit =
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -93,11 +97,11 @@ impl<N: network::Type> SequencerContext<N> {
             config.my_own_validator_config.private_key.clone(),
             node_id,
             config,
-            MemoryStorage::empty(),
             memberships,
             networks,
             initializer,
             ConsensusMetricsValue::new(metrics),
+            da_storage,
         )
         .await?
         .0;
@@ -115,7 +119,7 @@ impl<N: network::Type> SequencerContext<N> {
         handle: Consensus<N>,
         persistence: impl SequencerPersistence,
         node_index: u64,
-        state_signer: StateSigner,
+        state_signer: StateSigner<Ver>,
     ) -> Self {
         let events = handle.get_event_stream();
         let mut ctx = Self {
@@ -140,7 +144,7 @@ impl<N: network::Type> SequencerContext<N> {
     }
 
     /// Return a reference to the consensus state signer.
-    pub fn state_signer(&self) -> Arc<StateSigner> {
+    pub fn state_signer(&self) -> Arc<StateSigner<Ver>> {
         self.state_signer.clone()
     }
 
@@ -216,7 +220,7 @@ impl<N: network::Type> SequencerContext<N> {
     }
 }
 
-impl<N: network::Type> Drop for SequencerContext<N> {
+impl<N: network::Type, Ver: StaticVersionType + 'static> Drop for SequencerContext<N, Ver> {
     fn drop(&mut self) {
         if !self.detached {
             async_std::task::block_on(self.shut_down());
@@ -224,10 +228,10 @@ impl<N: network::Type> Drop for SequencerContext<N> {
     }
 }
 
-async fn handle_events(
+async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     mut persistence: impl SequencerPersistence,
-    state_signer: Arc<StateSigner>,
+    state_signer: Arc<StateSigner<Ver>>,
 ) {
     while let Some(event) = events.next().await {
         tracing::debug!(?event, "consensus event");

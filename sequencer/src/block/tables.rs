@@ -76,10 +76,7 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     ///
     /// TODO return Result or Option? Want to avoid catch-all Error type :(
     pub fn lookup(&self, ns_id: NamespaceId) -> Option<usize> {
-        // TODO don't use TxTable, need a new method
-        let ns_table_len = TxTable::get_tx_table_len(&self.bytes);
-
-        (0..ns_table_len).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
+        (0..self.len()).find(|&ns_index| ns_id == self.get_table_entry(ns_index).0)
     }
 
     fn add_new_entry_ns_id(&mut self, id: NamespaceId) -> Result<(), Error> {
@@ -106,7 +103,8 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     // Returned value is guaranteed to be no larger than the number of ns table entries that could possibly fit into `ns_table_bytes`.
     pub fn len(&self) -> usize {
         let left = self.get_table_len(0).try_into().unwrap_or(0);
-        let right = (self.bytes.len() - TxTableEntry::byte_len()) / (2 * TxTableEntry::byte_len());
+        let right = self.bytes.len().saturating_sub(TxTableEntry::byte_len())
+            / (2 * TxTableEntry::byte_len());
         std::cmp::min(left, right)
     }
 
@@ -165,28 +163,29 @@ impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {
     }
 
     /// Like `tx_payload_range` except for namespaces.
-    /// Returns the byte range for a ns in the block payload bytes.
+    /// Returns the ns id and the ns byte range in the block payload bytes.
     ///
     /// Ensures that the returned range is valid: `start <= end <= block_payload_byte_len`.
     pub fn get_payload_range(
         &self,
         ns_index: usize,
         block_payload_byte_len: usize,
-    ) -> Range<usize> {
-        let end = std::cmp::min(self.get_table_entry(ns_index).1, block_payload_byte_len);
+    ) -> (NamespaceId, Range<usize>) {
+        let (ns_id, offset) = self.get_table_entry(ns_index);
+        let end = std::cmp::min(offset, block_payload_byte_len);
         let start = if ns_index == 0 {
             0
         } else {
             std::cmp::min(self.get_table_entry(ns_index - 1).1, end)
         };
-        start..end
+        (ns_id, start..end)
     }
 }
 
 pub struct TxTable {}
 impl TxTable {
     // Parse `TxTableEntry::byte_len()`` bytes from `raw_payload`` starting at `offset` into a `TxTableEntry`
-    pub(crate) fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
+    fn get_len(raw_payload: &[u8], offset: usize) -> TxTableEntry {
         let end = std::cmp::min(
             offset.saturating_add(TxTableEntry::byte_len()),
             raw_payload.len(),
@@ -212,7 +211,7 @@ impl TxTable {
     // returns tx_offset
     // if tx_index would reach beyond ns_bytes then return 0.
     // tx_offset is not checked, could be anything
-    pub(crate) fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
+    fn get_table_entry(ns_bytes: &[u8], tx_index: usize) -> usize {
         // get the range for tx_offset bytes in tx table
         let tx_offset_range = {
             let start = std::cmp::min(
@@ -233,6 +232,29 @@ impl TxTable {
         tx_offset_bytes[..tx_offset_range.len()].copy_from_slice(&ns_bytes[tx_offset_range]);
         usize::try_from(TxTableEntry::from_bytes(&tx_offset_bytes).unwrap_or(TxTableEntry::zero()))
             .unwrap_or(0)
+    }
+
+    /// Ensures that the returned range is valid: `start <= end <= ns_bytes`.
+    pub fn get_payload_range(ns_bytes: &[u8], tx_idx: usize, tx_len: usize) -> Range<usize> {
+        let tx_payloads_offset = tx_len
+            .saturating_add(1)
+            .saturating_mul(TxTableEntry::byte_len());
+
+        let end = std::cmp::min(
+            TxTable::get_table_entry(ns_bytes, tx_idx).saturating_add(tx_payloads_offset),
+            ns_bytes.len(),
+        );
+
+        let start = if tx_idx == 0 {
+            tx_payloads_offset
+        } else {
+            std::cmp::min(
+                TxTable::get_table_entry(ns_bytes, tx_idx - 1).saturating_add(tx_payloads_offset),
+                end,
+            )
+        };
+
+        start..end
     }
 }
 #[cfg(test)]

@@ -63,6 +63,14 @@ build-docker-images:
 # generate rust bindings for contracts
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
+
+    # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
+    # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
+    # the source tree so that the deploy script can be compiled whenever the bindings are up to
+    # date, without needed to recompile the contracts.
+    mkdir -p contract-bindings/artifacts
+    jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
+
     cargo fmt --all
     cargo sort -g -w
 

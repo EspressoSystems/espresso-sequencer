@@ -36,6 +36,8 @@ commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = { workspace = true }
+dotenvy = { workspace = true }
+es-version = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
@@ -46,6 +48,7 @@ hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
+hotshot-state-prover = { workspace = true }
 hotshot-task = { workspace = true }
 
 # Dependencies for feature `testing`
@@ -67,6 +70,7 @@ serde = { workspace = true }
 serde_json = "^1.0.113"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
+strum = { workspace = true }
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
 time = "0.3"
@@ -81,3 +85,4 @@ typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
 url = { workspace = true }
+versioned-binary-serialization = { workspace = true }

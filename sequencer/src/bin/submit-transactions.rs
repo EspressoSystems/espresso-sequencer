@@ -6,6 +6,7 @@ use bytesize::ByteSize;
 use clap::Parser;
 use commit::{Commitment, Committable};
 use derive_more::From;
+use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -23,6 +24,7 @@ use std::{
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -131,7 +133,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client = Client::<Error>::new(opt.url.clone());
+    let client = Client::<Error, SequencerVersion>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -146,12 +148,13 @@ async fn main() {
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
+            SEQUENCER_VERSION,
         ));
     }
 
     // Start healthcheck endpoint once tasks are running.
     if let Some(port) = opt.port {
-        spawn(server(port));
+        spawn(server(port, SEQUENCER_VERSION));
     }
 
     // Keep track of the results.
@@ -221,12 +224,13 @@ struct SubmittedTransaction {
     submitted_at: Instant,
 }
 
-async fn submit_transactions(
+async fn submit_transactions<Ver: StaticVersionType>(
     opt: Options,
     mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
+    _: Ver,
 ) {
-    let client = Client::<Error>::new(opt.url.clone());
+    let client = Client::<Error, Ver>::new(opt.url.clone());
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -261,9 +265,9 @@ async fn submit_transactions(
     }
 }
 
-async fn server(port: u16) {
-    if let Err(err) = App::<(), ServerError>::with_state(())
-        .serve(format!("0.0.0.0:{port}"))
+async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
+    if let Err(err) = App::<(), ServerError, Ver>::with_state(())
+        .serve(format!("0.0.0.0:{port}"), bind_version)
         .await
     {
         tracing::error!("web server exited: {err}");

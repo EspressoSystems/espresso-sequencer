@@ -72,19 +72,13 @@ cleanup(){
 }
 
 mkdir -p ${WORKDIR}/target/$ARCH/release
-for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "gen-demo-genesis"; do
+for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "nasty-client"; do
   cp -v "${CARGO_TARGET_DIR}/release/$binary" ${WORKDIR}/target/$ARCH/release
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
     patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary
   fi
 done
-
-# Copy the contracts
-cp -v -r "${CONTRACTS_DIR}" ${WORKDIR}
-cp -v "./foundry.toml" ${WORKDIR}
-mkdir -p ${WORKDIR}/scripts
-cp -v "./scripts/launch-prover-service" ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
@@ -94,3 +88,5 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}

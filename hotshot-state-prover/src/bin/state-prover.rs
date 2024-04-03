@@ -1,6 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
+use es_version::SEQUENCER_VERSION;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
@@ -46,7 +47,7 @@ struct Args {
     /// Index of a funded account derived from eth-mnemonic.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
+        env = "ESPRESSO_SEQUENCER_STATE_PROVER_ACCOUNT_INDEX",
         default_value = "0"
     )]
     eth_account_index: u32,
@@ -110,9 +111,9 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        run_prover_service(config).await;
+        run_prover_service(config, SEQUENCER_VERSION).await;
     } else {
         // Run light client state update once
-        run_prover_once(config).await;
+        run_prover_once(config, SEQUENCER_VERSION).await;
     }
 }
