@@ -872,11 +872,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         unimplemented!("Resuming not implemented for the Libp2p network");
     }
 
-    #[instrument(name = "Libp2pNetwork::ready_nonblocking", skip_all)]
-    async fn is_ready(&self) -> bool {
-        self.inner.is_ready.load(Ordering::Relaxed)
-    }
-
     #[instrument(name = "Libp2pNetwork::shut_down", skip_all)]
     fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
     where

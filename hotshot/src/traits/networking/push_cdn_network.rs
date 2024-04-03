@@ -143,8 +143,8 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// marshal.
     ///
     /// # Errors
-    /// If we fail the initial connection
-    pub async fn new(
+    /// If we fail to build the config
+    pub fn new(
         marshal_endpoint: String,
         topics: Vec<String>,
         keypair: KeyPair<WrappedSignatureKey<TYPES::SignatureKey>>,
@@ -162,8 +162,8 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
             .keypair(keypair)
             .build()?;
 
-        // Create the client, performing the initial connection
-        let client = Client::new(config).await?;
+        // Create the client from the config
+        let client = Client::new(config);
 
         Ok(Self {
             client,
@@ -338,9 +338,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
                     // Create our client
                     let client = Arc::new(PushCdnNetwork {
-                        client: Client::new(client_config)
-                            .await
-                            .expect("failed to create client"),
+                        client: Client::new(client_config),
                         #[cfg(feature = "hotshot-testing")]
                         is_paused: Arc::from(AtomicBool::new(false)),
                     });
@@ -367,19 +365,15 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         self.is_paused.store(true, Ordering::Relaxed);
     }
 
-    /// Resumse sending and receiving on the PushCDN network.
+    /// Resume sending and receiving on the PushCDN network.
     fn resume(&self) {
         #[cfg(feature = "hotshot-testing")]
         self.is_paused.store(false, Ordering::Relaxed);
     }
 
-    /// The clients form an initial connection when created, so we don't have to wait.
-    async fn wait_for_ready(&self) {}
-
-    /// The clients form an initial connection when created, so we can return `true` here
-    /// always.
-    async fn is_ready(&self) -> bool {
-        true
+    /// Wait for the client to initialize the connection
+    async fn wait_for_ready(&self) {
+        self.client.ensure_initialized().await;
     }
 
     /// TODO: shut down the networks. Unneeded for testing.

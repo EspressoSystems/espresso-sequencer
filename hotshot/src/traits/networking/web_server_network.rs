@@ -726,11 +726,6 @@ impl<TYPES: NodeType + 'static, NetworkVersion: StaticVersionType + 'static>
         error!("Resuming CDN network");
         self.inner.running.store(true, Ordering::Relaxed);
     }
-    /// checks if the network is ready
-    /// nonblocking
-    async fn is_ready(&self) -> bool {
-        self.inner.connected.load(Ordering::Relaxed)
-    }
 
     /// Blocks until the network is shut down
     /// then returns true

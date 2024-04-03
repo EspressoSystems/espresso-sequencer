@@ -315,10 +315,6 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     /// Blocks until the network is successfully initialized
     async fn wait_for_ready(&self);
 
-    /// checks if the network is ready
-    /// nonblocking
-    async fn is_ready(&self) -> bool;
-
     /// Blocks until the network is shut down
     /// then returns true
     fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>

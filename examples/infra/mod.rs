@@ -749,8 +749,7 @@ where
             topics.iter().map(ToString::to_string).collect(),
             keypair,
         )
-        .await
-        .expect("failed to perform initial client connection");
+        .expect("failed to create network");
 
         PushCdnDaRun {
             config,

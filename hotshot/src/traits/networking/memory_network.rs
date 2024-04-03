@@ -224,11 +224,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
         unimplemented!("Resuming not implemented for the Memory network");
     }
 
-    #[instrument(name = "MemoryNetwork::ready_nonblocking")]
-    async fn is_ready(&self) -> bool {
-        true
-    }
-
     #[instrument(name = "MemoryNetwork::shut_down")]
     fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
     where
