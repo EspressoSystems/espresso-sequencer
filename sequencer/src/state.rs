@@ -320,7 +320,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
     /// proposal descends from parent. Returns updated `ValidatedState`.
     #[tracing::instrument(
         skip_all,
-        fields(view = ?parent_leaf.view_number, height = parent_leaf.block_header.height),
+        fields(view = ?parent_leaf.get_view_number(), height = parent_leaf.get_block_header().height),
     )]
     async fn validate_and_apply_header(
         &self,
