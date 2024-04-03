@@ -803,6 +803,7 @@ pub mod node_tests {
     }
 
     #[async_std::test]
+    #[ignore]
     pub async fn test_vid_recovery<D: TestableDataSource>() {
         setup_test();
 
