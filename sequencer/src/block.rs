@@ -1,4 +1,7 @@
-use crate::{BlockBuildingSnafu, Transaction};
+use crate::{
+    block::payload2::{num_nss_as_bytes, NamespaceBuilder},
+    BlockBuildingSnafu, NamespaceId, Transaction,
+};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
@@ -6,7 +9,7 @@ use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 pub mod entry;
 pub mod payload;
@@ -60,8 +63,23 @@ impl BlockPayload for Payload2 {
 
     // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
     fn from_transactions(
-        _transactions: impl IntoIterator<Item = Self::Transaction>,
+        transactions: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
+        // add each tx to its namespace
+        let mut namespaces = HashMap::<NamespaceId, NamespaceBuilder>::new();
+        for tx in transactions.into_iter() {
+            let namespace = namespaces.entry(tx.namespace()).or_default();
+            namespace.append_tx(tx);
+        }
+
+        // build block payload and namespace table
+        let mut payload = Vec::new();
+        let mut ns_table = Vec::from(num_nss_as_bytes(namespaces.len()));
+        for (ns_id, namespace) in namespaces {
+            payload.extend(namespace.into_bytes());
+            // TODO no easy way to convert NamespaceId into bytes...
+            // ns_table.extend()
+        }
         todo!()
     }
 

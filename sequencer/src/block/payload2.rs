@@ -4,6 +4,7 @@ use self::tx_table::{num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_
 use crate::Transaction;
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Default)]
 pub struct NamespaceBuilder {
     tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
@@ -38,22 +39,64 @@ impl NamespaceBuilder {
     }
 }
 
+// TODO better way to do this?
+pub use tx_table::{
+    ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
+    NUM_NSS_BYTE_LEN,
+};
+
+// TODO rename from tx_table, this mod also has ns_table utils
 mod tx_table {
     use std::mem::size_of;
 
     pub const NUM_TXS_BYTE_LEN: usize = 4;
     pub const TX_OFFSET_BYTE_LEN: usize = 4;
+    pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
+    pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
+    pub const NS_ID_BYTE_LEN: usize = 4;
 
+    /// Serialize `num_txs` into `NUM_TXS_BYTE_LEN` bytes.
+    ///
+    /// # Panics
+    /// If `num_txs` cannot fit into `NUM_TXS_BYTE_LEN` bytes.
     pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes(num_txs)
     }
 
+    /// Serialize `tx_offset` into `TX_OFFSET_BYTE_LEN` bytes.
+    ///
+    /// # Panics
+    /// If `tx_offset` cannot fit into `TX_OFFSET_BYTE_LEN` bytes.
     pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
         usize_to_bytes(tx_offset)
     }
 
-    /// Return `n` as an array of `BYTE_LEN` bytes in little-endian form,
-    /// padding with 0 as needed.
+    /// Serialize `num_nss` into `NUM_NSS_BYTE_LEN` bytes.
+    ///
+    /// # Panics
+    /// If `num_nss` cannot fit into `NUM_NSS_BYTE_LEN` bytes.
+    pub fn num_nss_as_bytes(num_nss: usize) -> [u8; NUM_NSS_BYTE_LEN] {
+        usize_to_bytes(num_nss)
+    }
+
+    /// Serialize `ns_offset` into `NS_OFFSET_BYTE_LEN` bytes.
+    ///
+    /// # Panics
+    /// If `ns_offset` cannot fit into `NS_OFFSET_BYTE_LEN` bytes.
+    pub fn ns_offset_as_bytes(ns_offset: usize) -> [u8; NS_OFFSET_BYTE_LEN] {
+        usize_to_bytes(ns_offset)
+    }
+
+    /// Serialize `ns_id` into `NS_ID_BYTE_LEN` bytes.
+    ///
+    /// # Panics
+    /// If `ns_id` cannot fit into `NS_ID_BYTE_LEN` bytes.
+    pub fn ns_id_as_bytes(ns_id: usize) -> [u8; NS_ID_BYTE_LEN] {
+        usize_to_bytes(ns_id)
+    }
+
+    /// Serialize `n` into `BYTE_LEN` bytes in little-endian form, padding with
+    /// 0 as needed.
     ///
     /// # Panics
     /// If `n` cannot fit into `BYTE_LEN` bytes.
