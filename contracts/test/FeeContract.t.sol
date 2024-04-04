@@ -17,160 +17,6 @@ import { FeeContract } from "../src/FeeContract.sol";
 import { DeployFeeContractScript } from "../script/Fee.s.sol";
 
 /// @title FeeContract Test
-contract FeeContractTest is Test {
-    FeeContract public feeContract;
-
-    function setUp() public {
-        feeContract = new FeeContract();
-    }
-
-    //test deposits work
-    function testFuzz_deposit(address user, uint256 amount) public payable {
-        vm.assume(user != address(0));
-        amount = bound(amount, feeContract.MIN_DEPOSIT_AMOUNT(), feeContract.MAX_DEPOSIT_AMOUNT());
-
-        uint256 balanceBeforeUser = feeContract.balances(user);
-
-        //check that the depositEvent is emitted
-        vm.expectEmit(true, false, false, true);
-        // We emit the event we expect to see.
-        emit FeeContract.Deposit(user, amount);
-
-        //deposit for the two users
-        feeContract.deposit{ value: amount }(user);
-
-        //get the balance for that user after the deposit
-        uint256 balanceAfterUser = feeContract.balances(user);
-
-        //test that the users' balances have been incremented accurately
-        assertEq(balanceAfterUser, balanceBeforeUser + amount);
-
-        //test that the smart contract has the accumulative balance for both users
-        assertEq(address(feeContract).balance, amount);
-    }
-
-    // test depositing for many users
-    function test_depositForManyDifferentUsers() public payable {
-        for (uint256 i = 0; i < 10; i++) {
-            address user = makeAddr(string(abi.encode(i)));
-            uint256 amount = i + feeContract.MIN_DEPOSIT_AMOUNT();
-            //fund this account
-            vm.deal(user, amount);
-
-            //check the balance before
-            uint256 balanceBefore = feeContract.balances(user);
-
-            //prank as if the deposit is made by the user
-            vm.prank(user);
-
-            //deposit for the user
-            feeContract.deposit{ value: amount }(user);
-
-            //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContract.balances(user);
-            assertEq(balanceAfter, balanceBefore + amount);
-        }
-    }
-
-    // test depositing for the same user many times
-    function test_depositManyTimesForTheSameUser() public payable {
-        address user = makeAddr("user");
-
-        //fund this account
-        vm.deal(user, 1 ether);
-
-        uint256 totalAmountDeposited = 0;
-
-        for (uint256 i = 0; i < 10; i++) {
-            uint256 amount = i + feeContract.MIN_DEPOSIT_AMOUNT();
-
-            //check the balance before
-            uint256 balanceBefore = feeContract.balances(user);
-
-            //prank as if the deposit is made by the user
-            vm.prank(user);
-
-            //deposit for the user
-            feeContract.deposit{ value: amount }(user);
-
-            //get the balance for that user after the deposit
-            uint256 balanceAfter = feeContract.balances(user);
-            assertEq(balanceAfter, balanceBefore + amount);
-            totalAmountDeposited += amount;
-        }
-
-        //affirm that the totalAmountDeposited is the user's current balance
-        assertEq(feeContract.balances(user), totalAmountDeposited);
-    }
-
-    // test calling no function with a payable amount is not successful
-    function testFuzz_noFunction(uint256 amount) public payable {
-        address fcAddress = address(feeContract);
-        (bool success,) = fcAddress.call{ value: amount }("");
-
-        //assert that the transaction was not successful
-        assertFalse(success);
-
-        //assert that the balance of the fee contract is still zero
-        assertEq(address(feeContract).balance, 0);
-    }
-
-    // test calling a function that does not exist is not successful
-    function testFuzz_nonExistentFunction(uint256 amount) public payable {
-        address fcAddress = address(feeContract);
-        (bool success,) =
-            fcAddress.call{ value: amount }(abi.encodeWithSignature("withdraw(address)", "0x"));
-
-        //assert that the transaction was not successful
-        assertFalse(success);
-
-        //assert that the balance of the fee contract is still zero
-        assertEq(address(feeContract).balance, 0);
-    }
-
-    //test deposits with a large amount reverts
-    function test_depositMaxAmount() public {
-        address user = makeAddr("user");
-        uint256 amount = feeContract.MAX_DEPOSIT_AMOUNT() + 1;
-
-        vm.expectRevert(FeeContract.DepositTooLarge.selector);
-
-        //deposit for the user
-        feeContract.deposit{ value: amount }(user);
-    }
-
-    //test deposits with a less than the min amount reverts
-    function test_depositMinAmount() public {
-        address user = makeAddr("user");
-        uint256 amount = feeContract.MIN_DEPOSIT_AMOUNT() - 0.0001 ether;
-
-        vm.expectRevert(FeeContract.DepositTooSmall.selector);
-
-        //deposit for the user
-        feeContract.deposit{ value: amount }(user);
-    }
-
-    //test deposits with invalid user address reverts
-    function test_invalidUserAddress() public {
-        address user = address(0);
-        uint256 amount = 0.5 ether;
-
-        vm.expectRevert(FeeContract.InvalidUserAddress.selector);
-
-        //deposit for the user
-        feeContract.deposit{ value: amount }(user);
-    }
-
-    // test that new users have a zero balance
-    function testFuzz_newUserHasZeroBalance(address user) public {
-        vm.assume(user != address(0));
-
-        uint256 balance = feeContract.balances(user);
-
-        assertEq(balance, 0);
-    }
-}
-
 contract FeeContractUpgradabilityTest is Test {
     address payable public proxy;
     address public admin;
@@ -185,9 +31,8 @@ contract FeeContractUpgradabilityTest is Test {
     //test deposits work with a proxy
     function testFuzz_deposit(address user, uint256 amount) public payable {
         vm.assume(user != address(0));
-        amount = bound(
-            amount, feeContractProxy.MIN_DEPOSIT_AMOUNT(), feeContractProxy.MAX_DEPOSIT_AMOUNT()
-        );
+        amount =
+            bound(amount, feeContractProxy.minDepositAmount(), feeContractProxy.maxDepositAmount());
 
         uint256 balanceBefore = feeContractProxy.balances(user);
 
@@ -208,7 +53,7 @@ contract FeeContractUpgradabilityTest is Test {
     function test_depositForManyDifferentUsers() public payable {
         for (uint256 i = 0; i < 10; i++) {
             address user = makeAddr(string(abi.encode(i)));
-            uint256 amount = i + feeContractProxy.MIN_DEPOSIT_AMOUNT();
+            uint256 amount = i + feeContractProxy.minDepositAmount();
 
             //fund this account
             vm.deal(user, amount);
@@ -238,7 +83,7 @@ contract FeeContractUpgradabilityTest is Test {
         uint256 totalAmountDeposited = 0;
 
         for (uint256 i = 0; i < 10; i++) {
-            uint256 amount = i + feeContractProxy.MIN_DEPOSIT_AMOUNT();
+            uint256 amount = i + feeContractProxy.minDepositAmount();
 
             //check the balance before
             uint256 balanceBefore = feeContractProxy.balances(user);
@@ -309,6 +154,48 @@ contract FeeContractUpgradabilityTest is Test {
             )
         );
         feeContractProxy.upgradeToAndCall(address(feeContractV2), "");
+    }
+
+    //test deposits with a large amount reverts
+    function test_depositMaxAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.maxDepositAmount() + 1;
+
+        vm.expectRevert(FeeContract.DepositTooLarge.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    //test deposits with a less than the min amount reverts
+    function test_depositMinAmount() public {
+        address user = makeAddr("user");
+        uint256 amount = feeContractProxy.minDepositAmount() - 0.0001 ether;
+
+        vm.expectRevert(FeeContract.DepositTooSmall.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    //test deposits with invalid user address reverts
+    function test_invalidUserAddress() public {
+        address user = address(0);
+        uint256 amount = 0.5 ether;
+
+        vm.expectRevert(FeeContract.InvalidUserAddress.selector);
+
+        //deposit for the user
+        feeContractProxy.deposit{ value: amount }(user);
+    }
+
+    // test that new users have a zero balance
+    function testFuzz_newUserHasZeroBalance(address user) public view {
+        vm.assume(user != address(0));
+
+        uint256 balance = feeContractProxy.balances(user);
+
+        assertEq(balance, 0);
     }
 }
 

@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
 import { Test } /*, console2*/ from "forge-std/Test.sol";
-import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
@@ -27,7 +26,7 @@ contract LightClientUpgradeTest is Test {
         lcV1Proxy = LCV1(proxy);
     }
 
-    function testCorrectInitialization() public {
+    function testCorrectInitialization() public view {
         assert(lcV1Proxy.blocksPerEpoch() == 10);
         assert(lcV1Proxy.currentEpoch() == 0);
 
@@ -70,16 +69,18 @@ contract LightClientUpgradeTest is Test {
 
     // check that the proxy address remains the same
     function testUpgradesSameProxyAddress() public {
-        assertEq(lcV1Proxy.MAJOR(), 1);
-        assertEq(lcV1Proxy.MINOR(), 0);
-        assertEq(lcV1Proxy.PATCH(), 0);
+        (uint8 major, uint8 minor, uint8 patch) = lcV1Proxy.getVersion();
+        assertEq(major, 1);
+        assertEq(minor, 0);
+        assertEq(patch, 0);
 
         //upgrade box
         lcV2Proxy = LCV2(upgrader.run(admin, proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
-        assertEq(lcV2Proxy.MAJOR(), 2);
-        assertEq(lcV2Proxy.MINOR(), 0);
-        assertEq(lcV2Proxy.PATCH(), 0);
+        (uint8 majorV2, uint8 minorV2, uint8 patchV2) = lcV2Proxy.getVersion();
+        assertEq(majorV2, 2);
+        assertEq(minorV2, 0);
+        assertEq(patchV2, 0);
     }
 
     function testMaliciousUpgradeFails() public {

@@ -1,5 +1,5 @@
 [profile.default]
-# Note that if we want to move the `./contracts` directory into it's own repo we
+# Note that if we want to move the `./contracts` directory into its own repo we
 # need to move the foundry.toml and remove the `./contracts` prefix from the
 # directories below.
 src = 'contracts/src'
@@ -17,6 +17,19 @@ solc = "0.8.23"
 # IPFS hash to the bytecode.
 bytecode_hash = "none"
 ffi = true
+extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "contracts/out"}]
+ignored_warnings_from = ['contracts/lib']
+
+[profile.defender]
+# Note that if we want to move the `./contracts` directory into its own repo we
+# need to move the foundry.toml and remove the `./contracts` prefix from the
+# directories below.
+out = 'out'
+build_info = true
+extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read-write", path = "./contracts/script/"}, { access = "read-write", path = "contracts/out"}]
+
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 

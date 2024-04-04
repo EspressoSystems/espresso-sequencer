@@ -66,7 +66,7 @@ contract LightClientCommonTest is Test {
         assertEq(frozenSTComm, expectedStakeTableComm);
     }
 
-    function assertEq(BN254.ScalarField a, BN254.ScalarField b) public {
+    function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {
         assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
     }
 }
@@ -78,7 +78,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 
     /// @dev Test the constructor has initialized the contract state properly, especially genesis
     /// block.
-    function test_CorrectInitialization() external {
+    function test_CorrectInitialization() external view {
         assert(lc.blocksPerEpoch() == BLOCKS_PER_EPOCH_TEST);
         assertEq(abi.encode(lc.getGenesisState()), abi.encode(genesis));
         assertEq(abi.encode(lc.getFinalizedState()), abi.encode(genesis));

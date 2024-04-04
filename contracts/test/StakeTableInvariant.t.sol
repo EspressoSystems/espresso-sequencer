@@ -287,7 +287,7 @@ contract StakeTableInvariant_Tests is Test {
         targetContract(address(handler));
     }
 
-    function invariant_BalancesAreConsistent() external {
+    function invariant_BalancesAreConsistent() external view {
         uint256 totalBalanceUsers = 0;
         for (uint256 i = 0; i < users.length; i++) {
             totalBalanceUsers += token.balanceOf(users[i]);
@@ -297,7 +297,7 @@ contract StakeTableInvariant_Tests is Test {
         assertEq(totalBalanceUsers + balanceStakeTable + tokenCreatorBalance, INITIAL_BALANCE);
     }
 
-    function invariant_Register() external {
+    function invariant_Register() external view {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
         if (handler.registrationCalledAtLeastOnce()) {
@@ -315,7 +315,7 @@ contract StakeTableInvariant_Tests is Test {
         }
     }
 
-    function invariant_RequestExit() external {
+    function invariant_RequestExit() external view {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
         if (handler.requestExitCalledAtLeastOnce()) {
@@ -327,7 +327,7 @@ contract StakeTableInvariant_Tests is Test {
         }
     }
 
-    function invariant_Queue() external {
+    function invariant_Queue() external view {
         // Global invariants
         assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
         assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());

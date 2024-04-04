@@ -162,7 +162,7 @@
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
-              excludes = [ "contract-bindings/artifacts" ];
+              excludes = [ "contract-bindings" ];
             };
             nixpkgs-fmt.enable = true;
           };
