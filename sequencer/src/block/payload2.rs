@@ -1,47 +1,71 @@
 // use serde::{Deserialize, Serialize};
 
+use self::tx_table::{num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN};
 use crate::Transaction;
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NamespaceBuilder {
-    tx_table: Vec<u8>,
+    tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
-    num_txs: usize,
 }
 
 impl NamespaceBuilder {
+    /// Return an empty namespace
     pub fn new() -> Self {
         Self {
-            tx_table: Vec::new(),
+            tx_table_entries: Vec::new(),
             tx_bodies: Vec::new(),
-            num_txs: 0,
         }
     }
 
+    /// Add a transaction's payload to this namespace
     pub fn append_tx(&mut self, tx: Transaction) {
-        let tx_payload = tx.into_payload();
-        todo!()
+        self.tx_bodies.extend(tx.into_payload());
+        self.tx_table_entries
+            .extend(tx_offset_as_bytes(self.tx_bodies.len()));
+    }
+
+    /// Serialize to bytes and consume self.
+    pub fn into_bytes(self) -> Vec<u8> {
+        let mut result = Vec::with_capacity(
+            NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
+        );
+        let num_txs = self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN;
+        result.extend(num_txs_as_bytes(num_txs));
+        result.extend(self.tx_table_entries);
+        result.extend(self.tx_bodies);
+        result
     }
 }
 
 mod tx_table {
     use std::mem::size_of;
 
-    const NUM_TXS_BYTE_LEN: usize = 4;
-    const TX_OFFSET_BYTE_LEN: usize = 4;
+    pub const NUM_TXS_BYTE_LEN: usize = 4;
+    pub const TX_OFFSET_BYTE_LEN: usize = 4;
 
     pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
-        usize_to_bytes::<NUM_TXS_BYTE_LEN>(num_txs)
+        usize_to_bytes(num_txs)
     }
 
+    pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
+        usize_to_bytes(tx_offset)
+    }
+
+    /// Return `n` as an array of `BYTE_LEN` bytes in little-endian form,
+    /// padding with 0 as needed.
+    ///
+    /// # Panics
+    /// If `n` cannot fit into `BYTE_LEN` bytes.
     fn usize_to_bytes<const BYTE_LEN: usize>(n: usize) -> [u8; BYTE_LEN] {
         if size_of::<usize>() > BYTE_LEN {
             assert!(
                 n <= max_from_byte_len(BYTE_LEN),
                 "n {n} cannot fit into {BYTE_LEN} bytes"
             );
-            n.to_le_bytes()[..BYTE_LEN].try_into().unwrap()
+            n.to_le_bytes()[..BYTE_LEN].try_into().unwrap() // panic is impossible
         } else {
+            // convert `n` to bytes and pad with 0
             let mut result = [0; BYTE_LEN];
             result[..size_of::<usize>()].copy_from_slice(&n.to_le_bytes()[..]);
             result
@@ -52,10 +76,12 @@ mod tx_table {
     //     max_from_byte_len(NUM_TXS_BYTE_LEN)
     // }
 
+    /// Return the largest `usize` value that can fit into `byte_len` bytes.
     const fn max_from_byte_len(byte_len: usize) -> usize {
         if byte_len >= size_of::<usize>() {
             usize::MAX
         } else {
+            // overflow cannot occur because `byte_len < size_of::<usize>()`
             (1 << (byte_len * 8)) - 1
         }
     }
