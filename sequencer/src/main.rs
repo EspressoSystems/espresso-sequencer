@@ -94,6 +94,9 @@ where
             if let Some(catchup) = modules.catchup {
                 opt = opt.catchup(catchup);
             }
+            if let Some(hotshot_events) = modules.hotshot_events {
+                opt = opt.hotshot_events(hotshot_events);
+            }
 
             let storage = storage_opt.create().await?;
             opt.serve(
