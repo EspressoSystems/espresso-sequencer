@@ -22,22 +22,22 @@ pub trait ExplorerHeader<Types: NodeType>: BlockHeader<Types> {
     /// BalanceAmount is a type that represents a general balance amount.  It
     /// does not indicate how this balance is represented, just that there is
     /// a representation of it that adheres to the trait restrictions specified.
-    type BalanceAmount: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type BalanceAmount: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// WalletAddress is a type that represents the address of a Wallet.  It
     /// does not indicate how this address is represented, just that there is
     /// a representation of it that adheres to the trait restrictions specified.
-    type WalletAddress: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type WalletAddress: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// ProposerId is a type that represents the proposer id of the block.  It
     /// does not indicate how this proposer id is represented, just that there is
     /// a representation of it that adheres to the trait restrictions specified.
-    type ProposerId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type ProposerId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// NamespaceId is a type that represents the id of a namespace.  It does
     /// not indicate how this namespace id is represented, just that there is
     /// a representation of it that adheres to the trait restrictions specified.
-    type NamespaceId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type NamespaceId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// The proposer id of the block as stored within the block header.
     fn proposer_id(&self) -> Self::ProposerId;

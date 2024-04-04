@@ -394,18 +394,68 @@ mod test {
         assert!(latest_blocks.len() == min(num_blocks as usize, 10));
         assert!(latest_transactions.len() == min(num_transactions as usize, 10));
 
-        let _block_detail_response: BlockDetailResponse<MockTypes> = client
-            .get(format!("block/{}", num_blocks - 1).as_str())
-            .send()
-            .await
-            .unwrap();
+        {
+            // Retrieve Block Detail using the block height
+            let block_detail_response: BlockDetailResponse<MockTypes> = client
+                .get(format!("block/{}", latest_block.height).as_str())
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(block_detail_response.block_detail, latest_block);
+        }
 
-        let _block_summaries_response: BlockSummaryResponse<MockTypes> = client
-            .get(format!("blocks/{}/{}", num_blocks - 1, 20).as_str())
-            .send()
-            .await
-            .unwrap();
+        {
+            // Retrieve Block Detail using the block hash
+            let block_detail_response: BlockDetailResponse<MockTypes> = client
+                .get(format!("block/hash/{}", latest_block.hash).as_str())
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(block_detail_response.block_detail, latest_block);
+        }
 
+        {
+            // Retrieve 20 Block Summaries using the block height
+            let block_summaries_response: BlockSummaryResponse<MockTypes> = client
+                .get(format!("blocks/{}/{}", num_blocks - 1, 20).as_str())
+                .send()
+                .await
+                .unwrap();
+            for (a, b) in block_summaries_response
+                .block_summaries
+                .iter()
+                .zip(latest_blocks.iter())
+            {
+                assert_eq!(a, b);
+            }
+        }
+
+        {
+            let target_num = min(num_blocks as usize, 10);
+            // Retrieve the 20 latest block summaries
+            let block_summaries_response: BlockSummaryResponse<MockTypes> = client
+                .get(format!("blocks/latest/{}", target_num).as_str())
+                .send()
+                .await
+                .unwrap();
+
+            // These blocks aren't guaranteed to have any overlap with what has
+            // been previously generated, so we don't know if we can check
+            // equality of the set.  However, we **can** check to see if the
+            // number of blocks we were asking for get returned.
+            assert_eq!(block_summaries_response.block_summaries.len(), target_num);
+
+            // We can also perform a check on the first block to ensure that it
+            // is larger than or equal to our `num_blocks` variable.
+            assert!(
+                block_summaries_response
+                    .block_summaries
+                    .first()
+                    .unwrap()
+                    .height
+                    >= num_blocks - 1
+            );
+        }
         let get_search_response: SearchResultResponse<MockTypes> = client
             .get(format!("search/{}", latest_block.hash).as_str())
             .send()
@@ -416,17 +466,63 @@ mod test {
 
         if num_transactions > 0 {
             let last_transaction = latest_transactions.last().unwrap();
-            let _transaction_detail_response: TransactionDetailResponse<MockTypes> = client
+            let transaction_detail_response: TransactionDetailResponse<MockTypes> = client
                 .get(format!("transaction/hash/{}", last_transaction.hash).as_str())
                 .send()
                 .await
                 .unwrap();
 
-            let _transaction_summaries_response: TransactionSummariesResponse<MockTypes> = client
+            assert!(
+                transaction_detail_response
+                    .transaction_detail
+                    .details
+                    .block_confirmed
+            );
+
+            assert_eq!(
+                transaction_detail_response.transaction_detail.details.hash,
+                last_transaction.hash
+            );
+            assert_eq!(
+                transaction_detail_response
+                    .transaction_detail
+                    .details
+                    .height,
+                last_transaction.height
+            );
+            assert_eq!(
+                transaction_detail_response
+                    .transaction_detail
+                    .details
+                    .num_transactions,
+                last_transaction.num_transactions
+            );
+            assert_eq!(
+                transaction_detail_response
+                    .transaction_detail
+                    .details
+                    .offset,
+                last_transaction.offset
+            );
+            // assert_eq!(transaction_detail_response.transaction_detail.details.size, last_transaction.size);
+            assert_eq!(
+                transaction_detail_response.transaction_detail.details.time,
+                last_transaction.time
+            );
+
+            let transaction_summaries_response: TransactionSummariesResponse<MockTypes> = client
                 .get(format!("transactions/hash/{}/{}", last_transaction.hash, 20).as_str())
                 .send()
                 .await
                 .unwrap();
+
+            for (a, b) in transaction_summaries_response
+                .transaction_summaries
+                .iter()
+                .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+            {
+                assert_eq!(a, b);
+            }
         }
     }
 

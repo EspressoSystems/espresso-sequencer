@@ -149,7 +149,7 @@ pub type BalanceAmount<Types> = <Header<Types> as ExplorerHeader<Types>>::Balanc
 
 /// [BlockDetail] is a struct that represents the details of a specific block
 /// for use in a Block Explorer.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct BlockDetail<Types: NodeType>
 where
@@ -193,7 +193,7 @@ where
 /// [BlockSummary] is a struct that represents a summary overview of a specific
 /// block.  It does not have all of the details of a [BlockDetail], but it is
 /// useful for displaying information in a list of Blocks.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct BlockSummary<Types: NodeType>
 where
@@ -281,7 +281,7 @@ where
 /// - Sequencer
 /// - DA Layer
 /// - Ethereum Mainnet
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FeeAttribution {
     pub target: String,
     pub fees: Vec<MonetaryValue>,
@@ -289,7 +289,7 @@ pub struct FeeAttribution {
 
 /// [TransactionDetail] is a struct that represents the details of a specific
 /// transaction / payload contained within a Block.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct TransactionDetail<Types: NodeType> {
     pub hash: TransactionHash<Types>,
@@ -306,7 +306,7 @@ pub struct TransactionDetail<Types: NodeType> {
 /// [TransactionDetailResponse] is a struct that represents the information
 /// returned concerning a request for a Transaction Detail. It contains the
 /// data payloads separately from the details of the Transaction itself.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct TransactionDetailResponse<Types: NodeType> {
     pub details: TransactionDetail<Types>,
@@ -317,7 +317,7 @@ pub struct TransactionDetailResponse<Types: NodeType> {
 /// specific transaction / payload contained within a Block. It does not have
 /// all of the details of a [TransactionDetail], but it is useful for displaying
 /// information in a list of Transactions.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct TransactionSummary<Types: NodeType>
 where
