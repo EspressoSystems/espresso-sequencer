@@ -1,5 +1,5 @@
 use crate::{
-    block::payload2::{num_nss_as_bytes, NamespaceBuilder},
+    block::payload2::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes, NamespaceBuilder},
     BlockBuildingSnafu, NamespaceId, Transaction,
 };
 use commit::{Commitment, Committable};
@@ -77,10 +77,16 @@ impl BlockPayload for Payload2 {
         let mut ns_table = Vec::from(num_nss_as_bytes(namespaces.len()));
         for (ns_id, namespace) in namespaces {
             payload.extend(namespace.into_bytes());
-            // TODO no easy way to convert NamespaceId into bytes...
-            // ns_table.extend()
+            ns_table.extend(ns_id_as_bytes(ns_id));
+            ns_table.extend(ns_offset_as_bytes(payload.len()));
         }
-        todo!()
+        Ok((
+            Self {
+                payload,
+                ns_table: ns_table.clone(),
+            },
+            ns_table,
+        ))
     }
 
     fn from_bytes<I>(_encoded_transactions: I, _metadata: &Self::Metadata) -> Self

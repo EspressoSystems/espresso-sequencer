@@ -42,6 +42,7 @@ es-version = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
+paste = "1.0"
 tagged-base64 = { workspace = true }
 zeroize = { workspace = true }
 

@@ -8331,6 +8331,7 @@ dependencies = [
  "jf-utils",
  "lazy_static",
  "num-traits",
+ "paste",
  "portpicker",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
