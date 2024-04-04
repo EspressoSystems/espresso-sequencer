@@ -100,7 +100,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
             config.known_nodes_with_stake.clone(),
-            config.num_nodes_without_stake.clone(),
+            config.num_nodes_without_stake,
         )));
 
         let handle = SystemContext::init(

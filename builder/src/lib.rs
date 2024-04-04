@@ -42,7 +42,6 @@ use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::GlobalState;
-use hotshot_state_prover;
 use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
@@ -202,7 +201,7 @@ pub mod testing {
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
-                num_nodes_without_stake: num_nodes_without_stake,
+                num_nodes_without_stake,
                 min_transactions: 1,
                 max_transactions: 10000.try_into().unwrap(),
                 known_nodes_with_stake,
@@ -324,11 +323,7 @@ pub mod testing {
                 Self::total_nodes(),
             );
             join_all((0..self.num_staking_non_staking_nodes()).map(|i| {
-                if i < num_staked_nodes {
-                    is_staked = true;
-                } else {
-                    is_staked = false;
-                }
+                is_staked = i < num_staked_nodes;
                 async move {
                     let (hotshot_handle, state_signer) = self
                         .init_node(i, is_staked, stake_table_commit, &NoMetrics, bind_version)
@@ -558,9 +553,7 @@ pub mod testing {
             .await
             .unwrap();
 
-            Self {
-                builder_config: builder_config,
-            }
+            Self { builder_config }
         }
     }
 
@@ -618,9 +611,7 @@ pub mod testing {
             .await
             .unwrap();
 
-            Self {
-                builder_context: builder_context,
-            }
+            Self { builder_context }
         }
     }
 
