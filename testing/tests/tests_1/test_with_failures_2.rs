@@ -5,7 +5,7 @@ use hotshot_testing::spinning_task::ChangeNode;
 use hotshot_testing::spinning_task::SpinningTaskDescription;
 use hotshot_testing::spinning_task::UpDown;
 use hotshot_testing::test_builder::TestMetadata;
-
+use hotshot_testing::block_builder::SimpleBuilderImplementation;
 // Test that a good leader can succeed in the view directly after view sync
 cross_tests!(
     TestName: test_with_failures_2,

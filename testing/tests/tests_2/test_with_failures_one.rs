@@ -5,7 +5,7 @@ use hotshot_testing::spinning_task::ChangeNode;
 use hotshot_testing::spinning_task::SpinningTaskDescription;
 use hotshot_testing::spinning_task::UpDown;
 use hotshot_testing::test_builder::TestMetadata;
-
+use hotshot_testing::block_builder::SimpleBuilderImplementation;
 
 // Test one node leaving the network.
 cross_tests!(

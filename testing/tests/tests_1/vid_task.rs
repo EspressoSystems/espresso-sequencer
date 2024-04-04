@@ -82,7 +82,7 @@ async fn test_vid_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::TransactionsSequenced(
+    input.push(HotShotEvent::BlockRecv(
         encoded_transactions.clone(),
         (),
         ViewNumber::new(2),

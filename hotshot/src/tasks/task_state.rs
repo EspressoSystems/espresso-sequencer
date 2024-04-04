@@ -1,6 +1,7 @@
 use crate::types::SystemContextHandle;
 
 use async_trait::async_trait;
+use hotshot_task_impls::builder::BuilderClient;
 use hotshot_task_impls::quorum_proposal::QuorumProposalTaskState;
 use hotshot_task_impls::{
     consensus::ConsensusTaskState, da::DATaskState, quorum_vote::QuorumVoteTaskState,
@@ -11,11 +12,7 @@ use hotshot_types::traits::{
     consensus_api::ConsensusApi,
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{collections::HashMap, marker::PhantomData};
 use versioned_binary_serialization::version::StaticVersionType;
 
 /// Trait for creating task states.
@@ -153,23 +150,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
+    CreateTaskState<TYPES, I>
+    for TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>, Ver>
 {
     async fn create_from(
         handle: &SystemContextHandle<TYPES, I>,
-    ) -> TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    ) -> TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>, Ver> {
         TransactionTaskState {
             api: handle.clone(),
             consensus: handle.hotshot.get_consensus(),
-            transactions: Arc::default(),
-            seen_transactions: HashSet::new(),
             cur_view: handle.get_cur_view().await,
             network: handle.hotshot.networks.quorum_network.clone(),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             id: handle.hotshot.id,
+            builder_client: BuilderClient::new(handle.hotshot.config.builder_url.clone()),
         }
     }
 }

@@ -54,6 +54,7 @@ tagged-base64 = { workspace = true }
 versioned-binary-serialization = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
+url = "2.5.0"
 
 [dev-dependencies]
 serde_json = { workspace = true }

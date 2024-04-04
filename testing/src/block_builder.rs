@@ -10,8 +10,11 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
-use futures::future::BoxFuture;
-use hotshot::{traits::BlockPayload, types::SignatureKey};
+use futures::{future::BoxFuture, Stream, StreamExt};
+use hotshot::{
+    traits::{BlockPayload, TestableNodeImplementation},
+    types::{Event, EventType, SignatureKey},
+};
 use hotshot_builder_api::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::{BuildError, Options},
@@ -21,8 +24,6 @@ use hotshot_example_types::{
     block_types::{TestBlockPayload, TestTransaction},
     node_types::TestTypes,
 };
-use hotshot_task::task::{Task, TaskState};
-use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
     traits::{block_contents::vid_commitment, election::Membership, node_implementation::NodeType},
@@ -33,7 +34,68 @@ use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, App, Url};
 
-use crate::test_runner::HotShotTaskCompleted;
+#[async_trait]
+pub trait TestBuilderImplementation {
+    type TYPES: NodeType;
+    type I: TestableNodeImplementation<Self::TYPES>;
+    async fn start(
+        membership: Arc<<Self::TYPES as NodeType>::Membership>,
+    ) -> (Option<Box<dyn BuilderTask<TYPES = Self::TYPES>>>, Url);
+}
+
+pub struct RandomBuilderImplementation<I: TestableNodeImplementation<TestTypes>> {
+    _marker: std::marker::PhantomData<I>,
+}
+
+#[async_trait]
+impl<I: TestableNodeImplementation<TestTypes>> TestBuilderImplementation
+    for RandomBuilderImplementation<I>
+{
+    type TYPES = TestTypes;
+    type I = I;
+
+    async fn start(
+        _membership: Arc<<TestTypes as NodeType>::Membership>,
+    ) -> (Option<Box<dyn BuilderTask<TYPES = Self::TYPES>>>, Url) {
+        let port = portpicker::pick_unused_port().expect("No free ports");
+        let url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
+        run_random_builder(url.clone());
+        (None, url)
+    }
+}
+
+pub struct SimpleBuilderImplementation<I: TestableNodeImplementation<TestTypes>> {
+    _marker: std::marker::PhantomData<I>,
+}
+
+#[async_trait]
+impl<I: TestableNodeImplementation<TestTypes>> TestBuilderImplementation
+    for SimpleBuilderImplementation<I>
+{
+    type TYPES = TestTypes;
+    type I = I;
+
+    async fn start(
+        membership: Arc<<TestTypes as NodeType>::Membership>,
+    ) -> (Option<Box<dyn BuilderTask<TYPES = Self::TYPES>>>, Url) {
+        let port = portpicker::pick_unused_port().expect("No free ports");
+        let url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
+        let (source, task) = make_simple_builder(membership).await;
+
+        let builder_api =
+            hotshot_builder_api::builder::define_api::<SimpleBuilderSource, TestTypes, Version01>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
+        let mut app: App<SimpleBuilderSource, hotshot_builder_api::builder::Error, Version01> =
+            App::with_state(source);
+        app.register_module("/", builder_api)
+            .expect("Failed to register the builder API");
+
+        async_spawn(app.serve(url.clone(), STATIC_VER_0_1));
+        (Some(Box::new(task)), url)
+    }
+}
 
 /// Entry for a built block
 struct BlockEntry {
@@ -326,55 +388,63 @@ impl SimpleBuilderSource {
     }
 }
 
+#[derive(Clone)]
 pub struct SimpleBuilderTask {
     transactions: Arc<RwLock<HashMap<Commitment<TestTransaction>, TestTransaction>>>,
     blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry>>>,
+    decided_transactions: LruCache<Commitment<TestTransaction>, ()>,
 }
 
-impl TaskState for SimpleBuilderTask {
-    type Event = Arc<HotShotEvent<TestTypes>>;
+pub trait BuilderTask: Send + Sync {
+    type TYPES: NodeType;
 
-    type Output = HotShotTaskCompleted;
+    fn start(
+        self: Box<Self>,
+        stream: Box<dyn Stream<Item = Event<Self::TYPES>> + std::marker::Unpin + Send + 'static>,
+    );
+}
 
-    fn filter(&self, event: &Arc<HotShotEvent<TestTypes>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::TransactionsRecv(_)
-                | HotShotEvent::LeafDecided(_)
-                | HotShotEvent::Shutdown
-        )
-    }
+impl BuilderTask for SimpleBuilderTask {
+    type TYPES = TestTypes;
 
-    async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let this = task.state_mut();
-        match event.as_ref() {
-            HotShotEvent::TransactionsRecv(transactions) => {
-                let mut queue = this.transactions.write().await;
-                for transaction in transactions {
-                    queue.insert(transaction.commit(), transaction.clone());
-                }
-            }
-            HotShotEvent::LeafDecided(leaf_chain) => {
-                let mut queue = this.transactions.write().await;
-                for leaf in leaf_chain.iter() {
-                    if let Some(ref payload) = leaf.get_block_payload() {
-                        for txn in payload.transaction_commitments(&()) {
-                            queue.remove(&txn);
-                        }
+    fn start(
+        mut self: Box<Self>,
+        mut stream: Box<
+            dyn Stream<Item = Event<Self::TYPES>> + std::marker::Unpin + Send + 'static,
+        >,
+    ) {
+        async_spawn(async move {
+            loop {
+                match stream.next().await {
+                    None => {
+                        break;
                     }
+                    Some(evt) => match evt.event {
+                        EventType::Decide { leaf_chain, .. } => {
+                            let mut queue = self.transactions.write().await;
+                            for leaf_info in leaf_chain.iter() {
+                                if let Some(ref payload) = leaf_info.leaf.get_block_payload() {
+                                    for txn in payload.transaction_commitments(&()) {
+                                        self.decided_transactions.put(txn, ());
+                                        queue.remove(&txn);
+                                    }
+                                }
+                            }
+                            self.blocks.write().await.clear();
+                        }
+                        EventType::Transactions { transactions } => {
+                            let mut queue = self.transactions.write().await;
+                            for transaction in transactions {
+                                if !self.decided_transactions.contains(&transaction.commit()) {
+                                    queue.insert(transaction.commit(), transaction.clone());
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
                 }
-                this.blocks.write().await.clear();
             }
-            _ => {}
-        };
-        None
-    }
-
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
+        });
     }
 }
 
@@ -398,6 +468,7 @@ pub async fn make_simple_builder(
     let task = SimpleBuilderTask {
         transactions,
         blocks,
+        decided_transactions: LruCache::new(NonZeroUsize::new(u16::MAX.into()).expect("> 0")),
     };
 
     (source, task)

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use hotshot_example_types::node_types::{CombinedImpl, TestTypes};
 use hotshot_testing::{
+    block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
     spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
@@ -16,6 +17,8 @@ use tracing::instrument;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_combined_network() {
+    use hotshot_testing::block_builder::SimpleBuilderImplementation;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let metadata: TestMetadata = TestMetadata {
@@ -42,7 +45,7 @@ async fn test_combined_network() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
         .await;
 }
 
@@ -90,7 +93,7 @@ async fn test_combined_network_cdn_crash() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
         .await;
 }
 
@@ -144,7 +147,7 @@ async fn test_combined_network_reup() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
         .await;
 }
 
@@ -192,7 +195,7 @@ async fn test_combined_network_half_dc() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
         .await;
 }
 
@@ -262,6 +265,6 @@ async fn test_stress_combined_network_fuzzy() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
         .await;
 }

@@ -67,7 +67,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
-            HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
+            HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number) => {
                 let encoded_transactions = encoded_transactions.clone();
                 // get the number of quorum committee members to be used for VID calculation
                 let num_storage_nodes = self.membership.total_nodes();
@@ -217,7 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         !matches!(
             event.as_ref(),
             HotShotEvent::Shutdown
-                | HotShotEvent::TransactionsSequenced(_, _, _)
+                | HotShotEvent::BlockRecv(_, _, _)
                 | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::DAProposalValidated(_, _)

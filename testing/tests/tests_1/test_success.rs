@@ -6,7 +6,7 @@ use hotshot_testing::completion_task::{
 };
 use hotshot_testing::test_builder::TestMetadata;
 use std::time::Duration;
-
+use hotshot_testing::block_builder::SimpleBuilderImplementation;
 cross_tests!(
     TestName: test_success,
     Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],

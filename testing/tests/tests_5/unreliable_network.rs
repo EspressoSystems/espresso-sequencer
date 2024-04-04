@@ -1,3 +1,4 @@
+use hotshot_testing::block_builder::SimpleBuilderImplementation;
 use hotshot_testing::test_builder::TimingData;
 use hotshot_types::traits::network::AsynchronousNetwork;
 use hotshot_types::traits::network::ChaosNetwork;
@@ -40,7 +41,7 @@ async fn libp2p_network_sync() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
         .await;
 }
 
@@ -73,7 +74,7 @@ async fn test_memory_network_sync() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
         .await;
 }
 
@@ -112,7 +113,7 @@ async fn libp2p_network_async() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
         .await;
 }
 
@@ -159,7 +160,7 @@ async fn test_memory_network_async() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<_>>()
         .await;
 }
 
@@ -211,7 +212,7 @@ async fn test_memory_network_partially_sync() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<_>>()
         .await;
 }
 
@@ -251,7 +252,7 @@ async fn libp2p_network_partially_sync() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<_>>()
         .await;
 }
 
@@ -289,7 +290,7 @@ async fn test_memory_network_chaos() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<_>>()
         .await;
 }
 
@@ -324,6 +325,6 @@ async fn libp2p_network_chaos() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<_>>()
         .await;
 }

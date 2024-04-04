@@ -1,16 +1,12 @@
 use crate::{
+    builder::BuilderClient,
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
 };
 use async_broadcast::Sender;
-use async_compatibility_layer::{
-    art::async_timeout,
-    async_primitives::subscribable_rwlock::{ReadView, SubscribableRwLock},
-};
+use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
-use bincode::config::Options;
-use commit::{Commitment, Committable};
-
+use hotshot_builder_api::block_info::{AvailableBlockData, AvailableBlockHeaderInput};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
@@ -23,23 +19,20 @@ use hotshot_types::{
         signature_key::SignatureKey,
         BlockPayload,
     },
-    utils::bincode_opts,
 };
 use std::{
-    collections::{HashMap, HashSet},
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant},
 };
-use tracing::{debug, error, instrument, warn};
-
-/// A type alias for `HashMap<Commitment<T>, T>`
-type CommitmentMap<T> = HashMap<Commitment<T>, T>;
+use tracing::{debug, error, instrument};
+use versioned_binary_serialization::version::StaticVersionType;
 
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
+    Ver: StaticVersionType,
 > {
     /// The state's api
     pub api: A,
@@ -50,17 +43,14 @@ pub struct TransactionTaskState<
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
-    /// A list of undecided transactions
-    pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
-
-    /// A list of transactions we've seen decided, but didn't receive
-    pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
-
     /// Network for all nodes
     pub network: Arc<I::QuorumNetwork>,
 
     /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
+
+    /// Builder API client
+    pub builder_client: BuilderClient<TYPES, Ver>,
 
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
@@ -70,12 +60,15 @@ pub struct TransactionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
-    TransactionTaskState<TYPES, I, A>
+impl<
+        TYPES: NodeType,
+        I: NodeImplementation<TYPES>,
+        A: ConsensusApi<TYPES, I> + 'static,
+        Ver: StaticVersionType,
+    > TransactionTaskState<TYPES, I, A, Ver>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
-
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -83,93 +76,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
             HotShotEvent::TransactionsRecv(transactions) => {
-                futures::join! {
-                    self.api
-                        .send_event(Event {
-                            view_number: self.cur_view,
-                            event: EventType::Transactions {
-                                transactions: transactions.clone(),
-                            },
-                        }),
-                    async {
-                        let consensus = self.consensus.read().await;
-                        self.transactions
-                            .modify(|txns| {
-                                for transaction in transactions {
-                                    let size =
-                                        bincode_opts().serialized_size(&transaction).unwrap_or(0);
-
-                                    // If we didn't already know about this transaction, update our mempool metrics.
-                                    if !self.seen_transactions.remove(&transaction.commit())
-                                        && txns.insert(transaction.commit(), transaction.clone()).is_none()
-                                    {
-                                        consensus.metrics.outstanding_transactions.update(1);
-                                        consensus
-                                            .metrics
-                                            .outstanding_transactions_memory_size
-                                            .update(i64::try_from(size).unwrap_or_else(|e| {
-                                                warn!(
-                                                    "Conversion failed: {e}. Using the max value."
-                                                );
-                                                i64::MAX
-                                            }));
-                                    }
-                                }
-                            })
-                            .await;
-                    }
-                };
-
-                return None;
-            }
-            HotShotEvent::LeafDecided(leaf_chain) => {
-                let mut included_txns = HashSet::new();
-                let mut included_txn_size = 0;
-                let mut included_txn_count = 0;
-                for leaf in leaf_chain {
-                    if let Some(ref payload) = leaf.get_block_payload() {
-                        for txn in
-                            payload.transaction_commitments(leaf.get_block_header().metadata())
-                        {
-                            included_txns.insert(txn);
-                        }
-                    }
-                }
-                let consensus = self.consensus.read().await;
-                let txns = self.transactions.cloned().await;
-
-                let _ = included_txns.iter().map(|hash| {
-                    if !txns.contains_key(hash) {
-                        self.seen_transactions.insert(*hash);
-                    }
-                });
-                drop(txns);
-                self.transactions
-                    .modify(|txns| {
-                        *txns = txns
-                            .drain()
-                            .filter(|(txn_hash, txn)| {
-                                if included_txns.contains(txn_hash) {
-                                    included_txn_count += 1;
-                                    included_txn_size +=
-                                        bincode_opts().serialized_size(txn).unwrap_or_default();
-                                    false
-                                } else {
-                                    true
-                                }
-                            })
-                            .collect();
+                self.api
+                    .send_event(Event {
+                        view_number: self.cur_view,
+                        event: EventType::Transactions {
+                            transactions: transactions.clone(),
+                        },
                     })
                     .await;
-
-                consensus
-                    .metrics
-                    .outstanding_transactions
-                    .update(-included_txn_count);
-                consensus
-                    .metrics
-                    .outstanding_transactions_memory_size
-                    .update(-(i64::try_from(included_txn_size).unwrap_or(i64::MAX)));
                 return None;
             }
             HotShotEvent::ViewChange(view) => {
@@ -191,38 +105,29 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     debug!("Not next leader for view {:?}", self.cur_view);
                     return None;
                 }
-                // TODO (Keyao) Determine whether to allow empty blocks.
-                // <https://github.com/EspressoSystems/HotShot/issues/1822>
-                let txns = self.wait_for_transactions().await?;
-                let (payload, metadata) =
-                    match <TYPES::BlockPayload as BlockPayload>::from_transactions(txns) {
-                        Ok((payload, metadata)) => (payload, metadata),
+
+                if let Some((block, _)) = self.wait_for_block().await {
+                    // send the sequenced transactions to VID and DA tasks
+                    let block_view = if make_block { view } else { view + 1 };
+                    let encoded_transactions = match block.block_payload.encode() {
+                        Ok(encoded) => encoded.into_iter().collect::<Vec<u8>>(),
                         Err(e) => {
-                            error!("Failed to build the block payload: {:?}.", e);
+                            error!("Failed to encode the block payload: {:?}.", e);
                             return None;
                         }
                     };
-
-                // encode the transactions
-                let encoded_transactions = match payload.encode() {
-                    Ok(encoded) => encoded.into_iter().collect::<Vec<u8>>(),
-                    Err(e) => {
-                        error!("Failed to encode the block payload: {:?}.", e);
-                        return None;
-                    }
+                    broadcast_event(
+                        Arc::new(HotShotEvent::BlockRecv(
+                            encoded_transactions,
+                            block.metadata,
+                            block_view,
+                        )),
+                        &event_stream,
+                    )
+                    .await;
+                } else {
+                    error!("Failed to get a block from the builder");
                 };
-
-                // send the sequenced transactions to VID and DA tasks
-                let block_view = if make_block { view } else { view + 1 };
-                broadcast_event(
-                    Arc::new(HotShotEvent::TransactionsSequenced(
-                        encoded_transactions,
-                        metadata,
-                        block_view,
-                    )),
-                    &event_stream,
-                )
-                .await;
 
                 return None;
             }
@@ -235,74 +140,95 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
-    async fn wait_for_transactions(&self) -> Option<Vec<TYPES::Transaction>> {
+    async fn wait_for_block(
+        &self,
+    ) -> Option<(AvailableBlockData<TYPES>, AvailableBlockHeaderInput<TYPES>)> {
         let task_start_time = Instant::now();
 
-        // TODO (Keyao) Investigate the use of transaction hash
-        // <https://github.com/EspressoSystems/HotShot/issues/1811>
-        // let parent_leaf = self.parent_leaf().await?;
-        // let previous_used_txns = match parent_leaf.tarnsaction_commitments {
-        //     Some(txns) => txns,
-        //     None => HashSet::new(),
-        // };
-
-        let receiver = self.transactions.subscribe().await;
-
-        loop {
-            let all_txns = self.transactions.cloned().await;
-            debug!("Size of transactions: {}", all_txns.len());
-            // TODO (Keyao) Investigate the use of transaction hash
-            // <https://github.com/EspressoSystems/HotShot/issues/1811>
-            // let unclaimed_txns: Vec<_> = all_txns
-            //     .iter()
-            //     .filter(|(txn_hash, _txn)| !previous_used_txns.contains(txn_hash))
-            //     .collect();
-            let unclaimed_txns = all_txns;
-
-            let time_past = task_start_time.elapsed();
-            if unclaimed_txns.len() < self.api.min_transactions()
-                && (time_past < self.api.propose_max_round_time())
+        let last_leaf = self.consensus.read().await.get_decided_leaf();
+        let mut latest_block: Option<(
+            AvailableBlockData<TYPES>,
+            AvailableBlockHeaderInput<TYPES>,
+        )> = None;
+        while task_start_time.elapsed() < self.api.propose_max_round_time()
+            && latest_block.as_ref().map_or(true, |(data, _)| {
+                data.block_payload.get_transactions(&data.metadata).len()
+                    < self.api.min_transactions()
+            })
+        {
+            let mut available_blocks = match self
+                .builder_client
+                .get_available_blocks(last_leaf.get_block_header().payload_commitment())
+                .await
             {
-                let duration = self.api.propose_max_round_time() - time_past;
-                let result = async_timeout(duration, receiver.recv()).await;
-                match result {
-                    Err(_) => {
-                        // Fall through below to updating new block
-                        debug!(
-                            "propose_max_round_time passed, sending transactions we have so far"
-                        );
-                    }
-                    Ok(Err(e)) => {
-                        // Something unprecedented is wrong, and `transactions` has been dropped
-                        error!("Channel receiver error for SubscribableRwLock {:?}", e);
-                        return None;
-                    }
-                    Ok(Ok(_)) => continue,
+                Ok(blocks) => blocks,
+                Err(err) => {
+                    error!(%err, "Couldn't get available blocks");
+                    continue;
                 }
+            };
+
+            available_blocks.sort_by_key(|block_info| block_info.offered_fee);
+
+            let Some(block_info) = available_blocks.pop() else {
+                continue;
+            };
+
+            // Don't try to re-claim the same block if builder advertises it again
+            if latest_block.as_ref().map_or(false, |block| {
+                block.0.block_payload.builder_commitment(&block.0.metadata) == block_info.block_hash
+            }) {
+                continue;
             }
-            break;
+
+            let Ok(signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+                &self.private_key,
+                block_info.block_hash.as_ref(),
+            ) else {
+                error!("Failed to sign block hash");
+                continue;
+            };
+
+            let (block, header_input) = futures::join! {
+                self.builder_client.claim_block(block_info.block_hash.clone(), &signature),
+                self.builder_client.claim_block_header_input(block_info.block_hash, &signature)
+            };
+
+            let block = match block {
+                Ok(val) => val,
+                Err(err) => {
+                    error!(%err, "Failed to claim block");
+                    continue;
+                }
+            };
+
+            let header_input = match header_input {
+                Ok(val) => val,
+                Err(err) => {
+                    error!(%err, "Failed to claim block");
+                    continue;
+                }
+            };
+
+            let num_txns = block.block_payload.get_transactions(&block.metadata).len();
+
+            latest_block = Some((block, header_input));
+            if num_txns >= self.api.min_transactions() {
+                return latest_block;
+            }
+            async_sleep(Duration::from_millis(100)).await;
         }
-        let all_txns = self.transactions.cloned().await;
-        // TODO (Keyao) Investigate the use of transaction hash
-        // <https://github.com/EspressoSystems/HotShot/issues/1811>
-        let txns: Vec<TYPES::Transaction> = all_txns.values().cloned().collect();
-        // let txns: Vec<TYPES::Transaction> = all_txns
-        //     .iter()
-        //     .filter_map(|(txn_hash, txn)| {
-        //         if previous_used_txns.contains(txn_hash) {
-        //             None
-        //         } else {
-        //             Some(txn.clone())
-        //         }
-        //     })
-        //     .collect();
-        Some(txns)
+        latest_block
     }
 }
 
 /// task state implementation for Transactions Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
-    for TransactionTaskState<TYPES, I, A>
+impl<
+        TYPES: NodeType,
+        I: NodeImplementation<TYPES>,
+        A: ConsensusApi<TYPES, I> + 'static,
+        Ver: StaticVersionType + 'static,
+    > TaskState for TransactionTaskState<TYPES, I, A, Ver>
 {
     type Event = Arc<HotShotEvent<TYPES>>;
 
@@ -312,7 +238,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         !matches!(
             event.as_ref(),
             HotShotEvent::TransactionsRecv(_)
-                | HotShotEvent::LeafDecided(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::ViewChange(_)
         )

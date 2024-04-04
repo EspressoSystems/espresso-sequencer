@@ -9,6 +9,7 @@ async fn test_timeout_web() {
     use hotshot_example_types::node_types::WebImpl;
 
     use hotshot_example_types::node_types::TestTypes;
+    use hotshot_testing::block_builder::SimpleBuilderImplementation;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
@@ -56,7 +57,7 @@ async fn test_timeout_web() {
     metadata
         .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<WebImpl>>()
         .await;
 }
 
@@ -70,6 +71,7 @@ async fn test_timeout_libp2p() {
     use hotshot_example_types::node_types::Libp2pImpl;
 
     use hotshot_testing::{
+        block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
@@ -122,6 +124,6 @@ async fn test_timeout_libp2p() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test()
+        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
         .await;
 }

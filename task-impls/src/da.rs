@@ -294,7 +294,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 return None;
             }
-            HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view) => {
+            HotShotEvent::BlockRecv(encoded_transactions, metadata, view) => {
                 let view = *view;
                 self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
@@ -367,7 +367,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::DAProposalRecv(_, _)
                 | HotShotEvent::DAVoteRecv(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::TransactionsSequenced(_, _, _)
+                | HotShotEvent::BlockRecv(_, _, _)
                 | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::DAProposalValidated(_, _)
