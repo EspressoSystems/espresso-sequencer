@@ -47,7 +47,9 @@ pub use tx_table::{
 
 // TODO rename from tx_table, this mod also has ns_table utils
 mod tx_table {
-    use std::mem::size_of;
+    use std::{fmt::Display, mem::size_of};
+
+    use num_traits::{Bounded, Num, PrimInt, ToBytes};
 
     pub const NUM_TXS_BYTE_LEN: usize = 4;
     pub const TX_OFFSET_BYTE_LEN: usize = 4;
@@ -115,6 +117,32 @@ mod tx_table {
         }
     }
 
+    trait Foo: PrimInt + ToBytes + Display {}
+
+    fn to_bytes<const BYTE_LEN: usize, T: Foo>(n: T) -> [u8; BYTE_LEN] {
+        if size_of::<T>() > BYTE_LEN {
+            assert!(
+                n <= max_from_byte_len2(BYTE_LEN),
+                "n {n} cannot fit into {BYTE_LEN} bytes"
+            );
+            n.to_le_bytes().as_ref()[..BYTE_LEN].try_into().unwrap() // panic is impossible
+        } else {
+            // convert `n` to bytes and pad with 0
+            let mut result = [0; BYTE_LEN];
+            result[..size_of::<usize>()].copy_from_slice(&n.to_le_bytes().as_ref());
+            result
+        }
+    }
+
+    fn max_from_byte_len2<T: Foo>(byte_len: usize) -> T {
+        if byte_len >= size_of::<T>() {
+            T::max_value()
+        } else {
+            // panic is impossible because `byte_len < size_of::<T>()`
+            T::from((1 << (byte_len * 8)) - 1).unwrap()
+        }
+    }
+
     // const fn max_num_txs() -> usize {
     //     max_from_byte_len(NUM_TXS_BYTE_LEN)
     // }
@@ -129,9 +157,19 @@ mod tx_table {
         }
     }
 
+    // pub trait ToBytes<const SIZE: usize> {
+    //     fn to_le_bytes(self) -> [u8; SIZE];
+    // }
+
+    // impl ToBytes<{ size_of::<usize>() }> for usize {
+    //     fn to_le_bytes(self) -> [u8; size_of::<usize>()] {
+    //         self.to_le_bytes()
+    //     }
+    // }
+
     #[cfg(test)]
     mod test {
-        use super::{max_from_byte_len, usize_to_bytes};
+        use super::{max_from_byte_len, max_from_byte_len2, usize_to_bytes, Foo};
         use fluent_asserter::prelude::*;
         use std::mem::size_of;
 
@@ -148,6 +186,24 @@ mod tx_table {
             // test byte lengths size_of::<usize>() to twice that length
             for i in size_of::<usize>()..2 * size_of::<usize>() {
                 assert_eq!(max_from_byte_len(i + 1), usize::MAX);
+            }
+        }
+
+        #[test]
+        fn max_from_byte_len2_correctness() {}
+
+        fn max_from_byte_len2_correctness_generic<T: Foo>() {
+            // test byte lengths 0 to size_of::<T>()
+            let mut bytes = [0; size_of::<T>()];
+            assert_eq!(max_from_byte_len2(0), 0);
+            for i in 0..bytes.len() {
+                bytes[i] = 0xff;
+                assert_eq!(max_from_byte_len2(i + 1).to_le_bytes(), bytes);
+            }
+
+            // test byte lengths size_of::<usize>() to twice that length
+            for i in size_of::<T>()..2 * size_of::<T>() {
+                assert_eq!(max_from_byte_len2(i + 1), T::max_value());
             }
         }
 
