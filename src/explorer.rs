@@ -31,6 +31,8 @@ use tide_disco::{api::ApiError, method::ReadState, Api};
 pub use traits::*;
 use versioned_binary_serialization::version::StaticVersionType;
 
+/// [Error] is an enum that represents the various errors that can be returned
+/// from the Explorer API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Error {
     #[serde(untagged)]
@@ -86,6 +88,8 @@ impl std::error::Error for Error {
     }
 }
 
+/// [BlockDetailResponse] is a struct that represents the response from the
+/// `get_block_detail` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct BlockDetailResponse<Types: NodeType>
@@ -104,6 +108,8 @@ where
     }
 }
 
+/// [BlockSummaryResponse] is a struct that represents the response from the
+/// `get_block_summaries` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct BlockSummaryResponse<Types: NodeType>
@@ -122,6 +128,8 @@ where
     }
 }
 
+/// [TransactionDetailResponse] is a struct that represents the response from the
+/// `get_transaction_detail` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct TransactionDetailResponse<Types: NodeType> {
@@ -136,6 +144,8 @@ impl<Types: NodeType> From<data_source::TransactionDetailResponse<Types>>
     }
 }
 
+/// [TransactionSummariesResponse] is a struct that represents the response from the
+/// `get_transaction_summaries` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct TransactionSummariesResponse<Types: NodeType>
@@ -156,6 +166,8 @@ where
     }
 }
 
+/// [ExplorerSummaryResponse] is a struct that represents the response from the
+/// `get_explorer_summary` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct ExplorerSummaryResponse<Types: NodeType>
@@ -174,6 +186,8 @@ where
     }
 }
 
+/// [SearchResultResponse] is a struct that represents the response from the
+/// `get_search_result` endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct SearchResultResponse<Types: NodeType>
@@ -212,6 +226,9 @@ fn validate_limit(
     Ok(num_blocks)
 }
 
+/// `define_api` is a function that defines the API endpoints for the Explorer
+/// module of the HotShot Query Service. It implements the specification
+/// defined in the `explorer.toml` file.
 pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> Result<Api<State, Error, Ver>, ApiError>

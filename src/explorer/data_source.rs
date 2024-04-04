@@ -24,7 +24,6 @@ use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use std::{
-    error::Error,
     fmt::{Debug, Display},
     num::{NonZeroUsize, TryFromIntError},
 };
@@ -207,6 +206,10 @@ where
     pub time: Timestamp,
 }
 
+/// [TimestampConversionError] represents an error that has occurred when
+/// attempting to convert a timestamp from a specific format to another.
+/// It is primarily used when attempting to deserialize a [Timestamp] from
+/// its serialized string representation.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TimestampConversionError {
     TimeError(time::error::ComponentRange),
@@ -440,6 +443,9 @@ impl<Types: NodeType> Default for GetTransactionSummariesRequest<Types> {
     }
 }
 
+/// [GenesisOverview] provides a summary overview of the block chain since
+/// it's genesis. At a high level it includes the total number of unique
+/// rollups, transactions, and blocks that are in the block chain.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenesisOverview {
     pub rollups: u64,
@@ -448,6 +454,15 @@ pub struct GenesisOverview {
     // pub sequencer_nodes: u64,
 }
 
+/// [ExplorerHistograms] provides a series of data points that can be used to
+/// draw simple histograms for the Block Explorer.  The data returned is meant
+/// to be an optimal packing of the values being returned.
+///
+/// It contains data for the last N blocks, indicated by the length of the
+/// vectors contained within the struct.  All of the vectors **MUST** have the
+/// same length.  The labels of the graph points is the `block_heights` vector.
+/// The remaining data points are the `block_time`, `block_size`, and
+/// `block_transactions` for those `block_heights`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExplorerHistograms {
     pub block_time: Vec<u64>,
@@ -456,6 +471,14 @@ pub struct ExplorerHistograms {
     pub block_heights: Vec<u64>,
 }
 
+/// [ExplorerSummary] is a struct that represents an at-a-glance snapshot of
+/// the Block Chain.  It contains some helpful information that can be used
+/// to display a simple health check of the Block Chain.
+///
+/// It contains the latest block for reference, the most recent blocks, the
+/// most recent transactions, some statistics concerning the total number
+/// of elements contained within the chain, and some histograms that can be
+/// used to draw graphs for the Block Explorer.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct ExplorerSummary<Types: NodeType>
@@ -470,6 +493,9 @@ where
     pub histograms: ExplorerHistograms,
 }
 
+/// [SearchResult] is a struct that represents the results of executing a
+/// search query against the chain.  It contains a list of blocks and
+/// transactions that match the search query.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct SearchResult<Types: NodeType>
@@ -753,6 +779,8 @@ impl std::error::Error for GetExplorerSummaryError {
     }
 }
 
+/// [GetSearchResultsError] represents an error that has occurred in response
+/// to the [GetSearchResults] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GetSearchResultsError {
     #[serde(untagged)]
@@ -817,35 +845,49 @@ pub trait ExplorerDataSource<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
 {
+    /// `get_block_detail` is a method that retrieves the details of a specific
+    /// block from the blockchain.  The block is identified by the given
+    /// [BlockIdentifier].
     async fn get_block_detail(
         &self,
         request: BlockIdentifier<Types>,
     ) -> Result<BlockDetail<Types>, GetBlockDetailError>;
+
+    /// `get_block_summaries` is a method that retrieves a list of block
+    /// summaries from the blockchain.  The list is generated from the given
+    /// [GetBlockSummariesRequest].
     async fn get_block_summaries(
         &self,
         request: GetBlockSummariesRequest<Types>,
     ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError>;
 
+    /// `get_transaction_detail` is a method that retrieves the details of a
+    /// specific transaction from the blockchain.  The transaction is identified
+    /// by the given [TransactionIdentifier].
     async fn get_transaction_detail(
         &self,
         request: TransactionIdentifier<Types>,
     ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError>;
 
+    /// `get_transaction_summaries` is a method that retrieves a list of
+    /// transaction summaries from the blockchain.  The list is generated from
+    /// the given [GetTransactionSummariesRequest].
     async fn get_transaction_summaries(
         &self,
         request: GetTransactionSummariesRequest<Types>,
     ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError>;
 
+    /// `get_explorer_summary` is a method that retrieves a summary overview of
+    /// the blockchain.  This is useful for displaying information that
+    /// indicates the overall status of the block chain.
     async fn get_explorer_summary(&self)
         -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
 
+    /// `get_search_results` is a method that retrieves the results of a search
+    /// query against the blockchain.  The results are generated from the given
+    /// query string.
     async fn get_search_results(
         &self,
         query: String,
     ) -> Result<SearchResult<Types>, GetSearchResultsError>;
-}
-
-#[async_trait]
-pub trait UpdateExplorerData<Types: NodeType> {
-    type Error: Error + Debug + Send + Sync + 'static;
 }

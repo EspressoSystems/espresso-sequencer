@@ -125,7 +125,6 @@ impl Serialize for InvalidCurrencyCodeError {
 /// not depend on their order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "&str")]
-
 pub enum CurrencyCode {
     FiatCurrencyStart = 0,
     #[serde(rename = "JPY")]
