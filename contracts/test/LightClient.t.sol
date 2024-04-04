@@ -23,7 +23,7 @@ contract LightClientCommonTest is Test {
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
     DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
     address payable public lcTestProxy;
-    address public admin;
+    address public admin = makeAddr("admin");
     address public approvedProver = makeAddr("prover");
 
     function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
@@ -35,7 +35,7 @@ contract LightClientCommonTest is Test {
         returns (address payable, address)
     {
         //deploy light client test with a proxy
-        (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch);
+        (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
 
         //cast the proxy to be of type light client test
         lc = LCTest(lcTestProxy);
