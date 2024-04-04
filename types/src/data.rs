@@ -229,7 +229,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Option<Proposal<TYPES, Self>> {
         let Ok(signature) =
-            TYPES::SignatureKey::sign(private_key, self.payload_commitment.as_ref().as_ref())
+            TYPES::SignatureKey::sign(private_key, self.payload_commitment.as_ref())
         else {
             error!("VID: failed to sign dispersal share payload");
             return None;
@@ -589,9 +589,9 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
             .u64_field("view number", *self.view_number)
             .u64_field("block number", self.get_height())
             .field("parent Leaf commitment", self.parent_commitment)
-            .fixed_size_field(
+            .var_size_field(
                 "block payload commitment",
-                self.get_payload_commitment().as_ref().as_ref(),
+                self.get_payload_commitment().as_ref(),
             )
             .field("justify qc", self.justify_qc.commit())
             .optional("upgrade certificate", &self.upgrade_certificate)

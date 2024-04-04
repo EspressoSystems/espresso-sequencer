@@ -108,7 +108,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let view_number = *view_number;
                 let Ok(signature) = TYPES::SignatureKey::sign(
                     &self.private_key,
-                    vid_disperse.payload_commitment.as_ref().as_ref(),
+                    vid_disperse.payload_commitment.as_ref(),
                 ) else {
                     error!("VID: failed to sign dispersal payload");
                     return None;
