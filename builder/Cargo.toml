@@ -8,36 +8,35 @@ edition = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = "0.7.0"
-async-lock = "3.3"
-async-trait = { workspace = true }
 async-compatibility-layer = { workspace = true }
+async-lock = "2.2"
 async-std = { workspace = true }
+async-trait = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 commit = { git = "https://github.com/EspressoSystems/commit.git" }
 dotenvy = { workspace = true }
-ethers = { workspace = true }
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
+ethers = { workspace = true }
 futures = { workspace = true }
-jf-primitives = { workspace = true }
-hotshot-types = { workspace = true }
 hotshot = { workspace = true }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.2" }
+hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hs-builder-core", branch = "hg/test_builder_executable" }
-hotshot-events-service = { workspace = true }
+hotshot-types = { workspace = true }
+jf-primitives = { workspace = true }
 portpicker = "0.1.1"
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
-snafu = { workspace = true }
 serde = { workspace = true }
+snafu = { workspace = true }
+surf = "2.3.1"
 surf-disco = { workspace = true }
-tracing = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
 versioned-binary-serialization = { workspace = true }
-surf = "2.3.1"
-# [[bin]]
