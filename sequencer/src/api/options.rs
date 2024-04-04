@@ -367,7 +367,7 @@ impl Options {
     {
         // Start the event streaming API server if it is enabled.
         // It runs to different port and app because State and Extensible Data source needs to support required
-        // EventsSource trait, which is currently inteneded not to implement to separate hotshot-query-service crate, and
+        // EventsSource trait, which is currently intended not to implement to separate hotshot-query-service crate, and
         // hotshot-events-service crate.
 
         let event_streamer = context.get_event_streamer();

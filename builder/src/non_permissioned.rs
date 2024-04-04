@@ -33,7 +33,7 @@ use sequencer::{
 };
 
 use hotshot_events_service::{
-    events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+    events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
     events_source::{BuilderEvent, EventConsumer, EventsStreamer},
 };
 
@@ -212,7 +212,7 @@ mod test {
     use async_lock::RwLock;
     use es_version::SequencerVersion;
     use hotshot_events_service::{
-        events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+        events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
     /// Test the non-permissioned builder core
@@ -279,28 +279,24 @@ mod test {
         let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
 
         // test getting available blocks
-        let response = loop {
-            // Test getting available blocks
-            let response = builder_client
-                .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                    "block_info/availableblocks/{parent_commitment}"
-                ))
-                .send()
-                .await;
-            match response {
-                Ok(response) => {
-                    println!("Received Available Blocks: {:?}", response);
-                    assert!(!response.is_empty());
-                    tracing::info!("Exiting from first loop");
-                    break response;
-                }
-                Err(e) => {
-                    panic!("Error getting available blocks {:?}", e);
-                }
-            };
+        let available_block_info = match builder_client
+            .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
+                "block_info/availableblocks/{parent_commitment}"
+            ))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                tracing::info!("Received Available Blocks: {:?}", response);
+                assert!(!response.is_empty());
+                response
+            }
+            Err(e) => {
+                panic!("Error getting available blocks {:?}", e);
+            }
         };
 
-        let builder_commitment = response[0].block_hash.clone();
+        let builder_commitment = available_block_info[0].block_hash.clone();
         let seed = [207_u8; 32];
         // Builder Public, Private key
         let (_hotshot_client_pub_key, hotshot_client_private_key) =
@@ -314,61 +310,51 @@ mod test {
         .expect("Claim block signing failed");
 
         // Test claiming blocks
-        let _response = loop {
-            let response = builder_client
-                .get::<AvailableBlockData<SeqTypes>>(&format!(
-                    "block_info/claimblock/{builder_commitment}/{encoded_signature}"
-                ))
-                .send()
-                .await;
-            match response {
-                Ok(response) => {
-                    println!("Received Block Data: {:?}", response);
-                    tracing::info!("Exiting from second loop");
-                    break response;
-                }
-                Err(e) => {
-                    panic!("Error while claiming block {:?}", e);
-                }
+        let _available_block_data = match builder_client
+            .get::<AvailableBlockData<SeqTypes>>(&format!(
+                "block_info/claimblock/{builder_commitment}/{encoded_signature}"
+            ))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                tracing::info!("Received Block Data: {:?}", response);
+                response
+            }
+            Err(e) => {
+                panic!("Error while claiming block {:?}", e);
             }
         };
 
         // Test claiming block header input
-        let _response = loop {
-            let response = builder_client
-                .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                    "block_info/claimheaderinput/{builder_commitment}/{encoded_signature}"
-                ))
-                .send()
-                .await;
-            match response {
-                Ok(response) => {
-                    println!("Received Block Header : {:?}", response);
-                    tracing::info!("Exiting from third loop");
-                    break response;
-                }
-                Err(e) => {
-                    panic!("Error getting claiming block header {:?}", e);
-                }
+        let _available_block_header = match builder_client
+            .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
+                "block_info/claimheaderinput/{builder_commitment}/{encoded_signature}"
+            ))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                tracing::info!("Received Block Header : {:?}", response);
+                response
+            }
+            Err(e) => {
+                panic!("Error getting claiming block header {:?}", e);
             }
         };
 
         // test getting builder key
-        loop {
-            let response = builder_client
-                .get::<BLSPubKey>(&format!("block_info/builderaddress"))
-                .send()
-                .await;
-            match response {
-                Ok(response) => {
-                    println!("Received Builder Key : {:?}", response);
-                    tracing::info!("Exiting from fourth loop");
-                    assert_eq!(response, builder_pub_key);
-                    break;
-                }
-                Err(e) => {
-                    panic!("Error getting builder key {:?}", e);
-                }
+        match builder_client
+            .get::<BLSPubKey>("block_info/builderaddress")
+            .send()
+            .await
+        {
+            Ok(response) => {
+                tracing::info!("Received Builder Key : {:?}", response);
+                assert_eq!(response, builder_pub_key);
+            }
+            Err(e) => {
+                panic!("Error getting builder key {:?}", e);
             }
         }
 
@@ -381,14 +367,12 @@ mod test {
             .await
         {
             Ok(response) => {
-                println!("Received txn submitted response : {:?}", response);
+                tracing::info!("Received txn submitted response : {:?}", response);
                 return;
             }
             Err(e) => {
                 panic!("Error submitting private transaction {:?}", e);
             }
         }
-
-        //task::sleep(std::time::Duration::from_secs(200)).await;
     }
 }

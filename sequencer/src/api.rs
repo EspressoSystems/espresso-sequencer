@@ -757,7 +757,7 @@ mod api_tests {
                 break;
             }
         }
-        // Offest 1 is due to the startup event info
+        // Offset 1 is due to the startup event info
         assert_eq!(receive_count, total_count + 1);
     }
 }

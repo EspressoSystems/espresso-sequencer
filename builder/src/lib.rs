@@ -154,7 +154,7 @@ pub mod testing {
     use hotshot_builder_api::builder::Options as HotshotBuilderApiOptions;
     use hotshot_builder_api::builder::{BuildError, Error as BuilderApiError};
     use hotshot_events_service::{
-        events::{Error as EventStreamApiError, Options as EventStreamingApiOptioins},
+        events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
@@ -181,13 +181,13 @@ pub mod testing {
 
             // first generate stake table entries for the staking nodes
             let (priv_keys_staking_nodes, staking_nodes_state_key_pairs, known_nodes_with_stake) =
-                genereate_stake_table_entries(num_nodes_with_stake as u64, 1);
+                generate_stake_table_entries(num_nodes_with_stake as u64, 1);
             // Now generate the stake table entries for the non-staking nodes
             let (
                 priv_keys_non_staking_nodes,
                 non_staking_nodes_state_key_pairs,
                 known_nodes_without_stake,
-            ) = genereate_stake_table_entries(num_nodes_without_stake as u64, 0);
+            ) = generate_stake_table_entries(num_nodes_without_stake as u64, 0);
 
             // get the pub key out of the stake table entry for the non-staking nodes
             // Only pass the pub keys to the hotshot config
@@ -235,7 +235,7 @@ pub mod testing {
         }
     }
 
-    pub fn genereate_stake_table_entries(
+    pub fn generate_stake_table_entries(
         num_nodes: u64,
         stake_value: u64,
     ) -> (Vec<BLSPrivKey>, Vec<StateKeyPair>, Vec<PeerConfig<PubKey>>) {
@@ -378,7 +378,7 @@ pub mod testing {
             .with_genesis(ValidatedState::default());
 
             tracing::info!("Before init hotshot");
-            let x = init_hotshot(
+            let handle = init_hotshot(
                 config,
                 Some(self.non_staking_nodes_stake_entries.clone()),
                 node_state,
@@ -392,7 +392,7 @@ pub mod testing {
             .await;
 
             tracing::info!("After init hotshot");
-            x
+            handle
         }
 
         pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
@@ -426,7 +426,7 @@ pub mod testing {
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
                 Version01,
-            >(&EventStreamingApiOptioins::default())
+            >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
             let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
@@ -458,7 +458,7 @@ pub mod testing {
                     let mut hotshot_event_stream = hotshot_context_handle.get_event_stream();
                     loop {
                         let event = hotshot_event_stream.next().await.unwrap();
-                        tracing::debug!("Befor writing in event streamer: {event:?}");
+                        tracing::debug!("Before writing in event streamer: {event:?}");
                         events_streamer.write().await.handle_event(event).await;
                         tracing::debug!("Event written to the event streamer");
                     }
