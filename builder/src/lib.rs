@@ -502,7 +502,8 @@ pub mod testing {
     }
 
     pub struct NonPermissionedBuilderTestConfig {
-        pub builder_config: BuilderConfig,
+        pub config: BuilderConfig,
+        pub pub_key: BLSPubKey,
     }
 
     impl NonPermissionedBuilderTestConfig {
@@ -553,12 +554,16 @@ pub mod testing {
             .await
             .unwrap();
 
-            Self { builder_config }
+            Self {
+                config: builder_config,
+                pub_key: builder_pub_key,
+            }
         }
     }
 
     pub struct PermissionedBuilderTestConfig<Ver: StaticVersionType + 'static> {
         pub builder_context: BuilderContext<network::Memory, Ver>,
+        pub pub_key: BLSPubKey,
     }
 
     impl<Ver: StaticVersionType + 'static> PermissionedBuilderTestConfig<Ver> {
@@ -611,7 +616,10 @@ pub mod testing {
             .await
             .unwrap();
 
-            Self { builder_context }
+            Self {
+                builder_context,
+                pub_key: builder_pub_key,
+            }
         }
     }
 

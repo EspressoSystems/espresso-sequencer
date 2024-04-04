@@ -261,14 +261,14 @@ mod test {
         // builder api url
         let hotshot_builder_api_url = hotshot_builder_url();
 
-        let _builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
+        let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             &hotshot_config,
             hotshot_events_streaming_api_url.clone(),
             hotshot_builder_api_url.clone(),
         )
         .await;
 
-        tracing::info!("Started Builder Api service");
+        let builder_pub_key = builder_config.pub_key;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -295,7 +295,7 @@ mod test {
                     break response;
                 }
                 Err(e) => {
-                    tracing::warn!("Error getting available blocks {:?}", e);
+                    panic!("Error getting available blocks {:?}", e);
                 }
             };
         };
@@ -328,7 +328,7 @@ mod test {
                     break response;
                 }
                 Err(e) => {
-                    tracing::warn!("Error while claiming block {:?}", e);
+                    panic!("Error while claiming block {:?}", e);
                 }
             }
         };
@@ -348,10 +348,29 @@ mod test {
                     break response;
                 }
                 Err(e) => {
-                    tracing::warn!("Error getting claiming block header {:?}", e);
+                    panic!("Error getting claiming block header {:?}", e);
                 }
             }
         };
+
+        // test getting builder key
+        loop {
+            let response = builder_client
+                .get::<BLSPubKey>(&format!("block_info/builderaddress"))
+                .send()
+                .await;
+            match response {
+                Ok(response) => {
+                    println!("Received Builder Key : {:?}", response);
+                    tracing::info!("Exiting from fourth loop");
+                    assert_eq!(response, builder_pub_key);
+                    break;
+                }
+                Err(e) => {
+                    panic!("Error getting builder key {:?}", e);
+                }
+            }
+        }
 
         let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
         match builder_client
@@ -366,7 +385,7 @@ mod test {
                 return;
             }
             Err(e) => {
-                tracing::warn!("Error submitting private transaction {:?}", e);
+                panic!("Error submitting private transaction {:?}", e);
             }
         }
 
