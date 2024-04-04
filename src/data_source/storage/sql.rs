@@ -1394,7 +1394,7 @@ where
                             "SELECT height FROM Header  where 
                              data->>'{header_state_commitment_field}' = $1"
                         ),
-                        &[&serde_json::to_string(&commit).map_err(ParseError::Serde)?],
+                        &[&commit.to_string()],
                     )
                     .await?;
 
@@ -1409,9 +1409,9 @@ where
                     [sql_param(&created)],
                 )
                 .await?;
-                let commit = row.get(0);
+                let commit: String = row.get(0);
                 let commit: State::Commit =
-                    serde_json::from_str(commit).map_err(ParseError::Serde)?;
+                    serde_json::from_value(commit.into()).map_err(ParseError::Serde)?;
                 (created, commit.digest())
             }
         };
@@ -1530,7 +1530,7 @@ where
             Some(MerkleNode::Empty) => State::T::default(),
             Some(_) => {
                 return Err(QueryError::Error {
-                    message: "First node in the proof should be leaf or empty".to_string(),
+                    message: "Missing State ".to_string(),
                 })
             }
             None => return Err(QueryError::Missing),
@@ -2863,7 +2863,7 @@ mod test {
             test_tree.update(i, i).unwrap();
 
             // data field of the header
-            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
             storage
                 .query_opt(
                     "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
@@ -2920,7 +2920,7 @@ mod test {
         // Also update the merkle commitment in the header
 
         // data field of the header
-        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
         storage
             .query_opt(
                 "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
@@ -3009,7 +3009,7 @@ mod test {
         test_tree.update(0, 0).unwrap();
         let commitment = test_tree.commitment();
 
-        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(commitment).unwrap()});
         // insert the header with merkle commitment
         storage
                 .query_opt(
@@ -3074,7 +3074,7 @@ mod test {
             [
                 sql_param(&2_i64),
                 sql_param(&"randomString2"),
-                sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()})),
+                sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
             ],
         )
         .await
@@ -3126,7 +3126,7 @@ mod test {
         test_tree.update(0, 0).unwrap();
         let commitment = test_tree.commitment();
 
-        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&commitment).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(commitment).unwrap()});
         // insert the header with merkle commitment
         storage
                 .query_opt(
@@ -3186,7 +3186,7 @@ mod test {
 
         for i in 0..27 {
             test_tree.update(i, i).unwrap();
-            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
             // insert the header with merkle commitment
             storage
                     .query_opt(
@@ -3239,7 +3239,7 @@ mod test {
         .await;
         assert!(merkle_path.is_err());
 
-        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
         // insert the header with merkle commitment
         storage
                 .query_opt(
@@ -3267,7 +3267,7 @@ mod test {
         test_tree.update(1, 200).unwrap();
 
         let (_, proof) = test_tree.lookup(1).expect_ok().unwrap();
-        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_string(&test_tree.commitment()).unwrap()});
+        let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
 
         // insert the header with merkle commitment
         storage
