@@ -495,11 +495,10 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload,
-    Header<Types>: availability::QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    Header<Types>: availability::QueryableHeader<Types>,
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource
-        + explorer::data_source::ExplorerDataSource<Types>
         + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
         + Send
@@ -512,7 +511,6 @@ where
         availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;
     let node_api = node::define_api(&options.node, bind_version).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status, bind_version).map_err(Error::internal)?;
-    let explorer_api = explorer::define_api(bind_version).map_err(Error::internal)?;
 
     // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
     let data_source = Arc::new(RwLock::new(data_source));
@@ -522,8 +520,6 @@ where
         .register_module("node", node_api)
         .map_err(Error::internal)?
         .register_module("status", status_api)
-        .map_err(Error::internal)?
-        .register_module("explorer", explorer_api)
         .map_err(Error::internal)?;
 
     // Serve app.
