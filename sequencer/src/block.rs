@@ -136,6 +136,10 @@ impl BlockPayload for Payload2 {
 }
 
 impl Payload2 {
+    // pub fn ns_iter() -> impl Iterator<Item = NamespaceId> {
+    //     todo!()
+    // }
+
     // TODO dead code even with `pub` because this module is private in lib.rs
     // #[allow(dead_code)]
     /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
@@ -205,6 +209,17 @@ fn ns_table_offset_range(ns_index: usize) -> Range<usize> {
         NUM_NSS_BYTE_LEN + (ns_index * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)) + NS_ID_BYTE_LEN;
     start..start + NS_OFFSET_BYTE_LEN
 }
+
+// pub struct NsIter<'a> {
+//     ns_index: usize, // TODO use newtype?
+//     block: &'a Payload2,
+// }
+
+// impl<'a> NsIter<'a> {
+//     fn new(block: &'a Payload2) -> Self {
+//         Self { ns_index: 0, block }
+//     }
+// }
 
 // OLD: DELETE
 pub type NsTable = NameSpaceTable<TxTableEntryWord>;
@@ -393,7 +408,8 @@ mod test {
     use crate::{NamespaceId, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot::traits::BlockPayload;
-    use rand::{Rng, RngCore};
+    use rand::RngCore;
+    use std::collections::HashMap;
 
     #[test]
     fn basic_correctness() {
@@ -408,12 +424,12 @@ mod test {
         let valid_tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
 
         for test in valid_tests {
-            let block = Payload2::from_transactions(test.txs).unwrap();
+            let _block = Payload2::from_transactions(test.as_vec_tx()).unwrap();
         }
     }
 
     struct ValidTest {
-        txs: Vec<Transaction>,
+        nss: HashMap<NamespaceId, Vec<Vec<u8>>>,
     }
 
     impl ValidTest {
@@ -421,14 +437,15 @@ mod test {
         where
             R: RngCore,
         {
-            let mut txs = Vec::new();
+            let mut txs = HashMap::new();
             for (ns_index, tx_lens) in tx_lengths.into_iter().enumerate() {
                 let ns_id = NamespaceId::from(ns_index as u64);
                 for len in tx_lens {
-                    txs.push(Transaction::new(ns_id, random_bytes(len, rng)));
+                    let ns: &mut Vec<Vec<u8>> = txs.entry(ns_id).or_default();
+                    ns.push(random_bytes(len, rng));
                 }
             }
-            Self { txs }
+            Self { nss: txs }
         }
 
         fn many_from_tx_lengths<R>(test_cases: Vec<Vec<Vec<usize>>>, rng: &mut R) -> Vec<Self>
@@ -439,6 +456,16 @@ mod test {
                 .into_iter()
                 .map(|t| Self::from_tx_lengths(t, rng))
                 .collect()
+        }
+
+        fn as_vec_tx(&self) -> Vec<Transaction> {
+            let mut txs = Vec::new();
+            for (ns_id, tx_payloads) in self.nss.iter() {
+                for tx_payload in tx_payloads {
+                    txs.push(Transaction::new(*ns_id, tx_payload.clone()));
+                }
+            }
+            txs
         }
     }
 
