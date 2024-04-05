@@ -2928,9 +2928,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.24"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
+checksum = "81fe527a889e1532da5c525686d96d4c2e74cdd345badf8dfef9f6b39dd5f5e8"
 dependencies = [
  "bytes 1.5.0",
  "fnv",
@@ -3180,7 +3180,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3224,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.6"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "async-trait",
  "clap",
@@ -3243,7 +3243,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3273,7 +3273,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "anyhow",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -3357,7 +3357,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -3370,7 +3370,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
@@ -3403,7 +3403,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -3451,7 +3451,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
  "async-lock 2.8.0",
@@ -3571,7 +3571,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.13",
- "socket2 0.5.5",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -4395,7 +4395,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.26"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=main#10dfcc7065ae99462cdf87538a225e5a562df2a4"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.32#10dfcc7065ae99462cdf87538a225e5a562df2a4"
 dependencies = [
  "anyhow",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.2)",
