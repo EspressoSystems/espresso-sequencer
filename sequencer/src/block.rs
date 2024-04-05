@@ -1,15 +1,19 @@
 use crate::{
-    block::payload2::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes, NamespaceBuilder},
+    block::payload2::{
+        ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes,
+        num_nss_as_bytes, NamespaceBuilder,
+    },
     BlockBuildingSnafu, NamespaceId, Transaction,
 };
 use commit::{Commitment, Committable};
-use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::BlockPayload;
-use hotshot_types::utils::BuilderCommitment;
+use hotshot_query_service::{availability::QueryablePayload, VidCommon};
+use hotshot_types::{traits::BlockPayload, vid::VidSchemeType};
+use hotshot_types::{utils::BuilderCommitment, vid::vid_scheme};
+use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 pub mod entry;
 pub mod payload;
@@ -21,6 +25,11 @@ pub mod tx_iterator;
 use entry::TxTableEntryWord;
 use payload::Payload;
 use tables::NameSpaceTable;
+
+use self::{
+    payload::NamespaceProof,
+    payload2::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload2 {
@@ -124,6 +133,76 @@ impl BlockPayload for Payload2 {
     fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
         todo!()
     }
+}
+
+impl Payload2 {
+    // TODO dead code even with `pub` because this module is private in lib.rs
+    // #[allow(dead_code)]
+    /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
+    ///
+    /// RPC-friendly proof contains:
+    /// - the namespace bytes
+    /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
+    pub fn namespace_with_proof(
+        &self,
+        ns_id: NamespaceId,
+        vid_common: VidCommon,
+    ) -> Option<NamespaceProof> {
+        if self.payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
+            return None; // error: vid_common inconsistent with self
+        }
+
+        let ns_range = if let Some(ns_range) = self.get_namespace_range(ns_id) {
+            ns_range
+        } else {
+            return Some(NamespaceProof::NonExistence { ns_id });
+        };
+
+        // TODO log output for each `?`
+        // fix this when we settle on an error handling pattern
+        Some(NamespaceProof::Existence {
+            ns_id,
+            ns_payload_flat: self.payload[ns_range.clone()].into(),
+            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
+                .payload_proof(&self.payload, ns_range)
+                .ok()?,
+            vid_common,
+        })
+    }
+
+    fn get_namespace_range(&self, ns_id: NamespaceId) -> Option<Range<usize>> {
+        // find ns_id in ns_table
+        let ns_index = (NUM_NSS_BYTE_LEN..self.ns_table.len())
+            .step_by(NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
+            .find(|&i| ns_id == ns_id_from_bytes(&self.ns_table[i..i + NS_ID_BYTE_LEN]))?;
+
+        // read (start,end) offsets for ns_id from ns_table
+        let ns_end = self.ns_offset(ns_index);
+        let ns_start = if ns_index == 0 {
+            0
+        } else {
+            self.ns_offset(ns_index - 1)
+        };
+
+        // ensure range is valid and within payload byte length
+        let ns_end = std::cmp::min(ns_end, self.payload.len());
+        let ns_start = std::cmp::min(ns_start, ns_end);
+
+        Some(ns_start..ns_end)
+    }
+
+    // TODO newtype for `ns_index` to protect against misuse?
+    fn ns_offset(&self, ns_index: usize) -> usize {
+        ns_offset_from_bytes(&self.ns_table[ns_table_offset_range(ns_index)])
+    }
+}
+
+// TODO move this lower level?
+// TODO newtype for `ns_index` to protect against misuse?
+fn ns_table_offset_range(ns_index: usize) -> Range<usize> {
+    let start =
+        NUM_NSS_BYTE_LEN + (ns_index * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)) + NS_ID_BYTE_LEN;
+    start..start + NS_OFFSET_BYTE_LEN
 }
 
 // OLD: DELETE

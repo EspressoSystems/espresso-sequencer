@@ -41,13 +41,8 @@ impl NamespaceBuilder {
 
 // TODO better way to do this?
 pub use tx_table::{
-    ns_id_as_bytes,
-    ns_id_from_bytes,
-    ns_offset_as_bytes,
-    ns_offset_from_bytes,
-    num_nss_as_bytes,
-    num_nss_from_bytes,
-    // NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes, num_nss_as_bytes,
+    num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 
 // TODO rename from tx_table, this mod also has ns_table utils
