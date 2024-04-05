@@ -170,6 +170,7 @@ impl Payload2 {
         })
     }
 
+    // TODO newtype for `Range<usize>` for indexing into `self.payload` to protect against misuse?
     fn get_namespace_range(&self, ns_id: NamespaceId) -> Option<Range<usize>> {
         // find ns_id in ns_table
         let ns_index = (NUM_NSS_BYTE_LEN..self.ns_table.len())
@@ -383,5 +384,67 @@ mod reference {
             "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
             |tx| tx.commit(),
         );
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Payload2;
+    use crate::{NamespaceId, Transaction};
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use hotshot::traits::BlockPayload;
+    use rand::{Rng, RngCore};
+
+    #[test]
+    fn basic_correctness() {
+        // play with this
+        let test_cases = vec![
+            vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
+        ];
+
+        setup_logging();
+        setup_backtrace();
+        let mut rng = jf_utils::test_rng();
+        let valid_tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
+
+        for test in valid_tests {
+            let block = Payload2::from_transactions(test.txs).unwrap();
+        }
+    }
+
+    struct ValidTest {
+        txs: Vec<Transaction>,
+    }
+
+    impl ValidTest {
+        fn from_tx_lengths<R>(tx_lengths: Vec<Vec<usize>>, rng: &mut R) -> Self
+        where
+            R: RngCore,
+        {
+            let mut txs = Vec::new();
+            for (ns_index, tx_lens) in tx_lengths.into_iter().enumerate() {
+                let ns_id = NamespaceId::from(ns_index as u64);
+                for len in tx_lens {
+                    txs.push(Transaction::new(ns_id, random_bytes(len, rng)));
+                }
+            }
+            Self { txs }
+        }
+
+        fn many_from_tx_lengths<R>(test_cases: Vec<Vec<Vec<usize>>>, rng: &mut R) -> Vec<Self>
+        where
+            R: RngCore,
+        {
+            test_cases
+                .into_iter()
+                .map(|t| Self::from_tx_lengths(t, rng))
+                .collect()
+        }
+    }
+
+    fn random_bytes<R: RngCore>(len: usize, rng: &mut R) -> Vec<u8> {
+        let mut result = vec![0; len];
+        rng.fill_bytes(&mut result);
+        result
     }
 }
