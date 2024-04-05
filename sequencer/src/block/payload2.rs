@@ -1,7 +1,7 @@
 // use serde::{Deserialize, Serialize};
 
 use self::tx_table::{num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN};
-use crate::{NamespaceId, Transaction};
+use crate::Transaction;
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[derive(Default)]
@@ -41,8 +41,10 @@ impl NamespaceBuilder {
 
 // TODO better way to do this?
 pub use tx_table::{
-    ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
-    NUM_NSS_BYTE_LEN,
+    ns_id_as_bytes,
+    ns_offset_as_bytes,
+    num_nss_as_bytes,
+    // NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 
 // TODO rename from tx_table, this mod also has ns_table utils
@@ -105,25 +107,9 @@ mod tx_table {
         u64_to_bytes2(u64::from(ns_id))
     }
 
-    /// Deserialize `bytes` in little-endian form into a `usize`, padding with 0
-    /// as needed.
-    ///
-    /// # Panics
-    /// If `bytes.len()` is too large to fit into a `usize`.
-    pub fn usize_from_bytes2(bytes: &[u8]) -> usize {
-        assert!(
-            bytes.len() <= size_of::<usize>(),
-            "bytes len {} cannot fit into usize",
-            bytes.len()
-        );
-        let mut usize_bytes = [0; size_of::<usize>()];
-        usize_bytes[..bytes.len()].copy_from_slice(bytes);
-        usize::from_le_bytes(usize_bytes)
-    }
-
     // Use an ugly macro because it's difficult or impossible to be generic over
     // primitive types such as `usize`, `u64`.
-    macro_rules! to_bytes_impl {
+    macro_rules! uint_bytes_impl {
         ($T:ty) => {
             paste! {
                 /// Serialize `n` into `BYTE_LEN` bytes in little-endian form, padding with
@@ -146,6 +132,23 @@ mod tx_table {
                     }
                 }
 
+                /// Deserialize `bytes` in little-endian form into a `$T`, padding with 0
+                /// as needed.
+                ///
+                /// # Panics
+                /// If `bytes.len()` is too large to fit into a `$T`.
+                fn [<$T _from_bytes2>](bytes: &[u8]) -> $T {
+                    assert!(
+                        bytes.len() <= size_of::<$T>(),
+                        "bytes len {} cannot fit into {}",
+                        bytes.len(),
+                        stringify!($T)
+                    );
+                    let mut [<$T _bytes>] = [0; size_of::<$T>()];
+                    [<$T _bytes>][..bytes.len()].copy_from_slice(bytes);
+                    $T::from_le_bytes([<$T _bytes>])
+                }
+
                 /// Return the largest `$T` value that can fit into `byte_len` bytes.
                 const fn [<$T _max_from_byte_len2>](byte_len: usize) -> $T {
                     if byte_len >= size_of::<$T>() {
@@ -159,8 +162,8 @@ mod tx_table {
         };
     }
 
-    to_bytes_impl!(usize);
-    to_bytes_impl!(u64);
+    uint_bytes_impl!(usize);
+    uint_bytes_impl!(u64);
 
     #[cfg(test)]
     mod test {
@@ -168,24 +171,10 @@ mod tx_table {
         use paste::paste;
         use std::mem::size_of;
 
-        use super::usize_from_bytes2;
-
-        #[test]
-        fn usize_from_bytes2_correctness() {
-            let bytes = [255; size_of::<usize>() + 1];
-            for len in 0..=size_of::<usize>() {
-                assert_eq!(
-                    usize_from_bytes2(&bytes[..len]),
-                    usize_max_from_byte_len2(len)
-                );
-            }
-            assert_that_code!(|| usize_from_bytes2(&bytes[..])).panics();
-        }
-
-        macro_rules! to_bytes_test_impl {
+        macro_rules! uint_bytes_test_impl {
             ($T:ty) => {
                 paste! {
-                    use super::{[<$T _max_from_byte_len2>], [<$T _to_bytes2>]};
+                    use super::{[<$T _max_from_byte_len2>], [<$T _to_bytes2>], [<$T _from_bytes2>]};
 
                     #[test]
                     fn [<$T _max_from_byte_len2_correctness>]() {
@@ -232,11 +221,23 @@ mod tx_table {
                         };
                         assert_eq!([<$T _to_bytes2>]($T::MAX), [<$T _max_bytes>]);
                     }
+
+                    #[test]
+                    fn [<$T _from_bytes2_correctness>]() {
+                        let bytes = [255; size_of::<$T>() + 1];
+                        for len in 0..=size_of::<$T>() {
+                            assert_eq!(
+                                [<$T _from_bytes2>](&bytes[..len]),
+                                [<$T _max_from_byte_len2>](len)
+                            );
+                        }
+                        assert_that_code!(|| [<$T _from_bytes2>](&bytes[..])).panics();
+                    }
                 }
             };
         }
 
-        to_bytes_test_impl!(usize);
-        to_bytes_test_impl!(u64);
+        uint_bytes_test_impl!(usize);
+        uint_bytes_test_impl!(u64);
     }
 }
