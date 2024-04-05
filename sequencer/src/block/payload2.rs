@@ -42,8 +42,11 @@ impl NamespaceBuilder {
 // TODO better way to do this?
 pub use tx_table::{
     ns_id_as_bytes,
+    ns_id_from_bytes,
     ns_offset_as_bytes,
+    ns_offset_from_bytes,
     num_nss_as_bytes,
+    num_nss_from_bytes,
     // NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 
@@ -60,42 +63,74 @@ mod tx_table {
     pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
     pub const NS_ID_BYTE_LEN: usize = 4;
 
-    /// Serialize `num_txs` into `NUM_TXS_BYTE_LEN` bytes.
+    /// Serialize `num_txs` into [`NUM_TXS_BYTE_LEN`] bytes.
     ///
     /// # Panics
-    /// If `num_txs` cannot fit into `NUM_TXS_BYTE_LEN` bytes.
+    /// If `num_txs` cannot fit into [`NUM_TXS_BYTE_LEN`] bytes.
     pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes2(num_txs)
     }
 
-    /// Serialize `tx_offset` into `TX_OFFSET_BYTE_LEN` bytes.
+    /// Deserialize `bytes` into a count of transactions (`usize`).
     ///
     /// # Panics
-    /// If `tx_offset` cannot fit into `TX_OFFSET_BYTE_LEN` bytes.
+    /// If `bytes.len()` differs from [`NUM_TXS_BYTE_LEN`].
+    pub fn num_txs_from_bytes(bytes: &[u8]) -> usize {
+        usize_from_bytes2::<NUM_TXS_BYTE_LEN>(bytes)
+    }
+
+    /// Serialize `tx_offset` into [`TX_OFFSET_BYTE_LEN`] bytes.
+    ///
+    /// # Panics
+    /// If `tx_offset` cannot fit into [`TX_OFFSET_BYTE_LEN`] bytes.
     pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
         usize_to_bytes2(tx_offset)
     }
 
-    /// Serialize `num_nss` into `NUM_NSS_BYTE_LEN` bytes.
+    /// Deserialize `bytes` into a transaction offset (`usize`).
     ///
     /// # Panics
-    /// If `num_nss` cannot fit into `NUM_NSS_BYTE_LEN` bytes.
+    /// If `bytes.len()` differs from [`TX_OFFSET_BYTE_LEN`].
+    pub fn tx_offset_from_bytes(bytes: &[u8]) -> usize {
+        usize_from_bytes2::<TX_OFFSET_BYTE_LEN>(bytes)
+    }
+
+    /// Serialize `num_nss` into [`NUM_NSS_BYTE_LEN`] bytes.
+    ///
+    /// # Panics
+    /// If `num_nss` cannot fit into [`NUM_NSS_BYTE_LEN`] bytes.
     pub fn num_nss_as_bytes(num_nss: usize) -> [u8; NUM_NSS_BYTE_LEN] {
         usize_to_bytes2(num_nss)
     }
 
-    /// Serialize `ns_offset` into `NS_OFFSET_BYTE_LEN` bytes.
+    /// Deserialize `bytes` into a count of namespaces (`usize`).
     ///
     /// # Panics
-    /// If `ns_offset` cannot fit into `NS_OFFSET_BYTE_LEN` bytes.
+    /// If `bytes.len()` differs from [`NUM_NSS_BYTE_LEN`].
+    pub fn num_nss_from_bytes(bytes: &[u8]) -> usize {
+        usize_from_bytes2::<NUM_NSS_BYTE_LEN>(bytes)
+    }
+
+    /// Serialize `ns_offset` into [`NS_OFFSET_BYTE_LEN`] bytes.
+    ///
+    /// # Panics
+    /// If `ns_offset` cannot fit into [`NS_OFFSET_BYTE_LEN`] bytes.
     pub fn ns_offset_as_bytes(ns_offset: usize) -> [u8; NS_OFFSET_BYTE_LEN] {
         usize_to_bytes2(ns_offset)
     }
 
-    /// Serialize `ns_id` into `NS_ID_BYTE_LEN` bytes.
+    /// Deserialize `bytes` into a namespace offset (`usize`).
     ///
     /// # Panics
-    /// If `ns_id` cannot fit into `NS_ID_BYTE_LEN` bytes.
+    /// If `bytes.len()` differs from [`NS_OFFSET_BYTE_LEN`].
+    pub fn ns_offset_from_bytes(bytes: &[u8]) -> usize {
+        usize_from_bytes2::<NS_OFFSET_BYTE_LEN>(bytes)
+    }
+
+    /// Serialize `ns_id` into [`NS_ID_BYTE_LEN`] bytes.
+    ///
+    /// # Panics
+    /// If `ns_id` cannot fit into [`NS_ID_BYTE_LEN`] bytes.
     ///
     /// TODO I'm cheating by converting `NamespaceId` via `u64::from`, which is
     /// available only because `NamespaceId` derives `From`. (Not sure it should
@@ -105,6 +140,14 @@ mod tx_table {
     /// infallible and returns a constant-size array.
     pub fn ns_id_as_bytes(ns_id: NamespaceId) -> [u8; NS_ID_BYTE_LEN] {
         u64_to_bytes2(u64::from(ns_id))
+    }
+
+    /// Deserialize `bytes` into a [`NamespaceId`].
+    ///
+    /// # Panics
+    /// If `bytes.len()` differs [`NS_ID_BYTE_LEN`].
+    pub fn ns_id_from_bytes(bytes: &[u8]) -> NamespaceId {
+        NamespaceId::from(u64_from_bytes2::<NS_ID_BYTE_LEN>(bytes))
     }
 
     // Use an ugly macro because it's difficult or impossible to be generic over
@@ -137,15 +180,15 @@ mod tx_table {
                 ///
                 /// # Panics
                 /// If `bytes.len()` is too large to fit into a `$T`.
-                fn [<$T _from_bytes2>](bytes: &[u8]) -> $T {
+                fn [<$T _from_bytes2>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
+                    assert_eq!(bytes.len(), BYTE_LEN, "bytes len {} differs from BYTE_LEN {BYTE_LEN}", bytes.len());
                     assert!(
-                        bytes.len() <= size_of::<$T>(),
-                        "bytes len {} cannot fit into {}",
-                        bytes.len(),
+                        BYTE_LEN <= size_of::<$T>(),
+                        "BYTE_LEN {BYTE_LEN} cannot fit into {}",
                         stringify!($T)
                     );
                     let mut [<$T _bytes>] = [0; size_of::<$T>()];
-                    [<$T _bytes>][..bytes.len()].copy_from_slice(bytes);
+                    [<$T _bytes>][..BYTE_LEN].copy_from_slice(bytes);
                     $T::from_le_bytes([<$T _bytes>])
                 }
 
@@ -225,13 +268,33 @@ mod tx_table {
                     #[test]
                     fn [<$T _from_bytes2_correctness>]() {
                         let bytes = [255; size_of::<$T>() + 1];
-                        for len in 0..=size_of::<$T>() {
-                            assert_eq!(
-                                [<$T _from_bytes2>](&bytes[..len]),
-                                [<$T _max_from_byte_len2>](len)
-                            );
-                        }
-                        assert_that_code!(|| [<$T _from_bytes2>](&bytes[..])).panics();
+
+                        // It would be nice to iterate through
+                        // `0..size_of::<$T>()` but this is not possible with
+                        // const generics for `[<$T _from_bytes2>]`. We could
+                        // use `seq-macro` crate but it requires an integer
+                        // literal whereas our range includes `size_of::<$T>()`.
+                        //
+                        // Instead we just hard code four constants:
+                        // `0`, `1`, `size_of::<$T>() - 1`, `size_of::<$T>()`.
+                        assert_eq!(
+                            [<$T _from_bytes2>]::<0>(&bytes[..0]),
+                            [<$T _max_from_byte_len2>](0)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes2>]::<1>(&bytes[..1]),
+                            [<$T _max_from_byte_len2>](1)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes2>]::<{size_of::<$T>() - 1}>(&bytes[..size_of::<$T>() - 1]),
+                            [<$T _max_from_byte_len2>](size_of::<$T>() - 1)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes2>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>()]),
+                            [<$T _max_from_byte_len2>](size_of::<$T>())
+                        );
+
+                        assert_that_code!(|| [<$T _from_bytes2>]::<{size_of::<$T>() + 1}>(&bytes[..])).panics();
                     }
                 }
             };
