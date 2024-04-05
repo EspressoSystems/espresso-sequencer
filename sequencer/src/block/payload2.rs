@@ -1,7 +1,7 @@
 // use serde::{Deserialize, Serialize};
 
 use self::tx_table::{num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN};
-use crate::Transaction;
+use crate::{NamespaceId, Transaction};
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[derive(Default)]
@@ -41,10 +41,8 @@ impl NamespaceBuilder {
 
 // TODO better way to do this?
 pub use tx_table::{
-    ns_id_as_bytes,
-    ns_offset_as_bytes,
-    num_nss_as_bytes,
-    // NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
+    NUM_NSS_BYTE_LEN,
 };
 
 // TODO rename from tx_table, this mod also has ns_table utils
@@ -96,8 +94,31 @@ mod tx_table {
     ///
     /// # Panics
     /// If `ns_id` cannot fit into `NS_ID_BYTE_LEN` bytes.
+    ///
+    /// TODO I'm cheating by converting `NamespaceId` via `u64::from`, which is
+    /// available only because `NamespaceId` derives `From`. (Not sure it should
+    /// be doing that. What's the point of the newtype?). Maybe I should instead
+    /// use serialization provided by `NamespaceId`? The problem is that
+    /// serialization is not ergonomic compared to mine here, which is
+    /// infallible and returns a constant-size array.
     pub fn ns_id_as_bytes(ns_id: NamespaceId) -> [u8; NS_ID_BYTE_LEN] {
         u64_to_bytes2(u64::from(ns_id))
+    }
+
+    /// Deserialize `bytes` in little-endian form into a `usize`, padding with 0
+    /// as needed.
+    ///
+    /// # Panics
+    /// If `bytes.len()` is too large to fit into a `usize`.
+    pub fn usize_from_bytes2(bytes: &[u8]) -> usize {
+        assert!(
+            bytes.len() <= size_of::<usize>(),
+            "bytes len {} cannot fit into usize",
+            bytes.len()
+        );
+        let mut usize_bytes = [0; size_of::<usize>()];
+        usize_bytes[..bytes.len()].copy_from_slice(bytes);
+        usize::from_le_bytes(usize_bytes)
     }
 
     // Use an ugly macro because it's difficult or impossible to be generic over
@@ -146,6 +167,20 @@ mod tx_table {
         use fluent_asserter::prelude::*;
         use paste::paste;
         use std::mem::size_of;
+
+        use super::usize_from_bytes2;
+
+        #[test]
+        fn usize_from_bytes2_correctness() {
+            let bytes = [255; size_of::<usize>() + 1];
+            for len in 0..=size_of::<usize>() {
+                assert_eq!(
+                    usize_from_bytes2(&bytes[..len]),
+                    usize_max_from_byte_len2(len)
+                );
+            }
+            assert_that_code!(|| usize_from_bytes2(&bytes[..])).panics();
+        }
 
         macro_rules! to_bytes_test_impl {
             ($T:ty) => {
