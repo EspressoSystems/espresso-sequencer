@@ -776,6 +776,7 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
+    use async_std::task::sleep;
     use commit::{Commitment, Committable};
     use es_version::SequencerVersion;
     use ethers::prelude::Signer;
@@ -788,6 +789,7 @@ mod test {
         AppendableMerkleTreeScheme,
     };
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -863,6 +865,8 @@ mod test {
             .collect::<Vec<_>>()
             .await;
 
+        // sleep for few seconds so that state data is upserted
+        sleep(Duration::from_secs(5)).await;
         network.stop_consensus().await;
 
         for i in 1..=3 {
