@@ -73,8 +73,9 @@ pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.get_consensus(),
         rx,
-        handle.hotshot.memberships.quorum_membership.clone(),
+        handle.hotshot.memberships.quorum_membership.clone().into(),
         handle.public_key().clone(),
+        handle.private_key().clone(),
     );
     task_reg
         .register(run_response_task::<TYPES, Version01>(state, hs_rx))

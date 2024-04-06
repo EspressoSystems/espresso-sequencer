@@ -54,7 +54,7 @@ async fn test_vid_task() {
     let vid_disperse = VidDisperse::from_membership(
         message.data.view_number,
         vid_disperse,
-        &quorum_membership.clone().into(),
+        quorum_membership.clone().into(),
     );
 
     let vid_proposal = Proposal {
@@ -71,10 +71,6 @@ async fn test_vid_task() {
         })
         .collect();
     let vid_share_proposal = vid_share_proposals[0].clone();
-    let disperse_receives: Vec<_> = vid_share_proposals
-        .into_iter()
-        .map(HotShotEvent::VidDisperseRecv)
-        .collect();
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
@@ -91,10 +87,7 @@ async fn test_vid_task() {
         vid_disperse.clone(),
         ViewNumber::new(2),
     ));
-    input.push(HotShotEvent::DAProposalValidated(
-        message,
-        *handle.public_key(),
-    ));
+
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseRecv(vid_share_proposal.clone()));
     input.push(HotShotEvent::Shutdown);
@@ -112,9 +105,6 @@ async fn test_vid_task() {
         HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
         1,
     );
-    for disperse_receive in disperse_receives {
-        output.insert(disperse_receive, 1);
-    }
 
     let vid_state = VIDTaskState {
         api: handle.clone(),

@@ -6,7 +6,6 @@ use displaydoc::Display;
 use crate::{
     data::{Leaf, VidDisperseShare},
     error::HotShotError,
-    message::Proposal,
     simple_certificate::{DACertificate, QuorumCertificate, UpgradeCertificate},
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
@@ -27,9 +26,9 @@ use tracing::error;
 pub type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 
 /// A type alias for `BTreeMap<T::Time, HashMap<T::SignatureKey, Proposal<T, VidDisperseShare<T>>>>`
-type VidShares<TYPES> = BTreeMap<
+pub type VidShares<TYPES> = BTreeMap<
     <TYPES as NodeType>::Time,
-    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
+    HashMap<<TYPES as NodeType>::SignatureKey, VidDisperseShare<TYPES>>,
 >;
 
 /// A reference to the consensus algorithm
