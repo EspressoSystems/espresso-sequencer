@@ -70,7 +70,7 @@ mod tx_table {
     ///
     /// # Panics
     /// If `bytes.len()` differs from [`NUM_TXS_BYTE_LEN`].
-    pub fn num_txs_from_bytes(bytes: &[u8]) -> usize {
+    pub fn _num_txs_from_bytes(bytes: &[u8]) -> usize {
         usize_from_bytes2::<NUM_TXS_BYTE_LEN>(bytes)
     }
 
@@ -86,7 +86,7 @@ mod tx_table {
     ///
     /// # Panics
     /// If `bytes.len()` differs from [`TX_OFFSET_BYTE_LEN`].
-    pub fn tx_offset_from_bytes(bytes: &[u8]) -> usize {
+    pub fn _tx_offset_from_bytes(bytes: &[u8]) -> usize {
         usize_from_bytes2::<TX_OFFSET_BYTE_LEN>(bytes)
     }
 

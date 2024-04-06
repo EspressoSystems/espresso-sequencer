@@ -28,7 +28,7 @@ use tables::NameSpaceTable;
 
 use self::{
     payload::NamespaceProof,
-    payload2::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
+    payload2::{num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -136,9 +136,19 @@ impl BlockPayload for Payload2 {
 }
 
 impl Payload2 {
-    // pub fn ns_iter() -> impl Iterator<Item = NamespaceId> {
-    //     todo!()
-    // }
+    pub fn num_namespaces(&self) -> usize {
+        if self.ns_table.len() < NUM_NSS_BYTE_LEN {
+            return 0;
+        }
+        let claimed_num_nss = num_nss_from_bytes(&self.ns_table[..NUM_NSS_BYTE_LEN]);
+        let max_num_nss =
+            (self.ns_table.len() - NUM_NSS_BYTE_LEN) / (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN);
+        std::cmp::min(claimed_num_nss, max_num_nss)
+    }
+
+    fn ns_iter(&self) -> impl Iterator<Item = NsInfo> + '_ {
+        NsIter::new(self)
+    }
 
     // TODO dead code even with `pub` because this module is private in lib.rs
     // #[allow(dead_code)]
@@ -156,8 +166,8 @@ impl Payload2 {
             return None; // error: vid_common inconsistent with self
         }
 
-        let ns_range = if let Some(ns_range) = self.get_namespace_range(ns_id) {
-            ns_range
+        let ns_range = if let Some(ns_info) = self.ns_iter().find(|info| ns_id == info.ns_id) {
+            ns_info.ns_range
         } else {
             return Some(NamespaceProof::NonExistence { ns_id });
         };
@@ -173,53 +183,53 @@ impl Payload2 {
             vid_common,
         })
     }
+}
 
-    // TODO newtype for `Range<usize>` for indexing into `self.payload` to protect against misuse?
-    fn get_namespace_range(&self, ns_id: NamespaceId) -> Option<Range<usize>> {
-        // find ns_id in ns_table
-        let ns_index = (NUM_NSS_BYTE_LEN..self.ns_table.len())
-            .step_by(NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
-            .find(|&i| ns_id == ns_id_from_bytes(&self.ns_table[i..i + NS_ID_BYTE_LEN]))?;
+struct NsInfo {
+    ns_id: NamespaceId,
+    ns_range: Range<usize>,
+}
+struct NsIter<'a> {
+    ns_table_index: usize, // TODO use newtype?
+    ns_payload_start: usize,
+    block: &'a Payload2,
+}
 
-        // read (start,end) offsets for ns_id from ns_table
-        let ns_end = self.ns_offset(ns_index);
-        let ns_start = if ns_index == 0 {
-            0
-        } else {
-            self.ns_offset(ns_index - 1)
-        };
-
-        // ensure range is valid and within payload byte length
-        let ns_end = std::cmp::min(ns_end, self.payload.len());
-        let ns_start = std::cmp::min(ns_start, ns_end);
-
-        Some(ns_start..ns_end)
-    }
-
-    // TODO newtype for `ns_index` to protect against misuse?
-    fn ns_offset(&self, ns_index: usize) -> usize {
-        ns_offset_from_bytes(&self.ns_table[ns_table_offset_range(ns_index)])
+impl<'a> NsIter<'a> {
+    fn new(block: &'a Payload2) -> Self {
+        Self {
+            ns_table_index: NUM_NSS_BYTE_LEN,
+            ns_payload_start: 0,
+            block,
+        }
     }
 }
 
-// TODO move this lower level?
-// TODO newtype for `ns_index` to protect against misuse?
-fn ns_table_offset_range(ns_index: usize) -> Range<usize> {
-    let start =
-        NUM_NSS_BYTE_LEN + (ns_index * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)) + NS_ID_BYTE_LEN;
-    start..start + NS_OFFSET_BYTE_LEN
+impl<'a> Iterator for NsIter<'a> {
+    type Item = NsInfo;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // this iterator is done if there's not enough room for another entry in
+        // the ns_table
+        if self.ns_table_index + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN > self.block.ns_table.len() {
+            return None;
+        }
+
+        let ns_id = ns_id_from_bytes(
+            &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_ID_BYTE_LEN],
+        );
+
+        self.ns_table_index += NS_ID_BYTE_LEN;
+        let ns_payload_end = ns_offset_from_bytes(
+            &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_OFFSET_BYTE_LEN],
+        );
+
+        self.ns_table_index += NS_OFFSET_BYTE_LEN;
+        let ns_range = self.ns_payload_start..ns_payload_end;
+        self.ns_payload_start = ns_payload_end;
+        Some(NsInfo { ns_id, ns_range })
+    }
 }
-
-// pub struct NsIter<'a> {
-//     ns_index: usize, // TODO use newtype?
-//     block: &'a Payload2,
-// }
-
-// impl<'a> NsIter<'a> {
-//     fn new(block: &'a Payload2) -> Self {
-//         Self { ns_index: 0, block }
-//     }
-// }
 
 // OLD: DELETE
 pub type NsTable = NameSpaceTable<TxTableEntryWord>;
@@ -405,9 +415,12 @@ mod reference {
 #[cfg(test)]
 mod test {
     use super::Payload2;
-    use crate::{NamespaceId, Transaction};
+    use crate::block::tables::NameSpaceTable;
+    use crate::{block::payload::NamespaceProof, NamespaceId, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot::traits::BlockPayload;
+    use hotshot_types::vid::vid_scheme;
+    use jf_primitives::vid::VidScheme;
     use rand::RngCore;
     use std::collections::HashMap;
 
@@ -423,8 +436,40 @@ mod test {
         let mut rng = jf_utils::test_rng();
         let valid_tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
 
-        for test in valid_tests {
-            let _block = Payload2::from_transactions(test.as_vec_tx()).unwrap();
+        let mut vid = vid_scheme(10);
+
+        for mut test in valid_tests {
+            let block = Payload2::from_transactions(test.as_vec_tx()).unwrap().0;
+            let disperse_data = vid.disperse(&block.payload).unwrap();
+
+            assert_eq!(block.num_namespaces(), test.nss.len());
+            for ns in block.ns_iter() {
+                tracing::info!("test ns_id {}", ns.ns_id);
+
+                test.nss
+                    .remove(&ns.ns_id)
+                    .expect("block ns_id missing from test");
+
+                let ns_proof = block
+                    .namespace_with_proof(ns.ns_id, disperse_data.common.clone())
+                    .expect("namespace_with_proof should succeed");
+
+                assert!(matches!(ns_proof, NamespaceProof::Existence { .. }));
+
+                let (_ns_proof_txs, ns_proof_ns_id) = ns_proof
+                    .verify(
+                        &vid,
+                        &disperse_data.commit,
+                        &NameSpaceTable::from_bytes(block.ns_table.clone()), // TODO verify() should not take `NamespaceTable`
+                    )
+                    .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns.ns_id));
+
+                assert_eq!(ns_proof_ns_id, ns.ns_id);
+            }
+            assert!(
+                test.nss.is_empty(),
+                "not all test namespaces consumed by ns_iter"
+            );
         }
     }
 
