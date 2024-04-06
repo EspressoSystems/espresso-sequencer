@@ -25,9 +25,9 @@ use l1_client::L1Client;
 
 use state_signature::static_stake_table_commitment;
 use url::Url;
-mod l1_client;
+pub mod l1_client;
 pub mod persistence;
-mod state;
+pub mod state;
 pub mod transaction;
 
 use derivative::Derivative;
@@ -689,6 +689,7 @@ mod test {
 
         loop {
             let event = events.next().await.unwrap();
+            tracing::info!("Received event from handle: {event:?}");
             let Decide { leaf_chain, .. } = event.event else {
                 continue;
             };

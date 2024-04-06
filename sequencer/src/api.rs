@@ -35,7 +35,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         }
     }
 }
-
 type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, State<N, P, Ver>>;
 
 impl<N: network::Type, D, Ver: StaticVersionType, P: SequencerPersistence> SubmitDataSource<N, P>
@@ -459,6 +458,8 @@ mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
+    use self::options::HotshotEvents;
+
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
@@ -715,6 +716,60 @@ mod api_tests {
             .await
             .unwrap();
         assert_eq!(chain, new_chain);
+    }
+    #[async_std::test]
+    pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
+        use hotshot_events_service::events_source::BuilderEvent;
+        use HotshotEvents;
+
+        setup_logging();
+
+        setup_backtrace();
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
+
+        let options = Options::from(options::Http {
+            port: query_service_port,
+        })
+        .hotshot_events(hotshot_events);
+
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<BuilderEvent<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let total_count = 5;
+        // wait for these events to receive on client 1
+        let mut receive_count = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            tracing::info!(
+                "Received event in hotshot event streaming Client 1: {:?}",
+                event
+            );
+            receive_count += 1;
+            if receive_count > total_count {
+                tracing::info!("Client Received atleast desired events, exiting loop");
+                break;
+            }
+        }
+        // Offset 1 is due to the startup event info
+        assert_eq!(receive_count, total_count + 1);
     }
 }
 
