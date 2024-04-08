@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 
 mod ns_iter;
-mod payload2;
+mod ns_payload_builder;
 mod payload_bytes;
 
-use payload2::NamespacePayloadBuilder;
+use ns_payload_builder::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
