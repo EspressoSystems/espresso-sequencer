@@ -133,8 +133,12 @@ impl Payload {
         self.ns_iter().count()
     }
 
-    fn ns_iter(&self) -> impl Iterator<Item = NsInfo> + '_ {
+    pub fn ns_iter(&self) -> impl Iterator<Item = NamespaceId> + '_ {
         NsIter::new(self)
+    }
+
+    fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfo> + '_ {
+        NsIterInternal::new(self)
     }
 
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
@@ -153,11 +157,12 @@ impl Payload {
             return None; // error: vid_common inconsistent with self
         }
 
-        let ns_range = if let Some(ns_info) = self.ns_iter().find(|info| ns_id == info.ns_id) {
-            ns_info.ns_range
-        } else {
-            return Some(NamespaceProof::NonExistence { ns_id });
-        };
+        let ns_range =
+            if let Some(ns_info) = self.ns_iter_internal().find(|info| ns_id == info.ns_id) {
+                ns_info.ns_range
+            } else {
+                return Some(NamespaceProof::NonExistence { ns_id });
+            };
 
         Some(NamespaceProof::Existence {
             ns_id,
@@ -170,18 +175,37 @@ impl Payload {
     }
 }
 
+/// Return type for [`Payload::ns_iter`].
+pub struct NsIter<'a>(NsIterInternal<'a>);
+
+impl<'a> NsIter<'a> {
+    fn new(block: &'a Payload) -> Self {
+        Self(NsIterInternal::new(block))
+    }
+}
+
+impl<'a> Iterator for NsIter<'a> {
+    type Item = NamespaceId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|item| item.ns_id)
+    }
+}
+
+/// [`Iterator::Item`] for [`NsIterInternal`].
 struct NsInfo {
     ns_id: NamespaceId,
     ns_range: Range<usize>,
 }
-struct NsIter<'a> {
+/// Return type for [`Payload::ns_iter_internal`].
+struct NsIterInternal<'a> {
     ns_table_index: usize,
     ns_payload_start: usize,
     block: &'a Payload,
     repeat_nss: HashSet<NamespaceId>,
 }
 
-impl<'a> NsIter<'a> {
+impl<'a> NsIterInternal<'a> {
     fn new(block: &'a Payload) -> Self {
         Self {
             ns_table_index: NUM_NSS_BYTE_LEN,
@@ -192,7 +216,7 @@ impl<'a> NsIter<'a> {
     }
 }
 
-impl<'a> Iterator for NsIter<'a> {
+impl<'a> Iterator for NsIterInternal<'a> {
     type Item = NsInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -256,7 +280,7 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             assert_eq!(block.num_namespaces(), test.nss.len());
-            for ns in block.ns_iter() {
+            for ns in block.ns_iter_internal() {
                 // tracing::info!("test ns_id {}", ns.ns_id);
 
                 test.nss
