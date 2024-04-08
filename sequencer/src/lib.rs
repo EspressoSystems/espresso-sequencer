@@ -68,7 +68,10 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{collections::BTreeMap, fmt::Debug, net::SocketAddr, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc,
+    time::Duration,
+};
 use versioned_binary_serialization::version::StaticVersionType;
 
 pub use block::payload::Payload;
