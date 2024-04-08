@@ -86,10 +86,12 @@ sol-test:
     forge test
 
 # Deploy contracts to local blockchain for development and testing
-dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk" num_blocks_per_epoch="10" num_init_validators="5":
-    MNEMONICS="{{mnemonics}}" forge script contracts/test/LightClientTest.s.sol:DeployLightClientTestScript \
-    --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
-    --fork-url {{url}} --broadcast
+dev-deploy url="" mnemonics="" num_blocks_per_epoch="10" num_init_validators="5" admin="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" private_key="":
+    MNEMONICS="{{mnemonics}}" forge script contracts/test/mocks/DeployLightClientTestScript.sol:DeployLightClientTestScript \
+    --sig "run(uint32 numBlocksPerEpoch, uint64 numInitValidators, address owner)" {{num_blocks_per_epoch}} {{num_init_validators}} {{admin}} \
+    --fork-url {{url}} --broadcast \
+    --private-key {{private_key}}
+
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.

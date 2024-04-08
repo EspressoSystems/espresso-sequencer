@@ -466,7 +466,7 @@ mod test {
     use ethers::{
         abi::AbiEncode,
         providers::Middleware,
-        utils::{Anvil, AnvilInstance},
+        utils::{hex, Anvil, AnvilInstance},
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
@@ -580,14 +580,23 @@ mod test {
     ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone());
-        let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
+        let client =
+            SignerMiddleware::new(provider.clone(), signer.with_chain_id(anvil.chain_id()));
+        let l1_wallet = Arc::new(client);
+        let wallet_address = format!("{:?}", l1_wallet.clone().address());
 
+        // Assuming `l1_wallet` is your Arc<L1Wallet> and already initialized
+        let private_key = hex::encode(anvil.keys()[0].to_bytes());
+
+        // deploy the light client contract via a proxy
         let output = Command::new("just")
             .arg("dev-deploy")
             .arg(anvil.endpoint())
             .arg(TEST_MNEMONIC)
             .arg(BLOCKS_PER_EPOCH.to_string())
             .arg(NUM_INIT_VALIDATORS.to_string())
+            .arg(wallet_address.clone())
+            .arg(private_key)
             .output()
             .expect("fail to deploy");
 
@@ -597,6 +606,7 @@ mod test {
         }
 
         let last_blk_num = provider.get_block_number().await?;
+
         // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
         let address = provider
             .get_block_receipts(last_blk_num)
@@ -606,8 +616,17 @@ mod test {
             .contract_address
             .expect("fail to get LightClient address from receipt");
 
-        let contract = LightClient::new(address, l1_wallet.clone());
-        Ok((l1_wallet, contract))
+        let proxy = LightClient::new(address, l1_wallet.clone());
+
+        let light_client_proxy = LightClient::new(proxy.address(), l1_wallet.clone());
+
+        //set this wallet as an approved prover so that it can update the state
+        light_client_proxy
+            .update_approved_prover(l1_wallet.clone().address())
+            .send()
+            .await?;
+
+        Ok((l1_wallet, light_client_proxy))
     }
 
     impl StateProverConfig {
@@ -666,9 +685,13 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        print!("{:?}", _wallet.address());
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
         // sanity check on `config`
+
+        //set the approved prover
+        // let _ = contract.update_approved_prover(_wallet.clone().address()).send().await?;
 
         // sanity check to ensure the same genesis state for LightClientTest and for our tests
         let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
