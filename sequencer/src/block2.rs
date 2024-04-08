@@ -5,21 +5,16 @@ use hotshot_query_service::VidCommon;
 use hotshot_types::{traits::BlockPayload, vid::VidSchemeType};
 use hotshot_types::{utils::BuilderCommitment, vid::vid_scheme};
 use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+use ns_iter::NsIter;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    ops::Range,
-};
+use std::{collections::HashMap, fmt::Display};
 
+mod ns_iter;
 mod payload2;
 mod payload_bytes;
 
 use payload2::NamespacePayloadBuilder;
-use payload_bytes::{
-    ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes, num_nss_as_bytes,
-    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-};
+use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -137,10 +132,6 @@ impl Payload {
         NsIter::new(self)
     }
 
-    fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfo> + '_ {
-        NsIterInternal::new(self)
-    }
-
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.
     ///
@@ -172,80 +163,6 @@ impl Payload {
                 .ok()?, // error: failure to make a payload proof
             vid_common,
         })
-    }
-}
-
-/// Return type for [`Payload::ns_iter`].
-pub struct NsIter<'a>(NsIterInternal<'a>);
-
-impl<'a> NsIter<'a> {
-    fn new(block: &'a Payload) -> Self {
-        Self(NsIterInternal::new(block))
-    }
-}
-
-impl<'a> Iterator for NsIter<'a> {
-    type Item = NamespaceId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|item| item.ns_id)
-    }
-}
-
-/// [`Iterator::Item`] for [`NsIterInternal`].
-struct NsInfo {
-    ns_id: NamespaceId,
-    ns_range: Range<usize>,
-}
-/// Return type for [`Payload::ns_iter_internal`].
-struct NsIterInternal<'a> {
-    ns_table_index: usize,
-    ns_payload_start: usize,
-    block: &'a Payload,
-    repeat_nss: HashSet<NamespaceId>,
-}
-
-impl<'a> NsIterInternal<'a> {
-    fn new(block: &'a Payload) -> Self {
-        Self {
-            ns_table_index: NUM_NSS_BYTE_LEN,
-            ns_payload_start: 0,
-            block,
-            repeat_nss: HashSet::new(),
-        }
-    }
-}
-
-impl<'a> Iterator for NsIterInternal<'a> {
-    type Item = NsInfo;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // this iterator is done if there's not enough room for another entry in
-        // the ns_table
-        while self.ns_table_index + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN <= self.block.ns_table.len()
-        {
-            // read the namespace ID from the namespace table
-            let ns_id = ns_id_from_bytes(
-                &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_ID_BYTE_LEN],
-            );
-
-            self.ns_table_index += NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN;
-
-            // skip duplicate namespace IDs
-            if !self.repeat_nss.insert(ns_id) {
-                continue;
-            }
-
-            // read the offset from the namespace table
-            let ns_payload_end = ns_offset_from_bytes(
-                &self.block.ns_table[self.ns_table_index - NS_OFFSET_BYTE_LEN..self.ns_table_index],
-            );
-
-            let ns_range = self.ns_payload_start..ns_payload_end;
-            self.ns_payload_start = ns_payload_end;
-            return Some(NsInfo { ns_id, ns_range });
-        }
-        None
     }
 }
 
