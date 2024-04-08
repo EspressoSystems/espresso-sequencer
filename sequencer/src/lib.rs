@@ -1,5 +1,6 @@
 pub mod api;
 pub mod block;
+pub mod block2;
 pub mod catchup;
 mod chain_variables;
 pub mod context;
