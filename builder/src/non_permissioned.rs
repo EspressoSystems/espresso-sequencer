@@ -205,6 +205,8 @@ mod test {
         block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::persistence::no_storage::{self, NoStorage};
+    use sequencer::persistence::PersistenceOptions;
     use sequencer::transaction::Transaction;
     use std::time::Duration;
     use surf_disco::Client;
@@ -228,7 +230,7 @@ mod test {
         let hotshot_config = HotShotTestConfig::default();
 
         // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let handles = hotshot_config.init_nodes(ver).await;
+        let handles = hotshot_config.init_nodes(ver, no_storage::Options).await;
 
         // start consensus for all the nodes
         for (handle, ..) in handles.iter() {
@@ -251,7 +253,7 @@ mod test {
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
 
         // enable a hotshot node event streaming
-        HotShotTestConfig::enable_hotshot_node_event_streaming(
+        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage>(
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
