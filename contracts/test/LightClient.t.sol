@@ -134,7 +134,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     }
 }
 
-contract LightClient_updateApprovedProver_Test is LightClientCommonTest {
+contract LightClient_approvedProver_Test is LightClientCommonTest {
     function setUp() public {
         init();
     }
@@ -149,6 +149,44 @@ contract LightClient_updateApprovedProver_Test is LightClientCommonTest {
         vm.expectRevert();
         vm.prank(makeAddr("not an admin"));
         lc.updateApprovedProver(makeAddr("new prover"));
+    }
+
+    function test_RevertWhen_UnapprovedProver() external {
+        // Generating a few consecutive states and proofs
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(3));
+        cmds[5] = vm.toString(uint64(3));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        vm.expectRevert(LC.UnapprovedProver.selector);
+        vm.prank(makeAddr("UnapprovedProver"));
+        lc.newFinalizedState(states[0], proofs[0]);
+    }
+
+    function test_RevertWhen_UnapprovedProverEvenIfAdmin() external {
+        // Generating a few consecutive states and proofs
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(3));
+        cmds[5] = vm.toString(uint64(3));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        vm.expectRevert(LC.UnapprovedProver.selector);
+        vm.prank(admin);
+        lc.newFinalizedState(states[0], proofs[0]);
     }
 }
 
@@ -174,25 +212,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
         vm.prank(approvedProver);
-        lc.newFinalizedState(states[0], proofs[0]);
-    }
-
-    function test_RevertWhen_UnapprovedProver() external {
-        // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](6);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[4] = vm.toString(uint64(3));
-        cmds[5] = vm.toString(uint64(3));
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
-        vm.expectRevert(LC.UnapprovedProver.selector);
-        vm.prank(makeAddr("UnapprovedProver"));
         lc.newFinalizedState(states[0], proofs[0]);
     }
 
