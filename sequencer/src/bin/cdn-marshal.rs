@@ -19,19 +19,36 @@ struct Args {
     discovery_endpoint: String,
 
     /// Whether or not metric collection and serving is enabled
-    #[arg(long, default_value_t = false, env = "ESPRESSO_CDN_MARSHAL_METRICS_ENABLED")]
+    #[arg(
+        long,
+        default_value_t = false,
+        env = "ESPRESSO_CDN_MARSHAL_METRICS_ENABLED"
+    )]
     metrics_enabled: bool,
 
     /// The IP to bind to for externalizing metrics
-    #[arg(long, default_value = "127.0.0.1", env = "ESPRESSO_CDN_MARSHAL_METRICS_IP")]
+    #[arg(
+        long,
+        default_value = "127.0.0.1",
+        env = "ESPRESSO_CDN_MARSHAL_METRICS_IP"
+    )]
     metrics_ip: String,
 
     /// The port to bind to for externalizing metrics
-    #[arg(long, default_value_t = 9090, env = "ESPRESSO_CDN_MARSHAL_METRICS_PORT")]
+    #[arg(
+        long,
+        default_value_t = 9090,
+        env = "ESPRESSO_CDN_MARSHAL_METRICS_PORT"
+    )]
     metrics_port: u16,
 
     /// The port to bind to for connections (from users)
-    #[arg(short, long, default_value_t = 1737, env = "ESPRESSO_CDN_MARSHAL_BIND_PORT")]
+    #[arg(
+        short,
+        long,
+        default_value_t = 1737,
+        env = "ESPRESSO_CDN_MARSHAL_BIND_PORT"
+    )]
     bind_port: u16,
 }
 
