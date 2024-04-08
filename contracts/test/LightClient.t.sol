@@ -134,6 +134,24 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     }
 }
 
+contract LightClient_updateApprovedProver_Test is LightClientCommonTest {
+    function setUp() public {
+        init();
+    }
+
+    function test_RevertWhen_UpdateApprovedProverToZeroAddress() external {
+        vm.expectRevert(LC.InvalidAddress.selector);
+        vm.prank(admin);
+        lc.updateApprovedProver(address(0));
+    }
+
+    function test_RevertWhen_NonAdminTriesToUpdateApprovedProver() external {
+        vm.expectRevert();
+        vm.prank(makeAddr("not an admin"));
+        lc.updateApprovedProver(makeAddr("new prover"));
+    }
+}
+
 contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     function setUp() public {
         init();
