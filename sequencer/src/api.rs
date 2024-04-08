@@ -1,7 +1,7 @@
 use self::data_source::StateSignatureDataSource;
 use crate::{
-    context::SequencerContext, network, state::ValidatedState, state_signature::StateSigner, Node,
-    SeqTypes,
+    context::SequencerContext, network, persistence::SequencerPersistence, state::ValidatedState,
+    state_signature::StateSigner, Node, SeqTypes,
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -20,37 +20,41 @@ mod update;
 
 pub use options::Options;
 
-struct State<N: network::Type, Ver: StaticVersionType> {
+struct State<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
     state_signer: Arc<StateSigner<Ver>>,
-    handle: SystemContextHandle<SeqTypes, Node<N>>,
+    handle: SystemContextHandle<SeqTypes, Node<N, P>>,
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static> From<&SequencerContext<N, Ver>>
-    for State<N, Ver>
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    From<&SequencerContext<N, P, Ver>> for State<N, P, Ver>
 {
-    fn from(ctx: &SequencerContext<N, Ver>) -> Self {
+    fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
             handle: ctx.consensus().clone(),
         }
     }
 }
-type StorageState<N, D, Ver> = ExtensibleDataSource<D, State<N, Ver>>;
+type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, State<N, P, Ver>>;
 
-impl<N: network::Type, D, Ver: StaticVersionType> SubmitDataSource<N> for StorageState<N, D, Ver> {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+impl<N: network::Type, D, Ver: StaticVersionType, P: SequencerPersistence> SubmitDataSource<N, P>
+    for StorageState<N, P, D, Ver>
+{
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
         self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType> SubmitDataSource<N> for State<N, Ver> {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> SubmitDataSource<N, P>
+    for State<N, P, Ver>
+{
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
         &self.handle
     }
 }
 
-impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType> StateDataSource
-    for StorageState<N, D, Ver>
+impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType, P: SequencerPersistence>
+    StateDataSource for StorageState<N, P, D, Ver>
 {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.as_ref().get_decided_state().await
@@ -61,7 +65,9 @@ impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType> StateDataSource
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType> StateDataSource for State<N, Ver> {
+impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> StateDataSource
+    for State<N, P, Ver>
+{
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.handle.get_decided_state().await
     }
@@ -72,8 +78,8 @@ impl<N: network::Type, Ver: StaticVersionType> StateDataSource for State<N, Ver>
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync, Ver: StaticVersionType> StateSignatureDataSource<N>
-    for StorageState<N, D, Ver>
+impl<N: network::Type, D: Sync, Ver: StaticVersionType, P: SequencerPersistence>
+    StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
@@ -81,7 +87,9 @@ impl<N: network::Type, D: Sync, Ver: StaticVersionType> StateSignatureDataSource
 }
 
 #[async_trait]
-impl<N: network::Type, Ver: StaticVersionType> StateSignatureDataSource<N> for State<N, Ver> {
+impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> StateSignatureDataSource<N>
+    for State<N, P, Ver>
+{
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer.get_state_signature(height).await
     }
@@ -108,6 +116,7 @@ mod test_helpers {
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
+
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -119,17 +128,17 @@ mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
-    pub struct TestNetwork {
-        pub server: SequencerContext<network::Memory, SequencerVersion>,
-        pub peers: Vec<SequencerContext<network::Memory, SequencerVersion>>,
+    pub struct TestNetwork<P: SequencerPersistence> {
+        pub server: SequencerContext<network::Memory, P, SequencerVersion>,
+        pub peers: Vec<SequencerContext<network::Memory, P, SequencerVersion>>,
         pub cfg: TestConfig,
     }
 
-    impl TestNetwork {
+    impl<P: SequencerPersistence> TestNetwork<P> {
         pub async fn with_state(
             opt: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [impl SequencerPersistence; TestConfig::NUM_NODES],
+            persistence: [P; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
             let cfg = TestConfig::default();
@@ -185,11 +194,11 @@ mod test_helpers {
             Self { server, peers, cfg }
         }
 
-        pub async fn new(opt: Options) -> Self {
+        pub async fn new(opt: Options, persistence: [P; TestConfig::NUM_NODES]) -> Self {
             Self::with_state(
                 opt,
                 Default::default(),
-                [NoStorage; TestConfig::NUM_NODES],
+                persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
             )
             .await
@@ -219,7 +228,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        let _network = TestNetwork::new(options).await;
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -265,7 +274,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let network = TestNetwork::new(options).await;
+        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
         let mut events = network.server.get_event_stream();
 
         client.connect(None).await;
@@ -294,7 +303,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
-        let network = TestNetwork::new(options).await;
+        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -335,7 +344,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
-        let mut network = TestNetwork::new(options).await;
+        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -454,6 +463,7 @@ mod api_tests {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
+        persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
@@ -510,6 +520,7 @@ mod api_tests {
         let storage = D::create_storage().await;
         let network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
+            [NoStorage; TestConfig::NUM_NODES],
         )
         .await;
         let mut events = network.server.get_event_stream();
@@ -734,7 +745,7 @@ mod api_tests {
         })
         .hotshot_events(hotshot_events);
 
-        let _network = TestNetwork::new(options).await;
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -794,7 +805,7 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
         let options = Options::from(options::Http { port });
-        let _network = TestNetwork::new(options).await;
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
