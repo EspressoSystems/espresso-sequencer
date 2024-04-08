@@ -13,6 +13,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::{BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
@@ -32,23 +33,34 @@ pub struct PermissionedBuilderOptions {
     )]
     pub orchestrator_url: Url,
 
-    /// URL of the HotShot DA web server.
+    /// The socket address of the HotShot CDN's main entry point (the marshal)
+    /// in `IP:port` form
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
-        default_value = "http://localhost:8081"
+        env = "ESPRESSO_SEQUENCER_CDN_ENDPOINT",
+        default_value = "127.0.0.1:8081"
     )]
-    pub da_server_url: Url,
+    pub cdn_endpoint: String,
 
-    /// URL of the HotShot consensus web server.
+    /// The address to bind to for Libp2p (in `IP:port` form)
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL",
-        default_value = "http://localhost:8082"
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
+        default_value = "0.0.0.0:1769"
     )]
-    pub consensus_server_url: Url,
+    pub libp2p_bind_address: SocketAddr,
+
+    /// The address we advertise to other nodes as being a Libp2p endpoint.
+    /// Should be supplied in `IP:port` form.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
+        default_value = "127.0.0.1:1769"
+    )]
+    pub libp2p_advertise_address: SocketAddr,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -198,11 +210,11 @@ async fn main() -> anyhow::Result<()> {
     let builder_pub_key = BLSPubKey::from_private(&private_staking_key);
 
     let network_params = NetworkParams {
-        da_server_url: opt.da_server_url,
-        consensus_server_url: opt.consensus_server_url,
+        cdn_endpoint: opt.cdn_endpoint,
+        libp2p_advertise_address: opt.libp2p_advertise_address,
+        libp2p_bind_address: opt.libp2p_bind_address,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
