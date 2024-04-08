@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use surf_disco::{client::HealthStatus, Client, Url};
 use tagged_base64::TaggedBase64;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Debug, Snafu, Serialize, Deserialize)]
 /// Represents errors than builder client may return
@@ -67,9 +67,13 @@ pub struct BuilderClient<TYPES: NodeType, Ver: StaticVersionType> {
 
 impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// Construct a new client from base url
+    ///
+    /// # Panics
+    ///
+    /// If the URL is malformed.
     pub fn new(base_url: impl Into<Url>) -> Self {
         Self {
-            inner: Client::new(base_url.into()),
+            inner: Client::new(base_url.into().join("api").unwrap()),
             _marker: std::marker::PhantomData,
         }
     }

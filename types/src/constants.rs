@@ -1,6 +1,6 @@
 //! configurable constants for hotshot
 
-use versioned_binary_serialization::version::{StaticVersion, Version};
+use vbs::version::{StaticVersion, Version};
 
 /// the number of views to gather information for ahead of time
 pub const LOOK_AHEAD: u64 = 5;

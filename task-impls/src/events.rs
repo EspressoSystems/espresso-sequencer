@@ -16,7 +16,7 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, BlockPayload},
     vid::VidCommitment,
 };
-use versioned_binary_serialization::version::Version;
+use vbs::version::Version;
 
 /// Marker that the task completed
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]

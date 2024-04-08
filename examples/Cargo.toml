@@ -108,7 +108,7 @@ async-lock = { workspace = true }
 async-trait = { workspace = true }
 bimap = "0.6"
 clap = { workspace = true, optional = true }
-commit = { workspace = true }
+committable = { workspace = true }
 custom_debug = { workspace = true }
 dashmap = "5"
 either = { workspace = true }
@@ -131,7 +131,7 @@ hotshot-task = { path = "../task" }
 hotshot = { path = "../hotshot" }
 hotshot-example-types = { path = "../example-types" }
 chrono = "0.4"
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 sha2.workspace = true
 local-ip-address = "0.6"
 

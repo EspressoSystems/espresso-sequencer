@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::node_types::TestTypes;
-use commit::{Commitment, Committable, RawCommitmentBuilder};
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, Leaf},
     traits::{
@@ -52,7 +52,7 @@ impl TestTransaction {
 
 impl Committable for TestTransaction {
     fn commit(&self) -> Commitment<Self> {
-        let builder = commit::RawCommitmentBuilder::new("Txn Comm");
+        let builder = committable::RawCommitmentBuilder::new("Txn Comm");
         let mut hasher = Keccak256::new();
         hasher.update(&self.0);
         let generic_array = hasher.finalize();
@@ -159,7 +159,7 @@ impl BlockPayload for TestBlockPayload {
     ) -> Vec<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
-            .map(commit::Committable::commit)
+            .map(committable::Committable::commit)
             .collect()
     }
 

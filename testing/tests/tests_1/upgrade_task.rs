@@ -18,7 +18,7 @@ use hotshot_types::{
     simple_vote::UpgradeProposalData,
     traits::{election::Membership, node_implementation::ConsensusTime},
 };
-use versioned_binary_serialization::version::Version;
+use vbs::version::Version;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]

@@ -20,7 +20,7 @@ toml = { workspace = true }
 thiserror = "1"
 serde-inline-default = "0.1"
 csv = "1"
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 multiaddr = "0.18"
 anyhow.workspace = true
 bincode.workspace = true

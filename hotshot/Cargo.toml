@@ -31,7 +31,7 @@ async-trait = { workspace = true }
 bimap = "0.6"
 bincode = { workspace = true }
 clap = { workspace = true, optional = true }
-commit = { workspace = true }
+committable = { workspace = true }
 custom_debug = { workspace = true }
 dashmap = "5"
 derive_more = "0.99"
@@ -52,7 +52,7 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 jf-primitives.workspace = true
 hotshot-orchestrator = { path = "../orchestrator" }
 blake3.workspace = true

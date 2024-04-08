@@ -13,7 +13,7 @@ use bincode::{
     },
     DefaultOptions, Options,
 };
-use commit::Commitment;
+use committable::Commitment;
 use digest::OutputSizeUser;
 use sha2::Digest;
 use std::{ops::Deref, sync::Arc};

@@ -21,7 +21,7 @@ use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::constants::WebServerVersion;
 use surf_disco::Url;
 use tracing::error;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]

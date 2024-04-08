@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, hash::Hash};
 
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ use crate::{
     vid::VidCommitment,
     vote::{HasViewNumber, Vote},
 };
-use versioned_binary_serialization::version::Version;
+use vbs::version::Version;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.
@@ -90,7 +90,7 @@ pub trait Voteable:
 /// All simple voteable types should be implemented here.  This prevents us from
 /// creating/using improper types when using the vote types.
 mod sealed {
-    use commit::Committable;
+    use committable::Committable;
 
     /// Only structs in this file can impl `Sealed`
     pub trait Sealed {}
@@ -162,7 +162,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
 
 impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Quorum data")
+        committable::RawCommitmentBuilder::new("Quorum data")
             .var_size_bytes(self.leaf_commit.as_ref())
             .finalize()
     }
@@ -170,7 +170,7 @@ impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
 
 impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Timeout data")
+        committable::RawCommitmentBuilder::new("Timeout data")
             .u64(*self.view)
             .finalize()
     }
@@ -178,7 +178,7 @@ impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
 
 impl Committable for DAData {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("DA data")
+        committable::RawCommitmentBuilder::new("DA data")
             .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }
@@ -186,7 +186,7 @@ impl Committable for DAData {
 
 impl Committable for VIDData {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("VID data")
+        committable::RawCommitmentBuilder::new("VID data")
             .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }
@@ -194,7 +194,7 @@ impl Committable for VIDData {
 
 impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        let builder = commit::RawCommitmentBuilder::new("Upgrade data");
+        let builder = committable::RawCommitmentBuilder::new("Upgrade data");
         builder
             .u64(*self.new_version_first_block)
             .u64(*self.old_version_last_block)
@@ -213,7 +213,7 @@ fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     relay: u64,
     tag: &str,
 ) -> Commitment<T> {
-    let builder = commit::RawCommitmentBuilder::new(tag);
+    let builder = committable::RawCommitmentBuilder::new(tag);
     builder.u64(*view).u64(relay).finalize()
 }
 

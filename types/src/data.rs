@@ -25,7 +25,7 @@ use crate::{
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
-use commit::{Commitment, Committable, RawCommitmentBuilder};
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
 use jf_primitives::vid::VidDisperse as JfVidDisperse;
 use rand::Rng;
@@ -583,7 +583,7 @@ pub fn serialize_signature2<TYPES: NodeType>(
 }
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
-    fn commit(&self) -> commit::Commitment<Self> {
+    fn commit(&self) -> committable::Commitment<Self> {
         // Skip the transaction commitments, so that the repliacs can reconstruct the leaf.
         RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)

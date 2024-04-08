@@ -35,7 +35,7 @@ use std::{
     },
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
-use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
+use vbs::{version::StaticVersionType, BinarySerializer, Serializer};
 
 /// Shared state for in-memory mock networking.
 ///

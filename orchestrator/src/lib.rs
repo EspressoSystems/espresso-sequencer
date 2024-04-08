@@ -35,7 +35,7 @@ use libp2p::{
     },
     Multiaddr, PeerId,
 };
-use versioned_binary_serialization::{
+use vbs::{
     version::{StaticVersion, StaticVersionType},
     BinarySerializer,
 };
@@ -404,7 +404,7 @@ where
 
             // Decode the libp2p data so we can add to our bootstrap nodes (if supplied)
             let Ok((libp2p_address, libp2p_public_key)) =
-                versioned_binary_serialization::Serializer::<Version01>::deserialize(&body_bytes)
+                vbs::Serializer::<Version01>::deserialize(&body_bytes)
             else {
                 return Err(ServerError {
                     status: tide_disco::StatusCode::BadRequest,
@@ -477,11 +477,8 @@ where
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
-    let mut app = App::<
-        RwLock<OrchestratorState<KEY, ELECTION>>,
-        ServerError, OrchestratorVersion
-    >::with_state(state);
-    app.register_module("api", web_api.unwrap())
+    let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
+    app.register_module::<ServerError, OrchestratorVersion>("api", web_api.unwrap())
         .expect("Error registering api");
     tracing::error!("listening on {:?}", url);
     app.serve(url, ORCHESTRATOR_VERSION).await

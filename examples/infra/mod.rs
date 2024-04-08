@@ -57,7 +57,7 @@ use std::time::Duration;
 use std::{fs, time::Instant};
 use surf_disco::Url;
 use tracing::{error, info, warn};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Debug, Clone)]
 /// Arguments passed to the orchestrator

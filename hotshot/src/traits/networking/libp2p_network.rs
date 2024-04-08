@@ -68,7 +68,7 @@ use std::{
 };
 use std::{collections::HashSet, net::SocketAddr};
 use tracing::{debug, error, info, instrument, warn};
-use versioned_binary_serialization::{
+use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
 };

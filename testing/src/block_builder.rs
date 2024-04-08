@@ -9,7 +9,7 @@ use std::{
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use futures::{future::BoxFuture, Stream, StreamExt};
 use hotshot::{
     traits::{BlockPayload, TestableNodeImplementation},
@@ -17,7 +17,7 @@ use hotshot::{
 };
 use hotshot_builder_api::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::{BuildError, Options},
+    builder::{BuildError, Error, Options},
     data_source::BuilderDataSource,
 };
 use hotshot_example_types::{
@@ -87,9 +87,9 @@ impl<I: TestableNodeImplementation<TestTypes>> TestBuilderImplementation
                 &Options::default(),
             )
             .expect("Failed to construct the builder API");
-        let mut app: App<SimpleBuilderSource, hotshot_builder_api::builder::Error, Version01> =
+        let mut app: App<SimpleBuilderSource, hotshot_builder_api::builder::Error> =
             App::with_state(source);
-        app.register_module("/", builder_api)
+        app.register_module("api", builder_api)
             .expect("Failed to register the builder API");
 
         async_spawn(app.serve(url.clone(), STATIC_VER_0_1));
@@ -286,9 +286,8 @@ pub fn run_random_builder(url: Url) {
             &Options::default(),
         )
         .expect("Failed to construct the builder API");
-    let mut app: App<RandomBuilderSource, hotshot_builder_api::builder::Error, Version01> =
-        App::with_state(source);
-    app.register_module("/", builder_api)
+    let mut app: App<RandomBuilderSource, Error> = App::with_state(source);
+    app.register_module::<Error, Version01>("api", builder_api)
         .expect("Failed to register the builder API");
 
     async_spawn(app.serve(url, STATIC_VER_0_1));
@@ -379,9 +378,8 @@ impl SimpleBuilderSource {
                 &Options::default(),
             )
             .expect("Failed to construct the builder API");
-        let mut app: App<SimpleBuilderSource, hotshot_builder_api::builder::Error, Version01> =
-            App::with_state(self);
-        app.register_module("/", builder_api)
+        let mut app: App<SimpleBuilderSource, Error> = App::with_state(self);
+        app.register_module::<Error, Version01>("api", builder_api)
             .expect("Failed to register the builder API");
 
         async_spawn(app.serve(url, STATIC_VER_0_1));

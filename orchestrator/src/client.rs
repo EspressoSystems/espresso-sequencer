@@ -13,7 +13,7 @@ use hotshot_types::{
 use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
-use versioned_binary_serialization::BinarySerializer;
+use vbs::BinarySerializer;
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client
@@ -212,10 +212,8 @@ impl OrchestratorClient {
         });
 
         // Serialize our (possible) libp2p-specific data
-        let request_body = versioned_binary_serialization::Serializer::<Version01>::serialize(&(
-            libp2p_address,
-            libp2p_public_key,
-        ))?;
+        let request_body =
+            vbs::Serializer::<Version01>::serialize(&(libp2p_address, libp2p_public_key))?;
 
         let identity = |client: Client<ClientError, OrchestratorVersion>| {
             // We need to clone here to move it into the closure

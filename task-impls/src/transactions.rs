@@ -6,6 +6,7 @@ use crate::{
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
+
 use hotshot_builder_api::block_info::{AvailableBlockData, AvailableBlockHeaderInput};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
@@ -25,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tracing::{debug, error, instrument};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<

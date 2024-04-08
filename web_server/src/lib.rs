@@ -23,7 +23,7 @@ use tide_disco::{
     Api, App, StatusCode, Url,
 };
 use tracing::{debug, info};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Convience alias for a lock over the state of the app
 /// TODO this is used in two places. It might be clearer to just inline
@@ -1110,9 +1110,10 @@ pub async fn run_web_server<
 
     let web_api = define_api(&options).unwrap();
     let state = State::new(WebServerState::new().with_shutdown_signal(shutdown_listener));
-    let mut app = App::<State<KEY>, Error, NetworkVersion>::with_state(state);
+    let mut app = App::<State<KEY>, Error>::with_state(state);
 
-    app.register_module("api", web_api).unwrap();
+    app.register_module::<Error, NetworkVersion>("api", web_api)
+        .unwrap();
 
     let app_future = app.serve(url, bind_version);
 

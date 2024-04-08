@@ -38,7 +38,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// for any errors we decide to add to memory network
 #[derive(Debug, Snafu, Serialize, Deserialize)]

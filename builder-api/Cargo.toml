@@ -16,5 +16,5 @@ snafu = { workspace = true }
 tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 toml = { workspace = true }
-commit = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+committable = { workspace = true }
+vbs = { workspace = true }

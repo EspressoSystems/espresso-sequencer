@@ -21,7 +21,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use commit::Committable;
+use committable::Committable;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,

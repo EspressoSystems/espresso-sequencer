@@ -3,7 +3,7 @@ use hotshot_example_types::state_types::TestTypes;
 use hotshot_types::constants::WebServerVersion;
 use std::sync::Arc;
 use surf_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use async_compatibility_layer::{
     channel::oneshot,

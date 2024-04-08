@@ -18,7 +18,7 @@ async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bitvec = { workspace = true }
-commit = { workspace = true }
+committable = { workspace = true }
 either = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
@@ -39,7 +39,7 @@ sha3 = "^0.10"
 snafu = { workspace = true }
 tide-disco = { workspace = true }
 tracing = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 lru = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]

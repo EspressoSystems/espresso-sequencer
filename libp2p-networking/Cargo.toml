@@ -33,7 +33,7 @@ tide = { version = "0.16", optional = true, default-features = false, features =
   "h1-server",
 ] }
 tracing = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 void = "1"
 lazy_static = { workspace = true }
 

@@ -22,7 +22,7 @@ use hotshot_types::{
 use rand::{prelude::SliceRandom, thread_rng};
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, info, instrument, warn};
-use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
+use vbs::{version::StaticVersionType, BinarySerializer, Serializer};
 
 /// Amount of time to try for a request before timing out.
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);

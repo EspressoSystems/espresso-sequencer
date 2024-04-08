@@ -18,7 +18,7 @@ async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
 chrono = "0.4"
-commit = { workspace = true }
+committable = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 hotshot-task = { path = "../task" }
@@ -34,7 +34,7 @@ surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

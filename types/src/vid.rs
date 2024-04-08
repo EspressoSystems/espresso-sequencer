@@ -50,17 +50,18 @@ use std::{fmt::Debug, ops::Range};
 /// When the construction fails for the underlying VID scheme.
 #[must_use]
 pub fn vid_scheme(num_storage_nodes: usize) -> VidSchemeType {
-    // chunk_size is currently num_storage_nodes rounded down to a power of two
-    // TODO chunk_size should be a function of the desired erasure code rate
+    // recovery_threshold is currently num_storage_nodes rounded down to a power of two
+    // TODO recovery_threshold should be a function of the desired erasure code rate
     // https://github.com/EspressoSystems/HotShot/issues/2152
-    let chunk_size = 1 << num_storage_nodes.ilog2();
+    let recovery_threshold = 1 << num_storage_nodes.ilog2();
 
-    // TODO intelligent choice of multiplicity
-    let multiplicity = 1;
+    let num_storage_nodes = u32::try_from(num_storage_nodes).unwrap_or_else(|err| {
+        panic!("num_storage_nodes {num_storage_nodes} should fit into u32\n\terror: : {err}")
+    });
 
     // TODO panic, return `Result`, or make `new` infallible upstream (eg. by panicking)?
     #[allow(clippy::panic)]
-    VidSchemeType(Advz::new(chunk_size, num_storage_nodes, multiplicity, &*KZG_SRS).unwrap_or_else(|err| panic!("advz construction failure:\n\t(num_storage nodes,chunk_size,multiplicity)=({num_storage_nodes},{chunk_size},{multiplicity})\n\terror: : {err}")))
+    VidSchemeType(Advz::new(num_storage_nodes, recovery_threshold, &*KZG_SRS).unwrap_or_else(|err| panic!("advz construction failure:\n\t(num_storage nodes,recovery_threshold)=({num_storage_nodes},{recovery_threshold})\n\terror: : {err}")))
 }
 
 /// VID commitment type
@@ -173,15 +174,15 @@ impl VidScheme for VidSchemeType {
         <Advz as VidScheme>::is_consistent(commit, common)
     }
 
-    fn get_payload_byte_len(common: &Self::Common) -> usize {
+    fn get_payload_byte_len(common: &Self::Common) -> u32 {
         <Advz as VidScheme>::get_payload_byte_len(common)
     }
 
-    fn get_num_storage_nodes(common: &Self::Common) -> usize {
+    fn get_num_storage_nodes(common: &Self::Common) -> u32 {
         <Advz as VidScheme>::get_num_storage_nodes(common)
     }
 
-    fn get_multiplicity(common: &Self::Common) -> usize {
+    fn get_multiplicity(common: &Self::Common) -> u32 {
         <Advz as VidScheme>::get_multiplicity(common)
     }
 }

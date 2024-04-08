@@ -25,7 +25,7 @@ async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
 blake3 = { workspace = true }
-commit = { workspace = true }
+committable = { workspace = true }
 custom_debug = { workspace = true }
 digest = { workspace = true }
 either = { workspace = true }
@@ -51,7 +51,7 @@ jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 tagged-base64 = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
 url = "2.5.0"

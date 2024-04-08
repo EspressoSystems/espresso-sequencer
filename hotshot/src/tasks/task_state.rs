@@ -13,7 +13,7 @@ use hotshot_types::traits::{
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
 use std::{collections::HashMap, marker::PhantomData};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Trait for creating task states.
 #[async_trait]

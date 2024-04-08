@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::task_helpers::{
     build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
 };
-use commit::Committable;
+use committable::Committable;
 
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 

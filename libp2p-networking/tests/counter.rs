@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::{debug, error, info, instrument, warn};
-use versioned_binary_serialization::{BinarySerializer, Serializer};
+use vbs::{BinarySerializer, Serializer};
 
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;

@@ -9,7 +9,7 @@ use crate::{
     utils::BuilderCommitment,
     vid::{vid_scheme, VidCommitment, VidSchemeType},
 };
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use jf_primitives::vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 

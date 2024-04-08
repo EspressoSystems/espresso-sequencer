@@ -21,7 +21,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tracing::{debug, info, instrument};
-use versioned_binary_serialization::{version::StaticVersionType, BinarySerializer, Serializer};
+use vbs::{version::StaticVersionType, BinarySerializer, Serializer};
 
 /// A handle containing:
 /// - A reference to the state

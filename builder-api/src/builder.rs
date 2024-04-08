@@ -5,7 +5,7 @@ use crate::{
     data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
 use clap::Args;
-use commit::Committable;
+use committable::Committable;
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::{
@@ -20,7 +20,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     Api, RequestError, StatusCode,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Args, Default)]
 pub struct Options {

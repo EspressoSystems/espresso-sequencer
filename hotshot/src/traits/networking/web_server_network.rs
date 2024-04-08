@@ -45,7 +45,7 @@ use std::{
 use surf_disco::error::ClientError;
 use surf_disco::Url;
 use tracing::{debug, error, info, warn};
-use versioned_binary_serialization::{
+use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
 };

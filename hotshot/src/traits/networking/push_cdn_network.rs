@@ -46,7 +46,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
-use versioned_binary_serialization::{
+use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
 };

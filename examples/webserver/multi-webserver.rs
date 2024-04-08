@@ -12,7 +12,7 @@ use hotshot_types::constants::WebServerVersion;
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::Url;
 use tracing::error;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Arguments to run multiple web servers
 #[derive(Parser, Debug)]

@@ -189,7 +189,7 @@ mod tests {
         bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
         SignatureScheme,
     };
-    use versioned_binary_serialization::{version::StaticVersion, BinarySerializer, Serializer};
+    use vbs::{version::StaticVersion, BinarySerializer, Serializer};
     type Version = StaticVersion<0, 1>;
 
     macro_rules! test_quorum_certificate {

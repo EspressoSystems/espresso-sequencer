@@ -26,7 +26,7 @@ use hotshot_types::{
 };
 use tracing::instrument;
 use tracing::{debug, error, warn};
-use versioned_binary_serialization::version::Version;
+use vbs::version::Version;
 
 /// quorum filter
 pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {

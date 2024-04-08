@@ -208,14 +208,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 #[cfg(feature = "example-upgrade")]
                 {
-                    use commit::Committable;
+                    use committable::Committable;
                     use std::marker::PhantomData;
 
                     use hotshot_types::{
                         data::UpgradeProposal, message::Proposal,
                         traits::node_implementation::ConsensusTime,
                     };
-                    use versioned_binary_serialization::version::Version;
+                    use vbs::version::Version;
 
                     if *view == 5 && self.quorum_membership.get_leader(view + 5) == self.public_key
                     {

@@ -6,7 +6,7 @@ use std::{
 };
 
 use bitvec::{bitvec, vec::BitVec};
-use commit::Commitment;
+use committable::Commitment;
 use either::Either;
 use ethereum_types::U256;
 use tracing::error;
