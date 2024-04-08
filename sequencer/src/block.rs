@@ -13,7 +13,11 @@ use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
-use std::{collections::HashMap, fmt::Display, ops::Range};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    ops::Range,
+};
 
 pub mod entry;
 pub mod payload;
@@ -28,7 +32,7 @@ use tables::NameSpaceTable;
 
 use self::{
     payload::NamespaceProof,
-    payload2::{num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
+    payload2::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -137,13 +141,10 @@ impl BlockPayload for Payload2 {
 
 impl Payload2 {
     pub fn num_namespaces(&self) -> usize {
-        if self.ns_table.len() < NUM_NSS_BYTE_LEN {
-            return 0;
-        }
-        let claimed_num_nss = num_nss_from_bytes(&self.ns_table[..NUM_NSS_BYTE_LEN]);
-        let max_num_nss =
-            (self.ns_table.len() - NUM_NSS_BYTE_LEN) / (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN);
-        std::cmp::min(claimed_num_nss, max_num_nss)
+        // Don't double count duplicate namespace IDs. The easiest solution is
+        // to consume an iterator. If performance is a concern then we could
+        // cache this count on construction of `Payload`.
+        self.ns_iter().count()
     }
 
     fn ns_iter(&self) -> impl Iterator<Item = NsInfo> + '_ {
@@ -190,9 +191,10 @@ struct NsInfo {
     ns_range: Range<usize>,
 }
 struct NsIter<'a> {
-    ns_table_index: usize, // TODO use newtype?
+    ns_table_index: usize,
     ns_payload_start: usize,
     block: &'a Payload2,
+    repeat_nss: HashSet<NamespaceId>,
 }
 
 impl<'a> NsIter<'a> {
@@ -201,6 +203,7 @@ impl<'a> NsIter<'a> {
             ns_table_index: NUM_NSS_BYTE_LEN,
             ns_payload_start: 0,
             block,
+            repeat_nss: HashSet::new(),
         }
     }
 }
@@ -211,23 +214,30 @@ impl<'a> Iterator for NsIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
         // the ns_table
-        if self.ns_table_index + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN > self.block.ns_table.len() {
-            return None;
+        while self.ns_table_index + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN <= self.block.ns_table.len()
+        {
+            // read the namespace ID from the namespace table
+            let ns_id = ns_id_from_bytes(
+                &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_ID_BYTE_LEN],
+            );
+
+            self.ns_table_index += NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN;
+
+            // skip duplicate namespace IDs
+            if !self.repeat_nss.insert(ns_id) {
+                continue;
+            }
+
+            // read the offset from the namespace table
+            let ns_payload_end = ns_offset_from_bytes(
+                &self.block.ns_table[self.ns_table_index - NS_OFFSET_BYTE_LEN..self.ns_table_index],
+            );
+
+            let ns_range = self.ns_payload_start..ns_payload_end;
+            self.ns_payload_start = ns_payload_end;
+            return Some(NsInfo { ns_id, ns_range });
         }
-
-        let ns_id = ns_id_from_bytes(
-            &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_ID_BYTE_LEN],
-        );
-
-        self.ns_table_index += NS_ID_BYTE_LEN;
-        let ns_payload_end = ns_offset_from_bytes(
-            &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_OFFSET_BYTE_LEN],
-        );
-
-        self.ns_table_index += NS_OFFSET_BYTE_LEN;
-        let ns_range = self.ns_payload_start..ns_payload_end;
-        self.ns_payload_start = ns_payload_end;
-        Some(NsInfo { ns_id, ns_range })
+        None
     }
 }
 
@@ -444,7 +454,7 @@ mod test {
 
             assert_eq!(block.num_namespaces(), test.nss.len());
             for ns in block.ns_iter() {
-                tracing::info!("test ns_id {}", ns.ns_id);
+                // tracing::info!("test ns_id {}", ns.ns_id);
 
                 test.nss
                     .remove(&ns.ns_id)

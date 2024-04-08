@@ -42,7 +42,7 @@ impl NamespaceBuilder {
 // TODO better way to do this?
 pub use tx_table::{
     ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes, num_nss_as_bytes,
-    num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 
 // TODO rename from tx_table, this mod also has ns_table utils
@@ -102,7 +102,7 @@ mod tx_table {
     ///
     /// # Panics
     /// If `bytes.len()` differs from [`NUM_NSS_BYTE_LEN`].
-    pub fn num_nss_from_bytes(bytes: &[u8]) -> usize {
+    pub fn _num_nss_from_bytes(bytes: &[u8]) -> usize {
         usize_from_bytes2::<NUM_NSS_BYTE_LEN>(bytes)
     }
 
