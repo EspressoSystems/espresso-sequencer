@@ -9,7 +9,7 @@ use crate::NamespaceId;
 use std::{collections::HashSet, ops::Range};
 
 impl Payload {
-    pub fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfoInternal> + '_ {
+    pub(super) fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfoInternal> + '_ {
         NsIterInternal::new(self)
     }
 }
@@ -32,7 +32,7 @@ impl<'a> Iterator for NsIter<'a> {
 }
 
 /// [`Iterator::Item`] for [`NsIterInternal`].
-pub struct NsInfoInternal {
+pub(super) struct NsInfoInternal {
     pub ns_id: NamespaceId,
     pub ns_range: Range<usize>,
 }

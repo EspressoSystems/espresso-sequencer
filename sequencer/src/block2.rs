@@ -197,15 +197,15 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             assert_eq!(block.num_namespaces(), test.nss.len());
-            for ns in block.ns_iter_internal() {
+            for ns_id in block.ns_iter() {
                 // tracing::info!("test ns_id {}", ns.ns_id);
 
                 test.nss
-                    .remove(&ns.ns_id)
+                    .remove(&ns_id)
                     .expect("block ns_id missing from test");
 
                 let ns_proof = block
-                    .namespace_with_proof(ns.ns_id, disperse_data.common.clone())
+                    .namespace_with_proof(ns_id, disperse_data.common.clone())
                     .expect("namespace_with_proof should succeed");
 
                 assert!(matches!(ns_proof, NamespaceProof::Existence { .. }));
@@ -216,9 +216,9 @@ mod test {
                         &disperse_data.commit,
                         &NameSpaceTable::from_bytes(block.ns_table.clone()), // TODO verify() should not take `NamespaceTable`
                     )
-                    .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns.ns_id));
+                    .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
-                assert_eq!(ns_proof_ns_id, ns.ns_id);
+                assert_eq!(ns_proof_ns_id, ns_id);
             }
             assert!(
                 test.nss.is_empty(),
