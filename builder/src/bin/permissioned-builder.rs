@@ -133,7 +133,7 @@ pub struct PermissionedBuilderOptions {
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(short, long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(long, env = "BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 
     /// Url a builder can use to stream hotshot events
