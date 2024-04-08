@@ -15,24 +15,23 @@ struct Args {
     /// The discovery client endpoint (including scheme) to connect to
     /// With the local discovery feature, this is a file path.
     /// With the remote (redis) discovery feature, this is a redis URL (e.g. `redis://127.0.0.1:6789`).
-
-    #[arg(short, long)]
+    #[arg(short, long, env = "ESPRESSO_CDN_MARSHAL_DISCOVERY_ENDPOINT")]
     discovery_endpoint: String,
 
     /// Whether or not metric collection and serving is enabled
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = false, env = "ESPRESSO_CDN_MARSHAL_METRICS_ENABLED")]
     metrics_enabled: bool,
 
     /// The IP to bind to for externalizing metrics
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(long, default_value = "127.0.0.1", env = "ESPRESSO_CDN_MARSHAL_METRICS_IP")]
     metrics_ip: String,
 
     /// The port to bind to for externalizing metrics
-    #[arg(long, default_value_t = 9090)]
+    #[arg(long, default_value_t = 9090, env = "ESPRESSO_CDN_MARSHAL_METRICS_PORT")]
     metrics_port: u16,
 
     /// The port to bind to for connections (from users)
-    #[arg(short, long, default_value_t = 1737)]
+    #[arg(short, long, default_value_t = 1737, env = "ESPRESSO_CDN_MARSHAL_BIND_PORT")]
     bind_port: u16,
 }
 

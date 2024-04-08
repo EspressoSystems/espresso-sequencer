@@ -19,40 +19,64 @@ struct Args {
     /// The discovery client endpoint (including scheme) to connect to.
     /// With the local discovery feature, this is a file path.
     /// With the remote (redis) discovery feature, this is a redis URL (e.g. `redis://127.0.0.1:6789`).
-    #[arg(short, long)]
+    #[arg(short, long, env = "ESPRESSO_CDN_BROKER_DISCOVERY_ENDPOINT")]
     discovery_endpoint: String,
 
     /// Whether or not metric collection and serving is enabled
-    #[arg(long, default_value_t = false)]
+    #[arg(
+        long,
+        default_value_t = false,
+        env = "ESPRESSO_CDN_BROKER_METRICS_ENABLED"
+    )]
     metrics_enabled: bool,
 
     /// The IP to bind to for externalizing metrics
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(
+        long,
+        default_value = "127.0.0.1",
+        env = "ESPRESSO_CDN_BROKER_METRICS_IP"
+    )]
     metrics_ip: String,
 
     /// The port to bind to for externalizing metrics
-    #[arg(long, default_value_t = 9090)]
+    #[arg(long, default_value_t = 9090, env = "ESPRESSO_CDN_BROKER_METRICS_PORT")]
     metrics_port: u16,
 
     /// The user-facing address to bind to for connections from users
-    #[arg(long, default_value = "0.0.0.0:1738")]
+    #[arg(
+        long,
+        default_value = "0.0.0.0:1738",
+        env = "ESPRESSO_CDN_BROKER_PUBLIC_BIND_ADDRESS"
+    )]
     public_bind_address: String,
 
     /// The user-facing address to advertise
-    #[arg(long, default_value = "local_ip:1738")]
+    #[arg(
+        long,
+        default_value = "local_ip:1738",
+        env = "ESPRESSO_CDN_BROKER_PUBLIC_ADVERTISE_ADDRESS"
+    )]
     public_advertise_address: String,
 
     /// The broker-facing address to bind to for connections from  
     /// other brokers
-    #[arg(long, default_value = "0.0.0.0:1739")]
+    #[arg(
+        long,
+        default_value = "0.0.0.0:1739",
+        env = "ESPRESSO_CDN_BROKER_PRIVATE_BIND_ADDRESS"
+    )]
     private_bind_address: String,
 
     /// The broker-facing address to advertise
-    #[arg(long, default_value = "local_ip:1739")]
+    #[arg(
+        long,
+        default_value = "local_ip:1739",
+        env = "ESPRESSO_CDN_BROKER_PRIVATE_ADVERTISE_ADDRESS"
+    )]
     private_advertise_address: String,
 
     /// The seed for broker key generation
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 0, env = "ESPRESSO_CDN_BROKER_KEY_SEED")]
     key_seed: u64,
 }
 
