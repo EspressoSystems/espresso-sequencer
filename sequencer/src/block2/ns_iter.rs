@@ -9,6 +9,17 @@ use crate::NamespaceId;
 use std::{collections::HashSet, ops::Range};
 
 impl Payload {
+    pub fn num_namespaces(&self) -> usize {
+        // Don't double count duplicate namespace IDs. The easiest solution is
+        // to consume an iterator. If performance is a concern then we could
+        // cache this count on construction of `Payload`.
+        self.ns_iter().count()
+    }
+
+    pub fn ns_iter(&self) -> impl Iterator<Item = NamespaceId> + '_ {
+        NsIter::new(self)
+    }
+
     pub(super) fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfoInternal> + '_ {
         NsIterInternal::new(self)
     }

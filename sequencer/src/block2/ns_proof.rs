@@ -158,6 +158,7 @@ mod test {
         }
     }
 
+    // TODO lots of infra here that could be reused in other tests.
     struct ValidTest {
         nss: HashMap<NamespaceId, Vec<Vec<u8>>>,
     }

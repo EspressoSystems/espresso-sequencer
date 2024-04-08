@@ -1,7 +1,6 @@
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
-use ns_iter::NsIter;
 use ns_payload_builder::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
@@ -28,18 +27,6 @@ pub struct Payload {
     // #[derivative(PartialEq = "ignore")]
     // #[serde(skip)]
     // pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
-}
-
-impl Display for Payload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:#?}")
-    }
-}
-
-impl Committable for Payload {
-    fn commit(&self) -> commit::Commitment<Self> {
-        todo!()
-    }
 }
 
 impl BlockPayload for Payload {
@@ -116,15 +103,14 @@ impl BlockPayload for Payload {
     }
 }
 
-impl Payload {
-    pub fn num_namespaces(&self) -> usize {
-        // Don't double count duplicate namespace IDs. The easiest solution is
-        // to consume an iterator. If performance is a concern then we could
-        // cache this count on construction of `Payload`.
-        self.ns_iter().count()
+impl Display for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
     }
+}
 
-    pub fn ns_iter(&self) -> impl Iterator<Item = NamespaceId> + '_ {
-        NsIter::new(self)
+impl Committable for Payload {
+    fn commit(&self) -> commit::Commitment<Self> {
+        todo!()
     }
 }
