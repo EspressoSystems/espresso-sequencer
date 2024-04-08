@@ -1,13 +1,13 @@
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
-use ns_payload_builder::NamespacePayloadBuilder;
+use ns_payload::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 
 mod ns_iter;
-mod ns_payload_builder;
+mod ns_payload;
 mod ns_proof;
 mod payload_bytes;
 
