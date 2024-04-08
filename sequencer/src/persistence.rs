@@ -321,6 +321,21 @@ mod persistence_tests {
                 .get_view_number(),
             qc.get_view_number()
         );
+
+        let highest_view_number = qc.view_number;
+
+        qc.view_number = qc.view_number - 1;
+        storage.update_high_qc(qc.clone()).await.unwrap();
+
+        assert_eq!(
+            storage
+                .load_high_qc()
+                .await
+                .unwrap()
+                .unwrap()
+                .get_view_number(),
+            highest_view_number,
+        );
     }
 
     #[async_std::test]

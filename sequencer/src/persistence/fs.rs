@@ -198,29 +198,19 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
-        if !dir_path.exists() {
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
+
+        if !file_path.exists() {
             return Ok(None);
         }
 
-        let entries = fs::read_dir(dir_path)?;
-        let view = view.get_u64();
+        let da_bytes = fs::read(file_path)?;
 
-        for entry in entries {
-            let path = entry.map(|entry| entry.path())?;
-
-            if let Some(file_stem) = path.file_stem() {
-                if let Ok(v) = file_stem.to_str().context("file not found")?.parse::<u64>() {
-                    if v == view {
-                        let da_bytes = fs::read(path)?;
-                        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
-                            bincode::deserialize(&da_bytes)?;
-                        return Ok(Some(da_proposal));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
+        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
+            bincode::deserialize(&da_bytes)?;
+        Ok(Some(da_proposal))
     }
 
     async fn load_vid_share(
@@ -229,29 +219,18 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
-        if !dir_path.exists() {
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
+
+        if !file_path.exists() {
             return Ok(None);
         }
 
-        let entries = fs::read_dir(dir_path)?;
-        let view = view.get_u64();
-
-        for entry in entries {
-            let path = entry.map(|entry| entry.path())?;
-
-            if let Some(file_stem) = path.file_stem() {
-                if let Ok(v) = file_stem.to_str().context("invalid file")?.parse::<u64>() {
-                    if v == view {
-                        let vid_share_bytes = fs::read(path)?;
-                        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
-                            bincode::deserialize(&vid_share_bytes)?;
-                        return Ok(Some(vid_share));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
+        let vid_share_bytes = fs::read(file_path)?;
+        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+            bincode::deserialize(&vid_share_bytes)?;
+        Ok(Some(vid_share))
     }
 
     async fn append_vid(
