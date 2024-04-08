@@ -110,10 +110,10 @@ where
                     )
                     .await?;
                 } else if leaf.get_view_number().get_u64() == 0 {
-                    // HotShot does not run VID in consensus for the genesis block). In
-                    // this case, the block payload is guaranteed to always be empty, so VID isn't
-                    // really necessary. But for consistency, we will still store the VID dispersal
-                    // data, computing it ourselves based on the well-known genesis VID commitment.
+                    // HotShot does not run VID in consensus for the genesis block. In this case,
+                    // the block payload is guaranteed to always be empty, so VID isn't really
+                    // necessary. But for consistency, we will still store the VID dispersal data,
+                    // computing it ourselves based on the well-known genesis VID commitment.
                     store_genesis_vid(self, leaf).await;
                 } else {
                     tracing::error!(

@@ -803,7 +803,6 @@ pub mod node_tests {
     }
 
     #[async_std::test]
-    #[ignore]
     pub async fn test_vid_recovery<D: TestableDataSource>() {
         setup_test();
 
@@ -822,6 +821,7 @@ pub mod node_tests {
             tracing::info!("waiting for transaction");
             let block = blocks.next().await.unwrap();
             if !block.is_empty() {
+                tracing::info!(height = block.height(), "transaction sequenced");
                 break block;
             }
             tracing::info!(height = block.height(), "empty block");
@@ -844,7 +844,15 @@ pub mod node_tests {
         let vid = &vid;
         let shares: Vec<VidShare> = join_all((0..network.num_nodes()).map(|i| async move {
             let ds = network.data_source_index(i);
-            let share = ds.read().await.vid_share(height).await.unwrap();
+
+            // Wait until the node has processed up to the desired block; since we have thus far
+            // only interacted with node 0, it is possible other nodes are slightly behind.
+            let mut leaves = { ds.read().await.subscribe_leaves(height).await };
+            let leaf = leaves.next().await.unwrap();
+            assert_eq!(leaf.height(), height as u64);
+            assert_eq!(leaf.payload_hash(), commit);
+
+            let share = { ds.read().await.vid_share(height).await.unwrap() };
             vid.verify_share(&share, common, &commit).unwrap().unwrap();
             share
         }))
