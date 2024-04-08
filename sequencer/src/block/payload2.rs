@@ -5,12 +5,12 @@ use crate::Transaction;
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[derive(Default)]
-pub struct NamespaceBuilder {
+pub struct NamespacePayloadBuilder {
     tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
 }
 
-impl NamespaceBuilder {
+impl NamespacePayloadBuilder {
     // /// Return an empty namespace
     // pub fn new() -> Self {
     //     Self {
@@ -63,7 +63,7 @@ mod tx_table {
     /// # Panics
     /// If `num_txs` cannot fit into [`NUM_TXS_BYTE_LEN`] bytes.
     pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
-        usize_to_bytes2(num_txs)
+        usize_to_bytes(num_txs)
     }
 
     /// Deserialize `bytes` into a count of transactions (`usize`).
@@ -71,7 +71,7 @@ mod tx_table {
     /// # Panics
     /// If `bytes.len()` differs from [`NUM_TXS_BYTE_LEN`].
     pub fn _num_txs_from_bytes(bytes: &[u8]) -> usize {
-        usize_from_bytes2::<NUM_TXS_BYTE_LEN>(bytes)
+        usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes)
     }
 
     /// Serialize `tx_offset` into [`TX_OFFSET_BYTE_LEN`] bytes.
@@ -79,7 +79,7 @@ mod tx_table {
     /// # Panics
     /// If `tx_offset` cannot fit into [`TX_OFFSET_BYTE_LEN`] bytes.
     pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
-        usize_to_bytes2(tx_offset)
+        usize_to_bytes(tx_offset)
     }
 
     /// Deserialize `bytes` into a transaction offset (`usize`).
@@ -87,7 +87,7 @@ mod tx_table {
     /// # Panics
     /// If `bytes.len()` differs from [`TX_OFFSET_BYTE_LEN`].
     pub fn _tx_offset_from_bytes(bytes: &[u8]) -> usize {
-        usize_from_bytes2::<TX_OFFSET_BYTE_LEN>(bytes)
+        usize_from_bytes::<TX_OFFSET_BYTE_LEN>(bytes)
     }
 
     /// Serialize `num_nss` into [`NUM_NSS_BYTE_LEN`] bytes.
@@ -95,7 +95,7 @@ mod tx_table {
     /// # Panics
     /// If `num_nss` cannot fit into [`NUM_NSS_BYTE_LEN`] bytes.
     pub fn num_nss_as_bytes(num_nss: usize) -> [u8; NUM_NSS_BYTE_LEN] {
-        usize_to_bytes2(num_nss)
+        usize_to_bytes(num_nss)
     }
 
     /// Deserialize `bytes` into a count of namespaces (`usize`).
@@ -103,7 +103,7 @@ mod tx_table {
     /// # Panics
     /// If `bytes.len()` differs from [`NUM_NSS_BYTE_LEN`].
     pub fn _num_nss_from_bytes(bytes: &[u8]) -> usize {
-        usize_from_bytes2::<NUM_NSS_BYTE_LEN>(bytes)
+        usize_from_bytes::<NUM_NSS_BYTE_LEN>(bytes)
     }
 
     /// Serialize `ns_offset` into [`NS_OFFSET_BYTE_LEN`] bytes.
@@ -111,7 +111,7 @@ mod tx_table {
     /// # Panics
     /// If `ns_offset` cannot fit into [`NS_OFFSET_BYTE_LEN`] bytes.
     pub fn ns_offset_as_bytes(ns_offset: usize) -> [u8; NS_OFFSET_BYTE_LEN] {
-        usize_to_bytes2(ns_offset)
+        usize_to_bytes(ns_offset)
     }
 
     /// Deserialize `bytes` into a namespace offset (`usize`).
@@ -119,7 +119,7 @@ mod tx_table {
     /// # Panics
     /// If `bytes.len()` differs from [`NS_OFFSET_BYTE_LEN`].
     pub fn ns_offset_from_bytes(bytes: &[u8]) -> usize {
-        usize_from_bytes2::<NS_OFFSET_BYTE_LEN>(bytes)
+        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(bytes)
     }
 
     /// Serialize `ns_id` into [`NS_ID_BYTE_LEN`] bytes.
@@ -134,7 +134,7 @@ mod tx_table {
     /// serialization is not ergonomic compared to mine here, which is
     /// infallible and returns a constant-size array.
     pub fn ns_id_as_bytes(ns_id: NamespaceId) -> [u8; NS_ID_BYTE_LEN] {
-        u64_to_bytes2(u64::from(ns_id))
+        u64_to_bytes(u64::from(ns_id))
     }
 
     /// Deserialize `bytes` into a [`NamespaceId`].
@@ -142,7 +142,7 @@ mod tx_table {
     /// # Panics
     /// If `bytes.len()` differs [`NS_ID_BYTE_LEN`].
     pub fn ns_id_from_bytes(bytes: &[u8]) -> NamespaceId {
-        NamespaceId::from(u64_from_bytes2::<NS_ID_BYTE_LEN>(bytes))
+        NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(bytes))
     }
 
     // Use an ugly macro because it's difficult or impossible to be generic over
@@ -155,7 +155,7 @@ mod tx_table {
                 ///
                 /// # Panics
                 /// If `n` cannot fit into `BYTE_LEN` bytes.
-                fn [<$T _to_bytes2>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
+                fn [<$T _to_bytes>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
                     if size_of::<$T>() > BYTE_LEN {
                         assert!(
                             n <= [<$T _max_from_byte_len2>](BYTE_LEN),
@@ -175,7 +175,7 @@ mod tx_table {
                 ///
                 /// # Panics
                 /// If `bytes.len()` is too large to fit into a `$T`.
-                fn [<$T _from_bytes2>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
+                fn [<$T _from_bytes>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
                     assert_eq!(bytes.len(), BYTE_LEN, "bytes len {} differs from BYTE_LEN {BYTE_LEN}", bytes.len());
                     assert!(
                         BYTE_LEN <= size_of::<$T>(),
@@ -212,7 +212,7 @@ mod tx_table {
         macro_rules! uint_bytes_test_impl {
             ($T:ty) => {
                 paste! {
-                    use super::{[<$T _max_from_byte_len2>], [<$T _to_bytes2>], [<$T _from_bytes2>]};
+                    use super::{[<$T _max_from_byte_len2>], [<$T _to_bytes>], [<$T _from_bytes>]};
 
                     #[test]
                     fn [<$T _max_from_byte_len2_correctness>]() {
@@ -231,65 +231,65 @@ mod tx_table {
                     }
 
                     #[test]
-                    fn [<$T _to_bytes2_correctness>]() {
+                    fn [<$T _to_bytes_correctness>]() {
                         // byte length 0
-                        assert_eq!([<$T _to_bytes2>](0), [0; 0]);
-                        assert_that_code!(|| [<$T _to_bytes2>]::<0>(1)).panics();
+                        assert_eq!([<$T _to_bytes>](0), [0; 0]);
+                        assert_that_code!(|| [<$T _to_bytes>]::<0>(1)).panics();
 
                         // byte length 1
-                        assert_eq!([<$T _to_bytes2>](0), [0; 1]);
-                        assert_eq!([<$T _to_bytes2>](255), [255; 1]);
-                        assert_that_code!(|| [<$T _to_bytes2>]::<1>(256)).panics();
+                        assert_eq!([<$T _to_bytes>](0), [0; 1]);
+                        assert_eq!([<$T _to_bytes>](255), [255; 1]);
+                        assert_that_code!(|| [<$T _to_bytes>]::<1>(256)).panics();
 
                         // byte length 2
-                        assert_eq!([<$T _to_bytes2>](0), [0; 2]);
-                        assert_eq!([<$T _to_bytes2>](65535), [255; 2]);
-                        assert_that_code!(|| [<$T _to_bytes2>]::<2>(65536)).panics();
+                        assert_eq!([<$T _to_bytes>](0), [0; 2]);
+                        assert_eq!([<$T _to_bytes>](65535), [255; 2]);
+                        assert_that_code!(|| [<$T _to_bytes>]::<2>(65536)).panics();
 
                         // byte length size_of::<$T>()
-                        assert_eq!([<$T _to_bytes2>](0), [0; size_of::<$T>()]);
-                        assert_eq!([<$T _to_bytes2>]($T::MAX), [255; size_of::<$T>()]);
+                        assert_eq!([<$T _to_bytes>](0), [0; size_of::<$T>()]);
+                        assert_eq!([<$T _to_bytes>]($T::MAX), [255; size_of::<$T>()]);
 
                         // byte length size_of::<$T>() + 1
-                        assert_eq!([<$T _to_bytes2>](0), [0; size_of::<$T>() + 1]);
+                        assert_eq!([<$T _to_bytes>](0), [0; size_of::<$T>() + 1]);
                         let [<$T _max_bytes>] = {
                             let mut bytes = [255; size_of::<$T>() + 1];
                             bytes[bytes.len() - 1] = 0;
                             bytes
                         };
-                        assert_eq!([<$T _to_bytes2>]($T::MAX), [<$T _max_bytes>]);
+                        assert_eq!([<$T _to_bytes>]($T::MAX), [<$T _max_bytes>]);
                     }
 
                     #[test]
-                    fn [<$T _from_bytes2_correctness>]() {
+                    fn [<$T _from_bytes_correctness>]() {
                         let bytes = [255; size_of::<$T>() + 1];
 
                         // It would be nice to iterate through
                         // `0..size_of::<$T>()` but this is not possible with
-                        // const generics for `[<$T _from_bytes2>]`. We could
+                        // const generics for `[<$T _from_bytes>]`. We could
                         // use `seq-macro` crate but it requires an integer
                         // literal whereas our range includes `size_of::<$T>()`.
                         //
                         // Instead we just hard code four constants:
                         // `0`, `1`, `size_of::<$T>() - 1`, `size_of::<$T>()`.
                         assert_eq!(
-                            [<$T _from_bytes2>]::<0>(&bytes[..0]),
+                            [<$T _from_bytes>]::<0>(&bytes[..0]),
                             [<$T _max_from_byte_len2>](0)
                         );
                         assert_eq!(
-                            [<$T _from_bytes2>]::<1>(&bytes[..1]),
+                            [<$T _from_bytes>]::<1>(&bytes[..1]),
                             [<$T _max_from_byte_len2>](1)
                         );
                         assert_eq!(
-                            [<$T _from_bytes2>]::<{size_of::<$T>() - 1}>(&bytes[..size_of::<$T>() - 1]),
+                            [<$T _from_bytes>]::<{size_of::<$T>() - 1}>(&bytes[..size_of::<$T>() - 1]),
                             [<$T _max_from_byte_len2>](size_of::<$T>() - 1)
                         );
                         assert_eq!(
-                            [<$T _from_bytes2>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>()]),
+                            [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>()]),
                             [<$T _max_from_byte_len2>](size_of::<$T>())
                         );
 
-                        assert_that_code!(|| [<$T _from_bytes2>]::<{size_of::<$T>() + 1}>(&bytes[..])).panics();
+                        assert_that_code!(|| [<$T _from_bytes>]::<{size_of::<$T>() + 1}>(&bytes[..])).panics();
                     }
                 }
             };

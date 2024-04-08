@@ -1,7 +1,7 @@
 use crate::{
     block::payload2::{
         ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes,
-        num_nss_as_bytes, NamespaceBuilder,
+        num_nss_as_bytes, NamespacePayloadBuilder,
     },
     BlockBuildingSnafu, NamespaceId, Transaction,
 };
@@ -37,13 +37,13 @@ use self::{
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload2 {
-    // Sequence of bytes representing the concatenated payloads for each namespace
+    // Concatenated payload bytes for each namespace
     #[serde(with = "base64_bytes")]
     payload: Vec<u8>,
 
-    // Sequence of bytes representing the namespace table
+    // namespace table bytes
     ns_table: Vec<u8>,
-    // TODO(X) Revisit caching of frequently used items
+    // TODO Revisit caching of frequently used items
     //
     // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`.
     // We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
@@ -79,7 +79,7 @@ impl BlockPayload for Payload2 {
         transactions: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         // add each tx to its namespace
-        let mut namespaces = HashMap::<NamespaceId, NamespaceBuilder>::new();
+        let mut namespaces = HashMap::<NamespaceId, NamespacePayloadBuilder>::new();
         for tx in transactions.into_iter() {
             let namespace = namespaces.entry(tx.namespace()).or_default();
             namespace.append_tx(tx);
@@ -151,13 +151,13 @@ impl Payload2 {
         NsIter::new(self)
     }
 
-    // TODO dead code even with `pub` because this module is private in lib.rs
-    // #[allow(dead_code)]
-    /// Returns the flat bytes for namespace `ns_id`, along with a proof of correctness for those bytes.
+    /// Returns the payload bytes for namespace `ns_id`, along with a proof of
+    /// correctness for those bytes.
     ///
-    /// RPC-friendly proof contains:
-    /// - the namespace bytes
-    /// - `vid_common` needed to verify the proof. This data is not accessible to the verifier because it's not part of the block header.
+    /// RPC-friendly proof contains everything not already available to the
+    /// verifier in the block header:
+    /// - the namespace payload bytes
+    /// - `vid_common` needed to verify the proof
     pub fn namespace_with_proof(
         &self,
         ns_id: NamespaceId,
@@ -173,14 +173,12 @@ impl Payload2 {
             return Some(NamespaceProof::NonExistence { ns_id });
         };
 
-        // TODO log output for each `?`
-        // fix this when we settle on an error handling pattern
         Some(NamespaceProof::Existence {
             ns_id,
             ns_payload_flat: self.payload[ns_range.clone()].into(),
             ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
                 .payload_proof(&self.payload, ns_range)
-                .ok()?,
+                .ok()?, // error: failure to make a payload proof
             vid_common,
         })
     }
