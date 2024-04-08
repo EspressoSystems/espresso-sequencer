@@ -165,7 +165,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
     async fn update_undecided_state(
         &self,
-        _leafs: CommitmentMap<Leaf>,
+        _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
