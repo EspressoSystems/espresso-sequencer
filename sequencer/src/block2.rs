@@ -2,19 +2,20 @@ use crate::block::payload::NamespaceProof;
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::VidCommon;
-use hotshot_types::{traits::BlockPayload, vid::VidSchemeType};
-use hotshot_types::{utils::BuilderCommitment, vid::vid_scheme};
+use hotshot_types::{
+    traits::BlockPayload, utils::BuilderCommitment, vid::vid_scheme, vid::VidSchemeType,
+};
 use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 use ns_iter::NsIter;
+use ns_payload_builder::NamespacePayloadBuilder;
+use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 
 mod ns_iter;
 mod ns_payload_builder;
+mod ns_proof;
 mod payload_bytes;
-
-use ns_payload_builder::NamespacePayloadBuilder;
-use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {

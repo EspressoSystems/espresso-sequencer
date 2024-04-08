@@ -3,7 +3,7 @@
 use super::payload_bytes::{
     num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
-use crate::Transaction;
+use crate::{NamespaceId, Transaction};
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[derive(Default)]
@@ -31,4 +31,16 @@ impl NamespacePayloadBuilder {
         result.extend(self.tx_bodies);
         result
     }
+}
+
+pub fn parse_ns_payload(ns_bytes: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
+    // Impl copied from old module. I'm amazed it works.
+    // TODO a proper impl requires an iterator like `NsIterInternal` for txs.
+    use crate::block::tables::TxTable;
+
+    let num_txs = TxTable::get_tx_table_len(ns_bytes);
+    (0..TxTable::get_tx_table_len(ns_bytes))
+        .map(|tx_idx| TxTable::get_payload_range(ns_bytes, tx_idx, num_txs))
+        .map(|tx_range| Transaction::new(ns_id, ns_bytes[tx_range].to_vec()))
+        .collect()
 }

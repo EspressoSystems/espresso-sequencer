@@ -38,8 +38,8 @@ pub(super) struct NsInfoInternal {
 }
 /// Return type for [`Payload::ns_iter_internal`].
 struct NsIterInternal<'a> {
-    ns_table_index: usize,
-    ns_payload_start: usize,
+    ns_table_start: usize,   // byte index into the namespace table
+    ns_payload_start: usize, // byte index into the payload
     block: &'a Payload,
     repeat_nss: HashSet<NamespaceId>,
 }
@@ -47,7 +47,7 @@ struct NsIterInternal<'a> {
 impl<'a> NsIterInternal<'a> {
     fn new(block: &'a Payload) -> Self {
         Self {
-            ns_table_index: NUM_NSS_BYTE_LEN,
+            ns_table_start: NUM_NSS_BYTE_LEN,
             ns_payload_start: 0,
             block,
             repeat_nss: HashSet::new(),
@@ -61,23 +61,28 @@ impl<'a> Iterator for NsIterInternal<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
         // the ns_table
-        while self.ns_table_index + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN <= self.block.ns_table.len()
+        while self.ns_table_start + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN <= self.block.ns_table.len()
         {
             // read the namespace ID from the namespace table
             let ns_id = ns_id_from_bytes(
-                &self.block.ns_table[self.ns_table_index..self.ns_table_index + NS_ID_BYTE_LEN],
+                &self.block.ns_table[self.ns_table_start..self.ns_table_start + NS_ID_BYTE_LEN],
             );
 
-            self.ns_table_index += NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN;
+            self.ns_table_start += NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN;
 
             // skip duplicate namespace IDs
             if !self.repeat_nss.insert(ns_id) {
                 continue;
             }
 
-            // read the offset from the namespace table
-            let ns_payload_end = ns_offset_from_bytes(
-                &self.block.ns_table[self.ns_table_index - NS_OFFSET_BYTE_LEN..self.ns_table_index],
+            // Read the offset from the namespace table.
+            // This offset must not exceed the payload byte length.
+            let ns_payload_end = std::cmp::min(
+                ns_offset_from_bytes(
+                    &self.block.ns_table
+                        [self.ns_table_start - NS_OFFSET_BYTE_LEN..self.ns_table_start],
+                ),
+                self.block.payload.len(),
             );
 
             let ns_range = self.ns_payload_start..ns_payload_end;
