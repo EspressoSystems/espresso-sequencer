@@ -13,11 +13,12 @@ use std::{
 };
 
 mod payload2;
+mod payload_bytes;
 
-use self::payload2::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN};
-use payload2::{
+use payload2::NamespacePayloadBuilder;
+use payload_bytes::{
     ns_id_as_bytes, ns_id_from_bytes, ns_offset_as_bytes, ns_offset_from_bytes, num_nss_as_bytes,
-    NamespacePayloadBuilder,
+    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
