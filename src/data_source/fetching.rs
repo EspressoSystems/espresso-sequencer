@@ -546,11 +546,12 @@ where
 }
 
 #[async_trait]
-impl<Types, State, S, P> UpdateStateData<Types, State> for FetchingDataSource<Types, S, P>
+impl<Types, State, S, P, const ARITY: usize> UpdateStateData<Types, State, ARITY>
+    for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    State: MerklizedState<Types>,
-    S: UpdateStateData<Types, State> + Send + Sync + 'static,
+    State: MerklizedState<Types, ARITY>,
+    S: UpdateStateData<Types, State, ARITY> + Send + Sync + 'static,
     P: AvailabilityProvider<Types>,
 {
     async fn insert_merkle_nodes(
@@ -570,17 +571,18 @@ where
 }
 
 #[async_trait]
-impl<Types, S, State, P> MerklizedStateDataSource<Types, State> for FetchingDataSource<Types, S, P>
+impl<Types, S, State, P, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
+    for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    S: MerklizedStateDataSource<Types, State> + Send + Sync + 'static,
+    S: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync + 'static,
     P: AvailabilityProvider<Types>,
-    State: MerklizedState<Types> + 'static,
+    State: MerklizedState<Types, ARITY> + 'static,
     <State as MerkleTreeScheme>::Commitment: Send,
 {
     async fn get_path(
         &self,
-        snapshot: Snapshot<Types, State>,
+        snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
         self.fetcher

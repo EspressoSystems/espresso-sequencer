@@ -37,10 +37,12 @@ use hotshot_query_service::{
     },
     Error,
 };
+use hotshot_testing::block_builder::run_random_builder;
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use portpicker::pick_unused_port;
 use std::{num::NonZeroUsize, time::Duration};
 
 const NUM_NODES: usize = 2;
@@ -151,7 +153,16 @@ async fn init_consensus(
         })
         .collect::<Vec<_>>();
 
+    // Pick a random port for the builder
+    let builder_port = pick_unused_port().expect("failed to get unused port");
+    let builder_url = surf_disco::Url::parse(&format!("127.0.0.1:{builder_port}"))
+        .expect("failed to parse builder URL");
+
+    // Start the builder
+    run_random_builder(builder_url.clone());
+
     let config = HotShotConfig {
+        builder_url,
         fixed_leader_for_gpuvid: 0,
         num_nodes_with_stake: NonZeroUsize::new(pub_keys.len()).unwrap(),
         num_nodes_without_stake: 0,

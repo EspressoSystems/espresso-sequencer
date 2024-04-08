@@ -34,7 +34,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -152,7 +152,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "status",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -292,7 +292,7 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<_, Error, Version01>::with_state(RwLock::new(data_source));
+        let mut app = App::<_, Error>::with_state(RwLock::new(data_source));
         app.register_module("status", api).unwrap();
 
         let port = pick_unused_port().unwrap();

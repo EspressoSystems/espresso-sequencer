@@ -32,6 +32,7 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_testing::block_builder::run_random_builder;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -39,6 +40,7 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use portpicker::pick_unused_port;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -79,6 +81,15 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 state_ver_key: state_key_pairs[id].ver_key(),
             })
             .collect::<Vec<_>>();
+
+        // Pick a random port for the builder
+        let builder_port = pick_unused_port().expect("failed to get unused port");
+        let builder_url = surf_disco::Url::parse(&format!("http://127.0.0.1:{builder_port}"))
+            .expect("failed to parse builder URL");
+
+        // Start the builder
+        run_random_builder(builder_url.clone());
+
         let nodes = join_all(
             priv_keys
                 .into_iter()
@@ -91,6 +102,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         state_key_pair: state_key_pairs[node_id].clone(),
                     };
                     let config = HotShotConfig {
+                        builder_url: builder_url.clone(),
                         fixed_leader_for_gpuvid: 0,
                         num_nodes_with_stake: num_staked_nodes,
                         num_nodes_without_stake: 0,

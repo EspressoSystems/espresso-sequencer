@@ -279,16 +279,17 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, State> MerklizedStateDataSource<Types, State> for ExtensibleDataSource<D, U>
+impl<D, U, Types, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
+    for ExtensibleDataSource<D, U>
 where
-    D: MerklizedStateDataSource<Types, State> + Send + Sync,
+    D: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    State: MerklizedState<Types>,
+    State: MerklizedState<Types, ARITY>,
 {
     async fn get_path(
         &self,
-        snapshot: Snapshot<Types, State>,
+        snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
         self.data_source.get_path(snapshot, key).await
@@ -296,11 +297,12 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, State> UpdateStateData<Types, State> for ExtensibleDataSource<D, U>
+impl<D, U, Types, State, const ARITY: usize> UpdateStateData<Types, State, ARITY>
+    for ExtensibleDataSource<D, U>
 where
-    D: UpdateStateData<Types, State> + Send + Sync,
+    D: UpdateStateData<Types, State, ARITY> + Send + Sync,
     U: Send + Sync,
-    State: MerklizedState<Types>,
+    State: MerklizedState<Types, ARITY>,
     Types: NodeType,
 {
     async fn insert_merkle_nodes(

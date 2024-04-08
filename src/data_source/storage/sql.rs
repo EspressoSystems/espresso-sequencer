@@ -29,7 +29,7 @@ use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
 use async_trait::async_trait;
 use bit_vec::BitVec;
 use chrono::Utc;
-use commit::Committable;
+use committable::Committable;
 use futures::{
     stream::{BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
@@ -1196,7 +1196,9 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, State: MerklizedState<Types>> UpdateStateData<Types, State> for SqlStorage {
+impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
+    UpdateStateData<Types, State, ARITY> for SqlStorage
+{
     async fn insert_merkle_nodes(
         &mut self,
         path: MerklePath<State::Entry, State::Key, State::T>,
@@ -1364,15 +1366,15 @@ impl<Types: NodeType, State: MerklizedState<Types>> UpdateStateData<Types, State
 }
 
 #[async_trait]
-impl<Types, State> MerklizedStateDataSource<Types, State> for SqlStorage
+impl<Types, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY> for SqlStorage
 where
     Types: NodeType,
-    State: MerklizedState<Types> + 'static,
+    State: MerklizedState<Types, ARITY> + 'static,
 {
     /// Retreives a Merkle path from the database
     async fn get_path(
         &self,
-        snapshot: Snapshot<Types, State>,
+        snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
         let state_type = State::state_type();
@@ -2596,6 +2598,7 @@ pub mod testing {
 mod test {
 
     use hotshot_example_types::state_types::TestInstanceState;
+    use jf_primitives::merkle_tree::universal_merkle_tree::UniversalMerkleTree;
     use jf_primitives::merkle_tree::UniversalMerkleTreeScheme;
 
     use super::{testing::TmpDb, *};
@@ -2842,8 +2845,6 @@ mod test {
 
     use jf_primitives::merkle_tree::MerkleTreeScheme;
 
-    use typenum::U8;
-
     #[async_std::test]
     async fn test_merklized_state_storage() {
         // In this test we insert some entries into the tree and update the database
@@ -2854,7 +2855,7 @@ mod test {
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
 
         // define a test tree
-        let mut test_tree = MockMerkleTree::new(3);
+        let mut test_tree: UniversalMerkleTree<_, _, _, 8, _> = MockMerkleTree::new(3);
         let block_height = 1;
 
         // insert some entries into the tree and the header table
@@ -2879,9 +2880,9 @@ mod test {
             let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
             // traversal path for the index.
             let traversal_path =
-                <usize as ToTraversalPath<U8>>::to_traversal_path(&i, test_tree.height());
+                <usize as ToTraversalPath<8>>::to_traversal_path(&i, test_tree.height());
 
-            <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+            <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
                 &mut storage,
                 proof.proof.clone(),
                 traversal_path.clone(),
@@ -2895,7 +2896,7 @@ mod test {
         for i in 0..27 {
             // Query the path for the index
             let merkle_path =
-                <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+                <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
                     &storage,
                     Snapshot::Index(block_height as u64),
                     i,
@@ -2935,10 +2936,10 @@ mod test {
         let (_, proof_bh_2) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
-            <usize as ToTraversalPath<U8>>::to_traversal_path(&0, test_tree.height());
+            <usize as ToTraversalPath<8>>::to_traversal_path(&0, test_tree.height());
         // Update storage to insert a new version of this code
 
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof_bh_2.proof.clone(),
             traversal_path.clone(),
@@ -2971,22 +2972,24 @@ mod test {
         // One with created = 1 and other with 2
         // Query snapshot with created = 2
 
-        let path_with_bh_2 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
-            &storage,
-            Snapshot::Index(2),
-            0,
-        )
-        .await
-        .unwrap();
+        let path_with_bh_2 =
+            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
+                &storage,
+                Snapshot::Index(2),
+                0,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(path_with_bh_2, proof_bh_2.proof);
-        let path_with_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
-            &storage,
-            Snapshot::Index(1),
-            0,
-        )
-        .await
-        .unwrap();
+        let path_with_bh_1 =
+            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
+                &storage,
+                Snapshot::Index(1),
+                0,
+            )
+            .await
+            .unwrap();
         assert_eq!(path_with_bh_1, proof_bh_1.proof);
     }
 
@@ -3026,9 +3029,9 @@ mod test {
         let (_, proof_before_remove) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
-            <usize as ToTraversalPath<U8>>::to_traversal_path(&0, test_tree.height());
+            <usize as ToTraversalPath<8>>::to_traversal_path(&0, test_tree.height());
         // insert merkle nodes
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof_before_remove.proof.clone(),
             traversal_path.clone(),
@@ -3037,7 +3040,7 @@ mod test {
         .await
         .expect("failed to insert nodes");
         // the path from the db and and tree should match
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Index(block_height as u64),
             0,
@@ -3059,7 +3062,7 @@ mod test {
         // Created = 2 in this case
         let proof_after_remove = test_tree.universal_lookup(0).expect_not_found().unwrap();
 
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof_after_remove.proof.clone(),
             traversal_path.clone(),
@@ -3081,7 +3084,7 @@ mod test {
         .unwrap();
         // Get non membership proof
         let non_membership_path =
-            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
                 &storage,
                 Snapshot::Index(2_u64),
                 0,
@@ -3098,7 +3101,7 @@ mod test {
         // This proof should be equal to the proof before deletion
         // Assert that the paths from the db and the tree are equal
 
-        let proof_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let proof_bh_1 = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Index(1_u64),
             0,
@@ -3143,9 +3146,9 @@ mod test {
         let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
-            <usize as ToTraversalPath<U8>>::to_traversal_path(&0, test_tree.height());
+            <usize as ToTraversalPath<8>>::to_traversal_path(&0, test_tree.height());
         // insert merkle nodes
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof.proof.clone(),
             traversal_path.clone(),
@@ -3154,7 +3157,7 @@ mod test {
         .await
         .expect("failed to insert nodes");
 
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Commit(commitment),
             0,
@@ -3203,9 +3206,9 @@ mod test {
             let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
             // traversal path for the index.
             let traversal_path =
-                <usize as ToTraversalPath<U8>>::to_traversal_path(&i, test_tree.height());
+                <usize as ToTraversalPath<8>>::to_traversal_path(&i, test_tree.height());
             // insert merkle nodes
-            <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+            <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
                 &mut storage,
                 proof.proof.clone(),
                 traversal_path.clone(),
@@ -3218,11 +3221,11 @@ mod test {
         test_tree.update(1, 100).unwrap();
         //insert updated merkle path without updating the header
         let traversal_path =
-            <usize as ToTraversalPath<U8>>::to_traversal_path(&1, test_tree.height());
+            <usize as ToTraversalPath<8>>::to_traversal_path(&1, test_tree.height());
         let (_, proof) = test_tree.lookup(1).expect_ok().unwrap();
 
         // insert merkle nodes
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof.proof.clone(),
             traversal_path.clone(),
@@ -3231,7 +3234,7 @@ mod test {
         .await
         .expect("failed to insert nodes");
 
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Index(block_height as u64),
             1,
@@ -3253,7 +3256,7 @@ mod test {
                 .await
                 .unwrap();
         // Querying the path again
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Index(block_height as u64),
             1,
@@ -3281,7 +3284,7 @@ mod test {
                 )
                 .await
                 .unwrap();
-        <SqlStorage as UpdateStateData<_, MockMerkleTree>>::insert_merkle_nodes(
+        <SqlStorage as UpdateStateData<_, MockMerkleTree, 8>>::insert_merkle_nodes(
             &mut storage,
             proof.proof.clone(),
             traversal_path.clone(),
@@ -3304,7 +3307,7 @@ mod test {
             .expect("failed to delete internal node");
         assert_eq!(rows, 1);
 
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree>>::get_path(
+        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
             &storage,
             Snapshot::Index(2_u64),
             1,

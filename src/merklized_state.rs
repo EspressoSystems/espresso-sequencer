@@ -26,7 +26,7 @@ use snafu::{ResultExt, Snafu};
 use std::fmt::Debug;
 use tagged_base64::TaggedBase64;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{api::load_api, QueryError};
 
@@ -81,14 +81,15 @@ impl Error {
 pub fn define_api<
     State,
     Types: NodeType,
-    M: MerklizedState<Types>,
+    M: MerklizedState<Types, ARITY>,
     Ver: StaticVersionType + 'static,
+    const ARITY: usize,
 >(
     options: &Options,
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M>,
+    <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M, ARITY>,
     Types: NodeType,
     for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
 {

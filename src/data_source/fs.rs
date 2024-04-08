@@ -101,7 +101,7 @@ use std::path::Path;
 /// # };
 /// # use std::path::Path;
 /// # use tide_disco::App;
-/// # use versioned_binary_serialization::version::StaticVersionType;
+/// # use vbs::version::StaticVersionType;
 /// struct AppState {
 ///     // Top-level storage coordinator
 ///     store: AtomicStore,

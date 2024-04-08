@@ -130,7 +130,7 @@ pub mod availability_tests {
         types::HeightIndexed,
     };
     use async_std::sync::RwLock;
-    use commit::Committable;
+    use committable::Committable;
     use futures::stream::StreamExt;
     use std::collections::HashMap;
     use std::fmt::Debug;
@@ -454,7 +454,7 @@ pub mod persistence_tests {
         },
         Leaf,
     };
-    use commit::Committable;
+    use committable::Committable;
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::simple_certificate::QuorumCertificate;
 
@@ -563,7 +563,7 @@ pub mod node_tests {
         types::HeightIndexed,
         Header, VidShare,
     };
-    use commit::Committable;
+    use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
     use hotshot_example_types::{
         block_types::{TestBlockHeader, TestBlockPayload},

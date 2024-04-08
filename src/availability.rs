@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
 use std::{fmt::Display, path::PathBuf, str::FromStr, time::Duration};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub(crate) mod data_source;
 mod fetch;
@@ -496,7 +496,7 @@ mod test {
         Error, Header,
     };
     use async_std::sync::RwLock;
-    use commit::Committable;
+    use committable::Committable;
     use futures::future::FutureExt;
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::{
@@ -790,7 +790,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(
@@ -942,7 +942,7 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<_, Error, Version01>::with_state(RwLock::new(data_source));
+        let mut app = App::<_, Error>::with_state(RwLock::new(data_source));
         app.register_module("availability", api).unwrap();
 
         let port = pick_unused_port().unwrap();
