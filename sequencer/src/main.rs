@@ -5,8 +5,7 @@ use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    context::SequencerContext,
-    init_node, network,
+    init_node,
     options::{Modules, Options},
     persistence, BuilderParams, L1Params, NetworkParams,
 };
@@ -22,10 +21,10 @@ async fn main() -> anyhow::Result<()> {
     let mut modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
 
-    let ctx = if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
+    if let Some(storage) = modules.storage_fs.take() {
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
@@ -34,13 +33,8 @@ async fn main() -> anyhow::Result<()> {
             persistence::fs::Options::default(),
             SEQUENCER_VERSION,
         )
-        .await?
-    };
-
-    // Start doing consensus.
-    ctx.start_consensus().await;
-    ctx.join().await;
-    Ok(())
+        .await
+    }
 }
 
 async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
@@ -48,7 +42,7 @@ async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
     opt: Options,
     storage_opt: S,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, Ver>>
+) -> anyhow::Result<()>
 where
     S: DataSourceOptions,
 {
@@ -75,7 +69,7 @@ where
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    match modules.http {
+    let ctx = match modules.http {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
@@ -117,7 +111,7 @@ where
                 },
                 bind_version,
             )
-            .await
+            .await?
         }
         None => {
             init_node(
@@ -128,7 +122,13 @@ where
                 l1_params,
                 bind_version,
             )
-            .await
+            .await?
         }
-    }
+    };
+
+    // Start doing consensus.
+    ctx.start_consensus().await;
+    ctx.join().await;
+
+    Ok(())
 }

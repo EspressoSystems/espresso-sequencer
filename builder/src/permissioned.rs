@@ -96,9 +96,13 @@ use crate::run_builder_api_service;
 use std::{num::NonZeroUsize, time::Duration};
 use surf_disco::Client;
 
-pub struct BuilderContext<N: network::Type, Ver: StaticVersionType + 'static> {
+pub struct BuilderContext<
+    N: network::Type,
+    P: SequencerPersistence,
+    Ver: StaticVersionType + 'static,
+> {
     /// The consensus handle
-    pub hotshot_handle: Consensus<N>,
+    pub hotshot_handle: Consensus<N, P>,
 
     /// Index of this sequencer node
     pub node_index: u64,
@@ -117,7 +121,7 @@ pub struct BuilderContext<N: network::Type, Ver: StaticVersionType + 'static> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<Ver: StaticVersionType + 'static>(
+pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     builder_params: BuilderParams,
@@ -128,7 +132,8 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
     bootstrapped_view: ViewNumber,
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
-) -> anyhow::Result<BuilderContext<network::Web, Ver>> {
+    persistence: P,
+) -> anyhow::Result<BuilderContext<network::Web, P, Ver>> {
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: None,
@@ -232,6 +237,7 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
         Some(network_params.state_relay_server_url),
         stake_table_commit,
         bind_version,
+        persistence,
     )
     .await;
 
@@ -252,19 +258,24 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_hotshot<N: network::Type, Ver: StaticVersionType + 'static>(
+pub async fn init_hotshot<
+    N: network::Type,
+    P: SequencerPersistence,
+    Ver: StaticVersionType + 'static,
+>(
     config: HotShotConfig<PubKey, ElectionConfig>,
     stake_table_entries_for_non_voting_nodes: Option<
         Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
     >,
     instance_state: NodeState,
-    networks: Networks<SeqTypes, Node<N>>,
+    networks: Networks<SeqTypes, Node<N, P>>,
     metrics: &dyn Metrics,
     node_id: u64,
     state_relay_server: Option<Url>,
     stake_table_commit: StakeTableCommitmentType,
     _: Ver,
-) -> (SystemContextHandle<SeqTypes, Node<N>>, StateSigner<Ver>) {
+    persistence: P,
+) -> (SystemContextHandle<SeqTypes, Node<N, P>>, StateSigner<Ver>) {
     let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
         config.num_nodes_with_stake.get() as u64,
         config.num_nodes_without_stake as u64,
@@ -294,7 +305,7 @@ pub async fn init_hotshot<N: network::Type, Ver: StaticVersionType + 'static>(
     };
     let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
-    let da_storage = Default::default();
+    let da_storage = Arc::new(RwLock::new(persistence));
     tracing::debug!("Before hotshot handle initialisation");
     let hotshot_handle = SystemContext::init(
         config.my_own_validator_config.public_key,
@@ -321,11 +332,13 @@ pub async fn init_hotshot<N: network::Type, Ver: StaticVersionType + 'static>(
     (hotshot_handle, state_signer)
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static> BuilderContext<N, Ver> {
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    BuilderContext<N, P, Ver>
+{
     /// Constructor
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        hotshot_handle: Consensus<N>,
+        hotshot_handle: Consensus<N, P>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
         pub_key: PubKey,
@@ -451,6 +464,7 @@ mod test {
         block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::transaction::Transaction;
     use std::time::Duration;
     use surf_disco::Client;
@@ -473,7 +487,7 @@ mod test {
         let hotshot_config = HotShotTestConfig::default();
 
         // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let mut handles = hotshot_config.init_nodes(ver).await;
+        let mut handles = hotshot_config.init_nodes(ver, no_storage::Options).await;
 
         // start consensus for all the nodes
         for (handle, ..) in handles.iter() {

@@ -1,9 +1,17 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, ValidatedState, ViewNumber};
+use crate::{Leaf, SeqTypes, ValidatedState, ViewNumber};
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
-use hotshot_types::traits::node_implementation::ConsensusTime;
+
+use hotshot_types::{
+    data::{DAProposal, VidDisperseShare},
+    event::HotShotAction,
+    message::Proposal,
+    simple_certificate::QuorumCertificate,
+    traits::node_implementation::ConsensusTime,
+    vote::HasViewNumber,
+};
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
@@ -53,6 +61,18 @@ impl Persistence {
     fn anchor_leaf_path(&self) -> PathBuf {
         self.0.join("anchor_leaf")
     }
+
+    fn vid_dir_path(&self) -> PathBuf {
+        self.0.join("vid")
+    }
+
+    fn da_dir_path(&self) -> PathBuf {
+        self.0.join("da")
+    }
+
+    fn high_qc_path(&self) -> PathBuf {
+        self.0.join("high_qc")
+    }
 }
 
 #[async_trait]
@@ -73,21 +93,31 @@ impl SequencerPersistence for Persistence {
         Ok(cfg.to_file(path.display().to_string())?)
     }
 
-    async fn save_voted_view(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        // Check if we already have a higher view before writing the new view. Note that this check
-        // is not atomic with respect to the subsequent write at the file system level, but this
-        // object is the only one which writes to this file, and we have a mutable reference, so
-        // this should be safe.
-        if let Some(prev) = self.load_voted_view().await? {
-            if prev >= view {
-                return Ok(());
+    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+        let view_number = view.get_u64();
+
+        let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
+            for entry in fs::read_dir(dir_path)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
+                    if let Ok(v) = file.parse::<u64>() {
+                        if v <= view_number {
+                            fs::remove_file(&path)?;
+                        }
+                    }
+                }
             }
-        }
-        fs::write(self.voted_view_path(), view.get_u64().to_le_bytes())?;
-        Ok(())
+
+            Ok(())
+        };
+
+        delete_files(self.da_dir_path())?;
+        delete_files(self.vid_dir_path())
     }
 
-    async fn load_voted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
         let path = self.voted_view_path();
         if !path.is_file() {
             return Ok(None);
@@ -145,6 +175,148 @@ impl SequencerPersistence for Persistence {
             .collect::<Result<Vec<_>, _>>()
             .context("read")?;
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+    }
+
+    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
+        let path = self.high_qc_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let mut file = File::open(path)?;
+
+        file.seek(SeekFrom::Start(8)).context("seek")?;
+        let bytes = file
+            .bytes()
+            .collect::<Result<Vec<_>, _>>()
+            .context("read")?;
+        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+    }
+
+    async fn load_da_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+        let dir_path = self.da_dir_path();
+
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
+
+        if !file_path.exists() {
+            return Ok(None);
+        }
+
+        let da_bytes = fs::read(file_path)?;
+
+        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
+            bincode::deserialize(&da_bytes)?;
+        Ok(Some(da_proposal))
+    }
+
+    async fn load_vid_share(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        let dir_path = self.vid_dir_path();
+
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
+
+        if !file_path.exists() {
+            return Ok(None);
+        }
+
+        let vid_share_bytes = fs::read(file_path)?;
+        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+            bincode::deserialize(&vid_share_bytes)?;
+        Ok(Some(vid_share))
+    }
+
+    async fn append_vid(
+        &mut self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.get_view_number().get_u64();
+        let dir_path = self.vid_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+
+        tracing::info!("file path {:?}", file_path);
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(file_path)?;
+
+        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+        file.write_all(&proposal_bytes)?;
+
+        Ok(())
+    }
+    async fn append_da(
+        &mut self,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.get_view_number().get_u64();
+        let dir_path = self.da_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(file_path)?;
+
+        let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+        file.write_all(&proposal_bytes)?;
+
+        Ok(())
+    }
+    async fn record_action(
+        &mut self,
+        view: ViewNumber,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        if let Some(prev) = self.load_latest_acted_view().await? {
+            if prev >= view {
+                return Ok(());
+            }
+        }
+        fs::write(self.voted_view_path(), view.get_u64().to_le_bytes())?;
+        Ok(())
+    }
+
+    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(self.high_qc_path())?;
+
+        if file.metadata()?.len() > 0 {
+            let mut view = [0; 8];
+            file.read_exact(&mut view).context("read view")?;
+            let view = u64::from_le_bytes(view);
+            if view >= high_qc.get_view_number().get_u64() {
+                return Ok(());
+            }
+        }
+
+        file.set_len(0).context("truncate")?;
+        file.write_all(&high_qc.get_view_number().get_u64().to_le_bytes())
+            .context("write view")?;
+
+        let bytes = bincode::serialize(&high_qc).context("serialize high qc")?;
+        file.write_all(&bytes).context("write high qc ")?;
+
+        Ok(())
     }
 
     async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {

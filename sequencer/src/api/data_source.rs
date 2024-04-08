@@ -4,7 +4,8 @@ use super::{
     sql,
 };
 use crate::{
-    network, persistence,
+    network,
+    persistence::{self, SequencerPersistence},
     state::{BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState},
     Node, SeqTypes,
 };
@@ -92,8 +93,8 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type> {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
+pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>>;
 }
 
 #[async_trait]
