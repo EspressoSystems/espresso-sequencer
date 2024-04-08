@@ -141,9 +141,9 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 cdn-client = { workspace = true, features = ["runtime-tokio"] }
 cdn-broker = { workspace = true, features = [
-
   "runtime-tokio",
-  "strong_consistency",
+  "strong-consistency",
+  "global-permits",
 ] }
 cdn-marshal = { workspace = true, features = ["runtime-tokio"] }
 
@@ -152,7 +152,8 @@ async-std = { workspace = true }
 cdn-client = { workspace = true, features = ["runtime-async-std"] }
 cdn-broker = { workspace = true, features = [
   "runtime-async-std",
-  "strong_consistency",
+  "strong-consistency",
+  "global-permits",
 ] }
 cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
 
