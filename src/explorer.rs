@@ -246,8 +246,12 @@ where
     api.with_version("0.0.1".parse().unwrap())
         .get("get_block_detail", move |req, state| {
             async move {
-                let target = match req.opt_integer_param::<str, usize>("height") {
-                    Ok(Some(from)) => BlockIdentifier::Height(from),
+                let target = match (
+                    req.opt_integer_param::<str, usize>("height"),
+                    req.opt_blob_param("hash"),
+                ) {
+                    (Ok(Some(from)), _) => BlockIdentifier::Height(from),
+                    (_, Ok(Some(hash))) => BlockIdentifier::Hash(hash),
                     _ => BlockIdentifier::Latest,
                 };
 
@@ -265,8 +269,12 @@ where
                     .map_err(GetBlockSummariesError::InvalidLimit)
                     .map_err(Error::GetBlockSummaries)?;
 
-                let target = match req.opt_integer_param::<str, usize>("from") {
-                    Ok(Some(from)) => BlockIdentifier::Height(from),
+                let target = match (
+                    req.opt_integer_param::<str, usize>("from"),
+                    req.opt_blob_param("hash"),
+                ) {
+                    (Ok(Some(from)), _) => BlockIdentifier::Height(from),
+                    (_, Ok(Some(hash))) => BlockIdentifier::Hash(hash),
                     _ => BlockIdentifier::Latest,
                 };
 
@@ -281,10 +289,22 @@ where
             }
             .boxed()
         })?
-        .get("get_transaction_detail", move |_req, state| {
+        .get("get_transaction_detail", move |req, state| {
             async move {
                 state
-                    .get_transaction_detail(TransactionIdentifier::Latest)
+                    .get_transaction_detail(
+                        match (
+                            req.opt_integer_param("height"),
+                            req.opt_integer_param("offset"),
+                            req.opt_blob_param("hash"),
+                        ) {
+                            (Ok(Some(height)), Ok(Some(offset)), _) => {
+                                TransactionIdentifier::HeightAndOffset(height, offset)
+                            }
+                            (_, _, Ok(Some(hash))) => TransactionIdentifier::Hash(hash),
+                            _ => TransactionIdentifier::Latest,
+                        },
+                    )
                     .await
                     .map(TransactionDetailResponse::from)
                     .map_err(Error::GetTransactionDetail)
