@@ -1,4 +1,4 @@
-use super::{ns_payload::parse_ns_payload, Payload};
+use super::{tx_iter::parse_ns_payload, Payload};
 use crate::{NamespaceId, Transaction};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,

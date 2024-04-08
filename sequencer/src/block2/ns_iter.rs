@@ -72,6 +72,7 @@ impl<'a> Iterator for NsIterInternal<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
         // the ns_table
+        // TODO we're completely ignoring the declared ns table length. :facepalm:
         while self.ns_table_start + NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN <= self.block.ns_table.len()
         {
             // read the namespace ID from the namespace table

@@ -4,12 +4,14 @@ use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use ns_payload::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
 mod ns_iter;
 mod ns_payload;
 mod ns_proof;
 mod payload_bytes;
+mod tx_iter;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -66,16 +68,19 @@ impl BlockPayload for Payload {
         ))
     }
 
-    fn from_bytes<I>(_encoded_transactions: I, _metadata: &Self::Metadata) -> Self
+    fn from_bytes<I>(encoded_transactions: I, ns_table: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
-        todo!()
+        Self {
+            payload: encoded_transactions.into_iter().collect(),
+            ns_table: ns_table.clone(), // TODO don't clone ns_table
+        }
     }
 
     // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
     fn genesis() -> (Self, Self::Metadata) {
-        todo!()
+        Self::from_transactions([]).unwrap()
     }
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
@@ -94,10 +99,16 @@ impl BlockPayload for Payload {
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
-        todo!()
+        let mut digest = sha2::Sha256::new();
+        digest.update((self.payload.len() as u64).to_le_bytes());
+        digest.update((self.ns_table.len() as u64).to_le_bytes());
+        digest.update(&self.payload);
+        digest.update(&self.ns_table);
+        BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
+    // TODO change return type so it's not a reference! :facepalm:
     fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
         todo!()
     }

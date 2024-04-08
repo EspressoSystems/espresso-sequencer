@@ -20,7 +20,7 @@ pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
 ///
 /// # Panics
 /// If `bytes.len()` differs from [`NUM_TXS_BYTE_LEN`].
-pub fn _num_txs_from_bytes(bytes: &[u8]) -> usize {
+pub fn num_txs_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes)
 }
 
@@ -36,7 +36,7 @@ pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
 ///
 /// # Panics
 /// If `bytes.len()` differs from [`TX_OFFSET_BYTE_LEN`].
-pub fn _tx_offset_from_bytes(bytes: &[u8]) -> usize {
+pub fn tx_offset_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<TX_OFFSET_BYTE_LEN>(bytes)
 }
 
