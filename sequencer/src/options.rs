@@ -248,6 +248,9 @@ impl ModuleArgs {
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
                 SequencerModule::Catchup(m) => curr = m.add(&mut modules.catchup, &mut provided)?,
+                SequencerModule::HotshotEvents(m) => {
+                    curr = m.add(&mut modules.hotshot_events, &mut provided)?
+                }
             }
         }
 
@@ -280,6 +283,7 @@ module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
 module!("state", api::options::State, requires: "http", "storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
+module!("hotshot-events", api::options::HotshotEvents, requires: "http");
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -353,6 +357,10 @@ enum SequencerModule {
     ///
     /// This module requires the http and storage-sql modules to be started.
     State(Module<api::options::State>),
+    /// Run the hotshot events API module.
+    ///
+    /// This module requires the http module to be started.
+    HotshotEvents(Module<api::options::HotshotEvents>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -365,4 +373,5 @@ pub struct Modules {
     pub status: Option<api::options::Status>,
     pub state: Option<api::options::State>,
     pub catchup: Option<api::options::Catchup>,
+    pub hotshot_events: Option<api::options::HotshotEvents>,
 }

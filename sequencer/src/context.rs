@@ -29,6 +29,8 @@ use crate::{
     static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 
+use async_std::sync::RwLock;
+use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
 pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
 
@@ -53,6 +55,9 @@ pub struct SequencerContext<N: network::Type, Ver: StaticVersionType + 'static> 
 
     /// Background tasks to shut down when the node is dropped.
     tasks: Vec<(String, JoinHandle<()>)>,
+
+    /// events streamer to stream hotshot events to external clients
+    events_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
 
     detached: bool,
 }
@@ -93,6 +98,11 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
+        let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
+            config.known_nodes_with_stake.clone(),
+            config.num_nodes_without_stake,
+        )));
+
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
             config.my_own_validator_config.private_key.clone(),
@@ -112,7 +122,13 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             state_signer = state_signer.with_relay_server(url);
         }
 
-        Ok(Self::new(handle, persistence, node_id, state_signer))
+        Ok(Self::new(
+            handle,
+            persistence,
+            node_id,
+            state_signer,
+            event_streamer,
+        ))
     }
 
     /// Constructor
@@ -121,8 +137,10 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
         persistence: impl SequencerPersistence,
         node_index: u64,
         state_signer: StateSigner<Ver>,
+        event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     ) -> Self {
         let events = handle.get_event_stream();
+
         let mut ctx = Self {
             handle,
             node_index,
@@ -130,11 +148,18 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
             tasks: vec![],
             detached: false,
             wait_for_orchestrator: None,
+            events_streamer: event_streamer.clone(),
         };
         ctx.spawn(
             "main event handler",
-            handle_events(events, persistence, ctx.state_signer.clone()),
+            handle_events(
+                events,
+                persistence,
+                ctx.state_signer.clone(),
+                Some(event_streamer.clone()),
+            ),
         );
+
         ctx
     }
 
@@ -157,6 +182,11 @@ impl<N: network::Type, Ver: StaticVersionType + 'static> SequencerContext<N, Ver
     pub async fn submit_transaction(&self, tx: Transaction) -> anyhow::Result<()> {
         self.handle.submit_transaction(tx).await?;
         Ok(())
+    }
+
+    /// get event streamer
+    pub fn get_event_streamer(&self) -> Arc<RwLock<EventsStreamer<SeqTypes>>> {
+        self.events_streamer.clone()
     }
 
     /// Return a reference to the underlying consensus handle.
@@ -233,6 +263,7 @@ async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     mut persistence: impl SequencerPersistence,
     state_signer: Arc<StateSigner<Ver>>,
+    events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
         tracing::debug!(?event, "consensus event");
@@ -242,5 +273,10 @@ async fn handle_events<Ver: StaticVersionType>(
 
         // Generate state signature.
         state_signer.handle_event(&event).await;
+
+        // Send the event via the event streaming service
+        if let Some(events_streamer) = events_streamer.as_ref() {
+            events_streamer.write().await.handle_event(event).await;
+        }
     }
 }

@@ -44,6 +44,7 @@ tagged-base64 = { workspace = true }
 zeroize = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
@@ -103,3 +104,6 @@ cdn-broker = { workspace = true, features = [
     "strong_consistency",
 ] }
 cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["hotshot-testing"]
