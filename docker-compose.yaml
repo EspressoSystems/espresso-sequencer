@@ -301,6 +301,31 @@ services:
       sequencer0:
         condition: service_healthy
 
+
+ permissionless-builder:
+    image: ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main
+    ports:
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+    environment:
+      - ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_STATE_RELAY_SERVER_URL
+      - ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL
+      - ESPRESSO_BUILDER_KEY_FILE
+      - ESPRESSO_BUILDER_ETH_MNEMONIC
+      - ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
+      - ESPRESSO_BUILDER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_STATE_PEERS
+      - BUILDER_SERVER_PORT=$ESPRESSO_BUILDER_SERVER_PORT
+      - BUILDER_HOST
+      - BUILDER_CHANNEL_CAPACITY
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+
   nasty-client:
     image: ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
     ports:

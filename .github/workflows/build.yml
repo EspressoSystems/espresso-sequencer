@@ -71,6 +71,7 @@ jobs:
             target/release/reset-storage
             target/release/deploy
             target/release/keygen
+            target/release/permissionless-builder
             target/release/nasty-client
 
   build-arm:
@@ -115,6 +116,7 @@ jobs:
             target/release/reset-storage
             target/release/deploy
             target/release/keygen
+            target/release/permissionless-builder
             target/release/nasty-client
 
   build-dockers:
@@ -129,6 +131,7 @@ jobs:
       commitment-task-tag: ${{ steps.commitment-task.outputs.tags }}
       submit-transactions-tag: ${{ steps.submit-transactions.outputs.tags }}
       deploy-tag: ${{ steps.deploy.outputs.tags }}
+      builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
     steps:
       - name: Checkout Repository
@@ -293,6 +296,16 @@ jobs:
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
 
+      - name: Build and push builder docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/permissionless-builder.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.builder.outputs.tags }}
+          labels: ${{ steps.builder.outputs.labels }}
+
       - name: Build and push nasty-client docker
         uses: docker/build-push-action@v5
         with:
@@ -326,6 +339,7 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.commitment-task-tag }}
           docker pull ${{ needs.build-dockers.outputs.submit-transactions-tag }}
           docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
+          docker pull ${{ needs.build-dockers.outputs.builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.nasty-client-tag }}
       - name: Tag new docker images
         run: |
