@@ -859,7 +859,7 @@ mod test {
                 .status(Default::default()),
         );
 
-        let mut network = TestNetwork::new(options).await;
+        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
 
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
