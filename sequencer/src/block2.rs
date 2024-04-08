@@ -22,7 +22,7 @@ use payload_bytes::{
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct Payload2 {
+pub struct Payload {
     // Concatenated payload bytes for each namespace
     #[serde(with = "base64_bytes")]
     payload: Vec<u8>,
@@ -39,19 +39,19 @@ pub struct Payload2 {
     // pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
 }
 
-impl Display for Payload2 {
+impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl Committable for Payload2 {
+impl Committable for Payload {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
     }
 }
 
-impl BlockPayload for Payload2 {
+impl BlockPayload for Payload {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = Vec<u8>; // namespace table bytes
@@ -125,7 +125,7 @@ impl BlockPayload for Payload2 {
     }
 }
 
-impl Payload2 {
+impl Payload {
     pub fn num_namespaces(&self) -> usize {
         // Don't double count duplicate namespace IDs. The easiest solution is
         // to consume an iterator. If performance is a concern then we could
@@ -177,12 +177,12 @@ struct NsInfo {
 struct NsIter<'a> {
     ns_table_index: usize,
     ns_payload_start: usize,
-    block: &'a Payload2,
+    block: &'a Payload,
     repeat_nss: HashSet<NamespaceId>,
 }
 
 impl<'a> NsIter<'a> {
-    fn new(block: &'a Payload2) -> Self {
+    fn new(block: &'a Payload) -> Self {
         Self {
             ns_table_index: NUM_NSS_BYTE_LEN,
             ns_payload_start: 0,
@@ -227,7 +227,7 @@ impl<'a> Iterator for NsIter<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::Payload2;
+    use super::Payload;
     use crate::block::tables::NameSpaceTable;
     use crate::{block::payload::NamespaceProof, NamespaceId, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -252,7 +252,7 @@ mod test {
         let mut vid = vid_scheme(10);
 
         for mut test in valid_tests {
-            let block = Payload2::from_transactions(test.as_vec_tx()).unwrap().0;
+            let block = Payload::from_transactions(test.as_vec_tx()).unwrap().0;
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             assert_eq!(block.num_namespaces(), test.nss.len());
