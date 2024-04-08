@@ -12,8 +12,11 @@ use ethers::{
     types::U256,
 };
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
 use std::time::Duration;
+use std::{
+    fmt::Debug,
+    process::{Child, Command},
+};
 use tempfile::TempDir;
 use url::Url;
 
@@ -346,16 +349,19 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
 }
 
 /// send a transaction and wait for confirmation before returning the tx receipt and block included.
-pub async fn contract_send<M: Middleware, T: Detokenize>(
+pub async fn contract_send<M: Middleware, T: Detokenize, E>(
     call: &ContractCall<M, T>,
 ) -> Result<(TransactionReceipt, u64), anyhow::Error>
 where
     M::Provider: Clone,
+    E: ContractRevert + Debug,
 {
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            return Err(anyhow!("error sending transaction: {}", err));
+            let e = err.decode_contract_revert::<E>().unwrap();
+            tracing::error!("contract revert: {:?}", e);
+            return Err(anyhow!("error sending transaction: {:?}", e));
         }
     };
 
