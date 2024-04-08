@@ -775,20 +775,32 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
+
+    use self::{
+        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
+    };
+
     use super::*;
     use crate::{
         catchup::StatePeers, persistence::no_storage::NoStorage, testing::TestConfig, Header,
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use commit::Committable;
+
+    use async_std::task::sleep;
+    use commit::{Commitment, Committable};
     use es_version::SequencerVersion;
     use ethers::prelude::Signer;
     use futures::stream::StreamExt;
     use hotshot::types::EventType;
+    use hotshot_query_service::availability::BlockQueryData;
     use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
-    use jf_primitives::merkle_tree::AppendableMerkleTreeScheme;
+    use jf_primitives::merkle_tree::{
+        prelude::{MerklePath, Sha3Node},
+        AppendableMerkleTreeScheme,
+    };
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -830,6 +842,54 @@ mod test {
     #[async_std::test]
     async fn state_test_without_query_module() {
         state_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn test_merklized_state_api() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+
+        let storage = SqlDataSource::create_storage().await;
+        let options = SqlDataSource::options(
+            &storage,
+            Options::from(options::Http { port })
+                .state(Default::default())
+                .status(Default::default()),
+        );
+
+        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
+
+        client.connect(None).await;
+
+        // Wait until some blocks have been decided.
+        client
+            .socket("availability/stream/blocks/0")
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .take(4)
+            .collect::<Vec<_>>()
+            .await;
+
+        // sleep for few seconds so that state data is upserted
+        sleep(Duration::from_secs(5)).await;
+        network.stop_consensus().await;
+
+        for i in 1..=3 {
+            assert!(client
+                .get::<MerklePath<Commitment<Header>, u64, Sha3Node>>(&format!(
+                    "state/blocks/{}/{i}",
+                    i + 1
+                ))
+                .send()
+                .await
+                .is_ok())
+        }
     }
 
     #[async_std::test]
