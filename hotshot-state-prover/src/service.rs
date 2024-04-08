@@ -7,7 +7,7 @@ use async_std::{
     sync::Arc,
     task::{sleep, spawn},
 };
-use contract_bindings::light_client::LightClient;
+use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -256,7 +256,7 @@ pub async fn submit_state_and_proof(
     let tx = contract.new_finalized_state(new_state.into(), proof.into());
 
     // send the tx
-    let (receipt, included_block) = sequencer_utils::contract_send(&tx)
+    let (receipt, included_block) = sequencer_utils::contract_send::<_, _, LightClientErrors>(&tx)
         .await
         .map_err(ProverError::ContractError)?;
 
