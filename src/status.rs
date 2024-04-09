@@ -128,6 +128,7 @@ mod test {
     use futures::FutureExt;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
+    use reqwest::redirect::Policy;
     use std::str::FromStr;
     use std::time::Duration;
     use surf_disco::Client;
@@ -156,7 +157,7 @@ mod test {
         );
 
         // Start a client.
-        let url = Url::from_str(&format!("http://localhost:{}/v0/status", port)).unwrap();
+        let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
         let client = Client::<Error, Version01>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
@@ -164,9 +165,22 @@ mod test {
         assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 0);
 
         // Test Prometheus export.
-        let mut res = surf::get(&format!("{url}/metrics")).send().await.unwrap();
+        // Create `reqwest` client that allows redirects
+        let reqwest_client = reqwest::Client::builder()
+            .redirect(Policy::limited(5))
+            .build()
+            .unwrap();
+
+        // Ask for the Prometheus data
+        let res = reqwest_client
+            .get(&format!("{url}/metrics"))
+            .send()
+            .await
+            .unwrap();
+
+        // Make sure it has the correct response code
         assert_eq!(res.status(), StatusCode::Ok);
-        let prometheus = res.body_string().await.unwrap();
+        let prometheus = res.text().await.unwrap();
         let lines = prometheus.lines().collect::<Vec<_>>();
         assert!(
             lines.contains(&"consensus_current_view 0"),
