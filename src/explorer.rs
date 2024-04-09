@@ -422,14 +422,20 @@ mod test {
         } = genesis_overview;
 
         assert!(num_blocks > 0);
-        assert!(histograms.block_heights.len() == min(num_blocks as usize, 50));
-        assert!(histograms.block_size.len() == min(num_blocks as usize, 50));
-        assert!(histograms.block_time.len() == min(num_blocks as usize, 50));
-        assert!(histograms.block_transactions.len() == min(num_blocks as usize, 50));
+        assert_eq!(histograms.block_heights.len(), min(num_blocks as usize, 50));
+        assert_eq!(histograms.block_size.len(), histograms.block_heights.len());
+        assert_eq!(histograms.block_time.len(), histograms.block_heights.len());
+        assert_eq!(
+            histograms.block_transactions.len(),
+            histograms.block_heights.len()
+        );
 
-        assert!(latest_block.height == num_blocks - 1);
-        assert!(latest_blocks.len() == min(num_blocks as usize, 10));
-        assert!(latest_transactions.len() == min(num_transactions as usize, 10));
+        assert_eq!(latest_block.height, num_blocks - 1);
+        assert_eq!(latest_blocks.len(), min(num_blocks as usize, 10));
+        assert_eq!(
+            latest_transactions.len(),
+            min(num_transactions as usize, 10)
+        );
 
         {
             // Retrieve Block Detail using the block height
