@@ -690,9 +690,6 @@ mod test {
         config.update_l1_info(&anvil, contract.address());
         // sanity check on `config`
 
-        //set the approved prover
-        // let _ = contract.update_approved_prover(_wallet.clone().address()).send().await?;
-
         // sanity check to ensure the same genesis state for LightClientTest and for our tests
         let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
