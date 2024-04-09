@@ -54,7 +54,7 @@ async fn test_vid_task() {
     let vid_disperse = VidDisperse::from_membership(
         message.data.view_number,
         vid_disperse,
-        quorum_membership.clone().into(),
+        &quorum_membership,
     );
 
     let vid_proposal = Proposal {

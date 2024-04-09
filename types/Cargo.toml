@@ -65,3 +65,6 @@ async-std = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
+
+[lints]
+workspace = true

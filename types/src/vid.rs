@@ -55,6 +55,7 @@ pub fn vid_scheme(num_storage_nodes: usize) -> VidSchemeType {
     // https://github.com/EspressoSystems/HotShot/issues/2152
     let recovery_threshold = 1 << num_storage_nodes.ilog2();
 
+    #[allow(clippy::panic)]
     let num_storage_nodes = u32::try_from(num_storage_nodes).unwrap_or_else(|err| {
         panic!("num_storage_nodes {num_storage_nodes} should fit into u32\n\terror: : {err}")
     });

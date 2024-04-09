@@ -57,7 +57,7 @@ pub async fn calculate_vid_disperse<TYPES: NodeType>(
     // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
     let vid_disperse = vid_disperse.unwrap();
 
-    VidDisperse::from_membership(view, vid_disperse, membership)
+    VidDisperse::from_membership(view, vid_disperse, membership.as_ref())
 }
 
 /// Utilities to print anyhow logs.

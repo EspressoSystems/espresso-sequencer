@@ -92,7 +92,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + Committable, THRESHOLD: Threshold<TYP
             .field("vote_commitment", self.vote_commitment)
             .field("view number", self.view_number.commit())
             .var_size_field("signatures", &signature_bytes)
-            .fixed_size_field("is genesis", &[self.is_genesis as u8])
+            .fixed_size_field("is genesis", &[u8::from(self.is_genesis)])
             .finalize()
     }
 }

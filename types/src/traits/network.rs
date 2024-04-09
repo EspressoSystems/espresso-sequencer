@@ -159,7 +159,10 @@ pub enum NetworkError {
     /// The requested data was not found
     NotFound,
     /// Multiple errors
-    MultipleErrors { errors: Vec<Box<NetworkError>> },
+    MultipleErrors {
+        /// vec of errors
+        errors: Vec<Box<NetworkError>>,
+    },
 }
 #[derive(Clone, Debug)]
 // Storing view number as a u64 to avoid the need TYPES generic

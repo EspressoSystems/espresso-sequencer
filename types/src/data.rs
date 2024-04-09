@@ -37,7 +37,6 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
     marker::PhantomData,
-    sync::Arc,
 };
 use tracing::error;
 
@@ -157,7 +156,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     pub fn from_membership(
         view_number: TYPES::Time,
         mut vid_disperse: JfVidDisperse<VidSchemeType>,
-        membership: Arc<TYPES::Membership>,
+        membership: &TYPES::Membership,
     ) -> Self {
         let shares = membership
             .get_staked_committee(view_number)
@@ -186,6 +185,7 @@ pub enum ViewChangeEvidence<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> ViewChangeEvidence<TYPES> {
+    /// Check that the given ViewChangeEvidence is relevant to the current view.
     pub fn is_valid_for_view(&self, view: &TYPES::Time) -> bool {
         match self {
             ViewChangeEvidence::Timeout(timeout_cert) => timeout_cert.get_data().view == *view - 1,
@@ -195,6 +195,7 @@ impl<TYPES: NodeType> ViewChangeEvidence<TYPES> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+/// VID share and associated metadata for a single node
 pub struct VidDisperseShare<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::Time,
@@ -268,6 +269,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         Some(vid_disperse)
     }
 
+    /// Split a VID share proposal into a proposal for each recipient.
     pub fn to_vid_share_proposals(
         vid_disperse_proposal: Proposal<TYPES, VidDisperse<TYPES>>,
     ) -> Vec<Proposal<TYPES, VidDisperseShare<TYPES>>> {
@@ -640,10 +642,7 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
 }
 
 impl<TYPES: NodeType> Leaf<TYPES> {
-    pub fn from_proposal(proposal: &Proposal<TYPES, QuorumProposal<TYPES>>) -> Self {
-        Self::from_quorum_proposal(&proposal.data)
-    }
-
+    /// Constructs a leaf from a given quorum proposal.
     pub fn from_quorum_proposal(quorum_proposal: &QuorumProposal<TYPES>) -> Self {
         // WARNING: Do NOT change this to a wildcard match, or reference the fields directly in the construction of the leaf.
         // The point of this match is that we will get a compile-time error if we add a field without updating this.
@@ -662,12 +661,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             upgrade_certificate: upgrade_certificate.clone(),
             block_payload: None,
         }
-    }
-
-    pub fn commit_from_proposal(
-        proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
-    ) -> Commitment<Self> {
-        Leaf::from_proposal(proposal).commit()
     }
 }
 
