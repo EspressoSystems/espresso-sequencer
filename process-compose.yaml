@@ -251,6 +251,13 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
+  permissionless-builder:
+    command: permissionless-builder
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      da_server:
+
   nasty-client:
     command: nasty-client
     depends_on:
