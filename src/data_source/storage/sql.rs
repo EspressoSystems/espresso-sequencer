@@ -1967,7 +1967,7 @@ where
                     "SELECT {BLOCK_COLUMNS}
                         FROM header AS h
                         JOIN payload AS p ON h.height = p.height
-                        WHERE h.hash <= (SELECT h1.height FROM header AS h1 WHERE h1.hash = $1)
+                        WHERE h.height <= (SELECT h1.height FROM header AS h1 WHERE h1.hash = $1)
                         ORDER BY h.height DESC 
                         LIMIT $2"
                 ),
