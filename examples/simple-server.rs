@@ -37,14 +37,12 @@ use hotshot_query_service::{
     },
     Error,
 };
-use hotshot_testing::block_builder::run_random_builder;
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use portpicker::pick_unused_port;
 use std::{num::NonZeroUsize, time::Duration};
-use surf_disco::Url;
 
 const NUM_NODES: usize = 2;
 
@@ -154,17 +152,32 @@ async fn init_consensus(
         })
         .collect::<Vec<_>>();
 
-    // Pick a random port for the builder
-    let builder_port = pick_unused_port().expect("failed to get unused port");
-    let builder_url = Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap();
+    // Get the number of nodes with stake
+    let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
 
-    // Start the builder
-    run_random_builder(Url::parse(&format!("http://0.0.0.0:{builder_port}")).unwrap());
+    // Create memberships
+    let election_config =
+        MockMembership::default_election_config(num_nodes_with_stake.get() as u64, 0);
+    let membership =
+        MockMembership::create_election(known_nodes_with_stake.clone(), election_config, 0);
+    let memberships = Memberships {
+        quorum_membership: membership.clone(),
+        da_membership: membership.clone(),
+        vid_membership: membership.clone(),
+        view_sync_membership: membership.clone(),
+    };
 
+    // Start the builder server
+    let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
+        MockTypes,
+    >>::start(Arc::new(membership))
+    .await;
+
+    // Create the configuration
     let config = HotShotConfig {
         builder_url,
         fixed_leader_for_gpuvid: 0,
-        num_nodes_with_stake: NonZeroUsize::new(pub_keys.len()).unwrap(),
+        num_nodes_with_stake,
         num_nodes_without_stake: 0,
         known_nodes_with_stake: known_nodes_with_stake.clone(),
         known_nodes_without_stake: vec![],
@@ -185,7 +198,8 @@ async fn init_consensus(
         data_request_delay: Duration::from_millis(200),
         view_sync_timeout: Duration::from_millis(250),
     };
-    join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
+
+    let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
         |(node_id, (priv_key, data_source))| {
             let pub_keys = pub_keys.clone();
             let known_nodes_with_stake = known_nodes_with_stake.clone();
@@ -193,6 +207,7 @@ async fn init_consensus(
             let mut config = config.clone();
             let master_map = master_map.clone();
 
+            let memberships = memberships.clone();
             async move {
                 config.my_own_validator_config = ValidatorConfig {
                     public_key: pub_keys[node_id],
@@ -202,22 +217,6 @@ async fn init_consensus(
                         .stake_amount
                         .as_u64(),
                     state_key_pair: state_key_pairs[node_id].clone(),
-                };
-
-                let election_config = MockMembership::default_election_config(
-                    config.num_nodes_with_stake.get() as u64,
-                    0,
-                );
-                let membership = MockMembership::create_election(
-                    known_nodes_with_stake.clone(),
-                    election_config,
-                    0,
-                );
-                let memberships = Memberships {
-                    quorum_membership: membership.clone(),
-                    da_membership: membership.clone(),
-                    vid_membership: membership.clone(),
-                    view_sync_membership: membership,
                 };
 
                 let network = Arc::new(MemoryNetwork::new(
@@ -251,5 +250,14 @@ async fn init_consensus(
             }
         },
     ))
-    .await
+    .await;
+
+    // Hook the builder up to the event stream from the first node
+    if let Some(builder_task) = builder_task {
+        builder_task.start(Box::new(
+            nodes[0].hotshot.output_event_stream.1.activate_cloned(),
+        ));
+    }
+
+    nodes
 }
