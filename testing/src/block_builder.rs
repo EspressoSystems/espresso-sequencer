@@ -200,7 +200,7 @@ impl RandomBuilderSource {
                 ) {
                     tracing::warn!("Block {} evicted", hash);
                 };
-                async_sleep(time_per_block - start.elapsed()).await;
+                async_sleep(time_per_block.saturating_sub(start.elapsed())).await;
             }
         });
     }
