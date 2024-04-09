@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-nix develop .#crossShell --command cargo build --release
-nix develop .#armCrossShell --command cargo build --release
+nix develop .#crossShell --ignore-environment --command cargo build --release
+nix develop .#armCrossShell --ignore-environment --command cargo build --release
 
 # The rest of the script doesn't run in a nix shell but we need to know where
 # the binaries are.
