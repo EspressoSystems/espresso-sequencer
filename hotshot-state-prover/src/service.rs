@@ -21,7 +21,7 @@ use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_orchestrator::OrchestratorVersion;
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+//use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
@@ -46,6 +46,9 @@ use url::Url;
 use versioned_binary_serialization::version::StaticVersionType;
 
 type F = ark_ed_on_bn254::Fq;
+
+
+const MOCK_STAKE_TABLE_CAPACITY: usize = 10;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -82,7 +85,7 @@ pub fn init_stake_table(
 ) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, StakeTableError> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(MOCK_STAKE_TABLE_CAPACITY);
     st.batch_register(
         bls_keys.iter().cloned(),
         iter::repeat(U256::one()).take(bls_keys.len()),
@@ -107,9 +110,8 @@ async fn init_stake_table_from_orchestrator(
                     .await
                 {
                     Ok(config) => {
-                        let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
-                            STAKE_TABLE_CAPACITY,
-                        );
+                        let mut st =
+                            StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(MOCK_STAKE_TABLE_CAPACITY);
                         config
                             .config
                             .known_nodes_with_stake
@@ -170,7 +172,7 @@ pub fn load_proving_key() -> ProvingKey {
         let num_gates = crate::circuit::build_for_preprocessing::<
             CircuitField,
             ark_ed_on_bn254::EdwardsConfig,
-            STAKE_TABLE_CAPACITY,
+            MOCK_STAKE_TABLE_CAPACITY,
         >()
         .unwrap()
         .0
@@ -194,7 +196,7 @@ pub fn load_proving_key() -> ProvingKey {
 
     std::println!("Generating proving key and verification key.");
     let key_gen_timer = Instant::now();
-    let (pk, _) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+    let (pk, _) = crate::snark::preprocess::<MOCK_STAKE_TABLE_CAPACITY>(&srs)
         .expect("Fail to preprocess state prover circuit");
     let key_gen_elapsed = key_gen_timer.elapsed();
     std::println!("Done in {key_gen_elapsed:.3}");
@@ -326,7 +328,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = time::Instant::now();
-    let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+    let (proof, public_input) = generate_state_update_proof::<_, _, _, _, MOCK_STAKE_TABLE_CAPACITY>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
         &entries,
