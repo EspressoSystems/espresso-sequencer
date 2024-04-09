@@ -47,7 +47,7 @@ mod tests {
         )));
 
         // Start the web server.
-        let mut app = App::<_, Error, Version01>::with_state(events_streamer.clone());
+        let mut app = App::<_, Error>::with_state(events_streamer.clone());
 
         let hotshot_events_api =
             define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, Version01>(

@@ -3136,7 +3136,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer 1.0.0",
@@ -3154,7 +3154,7 @@ dependencies = [
  "serde",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64 0.3.4",
+ "tagged-base64 0.4.0",
  "tide-disco",
  "toml",
  "tracing",

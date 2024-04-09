@@ -21,7 +21,7 @@ futures = "0.3"
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.33" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
-tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+tagged-base64 = "0.4"
 tide-disco = "0.6"
 toml = "0.8"
 tracing = "0.1"
