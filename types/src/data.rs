@@ -533,19 +533,22 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// Validate that a leaf has the right upgrade certificate to be the immediate child of another leaf
     ///
     /// This may not be a complete function. Please double-check that it performs the checks you expect before subtituting validation logic with it.
+    ///
+    /// # Errors
+    /// Returns an error if the certificates are not identical, or that when we no longer see a
+    /// cert, it's for the right reason.
     pub fn extends_upgrade(
         &self,
-        parent: Self,
-        decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+        parent: &Self,
+        decided_upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
     ) -> Result<()> {
         match (
             self.get_upgrade_certificate(),
             parent.get_upgrade_certificate(),
         ) {
-            // No upgrade certificate on either is the most common case, and is always fine.
-            (None, None) => {}
             // If the parent didn't have a certificate, but we see one now, it just means that we have begun an upgrade. Again, this is always fine.
-            (Some(_), None) => {}
+            // But, if we have no upgrade certificate on either is the most common case, and is always fine.
+            (Some(_) | None, None) => {}
             // If we no longer see a cert, we have to make sure that we either:
             //    - no longer care because we have passed new_version_first_view, or
             //    - no longer care because we have passed `decide_by` without deciding the certificate.

@@ -112,7 +112,7 @@ async fn validate_proposal<TYPES: NodeType>(
     UpgradeCertificate::validate(&proposal.data.upgrade_certificate, &quorum_membership)?;
 
     // Validate that the upgrade certificate is re-attached, if we saw one on the parent
-    proposed_leaf.extends_upgrade(parent_leaf.clone(), decided_upgrade_certificate)?;
+    proposed_leaf.extends_upgrade(&parent_leaf, &decided_upgrade_certificate)?;
 
     let justify_qc = proposal.data.justify_qc.clone();
     // Create a positive vote if either liveness or safety check

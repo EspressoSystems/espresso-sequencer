@@ -180,6 +180,11 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
+    /// Determines whether or not a certificate is relevant (i.e. we still have time to reach a
+    /// decide)
+    ///
+    /// # Errors
+    /// Returns an error when the certificate is no longer relevant
     pub fn is_relevant(
         &self,
         view_number: TYPES::Time,
@@ -194,7 +199,9 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
         Ok(())
     }
 
-    /// Validate an upgrade certificate
+    /// Validate an upgrade certificate.
+    /// # Errors
+    /// Returns an error when the upgrade certificate is invalid.
     pub fn validate(
         upgrade_certificate: &Option<Self>,
         quorum_membership: &TYPES::Membership,

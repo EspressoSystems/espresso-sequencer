@@ -327,6 +327,9 @@ impl<TYPES> Proposal<TYPES, QuorumProposal<TYPES>>
 where
     TYPES: NodeType,
 {
+    /// Checks that the signature of the quorum proposal is valid.
+    /// # Errors
+    /// Returns an error when the proposal signature is invalid.
     pub fn validate_signature(&self, quorum_membership: &TYPES::Membership) -> Result<()> {
         let view_number = self.data.get_view_number();
         let view_leader_key = quorum_membership.get_leader(view_number);
