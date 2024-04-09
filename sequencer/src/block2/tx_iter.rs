@@ -1,30 +1,28 @@
-use std::ops::Range;
-
-use crate::{NamespaceId, Transaction};
-
 use super::payload_bytes::{
     num_txs_from_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
+use crate::{NamespaceId, Transaction};
+use std::ops::Range;
 
 pub fn parse_ns_payload(ns_payload: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
-    TxIter::new(ns_payload)
+    TxIndexIter::new(ns_payload)
         .map(|info| Transaction::new(ns_id, ns_payload[info.tx_range].to_vec()))
         .collect()
 }
 
-pub struct TxInfo {
+pub struct TxIndex {
     tx_range: Range<usize>,
 }
 
-pub struct TxIter<'a> {
+pub struct TxIndexIter<'a> {
     tx_table_start: usize,    // byte index into the tx table
     tx_payloads_start: usize, // byte index into the tx payloads
     tx_table: &'a [u8],
     tx_payloads: &'a [u8],
 }
 
-impl<'a> TxIter<'a> {
-    fn new(ns_payload: &'a [u8]) -> Self {
+impl<'a> TxIndexIter<'a> {
+    pub fn new(ns_payload: &'a [u8]) -> Self {
         let tx_table_byte_len = if ns_payload.len() < NUM_TXS_BYTE_LEN {
             // `ns_table` is too short to store the number of txs.
             // So there are zero txs in this namespace.
@@ -48,8 +46,8 @@ impl<'a> TxIter<'a> {
     }
 }
 
-impl<'a> Iterator for TxIter<'a> {
-    type Item = TxInfo;
+impl<'a> Iterator for TxIndexIter<'a> {
+    type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
@@ -70,6 +68,6 @@ impl<'a> Iterator for TxIter<'a> {
         let tx_range = self.tx_payloads_start..tx_payloads_end;
         self.tx_payloads_start = tx_payloads_end;
         self.tx_table_start += TX_OFFSET_BYTE_LEN;
-        Some(TxInfo { tx_range })
+        Some(TxIndex { tx_range })
     }
 }

@@ -20,17 +20,17 @@ impl Payload {
         NsIter::new(self)
     }
 
-    pub(super) fn ns_iter_internal(&self) -> impl Iterator<Item = NsInfoInternal> + '_ {
-        NsIterInternal::new(self)
+    pub(super) fn ns_index_iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
+        NsIndexIter::new(self)
     }
 }
 
 /// Return type for [`Payload::ns_iter`].
-pub struct NsIter<'a>(NsIterInternal<'a>);
+pub struct NsIter<'a>(NsIndexIter<'a>);
 
 impl<'a> NsIter<'a> {
     pub fn new(block: &'a Payload) -> Self {
-        Self(NsIterInternal::new(block))
+        Self(NsIndexIter::new(block))
     }
 }
 
@@ -43,20 +43,21 @@ impl<'a> Iterator for NsIter<'a> {
 }
 
 /// [`Iterator::Item`] for [`NsIterInternal`].
-pub(super) struct NsInfoInternal {
+#[derive(Clone)]
+pub(super) struct NsIndex {
     pub ns_id: NamespaceId,
     pub ns_range: Range<usize>,
 }
 /// Return type for [`Payload::ns_iter_internal`].
-struct NsIterInternal<'a> {
+pub(super) struct NsIndexIter<'a> {
     ns_table_start: usize,   // byte index into the namespace table
     ns_payload_start: usize, // byte index into the payload
     block: &'a Payload,
     repeat_nss: HashSet<NamespaceId>,
 }
 
-impl<'a> NsIterInternal<'a> {
-    fn new(block: &'a Payload) -> Self {
+impl<'a> NsIndexIter<'a> {
+    pub fn new(block: &'a Payload) -> Self {
         Self {
             ns_table_start: NUM_NSS_BYTE_LEN,
             ns_payload_start: 0,
@@ -66,8 +67,8 @@ impl<'a> NsIterInternal<'a> {
     }
 }
 
-impl<'a> Iterator for NsIterInternal<'a> {
-    type Item = NsInfoInternal;
+impl<'a> Iterator for NsIndexIter<'a> {
+    type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
@@ -99,7 +100,7 @@ impl<'a> Iterator for NsIterInternal<'a> {
 
             let ns_range = self.ns_payload_start..ns_payload_end;
             self.ns_payload_start = ns_payload_end;
-            return Some(NsInfoInternal { ns_id, ns_range });
+            return Some(NsIndex { ns_id, ns_range });
         }
         None
     }

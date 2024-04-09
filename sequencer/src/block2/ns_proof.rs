@@ -42,15 +42,15 @@ impl Payload {
             return None; // error: vid_common inconsistent with self
         }
 
-        let ns_range =
-            if let Some(ns_info) = self.ns_iter_internal().find(|info| ns_id == info.ns_id) {
-                ns_info.ns_range
-            } else {
-                return Some(NsProof {
-                    ns_id,
-                    existence: None,
-                });
-            };
+        let ns_range = if let Some(ns_info) = self.ns_index_iter().find(|info| ns_id == info.ns_id)
+        {
+            ns_info.ns_range
+        } else {
+            return Some(NsProof {
+                ns_id,
+                existence: None,
+            });
+        };
 
         Some(NsProof {
             ns_id,
@@ -71,7 +71,7 @@ impl Payload {
         commit: &VidCommitment,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
         let ns_info = self
-            .ns_iter_internal()
+            .ns_index_iter()
             .find(|info| ns_proof.ns_id == info.ns_id);
 
         match (ns_info, &ns_proof.existence) {
