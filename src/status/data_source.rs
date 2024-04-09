@@ -10,7 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::query_data::MempoolQueryData;
 use crate::{
     metrics::{MetricsError, PrometheusMetrics},
     QueryError, QueryResult,
@@ -46,21 +45,6 @@ pub trait StatusDataSource {
             .ok_or_else(|| QueryError::Error {
                 message: "last_decided_time is in future".into(),
             })
-    }
-
-    async fn mempool_info(&self) -> QueryResult<MempoolQueryData> {
-        Ok(MempoolQueryData {
-            transaction_count: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions")
-                .map_err(metrics_err)?
-                .get() as u64,
-            memory_footprint: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions_memory_size")
-                .map_err(metrics_err)?
-                .get() as u64,
-        })
     }
 
     async fn success_rate(&self) -> QueryResult<f64> {
