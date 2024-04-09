@@ -64,7 +64,7 @@
 //!
 //! // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
 //! let data_source = Arc::new(RwLock::new(data_source));
-//! let mut app = App::<_, Error, Version01>::with_state(data_source.clone());
+//! let mut app = App::<_, Error>::with_state(data_source.clone());
 //! app
 //!     .register_module("availability", availability_api)
 //!     .map_err(Error::internal)?
@@ -185,7 +185,7 @@
 //! # use hotshot_query_service::Error;
 //! # use snafu::ResultExt;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
-//! # use versioned_binary_serialization::version::StaticVersionType;
+//! # use vbs::version::StaticVersionType;
 //! # #[async_trait]
 //! # trait UtxoDataSource: AvailabilityDataSource<AppTypes> {
 //! #   async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
@@ -225,10 +225,10 @@
 //!     options: &availability::Options,
 //!     data_source: D,
 //!     bind_version: Ver,
-//! ) -> Result<App<RwLock<D>, Error, Ver>, availability::Error> {
+//! ) -> Result<App<RwLock<D>, Error>, availability::Error> {
 //!     let api = define_app_specific_availability_api(options, bind_version)
 //!         .map_err(availability::Error::internal)?;
-//!     let mut app = App::<_, _, Ver>::with_state(RwLock::new(data_source));
+//!     let mut app = App::<_, _>::with_state(RwLock::new(data_source));
 //!     app.register_module("availability", api).map_err(availability::Error::internal)?;
 //!     Ok(app)
 //! }
@@ -434,7 +434,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use task::BackgroundTask;
 use tide_disco::{App, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
     data::Leaf,
@@ -513,7 +513,7 @@ where
 
     // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
     let data_source = Arc::new(RwLock::new(data_source));
-    let mut app = App::<_, Error, Ver>::with_state(data_source.clone());
+    let mut app = App::<_, Error>::with_state(data_source.clone());
     app.register_module("availability", availability_api)
         .map_err(Error::internal)?
         .register_module("node", node_api)
@@ -737,7 +737,7 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut app = App::<_, Error, Version01>::with_state(RwLock::new(state));
+        let mut app = App::<_, Error>::with_state(RwLock::new(state));
         app.register_module(
             "availability",
             availability::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -753,7 +753,7 @@ mod test {
             status::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
         )
         .unwrap()
-        .module::<Error>("mod", module_spec)
+        .module::<Error, Version01>("mod", module_spec)
         .unwrap()
         .get("get_ext", |_, state| {
             async move { state.module_state.load_latest().map_err(Error::internal) }.boxed()

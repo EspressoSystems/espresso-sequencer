@@ -60,7 +60,7 @@ required-features = ["sql-data-source", "testing"]
 [dependencies]
 anyhow = "1.0"
 ark-serialize = "0.4.2"
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
+async-compatibility-layer = { version = "1.1", default-features = false, features = [
 	"logging-utils",
 ] }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
@@ -70,29 +70,30 @@ bit-vec = { version = "0.6.3", features = ["serde_std"] }
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive", "env"] }
 cld = "0.5"
-commit = { git = "https://github.com/EspressoSystems/commit.git" }
+committable = "0.2"
 custom_debug = "0.6"
 derivative = "2.2"
 derive_more = "0.99"
 either = "1.10"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
 itertools = "0.12.1"
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3" }
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.8"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.5.0" }
-tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.5.0" }
+surf-disco = "0.6"
+tagged-base64 = "0.4"
+tide-disco = "0.6"
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
 trait-variant = "0.1"
 typenum = "1"
-versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization.git", tag = "0.1.2" }
+vbs = "0.1"
 
 # Dependencies enabled by feature "file-system-data-source".
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.4", optional = true }
@@ -111,7 +112,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32", optional = true }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.2", optional = true }
@@ -131,9 +132,9 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 generic-array = "0.14"
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
 portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.2"
-surf = "2.3"
 tempfile = "3.10"
+reqwest = "0.12.3"

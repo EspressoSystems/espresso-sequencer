@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use either::Either;
 
 /// A reference to a `T` which can be resolved into a whole `T`.

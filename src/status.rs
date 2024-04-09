@@ -15,8 +15,7 @@
 //! Unlike the [availability](crate::availability) and [node](crate::node) APIs, which deal only
 //! with committed data (albeit with different consistency properties), the status API offers a
 //! glimpse into internal consensus state and uncommitted data. Here you can find low-level
-//! information about a particular node, such as consensus and networking metrics. You can also find
-//! information about pending blocks and transactions in the mempool.
+//! information about a particular node, such as consensus and networking metrics.
 //!
 //! The status API is intended to be a lightweight way to inspect the activities and health of a
 //! consensus node. It is the only API that can be run without any persistent storage, and its
@@ -34,12 +33,11 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub(crate) mod data_source;
-pub(crate) mod query_data;
+
 pub use data_source::*;
-pub use query_data::*;
 
 #[derive(Args, Default)]
 pub struct Options {
@@ -96,9 +94,6 @@ where
         .get("block_height", |_, state| {
             async { state.block_height().await.map_err(internal) }.boxed()
         })?
-        .get("mempool_info", |_, state| {
-            async { state.mempool_info().await.map_err(internal) }.boxed()
-        })?
         .get("success_rate", |_, state| {
             async { state.success_rate().await.map_err(internal) }.boxed()
         })?
@@ -125,17 +120,15 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::MockTransaction,
             setup_test, sleep,
         },
         Error,
     };
     use async_std::sync::RwLock;
-    use bincode::Options as _;
     use futures::FutureExt;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::utils::bincode_opts;
     use portpicker::pick_unused_port;
+    use reqwest::redirect::Policy;
     use std::str::FromStr;
     use std::time::Duration;
     use surf_disco::Client;
@@ -152,7 +145,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "status",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -168,73 +161,40 @@ mod test {
         let client = Client::<Error, Version01>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
-        // Submit a transaction. We have not yet started the validators, so this transaction will
-        // stay in the mempool, allowing us to check the mempool endpoint.
-        let txn = MockTransaction::default();
-        let txn_size = bincode_opts().serialized_size(&txn).unwrap();
-        network.submit_transaction(txn.clone()).await;
-        loop {
-            let mempool = client
-                .get::<MempoolQueryData>("mempool-info")
-                .send()
-                .await
-                .unwrap();
-            let expected = MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: txn_size,
-            };
-            if mempool == expected {
-                break;
-            }
-            tracing::info!(
-                "waiting for mempool to reflect transaction (currently {:?})",
-                mempool
-            );
-            sleep(Duration::from_secs(1)).await;
-        }
         // The block height is initially zero.
         assert_eq!(client.get::<u64>("block-height").send().await.unwrap(), 0);
 
         // Test Prometheus export.
-        let mut res = surf::get(&format!("{url}/metrics")).send().await.unwrap();
+        // Create `reqwest` client that allows redirects
+        let reqwest_client = reqwest::Client::builder()
+            .redirect(Policy::limited(5))
+            .build()
+            .unwrap();
+
+        // Ask for the Prometheus data
+        let res = reqwest_client
+            .get(&format!("{url}/metrics"))
+            .send()
+            .await
+            .unwrap();
+
+        // Make sure it has the correct response code
         assert_eq!(res.status(), StatusCode::Ok);
-        let prometheus = res.body_string().await.unwrap();
+        let prometheus = res.text().await.unwrap();
         let lines = prometheus.lines().collect::<Vec<_>>();
         assert!(
-            lines.contains(&"consensus_outstanding_transactions 1"),
-            "Missing consensus_outstanding_transactions in metrics:\n{}",
-            prometheus
-        );
-        assert!(
-            lines.contains(
-                &format!(
-                    "consensus_outstanding_transactions_memory_size {}",
-                    txn_size
-                )
-                .as_str()
-            ),
-            "Missing consensus_outstanding_transactions_memory_size in metrics:\n{}",
+            lines.contains(&"consensus_current_view 0"),
+            "Missing consensus_current_view in metrics:\n{}",
             prometheus
         );
 
         // Start the validators and wait for the block to be finalized.
         network.start().await;
-        while client
-            .get::<MempoolQueryData>("mempool-info")
-            .send()
-            .await
-            .unwrap()
-            .transaction_count
-            > 0
-        {
-            tracing::info!("waiting for transaction to be finalized");
-            sleep(Duration::from_secs(1)).await;
-        }
 
-        // Check updated block height. There can be a brief delay between the mempool statistics
+        // Check updated block height.
         // being updated and the decide event being published. Retry this a few times until it
         // succeeds.
-        while client.get::<u64>("block-height").send().await.unwrap() == 1 {
+        while client.get::<u64>("block-height").send().await.unwrap() == 0 {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
         }
@@ -292,7 +252,7 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<_, Error, Version01>::with_state(RwLock::new(data_source));
+        let mut app = App::<_, Error>::with_state(RwLock::new(data_source));
         app.register_module("status", api).unwrap();
 
         let port = pick_unused_port().unwrap();

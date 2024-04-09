@@ -11,7 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
     simple_certificate::QuorumCertificate,

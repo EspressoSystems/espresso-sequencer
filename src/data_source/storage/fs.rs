@@ -33,7 +33,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
-use commit::Committable;
+use committable::Committable;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 
 use serde::{de::DeserializeOwned, Serialize};

@@ -32,6 +32,7 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -79,11 +80,36 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 state_ver_key: state_key_pairs[id].ver_key(),
             })
             .collect::<Vec<_>>();
+
+        // Create memberships
+        let election_config =
+            MockMembership::default_election_config(num_staked_nodes.get() as u64, 0);
+        let membership = MockMembership::create_election(
+            known_nodes_with_stake.clone(),
+            election_config.clone(),
+            0,
+        );
+
+        let memberships = Memberships {
+            quorum_membership: membership.clone(),
+            da_membership: membership.clone(),
+            vid_membership: membership.clone(),
+            view_sync_membership: membership.clone(),
+        };
+
+        // Start the builder server
+        let (builder_task, builder_url) =
+            <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(Arc::new(
+                membership,
+            ))
+            .await;
+
         let nodes = join_all(
             priv_keys
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
+                    let memberships = memberships.clone();
                     let my_own_validator_config = ValidatorConfig {
                         public_key: pub_keys[node_id],
                         private_key: priv_key.clone(),
@@ -91,6 +117,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         state_key_pair: state_key_pairs[node_id].clone(),
                     };
                     let config = HotShotConfig {
+                        builder_url: builder_url.clone(),
                         fixed_leader_for_gpuvid: 0,
                         num_nodes_with_stake: num_staked_nodes,
                         num_nodes_without_stake: 0,
@@ -115,11 +142,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                     };
 
                     let pub_keys = pub_keys.clone();
-                    let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
                     let master_map = master_map.clone();
-                    let election_config =
-                        MockMembership::default_election_config(num_staked_nodes.get() as u64, 0);
 
                     let span = info_span!("initialize node", node_id);
                     async move {
@@ -138,18 +162,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             da_network: network,
                             _pd: std::marker::PhantomData,
                         };
-                        let membership = MockMembership::create_election(
-                            known_nodes_with_stake.clone(),
-                            election_config.clone(),
-                            0,
-                        );
-
-                        let memberships = Memberships {
-                            quorum_membership: membership.clone(),
-                            da_membership: membership.clone(),
-                            vid_membership: membership.clone(),
-                            view_sync_membership: membership.clone(),
-                        };
 
                         let hs_storage: TestStorage<MockTypes> = TestStorage::default();
 
@@ -167,6 +179,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         .await
                         .unwrap()
                         .0;
+
                         MockNode {
                             hotshot,
                             data_source: Arc::new(RwLock::new(data_source)),
@@ -177,6 +190,11 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 }),
         )
         .await;
+
+        // Hook the builder up to the event stream from the first node
+        if let Some(builder_task) = builder_task {
+            builder_task.start(Box::new(nodes[0].hotshot.get_event_stream()));
+        }
 
         let mut network = Self {
             nodes,

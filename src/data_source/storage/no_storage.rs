@@ -300,7 +300,7 @@ pub mod testing {
             };
             tracing::info!("spawning server for missing data on port {fetch_from_port}");
             let api_data_source = network.data_source_index(1);
-            let mut app = App::<_, Error, Version01>::with_state(api_data_source);
+            let mut app = App::<_, Error>::with_state(api_data_source);
             app.register_module(
                 "availability",
                 define_api(&Default::default(), STATIC_VER_0_1).unwrap(),

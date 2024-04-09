@@ -25,7 +25,7 @@ use hotshot_types::{
 };
 use jf_primitives::vid::VidScheme;
 use surf_disco::{Client, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Data availability provider backed by another instance of this query service.
 ///
@@ -67,7 +67,8 @@ where
         match res {
             Ok((payload, common)) => {
                 // Verify that the data we retrieved is consistent with the request we made.
-                let num_storage_nodes = VidSchemeType::get_num_storage_nodes(common.common());
+                let num_storage_nodes =
+                    VidSchemeType::get_num_storage_nodes(common.common()) as usize;
                 let bytes = match payload.data().encode() {
                     Ok(bytes) => bytes.collect::<Vec<_>>(),
                     Err(err) => {
@@ -182,7 +183,7 @@ mod test {
         types::HeightIndexed,
         VidCommitment,
     };
-    use commit::Committable;
+    use committable::Committable;
     use futures::{
         future::{join, FutureExt},
         stream::StreamExt,
@@ -229,7 +230,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -456,7 +457,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -515,7 +516,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -578,7 +579,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -638,7 +639,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -699,7 +700,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -773,7 +774,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
             define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
@@ -867,7 +868,7 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<(), ServerError, Version01>::with_state(());
+        let mut app = App::<(), ServerError>::with_state(());
         app.register_module("availability", api).unwrap();
         app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1)
             .await

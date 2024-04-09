@@ -129,10 +129,9 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MockStorage;
 }
 
-pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, typenum::U8, Sha3Node>;
+pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, 8, Sha3Node>;
 
-impl MerklizedState<MockTypes> for MockMerkleTree {
-    type Arity = typenum::U8;
+impl MerklizedState<MockTypes, 8> for MockMerkleTree {
     type Key = usize;
     type Entry = usize;
     type T = Sha3Node;

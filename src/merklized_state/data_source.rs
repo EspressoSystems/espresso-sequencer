@@ -33,8 +33,6 @@ use std::fmt::Display;
 use std::{fmt::Debug, str::FromStr};
 use tagged_base64::TaggedBase64;
 
-use typenum::Unsigned;
-
 use std::{cmp::Ordering, sync::Arc};
 
 use crate::QueryResult;
@@ -42,21 +40,23 @@ use crate::QueryResult;
 /// This trait defines methods that a data source should implement
 /// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
 #[async_trait]
-pub trait MerklizedStateDataSource<Types, State>
+pub trait MerklizedStateDataSource<Types, State, const ARITY: usize>
 where
     Types: NodeType,
-    State: MerklizedState<Types>,
+    State: MerklizedState<Types, ARITY>,
 {
     async fn get_path(
         &self,
-        snapshot: Snapshot<Types, State>,
+        snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.
 #[async_trait]
-pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types>>: Send + Sync {
+pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>:
+    Send + Sync
+{
     async fn insert_merkle_nodes(
         &mut self,
         path: MerklePath<State::Entry, State::Key, State::T>,
@@ -81,7 +81,7 @@ pub trait UpdateStateStorage<Types: NodeType, D> {
     ) -> anyhow::Result<()>;
 }
 
-type StateCommitment<Types, T> = <T as MerklizedState<Types>>::Commit;
+type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types, ARITY>>::Commit;
 #[derive(Derivative, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
 #[derivative(
@@ -92,14 +92,16 @@ type StateCommitment<Types, T> = <T as MerklizedState<Types>>::Commit;
     Hash(bound = "")
 )]
 // Snapshot can be queried by block height (index) or merkle tree commitment
-pub enum Snapshot<Types: NodeType, T: MerklizedState<Types>> {
+pub enum Snapshot<Types: NodeType, T: MerklizedState<Types, ARITY>, const ARITY: usize> {
     #[display(fmt = "{_0}")]
-    Commit(StateCommitment<Types, T>),
+    Commit(StateCommitment<Types, T, ARITY>),
     #[display(fmt = "{_0}")]
     Index(u64),
 }
 
-impl<T: MerklizedState<Types>, Types: NodeType> PartialOrd for Snapshot<Types, T> {
+impl<T: MerklizedState<Types, ARITY>, Types: NodeType, const ARITY: usize> PartialOrd
+    for Snapshot<Types, T, ARITY>
+{
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -107,16 +109,16 @@ impl<T: MerklizedState<Types>, Types: NodeType> PartialOrd for Snapshot<Types, T
 
 /// This trait should be implemented by the MerkleTree that the module is initialized for.
 /// It defines methods utilized by the module.
-pub trait MerklizedState<Types>: MerkleTreeScheme + Send + Sync + Clone + 'static
+pub trait MerklizedState<Types, const ARITY: usize>:
+    MerkleTreeScheme + Send + Sync + Clone + 'static
 where
     Types: NodeType,
 {
-    type Arity: Unsigned;
     type Key: Index
         + Send
         + Sync
         + Serialize
-        + ToTraversalPath<Self::Arity>
+        + ToTraversalPath<ARITY>
         + FromStr
         + DeserializeOwned
         + Display
