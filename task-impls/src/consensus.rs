@@ -11,7 +11,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use async_std::task::JoinHandle;
 use committable::Committable;
 use core::time::Duration;
-use futures::future::FutureExt;
+use futures::future::{join_all, FutureExt};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::data::null_block;
 use hotshot_types::event::LeafInfo;
@@ -44,7 +44,7 @@ use crate::vote_collection::HandleVoteEvent;
 use chrono::Utc;
 use hotshot_types::data::VidDisperseShare;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     marker::PhantomData,
     sync::Arc,
 };
@@ -320,6 +320,10 @@ pub struct ConsensusTaskState<
     /// timeout task handle
     pub timeout_task: Option<JoinHandle<()>>,
 
+    /// Spawned tasks related to a specific view, so we can cancel them when
+    /// they are stale
+    pub spawned_tasks: BTreeMap<TYPES::Time, Vec<JoinHandle<()>>>,
+
     /// The most recent upgrade certificate this node formed.
     /// Note: this is ONLY for certificates that have been formed internally,
     /// so that we can propose with them.
@@ -355,6 +359,17 @@ pub struct ConsensusTaskState<
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     ConsensusTaskState<TYPES, I, A>
 {
+    /// Cancel all tasks the consensus tasks has spawned before the given view
+    async fn cancel_tasks(&mut self, view: TYPES::Time) {
+        let keep = self.spawned_tasks.split_off(&view);
+        let mut cancel = Vec::new();
+        while let Some((_, tasks)) = self.spawned_tasks.pop_first() {
+            let mut to_cancel = tasks.into_iter().map(cancel_task).collect();
+            cancel.append(&mut to_cancel);
+        }
+        self.spawned_tasks = keep;
+        join_all(cancel).await;
+    }
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
     // Check if we are able to vote, like whether the proposal is valid,
     // whether we have DAC and VID share, and if so, vote.
@@ -834,22 +849,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 };
 
-                async_spawn(
-                    validate_proposal(
-                        proposal.clone(),
-                        parent_leaf,
-                        self.consensus.clone(),
-                        self.decided_upgrade_cert.clone(),
-                        self.quorum_membership.clone(),
-                        parent_state.clone(),
-                        view_leader_key,
-                        event_stream.clone(),
-                        sender,
-                        self.output_event_stream.clone(),
-                        self.storage.clone(),
-                    )
-                    .map(AnyhowTracing::err_as_debug),
-                );
+                self.spawned_tasks
+                    .entry(proposal.data.get_view_number())
+                    .or_default()
+                    .push(async_spawn(
+                        validate_proposal(
+                            proposal.clone(),
+                            parent_leaf,
+                            self.consensus.clone(),
+                            self.decided_upgrade_cert.clone(),
+                            self.quorum_membership.clone(),
+                            parent_state.clone(),
+                            view_leader_key,
+                            event_stream.clone(),
+                            sender,
+                            self.output_event_stream.clone(),
+                            self.storage.clone(),
+                        )
+                        .map(AnyhowTracing::err_as_debug),
+                    ));
             }
             HotShotEvent::QuorumProposalValidated(proposal) => {
                 let consensus = self.consensus.upgradable_read().await;
@@ -1012,6 +1030,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let qc = consensus.high_qc.clone();
 
                 drop(consensus);
+                if new_decide_reached {
+                    self.cancel_tasks(new_anchor_view).await;
+                }
                 if should_propose {
                     debug!(
                         "Attempting to publish proposal after voting; now in view: {}",
@@ -1523,23 +1544,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let parent = parent_leaf.clone();
                 let state = state.clone();
                 let upgrade_cert = self.decided_upgrade_cert.clone();
-                async_spawn(async move {
-                    create_and_send_proposal(
-                        pub_key,
-                        priv_key,
-                        consensus,
-                        sender,
-                        view,
-                        null_block_commitment,
-                        metadata,
-                        parent,
-                        state,
-                        upgrade_cert,
-                        None,
-                        delay,
-                    )
-                    .await;
-                });
+                self.spawned_tasks
+                    .entry(view)
+                    .or_default()
+                    .push(async_spawn(async move {
+                        create_and_send_proposal(
+                            pub_key,
+                            priv_key,
+                            consensus,
+                            sender,
+                            view,
+                            null_block_commitment,
+                            metadata,
+                            parent,
+                            state,
+                            upgrade_cert,
+                            None,
+                            delay,
+                        )
+                        .await;
+                    }));
                 return;
             }
         }
@@ -1578,23 +1602,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             let metadata = commit_and_metadata.metadata.clone();
             let state = state.clone();
             let delay = self.round_start_delay;
-            async_spawn(async move {
-                create_and_send_proposal(
-                    pub_key,
-                    priv_key,
-                    consensus,
-                    sender,
-                    view,
-                    commit,
-                    metadata,
-                    parent_leaf.clone(),
-                    state,
-                    proposal_upgrade_certificate,
-                    proposal_certificate,
-                    delay,
-                )
-                .await;
-            });
+            self.spawned_tasks
+                .entry(view)
+                .or_default()
+                .push(async_spawn(async move {
+                    create_and_send_proposal(
+                        pub_key,
+                        priv_key,
+                        consensus,
+                        sender,
+                        view,
+                        commit,
+                        metadata,
+                        parent_leaf.clone(),
+                        state,
+                        proposal_upgrade_certificate,
+                        proposal_certificate,
+                        delay,
+                    )
+                    .await;
+                }));
 
             self.proposal_cert = None;
             self.payload_commitment_and_metadata = None;
