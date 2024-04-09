@@ -224,6 +224,7 @@
 //! fn init_server<D: UtxoDataSource + Send + Sync + 'static, Ver: StaticVersionType + 'static>(
 //!     options: &availability::Options,
 //!     data_source: D,
+//!     bind_version: Ver,
 //! ) -> Result<App<RwLock<D>, Error>, availability::Error> {
 //!     let api = define_app_specific_availability_api(options, bind_version)
 //!         .map_err(availability::Error::internal)?;
