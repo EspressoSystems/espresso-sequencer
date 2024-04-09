@@ -44,6 +44,7 @@ use portpicker::pick_unused_port;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use surf_disco::Url;
 use tracing::{info_span, Instrument};
 
 struct MockNode<D: DataSourceLifeCycle> {
@@ -84,11 +85,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 
         // Pick a random port for the builder
         let builder_port = pick_unused_port().expect("failed to get unused port");
-        let builder_url = surf_disco::Url::parse(&format!("http://127.0.0.1:{builder_port}"))
-            .expect("failed to parse builder URL");
+        let builder_url = Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap();
 
         // Start the builder
-        run_random_builder(builder_url.clone());
+        run_random_builder(Url::parse(&format!("http://0.0.0.0:{builder_port}")).unwrap());
 
         let nodes = join_all(
             priv_keys

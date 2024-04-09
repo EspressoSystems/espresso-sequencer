@@ -44,6 +44,7 @@ use hotshot_types::{
 };
 use portpicker::pick_unused_port;
 use std::{num::NonZeroUsize, time::Duration};
+use surf_disco::Url;
 
 const NUM_NODES: usize = 2;
 
@@ -155,11 +156,10 @@ async fn init_consensus(
 
     // Pick a random port for the builder
     let builder_port = pick_unused_port().expect("failed to get unused port");
-    let builder_url = surf_disco::Url::parse(&format!("127.0.0.1:{builder_port}"))
-        .expect("failed to parse builder URL");
+    let builder_url = Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap();
 
     // Start the builder
-    run_random_builder(builder_url.clone());
+    run_random_builder(Url::parse(&format!("http://0.0.0.0:{builder_port}")).unwrap());
 
     let config = HotShotConfig {
         builder_url,

@@ -68,8 +68,7 @@ where
             Ok((payload, common)) => {
                 // Verify that the data we retrieved is consistent with the request we made.
                 let num_storage_nodes =
-                    usize::try_from(VidSchemeType::get_num_storage_nodes(common.common()))
-                        .expect("expected >= 32 bit system");
+                    VidSchemeType::get_num_storage_nodes(common.common()) as usize;
                 let bytes = match payload.data().encode() {
                     Ok(bytes) => bytes.collect::<Vec<_>>(),
                     Err(err) => {
