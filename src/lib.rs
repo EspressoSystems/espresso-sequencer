@@ -224,11 +224,10 @@
 //! fn init_server<D: UtxoDataSource + Send + Sync + 'static, Ver: StaticVersionType + 'static>(
 //!     options: &availability::Options,
 //!     data_source: D,
-//!     bind_version: Ver,
-//! ) -> Result<App<RwLock<D>, Error, Ver>, availability::Error> {
+//! ) -> Result<App<RwLock<D>, Error>, availability::Error> {
 //!     let api = define_app_specific_availability_api(options, bind_version)
 //!         .map_err(availability::Error::internal)?;
-//!     let mut app = App::<_, _, Ver>::with_state(RwLock::new(data_source));
+//!     let mut app = App::<_, _>::with_state(RwLock::new(data_source));
 //!     app.register_module("availability", api).map_err(availability::Error::internal)?;
 //!     Ok(app)
 //! }

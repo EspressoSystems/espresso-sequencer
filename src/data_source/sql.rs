@@ -274,8 +274,7 @@ impl Config {
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     config: Config,
 ///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
-///     _: Ver,
-/// ) -> Result<App<Arc<RwLock<AppState>>, Error, Ver>, Error> {
+/// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
 ///     let tx = hotshot_qs.transaction().await.map_err(Error::internal)?;
