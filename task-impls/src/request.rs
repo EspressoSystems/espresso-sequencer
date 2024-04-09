@@ -75,7 +75,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         task: &mut hotshot_task::task::Task<Self>,
     ) -> Option<Self::Output> {
         match event.as_ref() {
-            HotShotEvent::QuorumProposalValidated(proposal) => {
+            HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 let state = task.state();
                 let prop_view = proposal.get_view_number();
                 if prop_view >= state.view {
@@ -105,7 +105,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         !matches!(
             event.as_ref(),
             HotShotEvent::Shutdown
-                | HotShotEvent::QuorumProposalValidated(_)
+                | HotShotEvent::QuorumProposalValidated(..)
                 | HotShotEvent::ViewChange(_)
         )
     }
@@ -270,7 +270,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     async fn handle_response_message(&self, message: SequencingMessage<TYPES>) {
         let event = match message {
             SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(prop)) => {
-                HotShotEvent::VidDisperseRecv(prop)
+                HotShotEvent::VIDShareRecv(prop)
             }
             _ => return,
         };

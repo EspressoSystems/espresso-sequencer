@@ -75,12 +75,12 @@ async fn test_consensus_task_upgrade() {
     let view_1 = TestScriptStage {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
-            VidDisperseRecv(vids[0].0[0].clone()),
+            VIDShareRecv(vids[0].0[0].clone()),
             DACertificateRecv(dacs[0].clone()),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
-            exact(QuorumProposalValidated(proposals[0].data.clone())),
+            quorum_proposal_validated(),
             exact(QuorumVoteSend(votes[0].clone())),
         ],
         asserts: vec![],
@@ -89,12 +89,12 @@ async fn test_consensus_task_upgrade() {
     let view_2 = TestScriptStage {
         inputs: vec![
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-            VidDisperseRecv(vids[1].0[0].clone()),
+            VIDShareRecv(vids[1].0[0].clone()),
             DACertificateRecv(dacs[1].clone()),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
-            exact(QuorumProposalValidated(proposals[1].data.clone())),
+            quorum_proposal_validated(),
             exact(QuorumVoteSend(votes[1].clone())),
         ],
         asserts: vec![no_decided_upgrade_cert()],
@@ -104,11 +104,11 @@ async fn test_consensus_task_upgrade() {
         inputs: vec![
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
             DACertificateRecv(dacs[2].clone()),
-            VidDisperseRecv(vids[2].0[0].clone()),
+            VIDShareRecv(vids[2].0[0].clone()),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(3))),
-            exact(QuorumProposalValidated(proposals[2].data.clone())),
+            quorum_proposal_validated(),
             leaf_decided(),
             exact(QuorumVoteSend(votes[2].clone())),
         ],
@@ -119,11 +119,11 @@ async fn test_consensus_task_upgrade() {
         inputs: vec![
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
             DACertificateRecv(dacs[3].clone()),
-            VidDisperseRecv(vids[3].0[0].clone()),
+            VIDShareRecv(vids[3].0[0].clone()),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(4))),
-            exact(QuorumProposalValidated(proposals[3].data.clone())),
+            quorum_proposal_validated(),
             leaf_decided(),
             exact(QuorumVoteSend(votes[3].clone())),
         ],
@@ -134,7 +134,7 @@ async fn test_consensus_task_upgrade() {
         inputs: vec![QuorumProposalRecv(proposals[4].clone(), leaders[4])],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(5))),
-            exact(QuorumProposalValidated(proposals[4].data.clone())),
+            quorum_proposal_validated(),
             leaf_decided(),
         ],
         asserts: vec![decided_upgrade_cert()],
@@ -238,7 +238,7 @@ async fn test_upgrade_and_consensus_task() {
     let inputs = vec![
         vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
-            VidDisperseRecv(vids[0].0[0].clone()),
+            VIDShareRecv(vids[0].0[0].clone()),
             DACertificateRecv(dacs[0].clone()),
         ],
         upgrade_vote_recvs,
@@ -426,12 +426,12 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     let inputs = vec![
         vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
-            VidDisperseRecv(vids[0].0[0].clone()),
+            VIDShareRecv(vids[0].0[0].clone()),
             DACertificateRecv(dacs[0].clone()),
         ],
         vec![
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-            VidDisperseRecv(vids[1].0[0].clone()),
+            VIDShareRecv(vids[1].0[0].clone()),
             DACertificateRecv(dacs[1].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[1].0[0].data.payload_commitment,
@@ -441,7 +441,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
         vec![
             DACertificateRecv(dacs[2].clone()),
-            VidDisperseRecv(vids[2].0[0].clone()),
+            VIDShareRecv(vids[2].0[0].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
                 (),
@@ -451,7 +451,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
         vec![
             DACertificateRecv(dacs[3].clone()),
-            VidDisperseRecv(vids[3].0[0].clone()),
+            VIDShareRecv(vids[3].0[0].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[3].0[0].data.payload_commitment,
                 (),
@@ -461,7 +461,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
         vec![
             DACertificateRecv(dacs[4].clone()),
-            VidDisperseRecv(vids[4].0[0].clone()),
+            VIDShareRecv(vids[4].0[0].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[4].0[0].data.payload_commitment,
                 (),
@@ -480,7 +480,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
         vec![
             DACertificateRecv(dacs[6].clone()),
-            VidDisperseRecv(vids[6].0[0].clone()),
+            VIDShareRecv(vids[6].0[0].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[6].0[0].data.payload_commitment,
                 (),

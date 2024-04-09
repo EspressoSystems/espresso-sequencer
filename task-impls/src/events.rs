@@ -49,15 +49,10 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
     QuorumVoteSend(QuorumVote<TYPES>),
-    // TODO: Complete the dependency implementation.
-    // <https://github.com/EspressoSystems/HotShot/issues/2710>
-    /// Dummy quorum vote to test if the quorum vote dependency works. Should be removed and
-    /// replaced by `QuorumVoteSend` once the above TODO is done.
-    DummyQuorumVoteSend(TYPES::Time),
     /// All dependencies for the quorum vote are validated.
     QuorumVoteDependenciesValidated(TYPES::Time),
-    /// A proposal was validated. This means it comes from the correct leader and has a correct QC.
-    QuorumProposalValidated(QuorumProposal<TYPES>),
+    /// A quorum proposal with the given parent leaf is validated.
+    QuorumProposalValidated(QuorumProposal<TYPES>, Leaf<TYPES>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DAProposalSend(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
@@ -127,10 +122,10 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ///
     /// Like [`HotShotEvent::DAProposalSend`].
     VidDisperseSend(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
-    /// Vid disperse data has been received from the network; handled by the DA task
+    /// Vid disperse share has been received from the network; handled by the consensus task
     ///
     /// Like [`HotShotEvent::DAProposalRecv`].
-    VidDisperseRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
+    VIDShareRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// VID share data is validated.
     VIDShareValidated(VidDisperseShare<TYPES>),
     /// Upgrade proposal has been received from the network

@@ -217,13 +217,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for QuorumVoteTaskState<TYPES, I>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> QuorumVoteTaskState<TYPES, I> {
+        let consensus = handle.hotshot.get_consensus();
+
         QuorumVoteTaskState {
+            public_key: handle.public_key().clone(),
+            private_key: handle.private_key().clone(),
+            consensus,
             latest_voted_view: handle.get_cur_view().await,
             vote_dependencies: HashMap::new(),
             quorum_network: handle.hotshot.networks.quorum_network.clone(),
             committee_network: handle.hotshot.networks.da_network.clone(),
+            quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
+            da_membership: handle.hotshot.memberships.da_membership.clone().into(),
             output_event_stream: handle.hotshot.output_event_stream.0.clone(),
             id: handle.hotshot.id,
+            storage: handle.storage.clone(),
         }
     }
 }

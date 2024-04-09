@@ -177,7 +177,7 @@ where
 {
     let info = "QuorumProposalValidated".to_string();
     let function = |e: &Arc<HotShotEvent<TYPES>>| {
-        PredicateResult::from(matches!(e.as_ref(), QuorumProposalValidated(_)))
+        PredicateResult::from(matches!(e.as_ref(), QuorumProposalValidated(..)))
     };
 
     Predicate {

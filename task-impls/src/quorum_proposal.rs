@@ -140,13 +140,6 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
         }
 
         broadcast_event(
-            Arc::new(HotShotEvent::QuorumProposalDependenciesValidated(
-                self.view_number,
-            )),
-            &self.sender,
-        )
-        .await;
-        broadcast_event(
             Arc::new(HotShotEvent::DummyQuorumProposalSend(self.view_number)),
             &self.sender,
         )
@@ -488,11 +481,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 if !validate_quorum_proposal(proposal.clone(), event_sender.clone()) {
                     return;
                 }
-                broadcast_event(
-                    Arc::new(HotShotEvent::QuorumProposalValidated(proposal.data.clone())),
-                    &event_sender.clone(),
-                )
-                .await;
 
                 self.create_dependency_task_if_new(
                     view + 1,
