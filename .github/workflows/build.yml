@@ -210,6 +210,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/deploy
 
+      - name: Generate builder metadata
+        uses: docker/metadata-action@v5
+        id: builder
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/builder
+
       - name: Generate nasty-client metadata
         uses: docker/metadata-action@v5
         id: nasty-client
@@ -351,6 +357,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
           docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
           docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
+          docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main
           docker tag ${{ needs.build-dockers.outputs.nasty-client-tag }} ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
 
       - name: Test docker demo
