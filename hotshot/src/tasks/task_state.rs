@@ -191,7 +191,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             vote_collector: None.into(),
             timeout_vote_collector: None.into(),
             timeout_task: None,
-            upgrade_cert: None,
+            formed_upgrade_certificate: None,
             proposal_cert: None,
             decided_upgrade_cert: None,
             version: handle.hotshot.version.clone(),

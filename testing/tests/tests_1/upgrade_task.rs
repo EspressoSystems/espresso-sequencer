@@ -39,9 +39,10 @@ async fn test_consensus_task_upgrade() {
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
         new_version,
+        decide_by: ViewNumber::new(5),
         new_version_hash: [0u8; 12].to_vec(),
-        old_version_last_block: ViewNumber::new(5),
-        new_version_first_block: ViewNumber::new(7),
+        old_version_last_view: ViewNumber::new(5),
+        new_version_first_view: ViewNumber::new(7),
     };
 
     let mut proposals = Vec::new();
@@ -175,9 +176,10 @@ async fn test_upgrade_and_consensus_task() {
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
         new_version,
+        decide_by: ViewNumber::new(4),
         new_version_hash: [0u8; 12].to_vec(),
-        old_version_last_block: ViewNumber::new(5),
-        new_version_first_block: ViewNumber::new(7),
+        old_version_last_view: ViewNumber::new(5),
+        new_version_first_view: ViewNumber::new(7),
     };
 
     let mut proposals = Vec::new();
@@ -331,9 +333,10 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
         new_version,
+        decide_by: ViewNumber::new(4),
         new_version_hash: [0u8; 12].to_vec(),
-        old_version_last_block: ViewNumber::new(4),
-        new_version_first_block: ViewNumber::new(8),
+        old_version_last_view: ViewNumber::new(4),
+        new_version_first_view: ViewNumber::new(8),
     };
 
     let mut proposals = Vec::new();

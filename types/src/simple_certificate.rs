@@ -6,6 +6,8 @@ use std::{
     marker::PhantomData,
 };
 
+use anyhow::{ensure, Result};
+
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
@@ -174,6 +176,43 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
             is_genesis: true,
             _pd: PhantomData,
         }
+    }
+}
+
+impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
+    pub fn is_relevant(
+        &self,
+        view_number: TYPES::Time,
+        decided_upgrade_certificate: Option<Self>,
+    ) -> Result<()> {
+        ensure!(
+            self.data.decide_by >= view_number
+                || decided_upgrade_certificate.is_some_and(|cert| cert == *self),
+            "Upgrade certificate is no longer relevant."
+        );
+
+        Ok(())
+    }
+
+    /// Validate an upgrade certificate
+    pub fn validate(
+        upgrade_certificate: &Option<Self>,
+        quorum_membership: &TYPES::Membership,
+    ) -> Result<()> {
+        if let Some(ref cert) = upgrade_certificate {
+            ensure!(
+                cert.is_valid_cert(quorum_membership),
+                "Invalid upgrade certificate."
+            );
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Test whether a view is in the interim period prior to the new version taking effect.
+    pub fn in_interim(&self, view: TYPES::Time) -> bool {
+        view > self.data.old_version_last_view && view < self.data.new_version_first_view
     }
 }
 

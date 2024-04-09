@@ -49,6 +49,7 @@ pub struct TestView {
     pub da_certificate: DACertificate<TestTypes>,
     pub transactions: Vec<TestTransaction>,
     upgrade_data: Option<UpgradeProposalData<TestTypes>>,
+    formed_upgrade_certificate: Option<UpgradeCertificate<TestTypes>>,
     view_sync_finalize_data: Option<ViewSyncFinalizeData<TestTypes>>,
     timeout_cert_data: Option<TimeoutData<TestTypes>>,
 }
@@ -137,6 +138,7 @@ impl TestView {
             transactions,
             leader_public_key,
             upgrade_data: None,
+            formed_upgrade_certificate: None,
             view_sync_finalize_data: None,
             timeout_cert_data: None,
             da_proposal,
@@ -215,7 +217,7 @@ impl TestView {
 
             Some(cert)
         } else {
-            None
+            self.formed_upgrade_certificate.clone()
         };
 
         let view_sync_certificate = if let Some(ref data) = self.view_sync_finalize_data {
@@ -272,7 +274,7 @@ impl TestView {
             block_header: block_header.clone(),
             view_number: next_view,
             justify_qc: quorum_certificate.clone(),
-            upgrade_certificate,
+            upgrade_certificate: upgrade_certificate.clone(),
             proposal_certificate,
         };
 
@@ -320,6 +322,9 @@ impl TestView {
             // so we reset for the next view.
             transactions: Vec::new(),
             upgrade_data: None,
+            // We preserve the upgrade_certificate once formed,
+            // and reattach it on every future view until cleared.
+            formed_upgrade_certificate: upgrade_certificate,
             view_sync_finalize_data: None,
             timeout_cert_data: None,
             da_proposal,

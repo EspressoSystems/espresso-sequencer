@@ -70,12 +70,15 @@ pub struct UpgradeProposalData<TYPES: NodeType + DeserializeOwned> {
     pub old_version: Version,
     /// The new version that we are upgrading to.
     pub new_version: Version,
+    /// The last view in which we are allowed to reach a decide on this upgrade.
+    /// If it is not decided by that view, we discard it.
+    pub decide_by: TYPES::Time,
     /// A unique identifier for the specific protocol being voted on.
     pub new_version_hash: Vec<u8>,
     /// The last block for which the old version will be in effect.
-    pub old_version_last_block: TYPES::Time,
+    pub old_version_last_view: TYPES::Time,
     /// The first block for which the new version will be in effect.
-    pub new_version_first_block: TYPES::Time,
+    pub new_version_first_view: TYPES::Time,
 }
 
 /// Marker trait for data or commitments that can be voted on.
@@ -196,8 +199,9 @@ impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         let builder = committable::RawCommitmentBuilder::new("Upgrade data");
         builder
-            .u64(*self.new_version_first_block)
-            .u64(*self.old_version_last_block)
+            .u64(*self.decide_by)
+            .u64(*self.new_version_first_view)
+            .u64(*self.old_version_last_view)
             .var_size_bytes(self.new_version_hash.as_slice())
             .u16(self.new_version.minor)
             .u16(self.new_version.major)

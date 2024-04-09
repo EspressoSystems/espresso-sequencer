@@ -235,7 +235,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             saved_leaves,
             saved_payloads,
             saved_da_certs: HashMap::new(),
-            saved_upgrade_certs: HashMap::new(),
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),

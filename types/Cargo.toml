@@ -38,6 +38,7 @@ generic-array = { workspace = true }
 # TODO generic-array should not be a direct dependency
 # https://github.com/EspressoSystems/HotShot/issues/1850
 lazy_static = { workspace = true }
+memoize = { workspace = true }
 rand = { workspace = true }
 sha2 = { workspace = true }
 snafu = { workspace = true }

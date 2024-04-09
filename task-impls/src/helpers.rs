@@ -59,3 +59,15 @@ pub async fn calculate_vid_disperse<TYPES: NodeType>(
 
     VidDisperse::from_membership(view, vid_disperse, membership)
 }
+
+/// Utilities to print anyhow logs.
+pub trait AnyhowTracing {
+    /// Print logs as debug
+    fn err_as_debug(self);
+}
+
+impl<T> AnyhowTracing for anyhow::Result<T> {
+    fn err_as_debug(self) {
+        let _ = self.inspect_err(|e| tracing::debug!("{}", format!("{:?}", e)));
+    }
+}

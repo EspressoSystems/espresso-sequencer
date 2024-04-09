@@ -3,7 +3,7 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::data::{QuorumProposal, UpgradeProposal, VidDisperseShare};
+use crate::data::{Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare};
 use crate::simple_certificate::{
     DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
     ViewSyncPreCommitCertificate2,
@@ -12,6 +12,7 @@ use crate::simple_vote::{
     DAVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
     ViewSyncPreCommitVote,
 };
+use crate::traits::election::Membership;
 use crate::traits::network::ResponseMessage;
 use crate::traits::signature_key::SignatureKey;
 use crate::vote::HasViewNumber;
@@ -23,6 +24,8 @@ use crate::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+use anyhow::{ensure, Result};
+use committable::Committable;
 use derivative::Derivative;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -318,4 +321,22 @@ pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + Deserializ
     pub signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     /// Phantom for TYPES
     pub _pd: PhantomData<TYPES>,
+}
+
+impl<TYPES> Proposal<TYPES, QuorumProposal<TYPES>>
+where
+    TYPES: NodeType,
+{
+    pub fn validate_signature(&self, quorum_membership: &TYPES::Membership) -> Result<()> {
+        let view_number = self.data.get_view_number();
+        let view_leader_key = quorum_membership.get_leader(view_number);
+        let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
+
+        ensure!(
+            view_leader_key.validate(&self.signature, proposed_leaf.commit().as_ref()),
+            "Proposal signature is invalid."
+        );
+
+        Ok(())
+    }
 }
