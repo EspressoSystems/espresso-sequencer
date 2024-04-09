@@ -1,6 +1,6 @@
 [package]
 name = "hotshot-events-service"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,16 +18,16 @@ derive_more = "0.99"
 derivative = "2.2"
 either = { version = "1.10", features = ["serde"] }
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.33" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.5.0" }
+tide-disco = "0.6"
 toml = "0.8"
 tracing = "0.1"
-versioned-binary-serialization = { git = "https://github.com/EspressoSystems/versioned-binary-serialization", tag = "0.1.2" }
+vbs = "0.1"
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.33" }
 portpicker = "0.1.1"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.5.0" }
+surf-disco = "0.6"
