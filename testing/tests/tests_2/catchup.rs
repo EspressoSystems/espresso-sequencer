@@ -52,7 +52,7 @@ async fn test_catchup() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -105,7 +105,7 @@ async fn test_catchup_cdn() {
     metadata
         .gen_launcher::<TestTypes, PushCdnImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<PushCdnImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -160,7 +160,7 @@ async fn test_catchup_one_node() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -221,7 +221,7 @@ async fn test_catchup_in_view_sync() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -282,6 +282,6 @@ async fn test_catchup_reload() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }

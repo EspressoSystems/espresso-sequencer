@@ -41,6 +41,7 @@ tide-disco = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
 lru = { workspace = true }
+tagged-base64.workspace = true
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

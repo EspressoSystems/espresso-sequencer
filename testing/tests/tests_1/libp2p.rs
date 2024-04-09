@@ -37,7 +37,7 @@ async fn libp2p_network() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -84,7 +84,7 @@ async fn libp2p_network_failures_2() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -100,6 +100,6 @@ async fn test_stress_libp2p_network() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }

@@ -41,7 +41,7 @@ async fn libp2p_network_sync() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -74,7 +74,7 @@ async fn test_memory_network_sync() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<MemoryImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -113,7 +113,7 @@ async fn libp2p_network_async() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -160,7 +160,7 @@ async fn test_memory_network_async() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<_>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -212,7 +212,7 @@ async fn test_memory_network_partially_sync() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<_>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -252,7 +252,7 @@ async fn libp2p_network_partially_sync() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<_>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -290,7 +290,7 @@ async fn test_memory_network_chaos() {
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<_>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -325,6 +325,6 @@ async fn libp2p_network_chaos() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<_>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }

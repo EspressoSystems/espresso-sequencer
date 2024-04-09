@@ -122,9 +122,7 @@ where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + BuilderDataSource<Types>,
     Types: NodeType,
-    <<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType:
-        for<'a> TryFrom<&'a TaggedBase64> + Into<TaggedBase64> + Display,
-    for<'a> <<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
+    for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
 {

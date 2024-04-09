@@ -57,7 +57,7 @@ async fn test_timeout_web() {
     metadata
         .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<WebImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -124,6 +124,6 @@ async fn test_timeout_libp2p() {
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<Libp2pImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }

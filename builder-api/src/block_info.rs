@@ -20,12 +20,11 @@ pub struct AvailableBlockInfo<I: NodeType> {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
-pub struct AvailableBlockData<I: NodeType> {
-    pub block_payload: <I as NodeType>::BlockPayload,
-    pub metadata: <<I as NodeType>::BlockPayload as BlockPayload>::Metadata,
-    pub signature: <<I as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    pub sender: <I as NodeType>::SignatureKey,
-    pub _phantom: PhantomData<I>,
+pub struct AvailableBlockData<TYPES: NodeType> {
+    pub block_payload: TYPES::BlockPayload,
+    pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+    pub signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    pub sender: TYPES::SignatureKey,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]

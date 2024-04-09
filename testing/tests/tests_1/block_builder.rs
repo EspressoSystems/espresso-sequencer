@@ -29,7 +29,7 @@ async fn test_random_block_builder() {
     let port = portpicker::pick_unused_port().expect("Could not find an open port");
     let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
 
-    run_random_builder(api_url.clone());
+    run_random_builder::<TestTypes>(api_url.clone());
     let builder_started = Instant::now();
 
     let client: BuilderClient<TestTypes, Version01> = BuilderClient::new(api_url);

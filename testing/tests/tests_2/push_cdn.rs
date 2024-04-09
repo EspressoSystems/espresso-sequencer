@@ -40,7 +40,7 @@ async fn push_cdn_network() {
     metadata
         .gen_launcher::<TestTypes, PushCdnImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<PushCdnImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
     shutdown_logging();
 }

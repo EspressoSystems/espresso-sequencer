@@ -45,7 +45,7 @@ async fn test_combined_network() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -93,7 +93,7 @@ async fn test_combined_network_cdn_crash() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -147,7 +147,7 @@ async fn test_combined_network_reup() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -195,7 +195,7 @@ async fn test_combined_network_half_dc() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }
 
@@ -265,6 +265,6 @@ async fn test_stress_combined_network_fuzzy() {
     metadata
         .gen_launcher::<TestTypes, CombinedImpl>(0)
         .launch()
-        .run_test::<SimpleBuilderImplementation<CombinedImpl>>()
+        .run_test::<SimpleBuilderImplementation>()
         .await;
 }

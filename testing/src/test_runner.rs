@@ -132,7 +132,7 @@ where
     /// # Panics
     /// if the test fails
     #[allow(clippy::too_many_lines)]
-    pub async fn run_test<B: TestBuilderImplementation<TYPES = TYPES, I = I>>(mut self) {
+    pub async fn run_test<B: TestBuilderImplementation<TYPES>>(mut self) {
         let (tx, rx) = broadcast(EVENT_CHANNEL_SIZE);
         let spinning_changes = self
             .launcher
@@ -327,7 +327,7 @@ where
     ///
     /// # Panics
     /// Panics if unable to create a [`HotShotInitializer`]
-    pub async fn add_nodes<B: TestBuilderImplementation<TYPES = TYPES, I = I>>(
+    pub async fn add_nodes<B: TestBuilderImplementation<TYPES>>(
         &mut self,
         total: usize,
         late_start: &HashSet<u64>,
