@@ -2,27 +2,31 @@
 /// types used for this example
 pub mod types;
 
-use crate::infra::read_orchestrator_init_config;
-use crate::infra::OrchestratorArgs;
-use crate::types::ThisRun;
-use crate::{
-    infra::run_orchestrator,
-    types::{DANetwork, NodeImpl, QuorumNetwork},
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::Path,
 };
-use async_compatibility_layer::art::async_spawn;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
+use async_compatibility_layer::{
+    art::async_spawn,
+    logging::{setup_backtrace, setup_logging},
+};
 use cdn_broker::{Broker, Config as BrokerConfig, ConfigBuilder as BrokerConfigBuilder};
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
-use hotshot::traits::implementations::{KeyPair, TestingDef, WrappedSignatureKey};
-use hotshot::types::SignatureKey;
+use hotshot::{
+    traits::implementations::{KeyPair, TestingDef, WrappedSignatureKey},
+    types::SignatureKey,
+};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::net::SocketAddr;
-use std::net::{IpAddr, Ipv4Addr};
-use std::path::Path;
 use tracing::{error, instrument};
+
+use crate::{
+    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
+    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+};
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]

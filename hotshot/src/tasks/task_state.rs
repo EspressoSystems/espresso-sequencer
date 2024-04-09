@@ -1,10 +1,12 @@
-use crate::types::SystemContextHandle;
+use std::{
+    collections::{BTreeMap, HashMap},
+    marker::PhantomData,
+};
 
 use async_trait::async_trait;
-use hotshot_task_impls::builder::BuilderClient;
-use hotshot_task_impls::quorum_proposal::QuorumProposalTaskState;
 use hotshot_task_impls::{
-    consensus::ConsensusTaskState, da::DATaskState, quorum_vote::QuorumVoteTaskState,
+    builder::BuilderClient, consensus::ConsensusTaskState, da::DATaskState,
+    quorum_proposal::QuorumProposalTaskState, quorum_vote::QuorumVoteTaskState,
     request::NetworkRequestState, transactions::TransactionTaskState, upgrade::UpgradeTaskState,
     vid::VIDTaskState, view_sync::ViewSyncTaskState,
 };
@@ -12,9 +14,9 @@ use hotshot_types::traits::{
     consensus_api::ConsensusApi,
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
-use std::collections::BTreeMap;
-use std::{collections::HashMap, marker::PhantomData};
 use vbs::version::StaticVersionType;
+
+use crate::types::SystemContextHandle;
 
 /// Trait for creating task states.
 #[async_trait]

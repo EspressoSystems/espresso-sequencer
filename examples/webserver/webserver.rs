@@ -1,15 +1,15 @@
 //! web server example
-use hotshot_example_types::state_types::TestTypes;
-use hotshot_types::constants::WebServerVersion;
 use std::sync::Arc;
-use surf_disco::Url;
-use vbs::version::StaticVersionType;
 
 use async_compatibility_layer::{
     channel::oneshot,
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
+use hotshot_example_types::state_types::TestTypes;
+use hotshot_types::constants::WebServerVersion;
+use surf_disco::Url;
+use vbs::version::StaticVersionType;
 
 /// web server arguments
 #[derive(Parser, Debug)]

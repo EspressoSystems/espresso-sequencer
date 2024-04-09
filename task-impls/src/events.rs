@@ -1,9 +1,6 @@
-use crate::view_sync::ViewSyncPhase;
-
 use either::Either;
-use hotshot_types::data::VidDisperseShare;
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse},
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare},
     message::Proposal,
     simple_certificate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -17,6 +14,8 @@ use hotshot_types::{
     vid::VidCommitment,
 };
 use vbs::version::Version;
+
+use crate::view_sync::ViewSyncPhase;
 
 /// Marker that the task completed
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]

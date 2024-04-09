@@ -1,10 +1,8 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::{config::NetworkConfig, OrchestratorVersion};
 use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
-
 use hotshot_types::{
     constants::Version01,
     traits::{election::ElectionConfig, signature_key::SignatureKey},
@@ -14,6 +12,8 @@ use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
 use vbs::BinarySerializer;
+
+use crate::{config::NetworkConfig, OrchestratorVersion};
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client

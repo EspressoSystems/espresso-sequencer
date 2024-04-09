@@ -1,5 +1,9 @@
 //! Contains the [`ConsensusApi`] trait.
 
+use std::{num::NonZeroUsize, time::Duration};
+
+use async_trait::async_trait;
+
 use crate::{
     event::Event,
     traits::{
@@ -7,9 +11,6 @@ use crate::{
         signature_key::SignatureKey,
     },
 };
-use async_trait::async_trait;
-
-use std::{num::NonZeroUsize, time::Duration};
 
 /// The API that tasks use to talk to the system
 /// TODO we plan to drop this <https://github.com/EspressoSystems/HotShot/issues/2294>

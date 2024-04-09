@@ -1,11 +1,18 @@
+use std::{
+    env, fs,
+    net::SocketAddr,
+    num::NonZeroUsize,
+    path::{Path, PathBuf},
+    time::Duration,
+    vec,
+};
+
 use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use libp2p::{Multiaddr, PeerId};
 use serde_inline_default::serde_inline_default;
-use std::{env, net::SocketAddr, num::NonZeroUsize, path::PathBuf, time::Duration, vec};
-use std::{fs, path::Path};
 use surf_disco::Url;
 use thiserror::Error;
 use toml;

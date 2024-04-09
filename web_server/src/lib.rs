@@ -3,19 +3,18 @@
 /// Configuration for the webserver
 pub mod config;
 
-use crate::config::{MAX_TXNS, MAX_VIEWS, TX_BATCH_SIZE};
-use async_compatibility_layer::channel::OneShotReceiver;
-use async_lock::RwLock;
-use clap::Args;
-use futures::FutureExt;
-
-use hotshot_types::traits::signature_key::SignatureKey;
-use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
     collections::{BTreeMap, HashMap},
     io,
     path::PathBuf,
 };
+
+use async_compatibility_layer::channel::OneShotReceiver;
+use async_lock::RwLock;
+use clap::Args;
+use futures::FutureExt;
+use hotshot_types::traits::signature_key::SignatureKey;
+use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use tide_disco::{
     api::ApiError,
     error::ServerError,
@@ -24,6 +23,8 @@ use tide_disco::{
 };
 use tracing::{debug, info};
 use vbs::version::StaticVersionType;
+
+use crate::config::{MAX_TXNS, MAX_VIEWS, TX_BATCH_SIZE};
 
 /// Convience alias for a lock over the state of the app
 /// TODO this is used in two places. It might be clearer to just inline

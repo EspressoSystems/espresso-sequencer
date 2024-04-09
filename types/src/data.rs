@@ -3,6 +3,24 @@
 //! This module provides types for representing consensus internal state, such as leaves,
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
+use std::{
+    collections::BTreeMap,
+    fmt::{Debug, Display},
+    hash::Hash,
+    marker::PhantomData,
+};
+
+use anyhow::{ensure, Result};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use bincode::Options;
+use committable::{Commitment, Committable, RawCommitmentBuilder};
+use derivative::Derivative;
+use jf_primitives::vid::VidDisperse as JfVidDisperse;
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use snafu::Snafu;
+use tracing::error;
+
 use crate::{
     message::Proposal,
     simple_certificate::{
@@ -23,22 +41,6 @@ use crate::{
     vid::{VidCommitment, VidCommon, VidSchemeType, VidShare},
     vote::{Certificate, HasViewNumber},
 };
-use anyhow::{ensure, Result};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bincode::Options;
-use committable::{Commitment, Committable, RawCommitmentBuilder};
-use derivative::Derivative;
-use jf_primitives::vid::VidDisperse as JfVidDisperse;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use snafu::Snafu;
-use std::{
-    collections::BTreeMap,
-    fmt::{Debug, Display},
-    hash::Hash,
-    marker::PhantomData,
-};
-use tracing::error;
 
 /// Type-safe wrapper around `u64` so we know the thing we're talking about is a view number.
 #[derive(
@@ -669,9 +671,10 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 
 pub mod null_block {
     #![allow(missing_docs)]
-    use crate::vid::{vid_scheme, VidCommitment};
     use jf_primitives::vid::VidScheme;
     use memoize::memoize;
+
+    use crate::vid::{vid_scheme, VidCommitment};
 
     /// The commitment for a null block payload.
     ///

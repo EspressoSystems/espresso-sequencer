@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, SendError, Sender};
 use async_compatibility_layer::art::async_timeout;
@@ -8,14 +7,11 @@ use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
 };
-use futures::{future::select_all, Future};
-
 #[cfg(async_executor_impl = "async-std")]
 use futures::future::join_all;
-
 #[cfg(async_executor_impl = "tokio")]
 use futures::future::try_join_all;
-
+use futures::{future::select_all, Future};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::{
     sync::RwLock,
@@ -335,13 +331,15 @@ impl TaskRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashSet, time::Duration};
+
     use async_broadcast::broadcast;
     #[cfg(async_executor_impl = "async-std")]
     use async_std::task::sleep;
-    use std::{collections::HashSet, time::Duration};
     #[cfg(async_executor_impl = "tokio")]
     use tokio::time::sleep;
+
+    use super::*;
 
     #[derive(Default)]
     pub struct DummyHandle {

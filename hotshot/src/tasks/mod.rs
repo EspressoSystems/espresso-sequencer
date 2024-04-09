@@ -3,13 +3,10 @@
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
 
-use crate::tasks::task_state::CreateTaskState;
-use crate::ConsensusApi;
+use std::{sync::Arc, time::Duration};
 
-use crate::types::SystemContextHandle;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-
 use async_lock::RwLock;
 use hotshot_task::task::{Task, TaskRegistry};
 use hotshot_task_impls::{
@@ -25,21 +22,19 @@ use hotshot_task_impls::{
     vid::VIDTaskState,
     view_sync::ViewSyncTaskState,
 };
-use hotshot_types::constants::VERSION_0_1;
 use hotshot_types::{
-    constants::Version01,
-    message::Message,
-    traits::{election::Membership, network::ConnectedNetwork, storage::Storage},
-};
-use hotshot_types::{
-    message::Messages,
+    constants::{Version01, VERSION_0_1},
+    message::{Message, Messages},
     traits::{
-        network::ConsensusIntentEvent,
+        election::Membership,
+        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        storage::Storage,
     },
 };
-use std::{sync::Arc, time::Duration};
 use tracing::error;
+
+use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 
 /// event for global event stream
 #[derive(Clone, Debug)]

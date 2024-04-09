@@ -6,10 +6,10 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot_example_types::state_types::TestTypes;
 use tracing::instrument;
 
-use crate::infra::read_orchestrator_init_config;
-use crate::infra::run_orchestrator;
-use crate::infra::OrchestratorArgs;
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork};
+use crate::{
+    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
+    types::{DANetwork, NodeImpl, QuorumNetwork},
+};
 /// general infra used for this example
 #[path = "../infra/mod.rs"]
 pub mod infra;

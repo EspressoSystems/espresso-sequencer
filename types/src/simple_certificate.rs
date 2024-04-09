@@ -7,9 +7,9 @@ use std::{
 };
 
 use anyhow::{ensure, Result};
-
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     data::{serialize_signature2, Leaf},
@@ -18,13 +18,12 @@ use crate::{
         ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
-        election::Membership, node_implementation::ConsensusTime, node_implementation::NodeType,
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
 };
-
-use serde::{Deserialize, Serialize};
 
 /// Trait which allows use to inject different threshold calculations into a Certificate type
 pub trait Threshold<TYPES: NodeType> {

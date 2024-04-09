@@ -1,17 +1,20 @@
 // use ark_bls12_381::Parameters as Param381;
+use std::{marker::PhantomData, num::NonZeroU64};
+
 use ethereum_types::U256;
-use hotshot_types::signature_key::BLSPubKey;
-use hotshot_types::traits::{
-    election::{ElectionConfig, Membership},
-    node_implementation::NodeType,
-    signature_key::{SignatureKey, StakeTableEntryType},
+use hotshot_types::{
+    signature_key::BLSPubKey,
+    traits::{
+        election::{ElectionConfig, Membership},
+        node_implementation::NodeType,
+        signature_key::{SignatureKey, StakeTableEntryType},
+    },
+    PeerConfig,
 };
-use hotshot_types::PeerConfig;
 #[cfg(feature = "randomized-leader-election")]
 use rand::{rngs::StdRng, Rng};
 #[allow(deprecated)]
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, num::NonZeroU64};
 use tracing::debug;
 
 /// Dummy implementation of [`Membership`]

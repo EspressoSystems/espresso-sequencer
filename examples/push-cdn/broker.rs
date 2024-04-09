@@ -4,11 +4,9 @@
 use anyhow::{Context, Result};
 use cdn_broker::{Broker, Config, ConfigBuilder};
 use clap::Parser;
-
 use hotshot::traits::implementations::{KeyPair, ProductionDef, WrappedSignatureKey};
 use hotshot_example_types::node_types::TestTypes;
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use sha2::Digest;
 
 #[derive(Parser, Debug)]

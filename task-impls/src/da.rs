@@ -1,13 +1,9 @@
-use crate::{
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::broadcast_event,
-    vote_collection::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
-};
+use std::{marker::PhantomData, sync::Arc};
+
 use async_broadcast::Sender;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::spawn_blocking;
-
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, View},
@@ -17,6 +13,7 @@ use hotshot_types::{
     simple_certificate::DACertificate,
     simple_vote::{DAData, DAVote},
     traits::{
+        block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
         network::{ConnectedNetwork, ConsensusIntentEvent},
@@ -28,13 +25,17 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use sha2::{Digest, Sha256};
-
-use crate::vote_collection::HandleVoteEvent;
-use hotshot_types::traits::block_contents::vid_commitment;
-use std::{marker::PhantomData, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, instrument, warn};
+
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::broadcast_event,
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
+    },
+};
 
 /// Alias for Optional type for Vote Collectors
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;

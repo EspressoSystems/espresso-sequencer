@@ -3,9 +3,8 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::parse::Result;
 use syn::{
-    parse::{Parse, ParseStream},
+    parse::{Parse, ParseStream, Result},
     parse_macro_input, Expr, ExprArray, ExprPath, ExprTuple, Ident, LitBool, Token,
 };
 

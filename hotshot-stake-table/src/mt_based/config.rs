@@ -1,8 +1,9 @@
 //! Config file for stake table
-use crate::utils::ToFields;
 use ark_ff::PrimeField;
 use ark_std::vec;
 use jf_primitives::{crhf::FixedLengthRescueCRHF, signatures::bls_over_bn254};
+
+use crate::utils::ToFields;
 
 /// Branch of merkle tree.
 /// Set to 3 because we are currently using RATE-3 rescue hash function

@@ -1,8 +1,9 @@
 //! Types and structs related to the stake table
 
-use crate::traits::signature_key::{SignatureKey, StakeTableEntryType};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
+
+use crate::traits::signature_key::{SignatureKey, StakeTableEntryType};
 
 /// Stake table entry
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash, Eq)]

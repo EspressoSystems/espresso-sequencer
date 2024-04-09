@@ -8,6 +8,8 @@
 //! This crate and all downstream crates should talk to the VID scheme only
 //! via the traits exposed here.
 
+use std::{fmt::Debug, ops::Range};
+
 use ark_bn254::Bn254;
 use jf_primitives::{
     pcs::{
@@ -28,7 +30,6 @@ use jf_primitives::{
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::{fmt::Debug, ops::Range};
 
 /// VID scheme constructor.
 ///

@@ -1,10 +1,12 @@
-use crate::predicates::{Predicate, PredicateResult};
+use std::{sync::Arc, time::Duration};
+
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_timeout;
 use hotshot_task::task::{Task, TaskRegistry, TaskState};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::{sync::Arc, time::Duration};
+
+use crate::predicates::{Predicate, PredicateResult};
 
 pub const RECV_TIMEOUT: Duration = Duration::from_millis(250);
 

@@ -1,20 +1,22 @@
 //! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
-use crate::{traits::NodeImplementation, types::Event, SystemContext};
-use async_broadcast::{InactiveReceiver, Receiver, Sender};
+use std::sync::Arc;
 
+use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 use futures::Stream;
-
-use hotshot_task_impls::events::HotShotEvent;
-use hotshot_types::traits::election::Membership;
-
 use hotshot_task::task::TaskRegistry;
-use hotshot_types::{boxed_sync, BoxSyncFuture};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    consensus::Consensus, data::Leaf, error::HotShotError, traits::node_implementation::NodeType,
+    boxed_sync,
+    consensus::Consensus,
+    data::Leaf,
+    error::HotShotError,
+    traits::{election::Membership, node_implementation::NodeType},
+    BoxSyncFuture,
 };
-use std::sync::Arc;
+
+use crate::{traits::NodeImplementation, types::Event, SystemContext};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///

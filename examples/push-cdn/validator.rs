@@ -2,11 +2,10 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
+use hotshot_orchestrator::client::ValidatorArgs;
 use tracing::{info, instrument};
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun};
-
-use hotshot_orchestrator::client::ValidatorArgs;
 
 /// types used for this example
 pub mod types;

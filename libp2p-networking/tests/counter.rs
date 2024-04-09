@@ -1,23 +1,24 @@
 #![allow(clippy::panic)]
 
 mod common;
-use crate::common::print_connections;
+use std::{fmt::Debug, sync::Arc, time::Duration};
+
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::prelude::StreamExt;
 use common::{test_bed, HandleSnafu, HandleWithState, TestError};
 use hotshot_types::constants::{Version01, STATIC_VER_0_1};
 use libp2p_networking::network::{NetworkEvent, NetworkNodeHandleError};
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+#[cfg(async_executor_impl = "tokio")]
+use tokio_stream::StreamExt;
 use tracing::{debug, error, info, instrument, warn};
 use vbs::{BinarySerializer, Serializer};
 
-#[cfg(async_executor_impl = "async-std")]
-use async_std::prelude::StreamExt;
-#[cfg(async_executor_impl = "tokio")]
-use tokio_stream::StreamExt;
+use crate::common::print_connections;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 

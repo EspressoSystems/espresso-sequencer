@@ -1,7 +1,5 @@
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
+use std::{collections::HashMap, sync::Arc};
+
 use async_broadcast::{Receiver, Sender};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
@@ -30,11 +28,14 @@ use hotshot_types::{
     utils::{Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use std::collections::HashMap;
-use std::sync::Arc;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+};
 
 /// Vote dependency types.
 #[derive(Debug, PartialEq)]

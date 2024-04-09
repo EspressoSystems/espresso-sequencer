@@ -1,6 +1,6 @@
-use async_compatibility_layer::art::async_sleep;
 use std::time::{Duration, Instant};
 
+use async_compatibility_layer::art::async_sleep;
 use hotshot_builder_api::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::{BuildError, Error as BuilderApiError},

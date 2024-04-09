@@ -1,9 +1,11 @@
-use async_broadcast::{Receiver, RecvError};
-use futures::future::BoxFuture;
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
-use futures::FutureExt;
 use std::future::Future;
+
+use async_broadcast::{Receiver, RecvError};
+use futures::{
+    future::BoxFuture,
+    stream::{FuturesUnordered, StreamExt},
+    FutureExt,
+};
 
 /// Type which describes the idea of waiting for a dependency to complete
 pub trait Dependency<T> {
@@ -175,8 +177,9 @@ impl<T: Clone + Send + Sync + 'static> Dependency<T> for EventDependency<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AndDependency, Dependency, EventDependency, OrDependency};
     use async_broadcast::{broadcast, Receiver};
+
+    use super::{AndDependency, Dependency, EventDependency, OrDependency};
 
     fn eq_dep(rx: Receiver<usize>, val: usize) -> EventDependency<usize> {
         EventDependency {

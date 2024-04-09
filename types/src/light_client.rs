@@ -1,5 +1,7 @@
 //! Types and structs associated with light client state
 
+use std::collections::HashMap;
+
 use ark_ed_on_bn254::EdwardsConfig as Config;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -8,7 +10,6 @@ use jf_primitives::signatures::schnorr;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tagged_base64::tagged;
 
 /// Base field in the prover circuit

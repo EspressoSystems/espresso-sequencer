@@ -3,7 +3,6 @@ use std::{
     mem::size_of,
 };
 
-use crate::node_types::TestTypes;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, Leaf},
@@ -18,6 +17,8 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use time::OffsetDateTime;
+
+use crate::node_types::TestTypes;
 
 /// The transaction in a [`TestBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]

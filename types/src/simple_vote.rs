@@ -3,8 +3,8 @@
 use std::{fmt::Debug, hash::Hash};
 
 use committable::{Commitment, Committable};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use vbs::version::Version;
 
 use crate::{
     data::Leaf,
@@ -12,7 +12,6 @@ use crate::{
     vid::VidCommitment,
     vote::{HasViewNumber, Vote},
 };
-use vbs::version::Version;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.

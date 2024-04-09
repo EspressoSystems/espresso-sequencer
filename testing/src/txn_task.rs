@@ -1,4 +1,5 @@
-use crate::test_runner::{HotShotTaskCompleted, Node};
+use std::time::Duration;
+
 use async_broadcast::{Receiver, TryRecvError};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 #[cfg(async_executor_impl = "async-std")]
@@ -10,9 +11,8 @@ use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 
-use std::time::Duration;
-
 use super::GlobalTestEvent;
+use crate::test_runner::{HotShotTaskCompleted, Node};
 
 // the obvious idea here is to pass in a "stream" that completes every `n` seconds
 // the stream construction can definitely be fancier but that's the baseline idea

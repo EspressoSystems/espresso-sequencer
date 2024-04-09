@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use either::Either;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency, OrDependency},
@@ -21,9 +23,6 @@ use hotshot_types::{
     },
     vote::HasViewNumber,
 };
-
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument};

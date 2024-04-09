@@ -15,12 +15,15 @@ use futures::{
 use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
-use super::{node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{
-    data::ViewNumber,
-    message::{MessagePurpose, SequencingMessage},
-    BoxSyncFuture,
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+    hash::Hash,
+    pin::Pin,
+    sync::Arc,
+    time::Duration,
 };
+
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -30,15 +33,14 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{
-    collections::{BTreeSet, HashMap},
-    fmt::Debug,
-    hash::Hash,
-    pin::Pin,
-    sync::Arc,
-    time::Duration,
-};
 use vbs::version::StaticVersionType;
+
+use super::{node_implementation::NodeType, signature_key::SignatureKey};
+use crate::{
+    data::ViewNumber,
+    message::{MessagePurpose, SequencingMessage},
+    BoxSyncFuture,
+};
 
 /// for any errors we decide to add to memory network
 #[derive(Debug, Snafu, Serialize, Deserialize)]

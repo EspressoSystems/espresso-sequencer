@@ -1,5 +1,7 @@
 //! Events that a `HotShot` instance can emit
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -9,8 +11,6 @@ use crate::{
     simple_certificate::QuorumCertificate,
     traits::{node_implementation::NodeType, ValidatedState},
 };
-
-use std::sync::Arc;
 /// A status event emitted by a `HotShot` instance
 ///
 /// This includes some metadata, such as the stage and view number that the event was generated in,
@@ -60,8 +60,9 @@ pub type LeafChain<TYPES> = Vec<LeafInfo<TYPES>>;
 
 /// Utilities for converting between HotShotError and a string.
 pub mod error_adaptor {
-    use super::{Arc, Deserialize, HotShotError, NodeType};
     use serde::{de::Deserializer, ser::Serializer};
+
+    use super::{Arc, Deserialize, HotShotError, NodeType};
 
     /// Convert a HotShotError into a string
     ///

@@ -2,14 +2,12 @@
 /// types used for this example
 pub mod types;
 
-use crate::infra::read_orchestrator_init_config;
-use crate::infra::OrchestratorArgs;
-use crate::types::ThisRun;
-use crate::{
-    infra::run_orchestrator,
-    types::{DANetwork, NodeImpl, QuorumNetwork},
-};
 use std::sync::Arc;
+
+use crate::{
+    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
+    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+};
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]

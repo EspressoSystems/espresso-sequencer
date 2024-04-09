@@ -1,24 +1,25 @@
-use crate::{
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task, AnyhowTracing},
-    vote_collection::{create_vote_accumulator, AccumulatorInfo, VoteCollectionTaskState},
+use core::time::Duration;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
 };
+
 use anyhow::{ensure, Context, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use chrono::Utc;
 use committable::Committable;
-use core::time::Duration;
 use futures::future::{join_all, FutureExt};
 use hotshot_task::task::{Task, TaskState};
-use hotshot_types::data::null_block;
-use hotshot_types::event::LeafInfo;
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal},
-    event::{Event, EventType},
+    constants::LOOK_AHEAD,
+    data::{null_block, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence},
+    event::{Event, EventType, LeafInfo},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
@@ -37,20 +38,18 @@ use hotshot_types::{
     vid::VidCommitment,
     vote::{Certificate, HasViewNumber},
 };
-use hotshot_types::{constants::LOOK_AHEAD, data::ViewChangeEvidence};
-use vbs::version::Version;
-
-use crate::vote_collection::HandleVoteEvent;
-use chrono::Utc;
-use hotshot_types::data::VidDisperseShare;
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+use vbs::version::Version;
+
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task, AnyhowTracing},
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
+    },
+};
 
 /// Alias for the block payload commitment and the associated metadata.
 pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {

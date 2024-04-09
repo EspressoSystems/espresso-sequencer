@@ -3,24 +3,33 @@
 //! To run the web server, see the `./web_server/` folder in this repo.
 //!
 
-use async_compatibility_layer::channel::{unbounded, UnboundedReceiver, UnboundedSender};
+use std::{
+    collections::{btree_map::Entry, hash_map::DefaultHasher, BTreeMap, BTreeSet},
+    hash::{Hash, Hasher},
+    num::NonZeroUsize,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
-    channel::{oneshot, OneShotSender},
+    channel::{oneshot, unbounded, OneShotSender, UnboundedReceiver, UnboundedSender},
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
 use derive_more::{Deref, DerefMut};
-use hotshot_types::traits::network::AsyncGenerator;
 use hotshot_types::{
     boxed_sync,
     constants::{Version01, VERSION_0_1},
     message::{Message, MessagePurpose},
     traits::{
         network::{
-            ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg, NetworkReliability,
-            TestableNetworkingImplementation, ViewMessage, WebServerNetworkError,
+            AsyncGenerator, ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
+            NetworkReliability, TestableNetworkingImplementation, ViewMessage,
+            WebServerNetworkError,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -30,20 +39,7 @@ use hotshot_types::{
 use hotshot_web_server::{self, config};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
-use std::num::NonZeroUsize;
-use std::{
-    collections::{btree_map::Entry, BTreeSet},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-use surf_disco::error::ClientError;
-use surf_disco::Url;
+use surf_disco::{error::ClientError, Url};
 use tracing::{debug, error, info, warn};
 use vbs::{
     version::{StaticVersionType, Version},

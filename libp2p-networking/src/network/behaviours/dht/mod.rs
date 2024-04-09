@@ -8,8 +8,7 @@ use std::{
 /// a local caching layer for the DHT key value pairs
 use futures::channel::oneshot::Sender;
 use lazy_static::lazy_static;
-use libp2p::kad::Event as KademliaEvent;
-use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour};
+use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour, Event as KademliaEvent};
 use libp2p::{
     kad::{
         /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapError, BootstrapOk,

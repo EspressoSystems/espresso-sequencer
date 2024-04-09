@@ -1,19 +1,12 @@
 use std::{cmp::max, marker::PhantomData};
 
+use committable::Committable;
+use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
-use sha2::{Digest, Sha256};
-
-use crate::task_helpers::{
-    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
-};
-use committable::Committable;
-
-use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
-
 use hotshot_types::{
     data::{DAProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
     message::Proposal,
@@ -22,17 +15,19 @@ use hotshot_types::{
         ViewSyncFinalizeCertificate2,
     },
     simple_vote::{
-        DAData, DAVote, TimeoutData, TimeoutVote, UpgradeProposalData, UpgradeVote,
-        ViewSyncFinalizeData, ViewSyncFinalizeVote,
+        DAData, DAVote, QuorumData, QuorumVote, TimeoutData, TimeoutVote, UpgradeProposalData,
+        UpgradeVote, ViewSyncFinalizeData, ViewSyncFinalizeVote,
     },
     traits::{
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+use sha2::{Digest, Sha256};
 
-use hotshot_types::simple_vote::QuorumData;
-use hotshot_types::simple_vote::QuorumVote;
+use crate::task_helpers::{
+    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
+};
 
 #[derive(Clone)]
 pub struct TestView {

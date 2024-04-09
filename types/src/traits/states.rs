@@ -4,6 +4,10 @@
 //! compatibilities over the current network state, which is modified by the transactions contained
 //! within blocks.
 
+use std::{error::Error, fmt::Debug, future::Future, hash::Hash};
+
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
 use super::block_contents::TestableBlock;
 use crate::{
     data::Leaf,
@@ -12,8 +16,6 @@ use crate::{
         BlockPayload,
     },
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, future::Future, hash::Hash};
 
 /// Instance-level state, which allows us to fetch missing validated state.
 pub trait InstanceState: Debug + Send + Sync {}

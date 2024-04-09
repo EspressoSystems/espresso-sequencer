@@ -2,20 +2,20 @@
 /// types used for this example
 pub mod types;
 
-use crate::infra::read_orchestrator_init_config;
-use crate::infra::OrchestratorArgs;
-use crate::types::ThisRun;
-use crate::{
-    infra::run_orchestrator,
-    types::{DANetwork, NodeImpl, QuorumNetwork},
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use async_compatibility_layer::{
+    art::async_spawn,
+    logging::{setup_backtrace, setup_logging},
 };
-use async_compatibility_layer::art::async_spawn;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
-use std::net::SocketAddr;
-use std::net::{IpAddr, Ipv4Addr};
 use tracing::instrument;
+
+use crate::{
+    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
+    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+};
 
 /// general infra used for this example
 #[path = "../infra/mod.rs"]

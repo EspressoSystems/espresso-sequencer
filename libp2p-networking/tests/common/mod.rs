@@ -1,6 +1,14 @@
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    num::NonZeroUsize,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
+
 use async_compatibility_layer::{
-    art::async_sleep,
-    art::async_spawn,
+    art::{async_sleep, async_spawn},
     async_primitives::subscribable_mutex::SubscribableMutex,
     channel::{bounded, RecvError},
     logging::{setup_backtrace, setup_logging},
@@ -14,14 +22,6 @@ use libp2p_networking::network::{
     NetworkNodeType,
 };
 use snafu::{ResultExt, Snafu};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    num::NonZeroUsize,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
 use tracing::{info, instrument, warn};
 
 #[derive(Clone, Debug)]

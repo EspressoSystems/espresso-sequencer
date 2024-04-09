@@ -1,26 +1,27 @@
 #![allow(clippy::panic)]
-use std::marker::PhantomData;
+use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
-use hotshot_example_types::{
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    node_types::{MemoryImpl, TestTypes},
-    state_types::{TestInstanceState, TestValidatedState},
-};
-
-use crate::test_builder::TestMetadata;
+use async_broadcast::{Receiver, Sender};
+use async_lock::RwLockUpgradableReadGuard;
+use bitvec::bitvec;
 use committable::Committable;
 use ethereum_types::U256;
 use hotshot::{
     types::{BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_example_types::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    node_types::{MemoryImpl, TestTypes},
+    state_types::{TestInstanceState, TestValidatedState},
+};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, VidDisperse, ViewNumber},
+    data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewNumber},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{DACertificate, QuorumCertificate},
-    simple_vote::{DAData, DAVote, SimpleVote},
+    simple_vote::{DAData, DAVote, QuorumData, QuorumVote, SimpleVote},
     traits::{
         block_contents::{vid_commitment, BlockHeader, TestableBlock},
         consensus_api::ConsensusApi,
@@ -29,25 +30,14 @@ use hotshot_types::{
         states::ValidatedState,
         BlockPayload,
     },
+    utils::{View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidSchemeType},
-    vote::HasViewNumber,
+    vote::{Certificate, HasViewNumber, Vote},
 };
-
-use async_broadcast::{Receiver, Sender};
-use async_lock::RwLockUpgradableReadGuard;
-use bitvec::bitvec;
-use hotshot_types::simple_vote::QuorumData;
-use hotshot_types::simple_vote::QuorumVote;
-use hotshot_types::utils::View;
-use hotshot_types::utils::ViewInner;
-use hotshot_types::vote::Certificate;
-use hotshot_types::vote::Vote;
-
 use jf_primitives::vid::VidScheme;
-
-use hotshot_types::data::VidDisperseShare;
 use serde::Serialize;
-use std::{fmt::Debug, hash::Hash, sync::Arc};
+
+use crate::test_builder::TestMetadata;
 
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics

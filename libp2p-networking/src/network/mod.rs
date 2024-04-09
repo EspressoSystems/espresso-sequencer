@@ -7,21 +7,13 @@ pub mod error;
 /// functionality of a libp2p network node
 mod node;
 
-pub use self::{
-    def::NetworkDef,
-    error::NetworkError,
-    node::{
-        network_node_handle_error, spawn_network_node, MeshParams, NetworkNode, NetworkNodeConfig,
-        NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
-        NetworkNodeHandleError, NetworkNodeReceiver,
-    },
-};
+use std::{collections::HashSet, fmt::Debug, str::FromStr};
 
-use self::behaviours::{
-    dht::DHTEvent,
-    request_response::{Request, Response},
-};
 use futures::channel::oneshot::{self, Sender};
+#[cfg(async_executor_impl = "async-std")]
+use libp2p::dns::async_std::Transport as DnsTransport;
+#[cfg(async_executor_impl = "tokio")]
+use libp2p::dns::tokio::Transport as DnsTransport;
 use libp2p::{
     build_multiaddr,
     core::{muxing::StreamMuxerBox, transport::Boxed},
@@ -33,18 +25,26 @@ use libp2p::{
     Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
-use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, str::FromStr};
-use tracing::instrument;
-
-#[cfg(async_executor_impl = "async-std")]
-use libp2p::dns::async_std::Transport as DnsTransport;
-#[cfg(async_executor_impl = "tokio")]
-use libp2p::dns::tokio::Transport as DnsTransport;
 #[cfg(async_executor_impl = "async-std")]
 use quic::async_std::Transport as QuicTransport;
 #[cfg(async_executor_impl = "tokio")]
 use quic::tokio::Transport as QuicTransport;
+use serde::{Deserialize, Serialize};
+use tracing::instrument;
+
+use self::behaviours::{
+    dht::DHTEvent,
+    request_response::{Request, Response},
+};
+pub use self::{
+    def::NetworkDef,
+    error::NetworkError,
+    node::{
+        network_node_handle_error, spawn_network_node, MeshParams, NetworkNode, NetworkNodeConfig,
+        NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
+        NetworkNodeHandleError, NetworkNodeReceiver,
+    },
+};
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 

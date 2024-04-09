@@ -21,11 +21,13 @@ use hotshot_builder_api::{
     builder::{BuildError, Error, Options},
     data_source::BuilderDataSource,
 };
-use hotshot_types::traits::block_contents::BlockHeader;
-use hotshot_types::traits::block_contents::Transaction;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
-    traits::{block_contents::vid_commitment, election::Membership, node_implementation::NodeType},
+    traits::{
+        block_contents::{vid_commitment, BlockHeader, Transaction},
+        election::Membership,
+        node_implementation::NodeType,
+    },
     utils::BuilderCommitment,
     vid::VidCommitment,
 };

@@ -1,4 +1,35 @@
 #![allow(clippy::panic)]
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+};
+
+use async_broadcast::broadcast;
+use either::Either::{self, Left, Right};
+use futures::future::join_all;
+use hotshot::{
+    traits::TestableNodeImplementation, types::SystemContextHandle, HotShotInitializer,
+    Memberships, SystemContext,
+};
+use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_task::task::{Task, TaskRegistry, TestTask};
+use hotshot_types::{
+    consensus::ConsensusMetricsValue,
+    constants::EVENT_CHANNEL_SIZE,
+    data::Leaf,
+    message::Message,
+    simple_certificate::QuorumCertificate,
+    traits::{
+        election::Membership,
+        network::ConnectedNetwork,
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+    },
+    HotShotConfig, ValidatorConfig,
+};
+#[allow(deprecated)]
+use tracing::info;
+
 use super::{
     completion_task::CompletionTask,
     overall_safety_task::{OverallSafetyTask, RoundCtx},
@@ -12,37 +43,6 @@ use crate::{
     txn_task::TxnTaskDescription,
     view_sync_task::ViewSyncTask,
 };
-use async_broadcast::broadcast;
-use either::Either::{self, Left, Right};
-use futures::future::join_all;
-use hotshot::{types::SystemContextHandle, Memberships};
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-
-use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
-
-use hotshot_task::task::{Task, TaskRegistry, TestTask};
-use hotshot_types::{
-    consensus::ConsensusMetricsValue,
-    data::Leaf,
-    traits::{
-        election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
-    },
-    HotShotConfig, ValidatorConfig,
-};
-use hotshot_types::{constants::EVENT_CHANNEL_SIZE, simple_certificate::QuorumCertificate};
-use hotshot_types::{
-    message::Message,
-    traits::{network::ConnectedNetwork, node_implementation::NodeImplementation},
-};
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
-
-#[allow(deprecated)]
-use tracing::info;
 
 /// a node participating in a test
 #[derive(Clone)]

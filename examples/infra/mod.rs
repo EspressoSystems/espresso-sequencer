@@ -1,36 +1,46 @@
 #![allow(clippy::panic)]
-use async_compatibility_layer::art::async_sleep;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_trait::async_trait;
-use cdn_broker::reexports::crypto::signature::KeyPair;
-use cdn_broker::reexports::message::Topic;
-use chrono::Utc;
-use clap::Parser;
-use clap::{Arg, Command};
-use futures::StreamExt;
-use hotshot::traits::implementations::{
-    derive_libp2p_peer_id, CombinedNetworks, PushCdnNetwork, WrappedSignatureKey,
+use std::{
+    fmt::Debug,
+    fs,
+    marker::PhantomData,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    num::NonZeroUsize,
+    time::{Duration, Instant},
 };
-use hotshot::traits::BlockPayload;
+
+use async_compatibility_layer::{
+    art::async_sleep,
+    logging::{setup_backtrace, setup_logging},
+};
+use async_trait::async_trait;
+use cdn_broker::reexports::{crypto::signature::KeyPair, message::Topic};
+use chrono::Utc;
+use clap::{Arg, Command, Parser};
+use futures::StreamExt;
 use hotshot::{
     traits::{
-        implementations::{Libp2pNetwork, WebServerNetwork},
-        NodeImplementation,
+        implementations::{
+            derive_libp2p_peer_id, CombinedNetworks, Libp2pNetwork, PushCdnNetwork,
+            WebServerNetwork, WrappedSignatureKey,
+        },
+        BlockPayload, NodeImplementation,
     },
     types::SystemContextHandle,
     Memberships, Networks, SystemContext,
 };
-use hotshot_example_types::node_types::{Libp2pImpl, PushCdnImpl};
-use hotshot_example_types::storage_types::TestStorage;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    node_types::{Libp2pImpl, PushCdnImpl},
     state_types::TestInstanceState,
+    storage_types::TestStorage,
 };
-use hotshot_orchestrator::config::NetworkConfigSource;
 use hotshot_orchestrator::{
     self,
     client::{BenchResults, OrchestratorClient, ValidatorArgs},
-    config::{CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, WebServerConfig},
+    config::{
+        CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, NetworkConfigSource,
+        WebServerConfig,
+    },
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -46,15 +56,7 @@ use hotshot_types::{
     },
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
-
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::num::NonZeroUsize;
-use std::time::Duration;
-use std::{fs, time::Instant};
+use rand::{rngs::StdRng, SeedableRng};
 use surf_disco::Url;
 use tracing::{error, info, warn};
 use vbs::version::StaticVersionType;

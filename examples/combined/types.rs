@@ -1,9 +1,11 @@
-use crate::infra::CombinedDARun;
+use std::fmt::Debug;
+
 use hotshot::traits::implementations::CombinedNetworks;
 use hotshot_example_types::{state_types::TestTypes, storage_types::TestStorage};
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+
+use crate::infra::CombinedDARun;
 
 /// dummy struct so we can choose types
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]

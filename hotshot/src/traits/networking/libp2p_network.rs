@@ -1,7 +1,20 @@
 //! Libp2p based/production networking implementation
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
-use super::NetworkingMetricsValue;
+#[cfg(feature = "hotshot-testing")]
+use std::str::FromStr;
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    net::SocketAddr,
+    num::NonZeroUsize,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use anyhow::anyhow;
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
@@ -39,39 +52,26 @@ use libp2p_identity::{
     ed25519::{self, SecretKey},
     Keypair, PeerId,
 };
-use libp2p_networking::network::NetworkNodeConfigBuilder;
-use libp2p_networking::{network::MeshParams, reexport::Multiaddr};
 use libp2p_networking::{
     network::{
         behaviours::request_response::{Request, Response},
-        spawn_network_node,
+        spawn_network_node, MeshParams,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
-        NetworkNodeConfig, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver,
-        NetworkNodeType,
+        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError,
+        NetworkNodeReceiver, NetworkNodeType,
     },
-    reexport::ResponseChannel,
+    reexport::{Multiaddr, ResponseChannel},
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
 use snafu::ResultExt;
-use std::num::NonZeroUsize;
-#[cfg(feature = "hotshot-testing")]
-use std::str::FromStr;
-use std::{
-    collections::BTreeSet,
-    fmt::Debug,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-use std::{collections::HashSet, net::SocketAddr};
 use tracing::{debug, error, info, instrument, warn};
 use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
 };
+
+use super::NetworkingMetricsValue;
 
 /// convenience alias for the type for bootstrap addresses
 /// concurrency primitives are needed for having tests

@@ -6,8 +6,9 @@
 //! - [`Histogram`]: stores multiple float values based for a graph (example usage: CPU %)
 //! - [`Label`]: Stores the last string (example usage: current version, network online/offline)
 
-use dyn_clone::DynClone;
 use std::fmt::Debug;
+
+use dyn_clone::DynClone;
 
 /// The metrics type.
 pub trait Metrics: Send + Sync + DynClone + Debug {
@@ -111,11 +112,12 @@ dyn_clone::clone_trait_object!(Label);
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
     };
+
+    use super::*;
 
     #[derive(Debug, Clone)]
     struct TestMetrics {

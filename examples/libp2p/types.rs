@@ -1,4 +1,5 @@
-use crate::infra::Libp2pDARun;
+use std::fmt::Debug;
+
 use hotshot::traits::implementations::Libp2pNetwork;
 use hotshot_example_types::{state_types::TestTypes, storage_types::TestStorage};
 use hotshot_types::{
@@ -6,7 +7,8 @@ use hotshot_types::{
     traits::node_implementation::{NodeImplementation, NodeType},
 };
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+
+use crate::infra::Libp2pDARun;
 
 /// dummy struct so we can choose types
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]

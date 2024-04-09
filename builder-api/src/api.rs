@@ -1,5 +1,5 @@
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
+
 use tide_disco::api::{Api, ApiError};
 use toml::{map::Entry, Value};
 use vbs::version::StaticVersionType;

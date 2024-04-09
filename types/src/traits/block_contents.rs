@@ -3,21 +3,22 @@
 //! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
 //! describe the behaviors that a block is expected to have.
 
-use crate::{
-    data::Leaf,
-    traits::{node_implementation::NodeType, ValidatedState},
-    utils::BuilderCommitment,
-    vid::{vid_scheme, VidCommitment, VidSchemeType},
-};
-use committable::{Commitment, Committable};
-use jf_primitives::vid::VidScheme;
-use serde::{de::DeserializeOwned, Serialize};
-
 use std::{
     error::Error,
     fmt::{Debug, Display},
     future::Future,
     hash::Hash,
+};
+
+use committable::{Commitment, Committable};
+use jf_primitives::vid::VidScheme;
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::{
+    data::Leaf,
+    traits::{node_implementation::NodeType, ValidatedState},
+    utils::BuilderCommitment,
+    vid::{vid_scheme, VidCommitment, VidSchemeType},
 };
 
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].

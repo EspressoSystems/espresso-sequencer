@@ -1,7 +1,9 @@
-use crate::network::NetworkNodeType;
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+
 use libp2p::{identity::Keypair, Multiaddr};
 use libp2p_identity::PeerId;
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+
+use crate::network::NetworkNodeType;
 
 /// replication factor for kademlia
 pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(20);

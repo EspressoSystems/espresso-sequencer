@@ -3,12 +3,13 @@
 mod config;
 mod internal;
 
-use self::internal::{to_merkle_path, Key, MerkleCommitment, MerkleProof, PersistentMerkleNode};
 use ark_std::{collections::HashMap, rand::SeedableRng, sync::Arc};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
 use serde::{Deserialize, Serialize};
+
+use self::internal::{to_merkle_path, Key, MerkleCommitment, MerkleProof, PersistentMerkleNode};
 
 /// Locally maintained stake table, generic over public key type `K`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,10 +223,11 @@ impl<K: Key> StakeTable<K> {
 
 #[cfg(test)]
 mod tests {
-    use super::StakeTable;
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
+
+    use super::StakeTable;
 
     // Hotshot use bn254::Fq as key type.
     type Key = ark_bn254::Fq;

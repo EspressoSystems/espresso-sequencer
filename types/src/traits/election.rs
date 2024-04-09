@@ -3,12 +3,12 @@
 // Needed to avoid the non-binding `let` warning.
 #![allow(clippy::let_underscore_untyped)]
 
-use super::node_implementation::NodeType;
-
-use crate::{traits::signature_key::SignatureKey, PeerConfig};
+use std::{collections::BTreeSet, fmt::Debug, hash::Hash, num::NonZeroU64};
 
 use snafu::Snafu;
-use std::{collections::BTreeSet, fmt::Debug, hash::Hash, num::NonZeroU64};
+
+use super::node_implementation::NodeType;
+use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
 /// Error for election problems
 #[derive(Snafu, Debug)]

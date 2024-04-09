@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::{events::HotShotEvent, helpers::calculate_vid_disperse};
 use async_broadcast::Receiver;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
@@ -23,6 +22,8 @@ use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use vbs::{version::StaticVersionType, BinarySerializer, Serializer};
+
+use crate::{events::HotShotEvent, helpers::calculate_vid_disperse};
 
 /// Type alias for consensus state wrapped in a lock.
 type LockedConsensusState<TYPES> = Arc<RwLock<Consensus<TYPES>>>;

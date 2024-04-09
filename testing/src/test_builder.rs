@@ -1,26 +1,24 @@
-use hotshot::traits::NetworkReliability;
-use hotshot_example_types::storage_types::TestStorage;
-use hotshot_orchestrator::config::ValidatorConfigFile;
-use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+
+use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
+use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_orchestrator::config::ValidatorConfigFile;
+use hotshot_types::{
+    traits::{election::Membership, node_implementation::NodeType},
+    ExecutionType, HotShotConfig, ValidatorConfig,
+};
 use tide_disco::Url;
 
-use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
-
-use hotshot_types::{
-    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
-};
-
-use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
 use super::{
-    overall_safety_task::OverallSafetyPropertiesDescription, txn_task::TxnTaskDescription,
+    completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
+    overall_safety_task::OverallSafetyPropertiesDescription,
+    txn_task::TxnTaskDescription,
 };
 use crate::{
     spinning_task::SpinningTaskDescription,
     test_launcher::{ResourceGenerators, TestLauncher},
     view_sync_task::ViewSyncTaskDescription,
 };
-use hotshot_example_types::state_types::TestInstanceState;
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {

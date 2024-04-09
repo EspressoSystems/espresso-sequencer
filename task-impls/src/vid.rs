@@ -1,8 +1,7 @@
-use crate::events::{HotShotEvent, HotShotTaskCompleted};
-use crate::helpers::{broadcast_event, calculate_vid_disperse};
+use std::{marker::PhantomData, sync::Arc};
+
 use async_broadcast::Sender;
 use async_lock::RwLock;
-
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
@@ -15,10 +14,12 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
 };
-
-use std::marker::PhantomData;
-use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
+
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, calculate_vid_disperse},
+};
 
 /// Tracks state of a VID task
 pub struct VIDTaskState<

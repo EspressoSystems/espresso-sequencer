@@ -1,13 +1,15 @@
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_compatibility_layer::channel::UnboundedSender;
+use std::collections::HashMap;
+
+use async_compatibility_layer::{
+    art::{async_sleep, async_spawn},
+    channel::UnboundedSender,
+};
 use libp2p::request_response::{Event, Message, OutboundRequestId, ResponseChannel};
 use libp2p_identity::PeerId;
-use std::collections::HashMap;
 use tracing::{error, info};
 
-use crate::network::{ClientRequest, NetworkEvent};
-
 use super::exponential_backoff::ExponentialBackoff;
+use crate::network::{ClientRequest, NetworkEvent};
 
 /// Request to direct message a peert
 #[derive(Debug)]

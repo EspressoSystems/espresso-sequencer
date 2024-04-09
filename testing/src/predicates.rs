@@ -1,14 +1,15 @@
-use hotshot_task_impls::{
-    consensus::ConsensusTaskState, events::HotShotEvent, events::HotShotEvent::*,
-};
-use hotshot_types::data::null_block;
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use hotshot::types::SystemContextHandle;
-
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_task_impls::{
+    consensus::ConsensusTaskState,
+    events::{HotShotEvent, HotShotEvent::*},
+};
+use hotshot_types::{
+    data::null_block,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum PredicateResult {

@@ -3,33 +3,31 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::data::{Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare};
-use crate::simple_certificate::{
-    DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
-    ViewSyncPreCommitCertificate2,
-};
-use crate::simple_vote::{
-    DAVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
-    ViewSyncPreCommitVote,
-};
-use crate::traits::election::Membership;
-use crate::traits::network::ResponseMessage;
-use crate::traits::signature_key::SignatureKey;
-use crate::vote::HasViewNumber;
-use crate::{
-    data::DAProposal,
-    simple_vote::QuorumVote,
-    traits::{
-        network::{DataRequest, NetworkMsg, ViewMessage},
-        node_implementation::{ConsensusTime, NodeType},
-    },
-};
+use std::{fmt::Debug, marker::PhantomData};
+
 use anyhow::{ensure, Result};
 use committable::Committable;
 use derivative::Derivative;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, marker::PhantomData};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::{
+    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
+    simple_certificate::{
+        DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+        ViewSyncPreCommitCertificate2,
+    },
+    simple_vote::{
+        DAVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        ViewSyncPreCommitVote,
+    },
+    traits::{
+        election::Membership,
+        network::{DataRequest, NetworkMsg, ResponseMessage, ViewMessage},
+        node_implementation::{ConsensusTime, NodeType},
+        signature_key::SignatureKey,
+    },
+    vote::HasViewNumber,
+};
 
 /// Incoming message
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, PartialEq, Eq, Hash)]

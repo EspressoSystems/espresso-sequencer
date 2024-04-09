@@ -1,9 +1,5 @@
 use std::{fmt::Display, path::PathBuf};
 
-use crate::{
-    api::load_api,
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
-};
 use clap::Args;
 use committable::Committable;
 use derive_more::From;
@@ -21,6 +17,11 @@ use tide_disco::{
     Api, RequestError, StatusCode,
 };
 use vbs::version::StaticVersionType;
+
+use crate::{
+    api::load_api,
+    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+};
 
 #[derive(Args, Default)]
 pub struct Options {

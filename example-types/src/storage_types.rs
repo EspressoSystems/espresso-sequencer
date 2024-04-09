@@ -1,3 +1,8 @@
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
+
 use anyhow::{bail, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -8,8 +13,6 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, storage::Storage},
     utils::View,
 };
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 type VidShares<TYPES> = HashMap<
     <TYPES as NodeType>::Time,

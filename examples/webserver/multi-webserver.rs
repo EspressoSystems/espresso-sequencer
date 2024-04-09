@@ -8,8 +8,7 @@ use async_compatibility_layer::{
 };
 use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
-use hotshot_types::constants::WebServerVersion;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{constants::WebServerVersion, traits::node_implementation::NodeType};
 use surf_disco::Url;
 use tracing::error;
 use vbs::version::StaticVersionType;

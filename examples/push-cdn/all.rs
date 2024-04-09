@@ -2,17 +2,21 @@
 /// The types we're importing
 pub mod types;
 
-use crate::infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs};
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun};
 use async_compatibility_layer::art::async_spawn;
-use cdn_broker::reexports::crypto::signature::KeyPair;
-use cdn_broker::Broker;
+use cdn_broker::{reexports::crypto::signature::KeyPair, Broker};
 use cdn_marshal::Marshal;
-use hotshot::traits::implementations::{TestingDef, WrappedSignatureKey};
-use hotshot::types::SignatureKey;
+use hotshot::{
+    traits::implementations::{TestingDef, WrappedSignatureKey},
+    types::SignatureKey,
+};
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
+
+use crate::{
+    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
+    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+};
 
 /// The infra implementation
 #[path = "../infra/mod.rs"]

@@ -1,26 +1,24 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use crate::test_runner::HotShotTaskCompleted;
-use crate::test_runner::{LateStartNode, Node, TestRunner};
 use either::{Left, Right};
-use hotshot::types::EventType;
-use hotshot::{traits::TestableNodeImplementation, HotShotInitializer};
-use hotshot_example_types::state_types::TestInstanceState;
-use hotshot_example_types::storage_types::TestStorage;
+use hotshot::{traits::TestableNodeImplementation, types::EventType, HotShotInitializer};
+use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 use hotshot_task::task::{Task, TaskState, TestTaskState};
-use hotshot_types::simple_certificate::QuorumCertificate;
-use hotshot_types::{data::Leaf, ValidatorConfig};
 use hotshot_types::{
+    data::Leaf,
     event::Event,
     message::Message,
+    simple_certificate::QuorumCertificate,
     traits::{
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
     },
     vote::HasViewNumber,
+    ValidatorConfig,
 };
 use snafu::Snafu;
-use std::collections::BTreeMap;
+
+use crate::test_runner::{HotShotTaskCompleted, LateStartNode, Node, TestRunner};
 /// convience type for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 

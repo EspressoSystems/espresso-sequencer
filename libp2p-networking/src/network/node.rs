@@ -5,36 +5,22 @@ mod config;
 /// allows for control over the libp2p network
 mod handle;
 
-pub use self::{
-    config::{
-        MeshParams, NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError,
-    },
-    handle::{
-        network_node_handle_error, spawn_network_node, NetworkNodeHandle, NetworkNodeHandleError,
-        NetworkNodeReceiver,
-    },
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+    num::{NonZeroU32, NonZeroUsize},
+    time::Duration,
 };
 
-use super::{
-    error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
-    gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal,
-    NetworkNodeType,
-};
-
-use crate::network::behaviours::{
-    dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
-    direct_message::{DMBehaviour, DMRequest},
-    exponential_backoff::ExponentialBackoff,
-    request_response::{Request, RequestResponseState, Response},
-};
 use async_compatibility_layer::{
     art::async_spawn,
     channel::{unbounded, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
 use futures::{select, FutureExt, StreamExt};
 use hotshot_types::constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
-use libp2p::{autonat, core::transport::ListenerId, StreamProtocol};
 use libp2p::{
+    autonat,
+    core::transport::ListenerId,
     gossipsub::{
         Behaviour as Gossipsub, ConfigBuilder as GossipsubConfigBuilder, Event as GossipEvent,
         Message as GossipsubMessage, MessageAuthenticity, MessageId, Topic, ValidationMode,
@@ -49,18 +35,33 @@ use libp2p::{
         Behaviour as RequestResponse, Config as RequestResponseConfig, ProtocolSupport,
     },
     swarm::SwarmEvent,
-    Multiaddr, Swarm, SwarmBuilder,
+    Multiaddr, StreamProtocol, Swarm, SwarmBuilder,
 };
 use libp2p_identity::PeerId;
 use rand::{prelude::SliceRandom, thread_rng};
 use snafu::ResultExt;
-use std::{
-    collections::{HashMap, HashSet},
-    iter,
-    num::{NonZeroU32, NonZeroUsize},
-    time::Duration,
-};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+
+pub use self::{
+    config::{
+        MeshParams, NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError,
+    },
+    handle::{
+        network_node_handle_error, spawn_network_node, NetworkNodeHandle, NetworkNodeHandleError,
+        NetworkNodeReceiver,
+    },
+};
+use super::{
+    error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
+    gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal,
+    NetworkNodeType,
+};
+use crate::network::behaviours::{
+    dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
+    direct_message::{DMBehaviour, DMRequest},
+    exponential_backoff::ExponentialBackoff,
+    request_response::{Request, RequestResponseState, Response},
+};
 
 /// Maximum size of a message
 pub const MAX_GOSSIP_MSG_SIZE: usize = 2_000_000_000;

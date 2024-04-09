@@ -1,10 +1,5 @@
 //! Types and structs for the hotshot signature keys
 
-use crate::{
-    qc::{BitVectorQC, QCParams},
-    stake_table::StakeTableEntry,
-    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
-};
 use bitvec::{slice::BitSlice, vec::BitVec};
 use ethereum_types::U256;
 use generic_array::GenericArray;
@@ -18,6 +13,12 @@ use jf_primitives::{
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use tracing::instrument;
+
+use crate::{
+    qc::{BitVectorQC, QCParams},
+    stake_table::StakeTableEntry,
+    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
+};
 
 /// BLS private key used to sign a message
 pub type BLSPrivKey = SignKey;

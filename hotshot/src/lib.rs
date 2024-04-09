@@ -12,29 +12,28 @@ pub mod types;
 
 pub mod tasks;
 
-use crate::{
-    tasks::{
-        add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
-        add_transaction_task, add_upgrade_task, add_view_sync_task,
-    },
-    traits::NodeImplementation,
-    types::{Event, SystemContextHandle},
+use std::{
+    collections::{BTreeMap, HashMap},
+    marker::PhantomData,
+    num::NonZeroUsize,
+    sync::Arc,
+    time::Duration,
 };
+
 use async_broadcast::{broadcast, InactiveReceiver, Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Committable;
 use futures::join;
-use hotshot_task_impls::events::HotShotEvent;
-use hotshot_task_impls::helpers::broadcast_event;
-use hotshot_task_impls::network;
-use hotshot_types::constants::{BASE_VERSION, EVENT_CHANNEL_SIZE, STATIC_VER_0_1};
-use vbs::version::Version;
-
 use hotshot_task::task::TaskRegistry;
+use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event, network};
+// Internal
+/// Reexport error type
+pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
+    constants::{BASE_VERSION, EVENT_CHANNEL_SIZE, STATIC_VER_0_1},
     data::Leaf,
     event::EventType,
     message::{DataMessage, Message, MessageKind},
@@ -50,23 +49,22 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
-use std::{
-    collections::{BTreeMap, HashMap},
-    marker::PhantomData,
-    num::NonZeroUsize,
-    sync::Arc,
-    time::Duration,
-};
-use tasks::{add_request_network_task, add_response_task, add_vid_task};
-use tracing::{debug, instrument, trace};
-
 // -- Rexports
 // External
 /// Reexport rand crate
 pub use rand;
-// Internal
-/// Reexport error type
-pub use hotshot_types::error::HotShotError;
+use tasks::{add_request_network_task, add_response_task, add_vid_task};
+use tracing::{debug, instrument, trace};
+use vbs::version::Version;
+
+use crate::{
+    tasks::{
+        add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
+        add_transaction_task, add_upgrade_task, add_view_sync_task,
+    },
+    traits::NodeImplementation,
+    types::{Event, SystemContextHandle},
+};
 
 /// Length, in bytes, of a 512 bit hash
 pub const H_512: usize = 64;

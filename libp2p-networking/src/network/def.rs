@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use futures::channel::oneshot::Sender;
 use libp2p::{
     autonat,
@@ -7,7 +9,7 @@ use libp2p::{
     Multiaddr,
 };
 use libp2p_identity::PeerId;
-use std::num::NonZeroUsize;
+use libp2p_swarm_derive::NetworkBehaviour;
 use tracing::{debug, error};
 
 use super::{
@@ -18,8 +20,6 @@ use super::{
     },
     NetworkEventInternal,
 };
-
-use libp2p_swarm_derive::NetworkBehaviour;
 
 /// Overarching network behaviour performing:
 /// - network topology discovoery

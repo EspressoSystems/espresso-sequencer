@@ -1,9 +1,5 @@
 //! A vector based stake table implementation. The commitment is the rescue hash of the list of (key, amount) pairs;
 
-use crate::{
-    config::STAKE_TABLE_CAPACITY,
-    utils::{u256_to_field, ToFields},
-};
 use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
@@ -13,6 +9,11 @@ use jf_primitives::{
     rescue::RescueParameter,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::{
+    config::STAKE_TABLE_CAPACITY,
+    utils::{u256_to_field, ToFields},
+};
 
 pub mod config;
 
@@ -381,13 +382,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::config::{FieldType as F, QCVerKey, StateVerKey};
-    use super::StakeTable;
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
-    use jf_primitives::signatures::bls_over_bn254::BLSOverBN254CurveSignatureScheme;
-    use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
+    use jf_primitives::signatures::{
+        bls_over_bn254::BLSOverBN254CurveSignatureScheme, SchnorrSignatureScheme, SignatureScheme,
+    };
+
+    use super::{
+        config::{FieldType as F, QCVerKey, StateVerKey},
+        StakeTable,
+    };
 
     #[test]
     fn crypto_test_stake_table() -> Result<(), StakeTableError> {

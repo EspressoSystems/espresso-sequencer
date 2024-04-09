@@ -1,12 +1,19 @@
-use super::NetworkError;
+#[cfg(feature = "hotshot-testing")]
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::{collections::BTreeSet, marker::PhantomData};
+#[cfg(feature = "hotshot-testing")]
+use std::{path::Path, sync::Arc, time::Duration};
+
 #[cfg(feature = "hotshot-testing")]
 use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use bincode::config::Options;
-use cdn_broker::reexports::connection::protocols::Tcp;
-use cdn_broker::reexports::def::RunDef;
-use cdn_broker::reexports::discovery::{Embedded, Redis};
+use cdn_broker::reexports::{
+    connection::protocols::Tcp,
+    def::RunDef,
+    discovery::{Embedded, Redis},
+};
 #[cfg(feature = "hotshot-testing")]
 use cdn_broker::{Broker, Config, ConfigBuilder as BrokerConfigBuilder};
 pub use cdn_client::reexports::crypto::signature::KeyPair;
@@ -39,17 +46,13 @@ use hotshot_types::{
 };
 #[cfg(feature = "hotshot-testing")]
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::collections::BTreeSet;
-use std::marker::PhantomData;
-#[cfg(feature = "hotshot-testing")]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "hotshot-testing")]
-use std::{path::Path, sync::Arc, time::Duration};
 use tracing::{error, warn};
 use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
 };
+
+use super::NetworkError;
 
 /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
 /// trait in order to sign and verify messages to/from the CDN.

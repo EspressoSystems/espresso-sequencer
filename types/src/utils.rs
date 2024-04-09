@@ -1,10 +1,7 @@
 //! Utility functions, type aliases, helper structs and enum definitions.
 
-use crate::{
-    data::Leaf,
-    traits::{node_implementation::NodeType, ValidatedState},
-    vid::VidCommitment,
-};
+use std::{ops::Deref, sync::Arc};
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::{
     config::{
@@ -16,9 +13,14 @@ use bincode::{
 use committable::Commitment;
 use digest::OutputSizeUser;
 use sha2::Digest;
-use std::{ops::Deref, sync::Arc};
 use tagged_base64::tagged;
 use typenum::Unsigned;
+
+use crate::{
+    data::Leaf,
+    traits::{node_implementation::NodeType, ValidatedState},
+    vid::VidCommitment,
+};
 
 /// A view's state
 #[derive(Debug)]

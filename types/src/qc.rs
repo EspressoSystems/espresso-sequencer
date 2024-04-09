@@ -1,10 +1,6 @@
 //! Implementation for `BitVectorQC` that uses BLS signature + Bit vector.
 //! See more details in hotshot paper.
 
-use crate::{
-    stake_table::StakeTableEntry,
-    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
-};
 use ark_std::{
     fmt::Debug,
     format,
@@ -22,6 +18,11 @@ use jf_primitives::{
 };
 use serde::{Deserialize, Serialize};
 use typenum::U32;
+
+use crate::{
+    stake_table::StakeTableEntry,
+    traits::{qc::QuorumCertificateScheme, signature_key::SignatureKey},
+};
 
 /// An implementation of QC using BLS signature and a bit-vector.
 #[derive(Serialize, Deserialize)]
@@ -184,12 +185,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use jf_primitives::signatures::{
         bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
         SignatureScheme,
     };
     use vbs::{version::StaticVersion, BinarySerializer, Serializer};
+
+    use super::*;
     type Version = StaticVersion<0, 1>;
 
     macro_rules! test_quorum_certificate {

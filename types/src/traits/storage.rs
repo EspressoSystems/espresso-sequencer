@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use async_trait::async_trait;
 
+use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
     data::{DAProposal, Leaf, VidDisperseShare},
@@ -15,8 +16,6 @@ use crate::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
 };
-
-use super::node_implementation::NodeType;
 
 /// Abstraction for storing a variety of consensus payload datum.
 #[async_trait]

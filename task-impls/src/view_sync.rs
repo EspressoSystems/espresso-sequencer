@@ -1,4 +1,39 @@
 #![allow(clippy::module_name_repetitions)]
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    sync::Arc,
+    time::Duration,
+};
+
+use async_broadcast::Sender;
+use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
+use hotshot_task::task::{Task, TaskState};
+use hotshot_types::{
+    message::GeneralConsensusMessage,
+    simple_certificate::{
+        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+    },
+    simple_vote::{
+        ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData, ViewSyncFinalizeVote,
+        ViewSyncPreCommitData, ViewSyncPreCommitVote,
+    },
+    traits::{
+        consensus_api::ConsensusApi,
+        election::Membership,
+        network::{ConnectedNetwork, ConsensusIntentEvent},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        signature_key::SignatureKey,
+    },
+    vote::{Certificate, HasViewNumber, Vote},
+};
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, instrument, warn};
+
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::{broadcast_event, cancel_task},
@@ -6,41 +41,6 @@ use crate::{
         create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
     },
 };
-use async_broadcast::Sender;
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_lock::RwLock;
-use hotshot_types::{
-    simple_certificate::{
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
-    },
-    simple_vote::ViewSyncFinalizeData,
-    traits::signature_key::SignatureKey,
-};
-use hotshot_types::{
-    simple_vote::{
-        ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitData,
-        ViewSyncPreCommitVote,
-    },
-    traits::network::ConsensusIntentEvent,
-    vote::{Certificate, HasViewNumber, Vote},
-};
-
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
-use hotshot_task::task::{Task, TaskState};
-use hotshot_types::{
-    message::GeneralConsensusMessage,
-    traits::{
-        consensus_api::ConsensusApi,
-        election::Membership,
-        network::ConnectedNetwork,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
-    },
-};
-use std::{collections::BTreeMap, collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
 pub enum ViewSyncPhase {
