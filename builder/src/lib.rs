@@ -63,7 +63,7 @@ use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub mod non_permissioned;
 pub mod permissioned;
@@ -86,8 +86,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
-        App::with_state(source);
+    let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError> = App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
@@ -101,7 +100,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use commit::Committable;
+    use committable::Committable;
     use core::num;
     use ethers::{
         types::spoof::State,
@@ -220,6 +219,8 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
+                // ???
+                builder_url: Url::parse("http://127.0.0.1").unwrap(),
             };
 
             Self {
@@ -429,7 +430,7 @@ pub mod testing {
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
-            let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
+            let mut app = App::<_, EventStreamApiError>::with_state(source);
 
             app.register_module("hotshot_events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");

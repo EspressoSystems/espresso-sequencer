@@ -26,7 +26,7 @@ use jf_primitives::merkle_tree::{
     prelude::MerklePath, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use tide_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -68,7 +68,7 @@ pub trait SequencerDataSource:
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
     /// Wrapper function to store merkle nodes
-    async fn store_state<S: MerklizedState<SeqTypes>>(
+    async fn store_state<S: MerklizedState<SeqTypes, A>, const A: usize>(
         &mut self,
         path: MerklePath<S::Entry, S::Key, S::T>,
         traversal_path: Vec<usize>,
@@ -128,13 +128,13 @@ impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for V
             .lookup(block_number - 1)
             .expect_ok()
             .context("Index not found in block merkle tree")?;
-        let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
+        let path = <u64 as ToTraversalPath<3>>::to_traversal_path(
             &(block_number - 1),
             block_merkle_tree.height(),
         );
 
         storage
-            .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
+            .store_state::<BlockMerkleTree, 3>(proof.proof, path, block_number)
             .await
             .context("failed to insert merkle nodes for block merkle tree")?;
 
@@ -145,13 +145,13 @@ impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for V
                 .expect_ok()
                 .context("Index not found in fee merkle tree")?;
             let path: Vec<usize> =
-                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
+                <FeeAccount as ToTraversalPath<256>>::to_traversal_path(
                     delta,
                     fee_merkle_tree.height(),
                 );
 
             storage
-                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
+                .store_state::<FeeMerkleTree, 256>(proof.proof, path, block_number)
                 .await
                 .context("failed to insert merkle nodes for block merkle tree")?;
         }

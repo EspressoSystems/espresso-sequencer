@@ -11,7 +11,7 @@ use hotshot_query_service::{
     merklized_state::UpdateStateStorage,
     Leaf,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub(super) async fn update_loop<N, D, Ver: StaticVersionType>(
     state: Arc<RwLock<StorageState<N, D, Ver>>>,

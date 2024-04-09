@@ -69,7 +69,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{collections::BTreeMap, time::Duration};
 use std::{fmt::Debug, sync::Arc};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
@@ -449,7 +449,7 @@ pub async fn init_node<Ver: StaticVersionType + 'static>(
 pub mod testing {
     use super::*;
     use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
-    use commit::Committable;
+    use committable::Committable;
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
@@ -525,6 +525,8 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
+                //??
+                builder_url: Url::parse("http://127.0.0.1").unwrap(),
             };
 
             Self {

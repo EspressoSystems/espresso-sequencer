@@ -22,7 +22,7 @@ use hotshot_types::{
 };
 use std::fmt::Display;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,

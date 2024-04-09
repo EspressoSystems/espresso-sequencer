@@ -24,7 +24,7 @@ impl SequencerDataSource for DataSource {
         Ok(data_source)
     }
 
-    async fn store_state<S: MerklizedState<SeqTypes>>(
+    async fn store_state<S: MerklizedState<SeqTypes, A>, const A: usize>(
         &mut self,
         _path: MerklePath<S::Entry, S::Key, S::T>,
         _traversal_path: Vec<usize>,

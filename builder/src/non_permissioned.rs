@@ -42,7 +42,7 @@ use std::{num::NonZeroUsize, time::Duration};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {

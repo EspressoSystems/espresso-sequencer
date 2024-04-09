@@ -3,7 +3,7 @@ use clap::Parser;
 use hotshot_types::constants::WebServerVersion;
 use hotshot_web_server::run_web_server;
 use sequencer::SeqTypes;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Parser)]
 struct Args {

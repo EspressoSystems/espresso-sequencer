@@ -16,7 +16,7 @@ use anyhow::{ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::RwLock, task::spawn};
 use clap::Parser;
-use commit::Committable;
+use committable::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
@@ -49,6 +49,7 @@ use surf_disco::{error::ClientError, socket, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
+use vbs::version::StaticVersion;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
@@ -578,7 +579,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
             .send()
             .await
             .context(format!("fetching VID common {block}"))?;
-        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()));
+        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()) as usize);
         ensure!(
             ns_proof
                 .proof
@@ -759,8 +760,8 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         PATH = ["/metrics"]
         METHOD = "METRICS"
     };
-    let mut app = App::<_, ServerError, _>::with_state(RwLock::new(metrics));
-    app.module::<ServerError>("status", api)
+    let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
+    app.module::<ServerError, StaticVersion<0, 1>>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()

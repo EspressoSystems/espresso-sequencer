@@ -43,7 +43,7 @@ use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 type F = ark_ed_on_bn254::Fq;
 
@@ -349,7 +349,7 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
     lightclient_address: Address,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 

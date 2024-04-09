@@ -1,5 +1,5 @@
 use crate::{BlockBuildingSnafu, Transaction};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use hotshot_types::utils::BuilderCommitment;

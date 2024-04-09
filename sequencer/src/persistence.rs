@@ -12,7 +12,7 @@ use crate::{ElectionConfig, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, V
 use anyhow::Context;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use commit::Committable;
+use committable::Committable;
 use hotshot::{
     traits::ValidatedState as _,
     types::{Event, EventType},

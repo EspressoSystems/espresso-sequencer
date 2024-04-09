@@ -29,7 +29,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     App, Url,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use hotshot_events_service::events::Error as EventStreamingError;
 
@@ -153,7 +153,7 @@ impl Options {
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
             let mut context = init_context(ds.populate_metrics()).await;
-            let mut app = App::<_, Error, Ver>::with_state(Arc::new(RwLock::new(
+            let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, super::State::from(&context)),
             )));
 
@@ -161,7 +161,7 @@ impl Options {
             let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
-            self.init_hotshot_modules(&mut app)?;
+            self.init_hotshot_modules::<_, _, Ver>(&mut app)?;
 
             if self.hotshot_events.is_some() {
                 self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
@@ -181,10 +181,9 @@ impl Options {
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
             let mut context = init_context(Box::new(NoMetrics)).await;
-            let mut app =
-                App::<_, Error, Ver>::with_state(RwLock::new(super::State::from(&context)));
+            let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
 
-            self.init_hotshot_modules(&mut app)?;
+            self.init_hotshot_modules::<_, _, Ver>(&mut app)?;
 
             if self.hotshot_events.is_some() {
                 self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
@@ -206,7 +205,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<(
         SequencerContext<N, Ver>,
-        App<Arc<RwLock<StorageState<N, D, Ver>>>, Error, Ver>,
+        App<Arc<RwLock<StorageState<N, D, Ver>>>, Error>,
     )>
     where
         N: network::Type,
@@ -227,7 +226,7 @@ impl Options {
         let state: endpoints::AvailState<N, D, Ver> = Arc::new(RwLock::new(
             ExtensibleDataSource::new(ds, (&context).into()),
         ));
-        let mut app = App::<_, Error, Ver>::with_state(state.clone());
+        let mut app = App::<_, Error>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
@@ -242,7 +241,7 @@ impl Options {
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
 
-        self.init_hotshot_modules(&mut app)?;
+        self.init_hotshot_modules::<_, _, Ver>(&mut app)?;
 
         context.spawn("query storage updater", update_loop(state, events));
 
@@ -287,8 +286,8 @@ impl Options {
     where
         N: network::Type,
         D: SequencerDataSource
-            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
-            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
+            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, 256>
+            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, 3>
             + Send
             + Sync
             + 'static,
@@ -302,12 +301,12 @@ impl Options {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "state/blocks",
-                endpoints::merklized_state::<N, D, BlockMerkleTree, _>(bind_version)?,
+                endpoints::merklized_state::<N, D, BlockMerkleTree, 3, _>(bind_version)?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "state/fees",
-                endpoints::merklized_state::<N, D, FeeMerkleTree, _>(bind_version)?,
+                endpoints::merklized_state::<N, D, FeeMerkleTree, 256, _>(bind_version)?,
             )?;
         }
 
@@ -329,7 +328,7 @@ impl Options {
     /// source, so initialization is the same no matter what mode the service is running in.
     fn init_hotshot_modules<N, S, Ver: StaticVersionType + 'static>(
         &self,
-        app: &mut App<S, Error, Ver>,
+        app: &mut App<S, Error>,
     ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
@@ -339,7 +338,7 @@ impl Options {
         let bind_version = Ver::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit()?;
+            let submit_api = endpoints::submit::<_, _, Ver>()?;
             app.register_module("submit", submit_api)?;
         }
 
@@ -372,14 +371,14 @@ impl Options {
 
         let event_streamer = context.get_event_streamer();
 
-        let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
+        let mut app = App::<_, EventStreamingError>::with_state(event_streamer);
 
         tracing::info!("initializing hotshot events API");
         let hotshot_events_api = hotshot_events_service::events::define_api(
             &hotshot_events_service::events::Options::default(),
         )?;
 
-        app.register_module("hotshot-events", hotshot_events_api)?;
+        app.register_module::<_, Ver>("hotshot-events", hotshot_events_api)?;
 
         context.spawn(
             "Hotshot Events Streaming API server",

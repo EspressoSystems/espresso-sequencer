@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0"
 ark-serialize = { version = "0.4", features = ["derive"] }
 async-std = { workspace = true }
-commit = { git = "https://github.com/EspressoSystems/commit" }
+committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 ethers = "2.0.4"
 portpicker = "0.1.1"

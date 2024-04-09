@@ -4,7 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use bytesize::ByteSize;
 use clap::Parser;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use derive_more::From;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
@@ -24,7 +24,7 @@ use std::{
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -266,7 +266,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
 }
 
 async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
-    if let Err(err) = App::<(), ServerError, Ver>::with_state(())
+    if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await
     {

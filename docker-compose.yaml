@@ -147,7 +147,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- storage-sql -- http -- query -- catchup
+    command: sequencer -- storage-sql -- http -- query -- catchup -- state
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -317,6 +317,7 @@ services:
 
   sequencer-db:
     image: postgres
+    user: postgres
     ports:
       - "$ESPRESSO_SEQUENCER_DB_PORT:5432"
     environment:

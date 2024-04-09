@@ -14,14 +14,14 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
-commit = { git = "https://github.com/EspressoSystems/commit.git" }
+committable = "0.2"
 dotenvy = { workspace = true }
-es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
+es-version = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.32" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.2" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "abdul/update-deps" }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
@@ -35,8 +35,8 @@ serde = { workspace = true }
 snafu = { workspace = true }
 surf = "2.3.1"
 surf-disco = { workspace = true }
-tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+tagged-base64 = "0.4"
 tide-disco = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }

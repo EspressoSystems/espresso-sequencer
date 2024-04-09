@@ -76,7 +76,7 @@ use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},

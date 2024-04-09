@@ -23,13 +23,13 @@ impl SequencerDataSource for DataSource {
         Ok(cfg.connect(provider).await?)
     }
 
-    async fn store_state<S: MerklizedState<SeqTypes>>(
+    async fn store_state<S: MerklizedState<SeqTypes, A>, const A: usize>(
         &mut self,
         path: MerklePath<S::Entry, S::Key, S::T>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> anyhow::Result<()> {
-        <DataSource as UpdateStateData<SeqTypes, S>>::insert_merkle_nodes(
+        <DataSource as UpdateStateData<SeqTypes, S, A>>::insert_merkle_nodes(
             self,
             path,
             traversal_path,

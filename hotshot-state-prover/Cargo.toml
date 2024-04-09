@@ -47,7 +47,7 @@ time = "0.3"
 toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
-versioned-binary-serialization = { workspace = true }
+vbs = { workspace = true }
 
 [features]
 default = ["parallel"]
