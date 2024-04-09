@@ -156,7 +156,7 @@ mod test {
         );
 
         // Start a client.
-        let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
+        let url = Url::from_str(&format!("http://localhost:{}/v0/status", port)).unwrap();
         let client = Client::<Error, Version01>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
@@ -169,7 +169,7 @@ mod test {
         let prometheus = res.body_string().await.unwrap();
         let lines = prometheus.lines().collect::<Vec<_>>();
         assert!(
-            lines.contains(&"consensus_current_view"),
+            lines.contains(&"consensus_current_view 0"),
             "Missing consensus_current_view in metrics:\n{}",
             prometheus
         );
@@ -180,7 +180,7 @@ mod test {
         // Check updated block height.
         // being updated and the decide event being published. Retry this a few times until it
         // succeeds.
-        while client.get::<u64>("block-height").send().await.unwrap() == 1 {
+        while client.get::<u64>("block-height").send().await.unwrap() == 0 {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
         }
