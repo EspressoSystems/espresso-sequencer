@@ -5,7 +5,7 @@ use crate::{NamespaceId, Transaction};
 use std::ops::Range;
 
 pub fn parse_ns_payload(ns_payload: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
-    TxIndexIter::new(ns_payload)
+    TxIter::new(ns_payload)
         .map(|info| Transaction::new(ns_id, ns_payload[info.tx_range].to_vec()))
         .collect()
 }
@@ -14,14 +14,14 @@ pub struct TxIndex {
     tx_range: Range<usize>,
 }
 
-pub struct TxIndexIter<'a> {
+pub struct TxIter<'a> {
     tx_table_start: usize,    // byte index into the tx table
     tx_payloads_start: usize, // byte index into the tx payloads
     tx_table: &'a [u8],
     tx_payloads: &'a [u8],
 }
 
-impl<'a> TxIndexIter<'a> {
+impl<'a> TxIter<'a> {
     pub fn new(ns_payload: &'a [u8]) -> Self {
         let tx_table_byte_len = if ns_payload.len() < NUM_TXS_BYTE_LEN {
             // `ns_table` is too short to store the number of txs.
@@ -46,7 +46,7 @@ impl<'a> TxIndexIter<'a> {
     }
 }
 
-impl<'a> Iterator for TxIndexIter<'a> {
+impl<'a> Iterator for TxIter<'a> {
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {

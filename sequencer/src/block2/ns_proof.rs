@@ -42,9 +42,8 @@ impl Payload {
             return None; // error: vid_common inconsistent with self
         }
 
-        let ns_range = if let Some(ns_info) = self.ns_index_iter().find(|info| ns_id == info.ns_id)
-        {
-            ns_info.ns_range
+        let ns_range = if let Some(ns_index) = self.ns_iter().find(|i| ns_id == i.ns_id) {
+            ns_index.ns_range
         } else {
             return Some(NsProof {
                 ns_id,
@@ -70,17 +69,15 @@ impl Payload {
         ns_proof: &NsProof,
         commit: &VidCommitment,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
-        let ns_info = self
-            .ns_index_iter()
-            .find(|info| ns_proof.ns_id == info.ns_id);
+        let ns_index = self.ns_iter().find(|i| ns_proof.ns_id == i.ns_id);
 
-        match (ns_info, &ns_proof.existence) {
-            (Some(info), Some(pf)) => {
+        match (ns_index, &ns_proof.existence) {
+            (Some(ns_index), Some(pf)) => {
                 vid_scheme(VidSchemeType::get_num_storage_nodes(&pf.vid_common))
                     .payload_verify(
                         Statement {
                             payload_subslice: &pf.ns_payload_flat,
-                            range: info.ns_range,
+                            range: ns_index.ns_range,
                             commit,
                             common: &pf.vid_common,
                         },
@@ -132,7 +129,7 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             assert_eq!(block.num_namespaces(), test.nss.len());
-            for ns_id in block.ns_iter() {
+            for ns_id in block.ns_iter().map(|i| i.ns_id) {
                 // tracing::info!("test ns_id {}", ns.ns_id);
 
                 test.nss

@@ -1,16 +1,14 @@
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
-use hotshot_query_service::availability::QueryablePayload;
+// use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
-use ns_iter::{NsIndex, NsIndexIter};
 use ns_payload::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::{collections::HashMap, fmt::Display, iter::Peekable};
-use tx_iter::TxIndex;
-use tx_iter::TxIndexIter;
+use std::{collections::HashMap, fmt::Display};
 
+mod iter;
 mod ns_iter;
 mod ns_payload;
 mod ns_proof;
@@ -155,41 +153,3 @@ impl Committable for Payload {
 //         todo!()
 //     }
 // }
-
-struct NsTxIndex {
-    ns_info: NsIndex,
-    tx_info: TxIndex,
-}
-
-struct NsTxIter<'a> {
-    ns_iter: Peekable<NsIndexIter<'a>>,
-    tx_iter: TxIndexIter<'a>,
-}
-
-impl<'a> NsTxIter<'a> {
-    fn new(block: &'a Payload) -> Self {
-        Self {
-            ns_iter: NsIndexIter::new(block).peekable(),
-            tx_iter: TxIndexIter::new(&[]),
-        }
-    }
-}
-
-impl<'a> Iterator for NsTxIter<'a> {
-    type Item = NsTxIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(ns_info) = self.ns_iter.peek() {
-                if let Some(tx_info) = self.tx_iter.next() {
-                    return Some(NsTxIndex {
-                        ns_info: ns_info.clone(),
-                        tx_info,
-                    });
-                }
-            } else {
-                return None;
-            }
-        }
-    }
-}

@@ -16,47 +16,26 @@ impl Payload {
         self.ns_iter().count()
     }
 
-    pub fn ns_iter(&self) -> impl Iterator<Item = NamespaceId> + '_ {
+    pub fn ns_iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
         NsIter::new(self)
     }
-
-    pub(super) fn ns_index_iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
-        NsIndexIter::new(self)
-    }
 }
 
-/// Return type for [`Payload::ns_iter`].
-pub struct NsIter<'a>(NsIndexIter<'a>);
-
-impl<'a> NsIter<'a> {
-    pub fn new(block: &'a Payload) -> Self {
-        Self(NsIndexIter::new(block))
-    }
-}
-
-impl<'a> Iterator for NsIter<'a> {
-    type Item = NamespaceId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|item| item.ns_id)
-    }
-}
-
-/// [`Iterator::Item`] for [`NsIterInternal`].
+/// [`Iterator::Item`] for [`NsIter`].
 #[derive(Clone)]
-pub(super) struct NsIndex {
-    pub ns_id: NamespaceId,
-    pub ns_range: Range<usize>,
+pub struct NsIndex {
+    pub(super) ns_id: NamespaceId,
+    pub(super) ns_range: Range<usize>,
 }
-/// Return type for [`Payload::ns_iter_internal`].
-pub(super) struct NsIndexIter<'a> {
+/// Return type for [`Payload::ns_iter`].
+pub struct NsIter<'a> {
     ns_table_start: usize,   // byte index into the namespace table
     ns_payload_start: usize, // byte index into the payload
     block: &'a Payload,
     repeat_nss: HashSet<NamespaceId>,
 }
 
-impl<'a> NsIndexIter<'a> {
+impl<'a> NsIter<'a> {
     pub fn new(block: &'a Payload) -> Self {
         Self {
             ns_table_start: NUM_NSS_BYTE_LEN,
@@ -67,7 +46,7 @@ impl<'a> NsIndexIter<'a> {
     }
 }
 
-impl<'a> Iterator for NsIndexIter<'a> {
+impl<'a> Iterator for NsIter<'a> {
     type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
