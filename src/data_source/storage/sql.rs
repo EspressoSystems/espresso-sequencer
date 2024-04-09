@@ -1963,6 +1963,11 @@ where
                 ],
             ),
             explorer::data_source::BlockIdentifier::Hash(hash) => (
+                // We want to match the blocks starting with the given hash, and working backwards until we
+                // have returned up to the number of requested blocks.  The hash for a block should be unique,
+                // so we should just need to start with identifying the block height with the given hash, and
+                // return all blocks with a height less than or equal to that height, up to the number of
+                // requested blocks.
                 format!(
                     "SELECT {BLOCK_COLUMNS}
                         FROM header AS h
