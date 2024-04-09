@@ -354,7 +354,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                         #task_names.state().handle_result(&res).await;
                     }
 
-                    while let Ok(received_output) = test_receiver.try_recv() {
+                    while let Ok(Ok(received_output)) = async_timeout(Duration::from_millis(35), test_receiver.recv_direct()).await {
                         tracing::debug!("Test received: {:?}", received_output);
 
                         let output_asserts = &mut #task_expectations[stage_number].output_asserts;

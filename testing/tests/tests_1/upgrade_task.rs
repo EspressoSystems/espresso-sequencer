@@ -18,6 +18,7 @@ use hotshot_types::{
     simple_vote::UpgradeProposalData,
     traits::{election::Membership, node_implementation::ConsensusTime},
 };
+use std::time::Duration;
 use vbs::version::Version;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
