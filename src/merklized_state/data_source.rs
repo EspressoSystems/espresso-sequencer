@@ -23,6 +23,7 @@ use derive_more::Display;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
 
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 use jf_primitives::merkle_tree::DigestAlgorithm;
 use jf_primitives::merkle_tree::{
     prelude::MerklePath, Element, Index, MerkleCommitment, MerkleTreeScheme, NodeValue,
@@ -49,7 +50,10 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
+
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()>;
+    async fn get_last_state_height(&self) -> QueryResult<usize>;
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.

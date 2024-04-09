@@ -94,6 +94,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -584,13 +585,32 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.fetcher
             .storage
             .read()
             .await
             .storage
             .get_path(snapshot, key)
+            .await
+    }
+
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .storage
+            .set_last_state_height(height)
+            .await
+    }
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        self.fetcher
+            .storage
+            .read()
+            .await
+            .storage
+            .get_last_state_height()
             .await
     }
 }

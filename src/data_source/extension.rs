@@ -26,6 +26,7 @@ use crate::{
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::merkle_tree::prelude::MerklePath;
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -291,8 +292,15 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.data_source.get_path(snapshot, key).await
+    }
+
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
+        self.data_source.set_last_state_height(height).await
+    }
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        self.data_source.get_last_state_height().await
     }
 }
 
