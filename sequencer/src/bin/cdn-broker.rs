@@ -2,7 +2,6 @@
 //! a `Broker` object.
 
 use anyhow::{Context, Result};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use cdn_broker::{Broker, Config, ConfigBuilder};
 use clap::Parser;
 
@@ -80,15 +79,13 @@ struct Args {
     key_seed: u64,
 }
 
-#[cfg_attr(async_executor_impl = "tokio", tokio::main(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::main)]
+#[async_std::main]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
 
     // Initialize tracing
-    setup_logging();
-    setup_backtrace();
+    tracing_subscriber::fmt::init();
 
     // Generate the broker key from the supplied seed
     let key_hash = sha2::Sha256::digest(args.key_seed.to_le_bytes());

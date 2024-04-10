@@ -115,6 +115,11 @@ struct Args {
     )]
     max_transactions: NonZeroUsize,
 
+    /// The number of nodes a Libp2p node should try to maintain
+    /// a connection with at one time.
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    libp2p_mesh_n: usize,
+
     /// Seed to use for generating node keys.
     ///
     /// The seed is a 32 byte integer, encoded in hex.
@@ -196,14 +201,14 @@ async fn main() {
     let libp2p_config = Libp2pConfig {
         bootstrap_nodes: Vec::new(),
         node_index: 0,
-        bootstrap_mesh_n_high: 4,
-        bootstrap_mesh_n_low: 4,
-        bootstrap_mesh_outbound_min: 2,
-        bootstrap_mesh_n: 4,
-        mesh_n_high: 4,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-        mesh_n: 4,
+        bootstrap_mesh_n_high: args.libp2p_mesh_n,
+        bootstrap_mesh_n_low: args.libp2p_mesh_n,
+        bootstrap_mesh_outbound_min: args.libp2p_mesh_n / 2,
+        bootstrap_mesh_n: args.libp2p_mesh_n,
+        mesh_n_high: args.libp2p_mesh_n,
+        mesh_n_low: args.libp2p_mesh_n,
+        mesh_outbound_min: args.libp2p_mesh_n / 2,
+        mesh_n: args.libp2p_mesh_n,
         next_view_timeout: config.next_view_timeout,
         propose_min_round_time: config.propose_min_round_time,
         propose_max_round_time: config.propose_max_round_time,

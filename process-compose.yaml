@@ -89,6 +89,13 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_started
+      broker_1:
+        condition: process_started
+      marshal_0:
+        condition: process_started
+
     readiness_probe:
       http_get:
         scheme: http
@@ -121,6 +128,12 @@ processes:
         condition: process_healthy
       sequencer-db:
         condition: process_healthy
+      broker_0:
+        condition: process_started
+      broker_1:
+        condition: process_started
+      marshal_0:
+        condition: process_started
     readiness_probe:
       http_get:
         scheme: http
@@ -147,6 +160,12 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_started
+      broker_1:
+        condition: process_started
+      marshal_0:
+        condition: process_started
     readiness_probe:
       http_get:
         scheme: http
@@ -173,6 +192,12 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_started
+      broker_1:
+        condition: process_started
+      marshal_0:
+        condition: process_started
     readiness_probe:
       http_get:
         scheme: http
@@ -197,6 +222,12 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_started
+      broker_1:
+        condition: process_started
+      marshal_0:
+        condition: process_started
     readiness_probe:
       http_get:
         scheme: http
@@ -216,10 +247,16 @@ processes:
   # The CDN system's main entry point; where users contact first.
   marshal_0:
     command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT
+    depends_on:
+      keydb:
+        condition: process_started
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
     command: cdn-broker -d "redis://:changeme!@localhost:6379"
+    depends_on:
+      keydb:
+        condition: process_started
 
   # A broker is the main message-routing unit of the CDN
   # as we're running a local demo, we need to operate on different ports
@@ -230,6 +267,9 @@ processes:
       --private-bind-address 0.0.0.0:1741
       --private-advertise-address local_ip:1741
       -d "redis://:changeme!@localhost:6379"
+    depends_on:
+      keydb:
+        condition: process_started
 
   commitment-task:
     command: commitment-task

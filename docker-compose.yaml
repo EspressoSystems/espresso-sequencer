@@ -54,6 +54,8 @@ services:
 
   # The CDN system's main entry point; where users contact first.
   marshal-0:
+    environment:
+      RUST_LOG: info
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main
     command:
       - -d
@@ -63,24 +65,28 @@ services:
 
   # A broker is the main message-routing unit of the CDN
   broker-0:
+    environment:
+      RUST_LOG: info
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
     - redis://:changemeplease!!@keydb:6379
-    - --public_advertise_address
+    - --public-advertise-address
     - broker-0:1738
-    - --private_advertise_address
+    - --private-advertise-address
     - broker-0:1739
 
   # A broker is the main message-routing unit of the CDN
   broker-1:
+    environment:
+      RUST_LOG: info
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
     - redis://:changemeplease!!@keydb:6379
-    - --public_advertise_address
+    - --public-advertise-address
     - broker-1:1738
-    - --private_advertise_address
+    - --private-advertise-address
     - broker-1:1739
 
   state-relay-server:
@@ -154,6 +160,12 @@ services:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
+      broker-0:
+        condition: service_started
+      broker-1:
+        condition: service_started
+      marshal-0:
+        condition: service_started
 
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -188,6 +200,12 @@ services:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
+      broker-0:
+        condition: service_started
+      broker-1:
+        condition: service_started
+      marshal-0:
+        condition: service_started
 
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -219,6 +237,12 @@ services:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
+      broker-0:
+        condition: service_started
+      broker-1:
+        condition: service_started
+      marshal-0:
+        condition: service_started
 
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -249,6 +273,12 @@ services:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
+      broker-0:
+        condition: service_started
+      broker-1:
+        condition: service_started
+      marshal-0:
+        condition: service_started
 
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -279,6 +309,12 @@ services:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
+      broker-0:
+        condition: service_started
+      broker-1:
+        condition: service_started
+      marshal-0:
+        condition: service_started
 
   commitment-task:
     image: ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
