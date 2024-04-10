@@ -55,18 +55,28 @@ services:
   # The CDN system's main entry point; where users contact first.
   marshal-0:
     environment:
-      RUST_LOG: info
+      - RUST_LOG
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main
     command:
       - -d
       - redis://:changemeplease!!@keydb:6379
       - --bind-port 
       - $ESPRESSO_CDN_SERVER_PORT
+      - --metrics-enabled
+    healthcheck:
+      # Curl the metrics endpoint
+      test: "curl localhost:9090"
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    depends_on:
+      keydb:
+        condition: service_started
 
   # A broker is the main message-routing unit of the CDN
   broker-0:
     environment:
-      RUST_LOG: info
+      - RUST_LOG
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
@@ -75,11 +85,21 @@ services:
     - broker-0:1738
     - --private-advertise-address
     - broker-0:1739
+    - --metrics-enabled
+    healthcheck:
+      # Curl the metrics endpoint
+      test: "curl localhost:9090"
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    depends_on:
+      keydb:
+        condition: service_started
 
   # A broker is the main message-routing unit of the CDN
   broker-1:
     environment:
-      RUST_LOG: info
+      - RUST_LOG
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
@@ -88,6 +108,16 @@ services:
     - broker-1:1738
     - --private-advertise-address
     - broker-1:1739
+    - --metrics-enabled
+    healthcheck:
+      # Curl the metrics endpoint
+      test: "curl localhost:9090"
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    depends_on:
+      keydb:
+        condition: service_started
 
   state-relay-server:
     image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
@@ -161,11 +191,11 @@ services:
       state-relay-server:
         condition: service_healthy
       broker-0:
-        condition: service_started
+        condition: service_healthy
       broker-1:
-        condition: service_started
+        condition: service_healthy
       marshal-0:
-        condition: service_started
+        condition: service_healthy
 
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -201,11 +231,11 @@ services:
       state-relay-server:
         condition: service_healthy
       broker-0:
-        condition: service_started
+        condition: service_healthy
       broker-1:
-        condition: service_started
+        condition: service_healthy
       marshal-0:
-        condition: service_started
+        condition: service_healthy
 
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -238,11 +268,11 @@ services:
       state-relay-server:
         condition: service_healthy
       broker-0:
-        condition: service_started
+        condition: service_healthy
       broker-1:
-        condition: service_started
+        condition: service_healthy
       marshal-0:
-        condition: service_started
+        condition: service_healthy
 
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -274,11 +304,11 @@ services:
       state-relay-server:
         condition: service_healthy
       broker-0:
-        condition: service_started
+        condition: service_healthy
       broker-1:
-        condition: service_started
+        condition: service_healthy
       marshal-0:
-        condition: service_started
+        condition: service_healthy
 
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -310,11 +340,11 @@ services:
       state-relay-server:
         condition: service_healthy
       broker-0:
-        condition: service_started
+        condition: service_healthy
       broker-1:
-        condition: service_started
+        condition: service_healthy
       marshal-0:
-        condition: service_started
+        condition: service_healthy
 
   commitment-task:
     image: ghcr.io/espressosystems/espresso-sequencer/commitment-task:main

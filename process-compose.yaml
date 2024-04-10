@@ -90,11 +90,11 @@ processes:
       state-relay-server:
         condition: process_healthy
       broker_0:
-        condition: process_started
+        condition: process_healthy
       broker_1:
-        condition: process_started
+        condition: process_healthy
       marshal_0:
-        condition: process_started
+        condition: process_healthy
 
     readiness_probe:
       http_get:
@@ -129,11 +129,11 @@ processes:
       sequencer-db:
         condition: process_healthy
       broker_0:
-        condition: process_started
+        condition: process_healthy
       broker_1:
-        condition: process_started
+        condition: process_healthy
       marshal_0:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -161,11 +161,11 @@ processes:
       state-relay-server:
         condition: process_healthy
       broker_0:
-        condition: process_started
+        condition: process_healthy
       broker_1:
-        condition: process_started
+        condition: process_healthy
       marshal_0:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -193,11 +193,11 @@ processes:
       state-relay-server:
         condition: process_healthy
       broker_0:
-        condition: process_started
+        condition: process_healthy
       broker_1:
-        condition: process_started
+        condition: process_healthy
       marshal_0:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -223,11 +223,11 @@ processes:
       state-relay-server:
         condition: process_healthy
       broker_0:
-        condition: process_started
+        condition: process_healthy
       broker_1:
-        condition: process_started
+        condition: process_healthy
       marshal_0:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -246,17 +246,32 @@ processes:
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
-    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT
+    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT --metrics-enabled --metrics-port 9093
     depends_on:
       keydb:
         condition: process_started
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9093
+        path: /metrics
+      failure_threshold: 100
+
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
-    command: cdn-broker -d "redis://:changeme!@localhost:6379"
+    command: cdn-broker -d "redis://:changeme!@localhost:6379" --metrics-enabled --metrics-port 9091
     depends_on:
       keydb:
         condition: process_started
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9091
+        path: /metrics
+      failure_threshold: 100
 
   # A broker is the main message-routing unit of the CDN
   # as we're running a local demo, we need to operate on different ports
@@ -267,9 +282,18 @@ processes:
       --private-bind-address 0.0.0.0:1741
       --private-advertise-address local_ip:1741
       -d "redis://:changeme!@localhost:6379"
+      --metrics-enabled
+      --metrics-port 9092
     depends_on:
       keydb:
         condition: process_started
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9092
+        path: /metrics
+      failure_threshold: 100
 
   commitment-task:
     command: commitment-task
