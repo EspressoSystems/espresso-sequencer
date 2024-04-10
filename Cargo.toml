@@ -80,3 +80,7 @@ toml = "0.8"
 url = "2.3"
 vbs = "0.1"
 zeroize = "1.7"
+committable = "0.2"
+portpicker = "0.1.1"
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.34" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "abdul/update-deps" }

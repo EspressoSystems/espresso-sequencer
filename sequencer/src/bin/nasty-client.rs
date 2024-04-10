@@ -52,7 +52,6 @@ use surf_disco::{error::ClientError, socket, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
-use vbs::version::StaticVersion;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
@@ -774,7 +773,7 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, StaticVersion<0, 1>>("status", api)
+    app.module::<ServerError, SequencerVersion>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()

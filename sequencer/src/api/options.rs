@@ -12,7 +12,7 @@ use crate::{
     context::SequencerContext,
     network,
     persistence::{self, SequencerPersistence},
-    state::{update_state_storage, BlockMerkleTree, FeeMerkleTree},
+    state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
@@ -320,8 +320,8 @@ impl Options {
             .await?;
 
         context.spawn(
-            "merklized state storage updater",
-            update_state_storage(Arc::new(RwLock::new(ds)), context.node_state()),
+            "merklized state storage update loop",
+            update_state_storage_loop(ds, context.node_state()),
         );
 
         context.spawn(

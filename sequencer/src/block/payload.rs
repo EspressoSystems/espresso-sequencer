@@ -123,7 +123,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         ns_id: NamespaceId,
         vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
-        if self.raw_payload.len() as u32 != VidSchemeType::get_payload_byte_len(&vid_common) {
+        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) as usize {
             return None; // error: vid_common inconsistent with self
         }
 
