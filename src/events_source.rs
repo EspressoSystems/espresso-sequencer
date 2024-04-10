@@ -1,4 +1,4 @@
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
+use async_broadcast::{broadcast, InactiveReceiver, Sender as BroadcastSender};
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
@@ -123,7 +123,7 @@ where
 #[derive(Debug)]
 pub struct EventsStreamer<Types: NodeType> {
     // required for api subscription
-    to_subscribe_clone_recv: BroadcastReceiver<Arc<BuilderEvent<Types>>>,
+    inactive_to_subscribe_clone_recv: InactiveReceiver<Arc<BuilderEvent<Types>>>,
     subscriber_send_channel: BroadcastSender<Arc<BuilderEvent<Types>>>,
 
     // required for sending startup info
@@ -165,7 +165,7 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
     type EventStream = BoxStream<'static, Arc<BuilderEvent<Types>>>;
 
     async fn get_event_stream(&self) -> Self::EventStream {
-        let recv_channel = self.to_subscribe_clone_recv.clone();
+        let recv_channel = self.inactive_to_subscribe_clone_recv.activate_cloned();
         let starup_event_initialized = false;
         let startup_event = self.get_startup_event().clone();
         stream::unfold(
@@ -196,9 +196,10 @@ impl<Types: NodeType> EventsStreamer<Types> {
         let (mut subscriber_send_channel, to_subscribe_clone_recv) =
             broadcast::<Arc<BuilderEvent<Types>>>(RETAINED_EVENTS_COUNT);
         subscriber_send_channel.set_overflow(true);
+        let inactive_to_subscribe_clone_recv = to_subscribe_clone_recv.deactivate();
         EventsStreamer {
             subscriber_send_channel,
-            to_subscribe_clone_recv,
+            inactive_to_subscribe_clone_recv,
             known_nodes_with_stake,
             non_staked_node_count,
         }
