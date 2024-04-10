@@ -12,8 +12,7 @@ use crate::{
     context::SequencerContext,
     network,
     persistence::{self, SequencerPersistence},
-    state::{BlockMerkleTree, FeeMerkleTree},
-    SeqTypes,
+    state::{update_state_storage, BlockMerkleTree, FeeMerkleTree},
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
@@ -21,7 +20,6 @@ use clap::Parser;
 use futures::future::BoxFuture;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
-    merklized_state::MerklizedStateDataSource,
     status::{self, UpdateStatusData},
     Error,
 };
@@ -132,7 +130,7 @@ impl Options {
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module_sql::<N, P, sql::DataSource, Ver>(
+                self.init_with_query_module_sql::<N, P, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -280,24 +278,23 @@ impl Options {
         Ok(context)
     }
 
-    async fn init_with_query_module_sql<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static>(
         self,
         query_opt: Query,
-        mod_opt: D::Options,
+        mod_opt: persistence::sql::Options,
         init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
         bind_version: Ver,
     ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource
-            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, 256>
-            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, 3>
-            + Send
-            + Sync
-            + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+        let ds = sql::DataSource::create(
+            mod_opt.clone(),
+            provider(query_opt.peers.clone(), bind_version),
+            false,
+        )
+        .await?;
         let (mut context, mut app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
@@ -306,18 +303,26 @@ impl Options {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "state/blocks",
-                endpoints::merklized_state::<N, P, D, BlockMerkleTree, _, 3>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>(bind_version)?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "state/fees",
-                endpoints::merklized_state::<N, P, D, FeeMerkleTree, _, 256>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
             )?;
         }
 
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
         }
+
+        let ds = sql::DataSource::create(mod_opt, provider(query_opt.peers, bind_version), false)
+            .await?;
+
+        context.spawn(
+            "merklized state storage updater",
+            update_state_storage(Arc::new(RwLock::new(ds)), context.node_state()),
+        );
 
         context.spawn(
             "API server",

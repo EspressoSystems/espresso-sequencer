@@ -78,7 +78,7 @@ impl Transaction {
 }
 
 impl HotShotTransaction for Transaction {
-    fn from_bytes(bytes: &[u8]) -> Self {
+    fn from_bytes(_bytes: &[u8]) -> Self {
         todo!()
     }
 

@@ -279,7 +279,8 @@ impl BlockHeader<SeqTypes> for Header {
                     parent_state.fee_merkle_tree.commitment(),
                     missing_accounts,
                 )
-                .await;
+                .await
+                .unwrap();
 
             // Insert missing fee state entries
             for account in missing_account_proofs.iter() {
@@ -300,7 +301,8 @@ impl BlockHeader<SeqTypes> for Header {
                     parent_leaf.get_view_number(),
                     &mut validated_state.block_merkle_tree,
                 )
-                .await;
+                .await
+                .expect("failed to remember proof");
         }
 
         Self::from_info(
