@@ -61,8 +61,9 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$"
 gen-bindings:
-    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
+    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
     # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to

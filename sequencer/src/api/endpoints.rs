@@ -9,9 +9,11 @@ use super::{
 use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
     network,
+    persistence::SequencerPersistence,
     state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
     NamespaceId, SeqTypes, Transaction,
 };
+use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
 use committable::Committable;
 use ethers::prelude::U256;
@@ -53,22 +55,27 @@ impl From<(FeeAccountProof, U256)> for AccountQueryData {
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
-pub(super) type AvailState<N, D, Ver> = Arc<RwLock<StorageState<N, D, Ver>>>;
+pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>>>;
 
-pub(super) fn availability<N, D, Ver: StaticVersionType + 'static>(
+type AvailabilityApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, availability::Error, Ver>;
+
+pub(super) fn availability<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, availability::Error, Ver>>
+) -> Result<AvailabilityApi<N, P, D, Ver>>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
+    P: SequencerPersistence,
 {
     let mut options = availability::Options::default();
     let extension = toml::from_str(include_str!("../../api/availability.toml"))?;
     options.extensions.push(extension);
     let timeout = options.fetch_timeout;
 
-    let mut api =
-        availability::define_api::<AvailState<N, D, Ver>, SeqTypes, Ver>(&options, bind_version)?;
+    let mut api = availability::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
+        &options,
+        bind_version,
+    )?;
 
     api.get("getnamespaceproof", move |req, state| {
         async move {
@@ -131,24 +138,28 @@ where
     Ok(api)
 }
 
-pub(super) fn node<N, D, Ver: StaticVersionType + 'static>(
+type NodeApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, node::Error, Ver>;
+
+pub(super) fn node<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, node::Error, Ver>>
+) -> Result<NodeApi<N, P, D, Ver>>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
+    P: SequencerPersistence,
 {
-    let api = node::define_api::<AvailState<N, D, Ver>, SeqTypes, Ver>(
+    let api = node::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
         &Default::default(),
         bind_version,
     )?;
     Ok(api)
 }
-pub(super) fn submit<N, S, Ver: StaticVersionType + 'static>() -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, P, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
-    S::State: Send + Sync + SubmitDataSource<N>,
+    P: SequencerPersistence,
+    S::State: Send + Sync + SubmitDataSource<N, P>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
@@ -174,7 +185,7 @@ where
 
 pub(super) fn state_signature<N, S, Ver: StaticVersionType + 'static>(
     _: Ver,
-) -> anyhow::Result<Api<S, Error, Ver>>
+) -> Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + ReadState,
@@ -202,9 +213,7 @@ where
     Ok(api)
 }
 
-pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(
-    _: Ver,
-) -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateDataSource,
@@ -277,16 +286,18 @@ where
     Ok(api)
 }
 
-pub(super) fn merklized_state<N, D, S, const ARITY: usize, Ver: StaticVersionType + 'static>(
+type MerklizedStateApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, merklized_state::Error, Ver>;
+pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, const ARITY: usize>(
     _: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, merklized_state::Error, Ver>>
+) -> Result<MerklizedStateApi<N, P, D, Ver>>
 where
     N: network::Type,
     D: MerklizedStateDataSource<SeqTypes, S, ARITY> + Send + Sync + 'static,
     S: MerklizedState<SeqTypes, ARITY>,
+    P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
 {
-    let api = merklized_state::define_api::<AvailState<N, D, Ver>, SeqTypes, S, Ver, ARITY>(
+    let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver, ARITY>(
         &Default::default(),
     )?;
     Ok(api)

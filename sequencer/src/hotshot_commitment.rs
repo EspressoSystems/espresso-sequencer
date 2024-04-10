@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
-use contract_bindings::hot_shot::{HotShot, Qc};
+use contract_bindings::hot_shot::{HotShot, HotShotErrors, Qc};
 use ethers::prelude::*;
 use futures::{
     future,
@@ -249,7 +249,7 @@ async fn sync_with_l1(
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
     // example, if there are multiple commitment tasks racing.
-    contract_send(&txn)
+    contract_send::<_, _, HotShotErrors>(&txn)
         .await
         .map_err(|e| SyncError::TransactionFailed { err: e, num_leaves })?;
 

@@ -143,7 +143,10 @@ pub mod testing {
             node_implementation::ConsensusTime,
         },
     };
-    use sequencer::{catchup::StateCatchup, state_signature::StateSignatureMemStorage};
+    use sequencer::{
+        catchup::StateCatchup, persistence::PersistenceOptions,
+        state_signature::StateSignatureMemStorage,
+    };
     use sequencer::{Event, Transaction};
     use std::{num::NonZeroUsize, time::Duration};
 
@@ -310,11 +313,12 @@ pub mod testing {
             }
         }
 
-        pub async fn init_nodes<Ver: StaticVersionType + 'static>(
+        pub async fn init_nodes<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
+            options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            SystemContextHandle<SeqTypes, Node<network::Memory>>,
+            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
             Option<StateSigner<Ver>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
@@ -323,11 +327,21 @@ pub mod testing {
                 &self.config.known_nodes_with_stake,
                 Self::total_nodes(),
             );
+
             join_all((0..self.num_staking_non_staking_nodes()).map(|i| {
                 is_staked = i < num_staked_nodes;
+                let options = options.clone();
                 async move {
+                    let persistence = options.create().await.unwrap();
                     let (hotshot_handle, state_signer) = self
-                        .init_node(i, is_staked, stake_table_commit, &NoMetrics, bind_version)
+                        .init_node(
+                            i,
+                            is_staked,
+                            stake_table_commit,
+                            &NoMetrics,
+                            bind_version,
+                            persistence,
+                        )
                         .await;
                     // wrapped in some because need to take later
                     (hotshot_handle, Some(state_signer))
@@ -336,15 +350,16 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<Ver: StaticVersionType + 'static>(
+        pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
             &self,
             i: usize,
             is_staked: bool,
             stake_table_commit: StakeTableCommitmentType,
             metrics: &dyn Metrics,
             bind_version: Ver,
+            persistence: P,
         ) -> (
-            SystemContextHandle<SeqTypes, Node<network::Memory>>,
+            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
             StateSigner<Ver>,
         ) {
             let mut config = self.config.clone();
@@ -389,6 +404,7 @@ pub mod testing {
                 None,
                 stake_table_commit,
                 bind_version,
+                persistence,
             )
             .await;
 
@@ -438,11 +454,11 @@ pub mod testing {
             async_spawn(app.serve(url, STATIC_VER_0_1));
         }
         // enable hotshot event streaming
-        pub fn enable_hotshot_node_event_streaming(
+        pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory>>,
+            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -562,15 +578,20 @@ pub mod testing {
         }
     }
 
-    pub struct PermissionedBuilderTestConfig<Ver: StaticVersionType + 'static> {
-        pub builder_context: BuilderContext<network::Memory, Ver>,
+    pub struct PermissionedBuilderTestConfig<
+        P: SequencerPersistence,
+        Ver: StaticVersionType + 'static,
+    > {
+        pub builder_context: BuilderContext<network::Memory, P, Ver>,
         pub pub_key: BLSPubKey,
     }
 
-    impl<Ver: StaticVersionType + 'static> PermissionedBuilderTestConfig<Ver> {
+    impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
+        PermissionedBuilderTestConfig<P, Ver>
+    {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: SystemContextHandle<SeqTypes, Node<network::Memory>>,
+            hotshot_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,
@@ -658,6 +679,8 @@ mod test {
     };
     use hotshot_types::utils::BuilderCommitment;
     use sequencer::block::payload::Payload;
+    use sequencer::persistence::no_storage::{self, NoStorage};
+    use sequencer::persistence::sql;
     use sequencer::Header;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
@@ -677,7 +700,7 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let config = HotShotTestConfig::default();
         tracing::debug!("Done with hotshot test config");
-        let handles = config.init_nodes(ver).await;
+        let handles = config.init_nodes(ver, no_storage::Options).await;
         tracing::debug!("Done with init nodes");
         let total_nodes = HotShotTestConfig::total_nodes();
 

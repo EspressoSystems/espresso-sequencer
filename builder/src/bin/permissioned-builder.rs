@@ -11,6 +11,7 @@ use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
+use sequencer::persistence::no_storage::NoStorage;
 use sequencer::{BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
 use std::num::NonZeroUsize;
@@ -132,7 +133,7 @@ pub struct PermissionedBuilderOptions {
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(short, long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(long, env = "BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 
     /// Url a builder can use to stream hotshot events
@@ -226,6 +227,7 @@ async fn main() -> anyhow::Result<()> {
         bootstrapped_view,
         opt.channel_capacity,
         sequencer_version,
+        NoStorage,
     )
     .await?;
 
