@@ -11,7 +11,6 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
-use crate::merklized_state::UpdateStateStorage;
 use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
@@ -66,7 +65,6 @@ impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
     T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
     Payload<Types>: QueryablePayload,
-    <Types as NodeType>::ValidatedState: UpdateStateStorage<Types, T>,
 {
     async fn update(
         &mut self,
@@ -86,10 +84,7 @@ where
             for (
                 qc,
                 LeafInfo {
-                    leaf,
-                    state,
-                    delta,
-                    vid_share,
+                    leaf, vid_share, ..
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
@@ -130,13 +125,6 @@ where
                         "block {} not available at decide",
                         leaf.get_block_header().block_number()
                     );
-                }
-
-                // Update state storage if the state has changed
-                if let Some(delta) = delta {
-                    if let Err(e) = state.update_storage(self, leaf, delta.clone()).await {
-                        tracing::error!("failed to update state storage {e} for leaf {leaf}")
-                    }
                 }
             }
         }

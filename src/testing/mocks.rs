@@ -10,23 +10,21 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::merklized_state::{MerklizedState, UpdateStateStorage};
+use crate::merklized_state::MerklizedState;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
     types::HeightIndexed,
 };
-use async_trait::async_trait;
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
     implementations::MemoryNetwork,
-    NodeImplementation, ValidatedState,
+    NodeImplementation,
 };
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
-use hotshot_types::data::Leaf;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     message::Message,
@@ -39,7 +37,7 @@ use jf_primitives::merkle_tree::{
     universal_merkle_tree::UniversalMerkleTree,
 };
 use serde::{Deserialize, Serialize};
-use std::{ops::Range, sync::Arc};
+use std::ops::Range;
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
@@ -98,18 +96,6 @@ impl NodeType for MockTypes {
     type InstanceState = TestInstanceState;
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
-}
-
-#[async_trait]
-impl<D> UpdateStateStorage<MockTypes, D> for TestValidatedState {
-    async fn update_storage(
-        &self,
-        _storage: &mut D,
-        _leaf: &Leaf<MockTypes>,
-        _delta: Arc<<<MockTypes as NodeType>::ValidatedState as ValidatedState<MockTypes>>::Delta>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;

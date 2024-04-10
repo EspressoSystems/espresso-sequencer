@@ -85,7 +85,10 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -594,7 +597,16 @@ where
             .get_path(snapshot, key)
             .await
     }
+}
 
+#[async_trait]
+impl<Types, S, P> MerklizedStateHeightPersistence for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: MerklizedStateHeightPersistence + Send + Sync,
+    P: Send + Sync,
+{
     async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
         self.fetcher
             .storage
@@ -614,7 +626,6 @@ where
             .await
     }
 }
-
 #[async_trait]
 impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S, P>
 where

@@ -17,7 +17,10 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -295,7 +298,14 @@ where
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.data_source.get_path(snapshot, key).await
     }
+}
 
+#[async_trait]
+impl<D, U> MerklizedStateHeightPersistence for ExtensibleDataSource<D, U>
+where
+    D: MerklizedStateHeightPersistence + Send + Sync,
+    U: Send + Sync,
+{
     async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
         self.data_source.set_last_state_height(height).await
     }

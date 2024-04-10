@@ -79,7 +79,10 @@ use crate::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     task::BackgroundTask,
     types::HeightIndexed,
@@ -1584,7 +1587,10 @@ where
             proof: proof_path,
         })
     }
+}
 
+#[async_trait]
+impl MerklizedStateHeightPersistence for SqlStorage {
     async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
         self.transaction()
             .await?
