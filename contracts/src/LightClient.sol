@@ -112,7 +112,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error WrongStakeTableUsed();
     /// @notice Invalid address
     error InvalidAddress();
-    /// @notice Only an approved prover can perform this actionx
+    /// @notice Only an approved prover can perform this action
     error UnapprovedProver();
 
     /// @notice since the constructor initializes storage on this contract we disable it
