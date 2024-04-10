@@ -14,7 +14,7 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
-commit = { git = "https://github.com/EspressoSystems/commit.git" }
+commit = { git = "https://github.com/EspressoSystems/commit" }
 dotenvy = { workspace = true }
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 ethers = { workspace = true }
