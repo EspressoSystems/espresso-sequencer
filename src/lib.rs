@@ -753,8 +753,6 @@ mod test {
             status::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
         )
         .unwrap()
-        .register_module("explorer", explorer::define_api(STATIC_VER_0_1).unwrap())
-        .unwrap()
         .module::<Error, Version01>("mod", module_spec)
         .unwrap()
         .get("get_ext", |_, state| {

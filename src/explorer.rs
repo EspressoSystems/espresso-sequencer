@@ -29,7 +29,7 @@ use std::path::Path;
 use tide_disco::StatusCode;
 use tide_disco::{api::ApiError, method::ReadState, Api};
 pub use traits::*;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// [Error] is an enum that represents the various errors that can be returned
 /// from the Explorer API.
@@ -583,7 +583,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error, Version01>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("explorer", define_api(STATIC_VER_0_1).unwrap())
             .unwrap();
         network.spawn(
