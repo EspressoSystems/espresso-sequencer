@@ -32,10 +32,7 @@ use quic::tokio::Transport as QuicTransport;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use self::behaviours::{
-    dht::DHTEvent,
-    request_response::{Request, Response},
-};
+use self::behaviours::request_response::{Request, Response};
 pub use self::{
     def::NetworkDef,
     error::NetworkError,
@@ -180,7 +177,7 @@ pub enum NetworkEvent {
 /// only used for event processing before relaying to client
 pub enum NetworkEventInternal {
     /// a DHT event
-    DHTEvent(DHTEvent),
+    DHTEvent(libp2p::kad::Event),
     /// a identify event. Is boxed because this event is much larger than the other ones so we want
     /// to store it on the heap.
     IdentifyEvent(Box<IdentifyEvent>),

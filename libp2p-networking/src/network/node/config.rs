@@ -38,6 +38,9 @@ pub struct NetworkNodeConfig {
     /// expiratiry for records in DHT
     #[builder(default)]
     pub ttl: Option<Duration>,
+    /// whether to start in libp2p::kad::Mode::Server mode
+    #[builder(default = "false")]
+    pub server_mode: bool,
 }
 
 /// NOTE: `mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high`

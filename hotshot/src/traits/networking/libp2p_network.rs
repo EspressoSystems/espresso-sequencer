@@ -374,6 +374,7 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
                 NonZeroUsize::new(config.config.num_nodes_with_stake.get() - 2)
                     .expect("failed to calculate replication factor"),
             )
+            .server_mode(libp2p_config.server_mode)
             .identity(keypair)
             .bound_addr(Some(bind_address.clone()))
             .mesh_params(Some(MeshParams {

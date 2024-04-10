@@ -200,7 +200,8 @@ pub async fn spin_up_swarms<S: Debug + Default + Send>(
             .to_connect_addrs(HashSet::default())
             .bound_addr(Some(addr))
             .ttl(None)
-            .republication_interval(None);
+            .republication_interval(None)
+            .server_mode(true);
         let config = config
             .build()
             .context(NodeConfigSnafu)
@@ -237,6 +238,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send>(
             .replication_factor(replication_factor)
             .bound_addr(Some(addr.clone()))
             .to_connect_addrs(HashSet::default())
+            .server_mode(true)
             .build()
             .context(NodeConfigSnafu)
             .context(HandleSnafu)?;

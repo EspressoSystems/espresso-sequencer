@@ -66,6 +66,7 @@ mesh_n_low = 4
 mesh_outbound_min = 2
 mesh_n = 4
 online_time = 10
+server_mode = true
 
 [web_server_config]
 url = "http://localhost:9000"

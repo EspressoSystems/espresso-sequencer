@@ -1,23 +1,20 @@
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    num::NonZeroUsize,
-    task::Poll,
-    time::Duration,
-};
+/// Task for doing bootstraps at a regular interval
+pub mod bootstrap;
+use std::{collections::HashMap, num::NonZeroUsize, time::Duration};
 
+use async_compatibility_layer::{art, channel::UnboundedSender};
 /// a local caching layer for the DHT key value pairs
-use futures::channel::oneshot::Sender;
-use lazy_static::lazy_static;
-use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour, Event as KademliaEvent};
-use libp2p::{
-    kad::{
-        /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapError, BootstrapOk,
-        GetClosestPeersOk, GetRecordOk, GetRecordResult, Mode, ProgressStep, PutRecordResult,
-        QueryId, QueryResult, Quorum, Record,
-    },
-    swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
-    Multiaddr,
+use futures::{
+    channel::{mpsc, oneshot::Sender},
+    SinkExt,
 };
+use lazy_static::lazy_static;
+use libp2p::kad::{
+    /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapOk, GetClosestPeersOk,
+    GetRecordOk, GetRecordResult, ProgressStep, PutRecordResult, QueryId, QueryResult, Record,
+};
+use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour};
+use libp2p::kad::{BootstrapError, Event as KademliaEvent};
 use libp2p_identity::PeerId;
 use tracing::{error, info, warn};
 
@@ -30,6 +27,8 @@ lazy_static! {
     static ref MAX_DHT_QUERY_SIZE: NonZeroUsize = NonZeroUsize::new(50).unwrap();
 }
 
+use crate::network::{ClientRequest, NetworkEvent};
+
 use super::exponential_backoff::ExponentialBackoff;
 
 /// Behaviour wrapping libp2p's kademlia
@@ -38,31 +37,24 @@ use super::exponential_backoff::ExponentialBackoff;
 /// - Request API
 /// - bootstrapping into the network
 /// - peer discovery
+#[derive(Debug)]
 pub struct DHTBehaviour {
-    /// client approval to begin bootstrap
-    pub begin_bootstrap: bool,
     /// in progress queries for nearby peers
     pub in_progress_get_closest_peers: HashMap<QueryId, Sender<()>>,
-    /// bootstrap nodes
-    pub bootstrap_nodes: HashMap<PeerId, HashSet<Multiaddr>>,
-    /// List of kademlia events
-    pub event_queue: Vec<DHTEvent>,
     /// List of in-progress get requests
     in_progress_get_record_queries: HashMap<QueryId, KadGetQuery>,
     /// List of in-progress put requests
     in_progress_put_record_queries: HashMap<QueryId, KadPutQuery>,
-    /// List of previously failed get requests
-    queued_get_record_queries: VecDeque<KadGetQuery>,
-    /// List of previously failed put requests
-    queued_put_record_queries: VecDeque<KadPutQuery>,
-    /// Kademlia behaviour
-    pub kadem: KademliaBehaviour<MemoryStore>,
     /// State of bootstrapping
     pub bootstrap_state: Bootstrap,
     /// the peer id (useful only for debugging right now)
     pub peer_id: PeerId,
     /// replication factor
     pub replication_factor: NonZeroUsize,
+    /// Sender to retry requests.
+    retry_tx: Option<UnboundedSender<ClientRequest>>,
+    /// Sender to the bootstrap task
+    bootstrap_tx: Option<mpsc::Sender<bootstrap::InputEvent>>,
 }
 
 /// State of bootstrapping
@@ -91,58 +83,41 @@ pub enum DHTEvent {
 }
 
 impl DHTBehaviour {
-    /// Begin the bootstrap process
-    pub fn begin_bootstrap(&mut self) {
-        self.begin_bootstrap = true;
+    /// Give the handler a way to retry requests.
+    pub fn set_retry(&mut self, tx: UnboundedSender<ClientRequest>) {
+        self.retry_tx = Some(tx);
     }
-
-    /// Start a query for the closest peers
-    pub fn query_closest_peers(&mut self, random_peer: PeerId) {
-        self.kadem.get_closest_peers(random_peer);
+    /// Sets a sender to bootstrap task
+    pub fn set_bootstrap_sender(&mut self, tx: mpsc::Sender<bootstrap::InputEvent>) {
+        self.bootstrap_tx = Some(tx);
     }
-
     /// Create a new DHT behaviour
     #[must_use]
-    pub fn new(
-        mut kadem: KademliaBehaviour<MemoryStore>,
-        pid: PeerId,
-        replication_factor: NonZeroUsize,
-    ) -> Self {
+    pub fn new(pid: PeerId, replication_factor: NonZeroUsize) -> Self {
         // needed because otherwise we stay in client mode when testing locally
         // and don't publish keys stuff
         // e.g. dht just doesn't work. We'd need to add mdns and that doesn't seem worth it since
         // we won't have a local network
         // <https://github.com/libp2p/rust-libp2p/issues/4194>
-        kadem.set_mode(Some(Mode::Server));
         Self {
-            begin_bootstrap: false,
-            bootstrap_nodes: HashMap::default(),
             peer_id: pid,
-            event_queue: Vec::default(),
             in_progress_get_record_queries: HashMap::default(),
             in_progress_put_record_queries: HashMap::default(),
-            queued_get_record_queries: VecDeque::default(),
-            queued_put_record_queries: VecDeque::default(),
-            kadem,
             bootstrap_state: Bootstrap {
                 state: State::NotStarted,
                 backoff: ExponentialBackoff::new(2, Duration::from_secs(1)),
             },
             in_progress_get_closest_peers: HashMap::default(),
             replication_factor,
+            retry_tx: None,
+            bootstrap_tx: None,
         }
     }
 
-    /// query a peer (e.g. obtain its address if it exists)
-    pub fn lookup_peer(&mut self, peer_id: PeerId, chan: Sender<()>) {
-        let qid = self.kadem.get_closest_peers(peer_id);
-        self.in_progress_get_closest_peers.insert(qid, chan);
-    }
-
     /// print out the routing table to stderr
-    pub fn print_routing_table(&mut self) {
+    pub fn print_routing_table(&mut self, kadem: &mut KademliaBehaviour<MemoryStore>) {
         let mut err = format!("KBUCKETS: PID: {:?}, ", self.peer_id);
-        let v = self.kadem.kbuckets().collect::<Vec<_>>();
+        let v = kadem.kbuckets().collect::<Vec<_>>();
         for i in v {
             for j in i.iter() {
                 let s = format!(
@@ -155,47 +130,17 @@ impl DHTBehaviour {
         error!("{:?}", err);
     }
 
-    /// Passthru to kademlia
-    /// Associate address with kademlia peer
-    pub fn add_address(&mut self, peer_id: &PeerId, addr: Multiaddr) {
-        // add address to kademlia
-        self.kadem.add_address(peer_id, addr);
+    /// Get the replication factor for queries
+    #[must_use]
+    pub fn get_replication_factor(&self) -> NonZeroUsize {
+        self.replication_factor
     }
-
-    /// Save in case kademlia forgets about bootstrap nodes
-    pub fn add_bootstrap_nodes(&mut self, nodes: HashMap<PeerId, HashSet<Multiaddr>>) {
-        for (k, v) in nodes {
-            self.bootstrap_nodes.insert(k, v);
-        }
-    }
-
     /// Publish a key/value to the kv store.
     /// Once replicated upon all nodes, the caller is notified over
     /// `chan`. If there is an error, a [`crate::network::error::DHTError`] is
     /// sent instead.
-    pub fn put_record(&mut self, mut query: KadPutQuery) {
-        let record = Record::new(query.key.clone(), query.value.clone());
-
-        match self
-            .kadem
-            .put_record(record, Quorum::N(self.replication_factor))
-        {
-            Err(e) => {
-                // failed try again later
-                query.progress = DHTProgress::NotStarted;
-                query.backoff.start_next(false);
-                error!("Error publishing to DHT: {e:?} for peer {:?}", self.peer_id);
-                self.queued_put_record_queries.push_back(query);
-            }
-            Ok(qid) => {
-                info!("Success publishing {:?} to DHT", qid);
-                let query = KadPutQuery {
-                    progress: DHTProgress::InProgress(qid),
-                    ..query
-                };
-                self.in_progress_put_record_queries.insert(qid, query);
-            }
-        }
+    pub fn put_record(&mut self, id: QueryId, query: KadPutQuery) {
+        self.in_progress_put_record_queries.insert(id, query);
     }
 
     /// Retrieve a value for a key from the DHT.
@@ -209,6 +154,7 @@ impl DHTBehaviour {
         factor: NonZeroUsize,
         backoff: ExponentialBackoff,
         retry_count: u8,
+        kad: &mut KademliaBehaviour<MemoryStore>,
     ) {
         // noop
         if retry_count == 0 {
@@ -216,7 +162,7 @@ impl DHTBehaviour {
         }
 
         // check cache before making the request
-        if let Some(entry) = self.kadem.store_mut().get(&key.clone().into()) {
+        if let Some(entry) = kad.store_mut().get(&key.clone().into()) {
             // exists in cache
             if chan.send(entry.value.clone()).is_err() {
                 error!("Get DHT: channel closed before get record request result could be sent");
@@ -224,7 +170,7 @@ impl DHTBehaviour {
         } else {
             tracing::debug!("DHT cache miss, key: {:?}", key);
             // doesn't exist in cache, actually propagate request
-            let qid = self.kadem.get_record(key.clone().into());
+            let qid = kad.get_record(key.clone().into());
             let query = KadGetQuery {
                 backoff,
                 progress: DHTProgress::InProgress(qid),
@@ -238,8 +184,47 @@ impl DHTBehaviour {
         }
     }
 
+    /// Spawn a task which will retry the query after a backoff.
+    fn retry_get(&self, mut query: KadGetQuery) {
+        let Some(tx) = self.retry_tx.clone() else {
+            return;
+        };
+        let req = ClientRequest::GetDHT {
+            key: query.key,
+            notify: query.notify,
+            retry_count: query.retry_count,
+        };
+        let backoff = query.backoff.next_timeout(false);
+        art::async_spawn(async move {
+            art::async_sleep(backoff).await;
+            let _ = tx.send(req).await;
+        });
+    }
+
+    /// Spawn a task which will retry the query after a backoff.
+    fn retry_put(&self, mut query: KadPutQuery) {
+        let Some(tx) = self.retry_tx.clone() else {
+            return;
+        };
+        let req = ClientRequest::PutDHT {
+            key: query.key,
+            value: query.value,
+            notify: query.notify,
+        };
+        art::async_spawn(async move {
+            art::async_sleep(query.backoff.next_timeout(false)).await;
+            let _ = tx.send(req).await;
+        });
+    }
+
     /// update state based on recv-ed get query
-    fn handle_get_query(&mut self, record_results: GetRecordResult, id: QueryId, mut last: bool) {
+    fn handle_get_query(
+        &mut self,
+        store: &mut MemoryStore,
+        record_results: GetRecordResult,
+        id: QueryId,
+        mut last: bool,
+    ) {
         let num = match self.in_progress_get_record_queries.get_mut(&id) {
             Some(query) => match record_results {
                 Ok(results) => match results {
@@ -311,9 +296,7 @@ impl DHTBehaviour {
                         publisher: None,
                         expires: None,
                     };
-                    if self.kadem.store_mut().put(record).is_err() {
-                        error!("Error putting DHT Get result into Record Store");
-                    }
+                    let _ = store.put(record);
                     // return value
                     if notify.send(r).is_err() {
                         error!("Get DHT: channel closed before get record request result could be sent");
@@ -330,7 +313,7 @@ impl DHTBehaviour {
                             NonZeroUsize::new(num_replicas.get() + 1).unwrap_or(num_replicas),
                             *MAX_DHT_QUERY_SIZE,
                         );
-                        self.queued_get_record_queries.push_back(KadGetQuery {
+                        self.retry_get(KadGetQuery {
                             backoff,
                             progress: DHTProgress::NotStarted,
                             notify,
@@ -369,27 +352,39 @@ impl DHTBehaviour {
                         e, self.peer_id
                     );
                     // push back onto the queue
-                    self.queued_put_record_queries.push_back(query);
+                    self.retry_put(query);
                 }
             }
         } else {
             warn!("Put DHT: completed DHT query that is no longer tracked.");
         }
     }
-}
 
-impl DHTBehaviour {
-    #![allow(clippy::too_many_lines)]
+    /// Send that the bootsrap suceeded
+    fn finsish_bootstrap(&mut self) {
+        if let Some(mut tx) = self.bootstrap_tx.clone() {
+            art::async_spawn(
+                async move { tx.send(bootstrap::InputEvent::BootstrapFinished).await },
+            );
+        }
+    }
+    #[allow(clippy::too_many_lines)]
     /// handle a DHT event
-    fn dht_handle_event(&mut self, event: KademliaEvent) {
+    pub fn dht_handle_event(
+        &mut self,
+        event: KademliaEvent,
+        store: &mut MemoryStore,
+    ) -> Option<NetworkEvent> {
         match event {
             KademliaEvent::OutboundQueryProgressed {
                 result: QueryResult::PutRecord(record_results),
                 id,
-                step: ProgressStep { last: true, .. },
+                step: ProgressStep { last, .. },
                 ..
             } => {
-                self.handle_put_query(record_results, id);
+                if last {
+                    self.handle_put_query(record_results, id);
+                }
             }
             KademliaEvent::OutboundQueryProgressed {
                 result: QueryResult::GetClosestPeers(r),
@@ -425,7 +420,7 @@ impl DHTBehaviour {
                 step: ProgressStep { last, .. },
                 ..
             } => {
-                self.handle_get_query(record_results, id, last);
+                self.handle_get_query(store, record_results, id, last);
             }
             KademliaEvent::OutboundQueryProgressed {
                 result:
@@ -438,18 +433,14 @@ impl DHTBehaviour {
             } => {
                 if num_remaining == 0 {
                     info!("Finished bootstrap for peer {:?}", self.peer_id);
-                    self.bootstrap_state.state = State::NotStarted;
-                    self.event_queue.push(DHTEvent::IsBootstrapped);
-                    // After initial bootstrap succeeds do it every 2 minutes to maintain routing.
-                    self.bootstrap_state.backoff =
-                        ExponentialBackoff::new(1, Duration::from_secs(120));
-                    self.bootstrap_state.backoff.start_next(true);
+                    self.finsish_bootstrap();
                 } else {
                     warn!(
                         "Bootstrap in progress: num remaining nodes to ping {:?}",
                         num_remaining
                     );
                 }
+                return Some(NetworkEvent::IsBootstrapped);
             }
             KademliaEvent::OutboundQueryProgressed {
                 result: QueryResult::Bootstrap(Err(e)),
@@ -458,17 +449,11 @@ impl DHTBehaviour {
                 let BootstrapError::Timeout { num_remaining, .. } = e;
                 if num_remaining.is_none() {
                     error!(
-                        "Peer {:?} failed bootstrap with error {:?}. This should not happen and means all bootstrap nodes are down or were evicted from our local DHT. Readding bootstrap nodes {:?}",
-                        self.peer_id, e, self.bootstrap_nodes
+                        "Peer {:?} failed bootstrap with error {:?}. This should not happen and means all bootstrap nodes are down or were evicted from our local DHT.",
+                        self.peer_id, e,
                     );
-                    for (peer, addrs) in self.bootstrap_nodes.clone() {
-                        for addr in addrs {
-                            self.kadem.add_address(&peer, addr);
-                        }
-                    }
                 }
-                self.bootstrap_state.state = State::NotStarted;
-                self.bootstrap_state.backoff.start_next(true);
+                self.finsish_bootstrap();
             }
             KademliaEvent::RoutablePeer { peer, address: _ } => {
                 info!("on peer {:?} found routable peer {:?}", self.peer_id, peer);
@@ -490,13 +475,7 @@ impl DHTBehaviour {
                 bucket_range: _,
                 old_peer: _,
             } => {
-                // Trigger a new bootstrap when our table changes, if it's not running
-                // We do this to refresh our peers when we know routing has changed
-                // For more info see: https://github.com/libp2p/rust-libp2p/pull/4838
-                // TODO: Remove once that pr is in a libp2p release
-                if self.bootstrap_state.state == State::NotStarted {
-                    self.bootstrap_state.backoff.expire();
-                }
+                info!("Routing table update");
             }
             e @ KademliaEvent::OutboundQueryProgressed { .. } => {
                 info!("Not handling dht event {:?}", e);
@@ -505,6 +484,7 @@ impl DHTBehaviour {
                 error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
             }
         }
+        None
     }
 }
 
@@ -549,190 +529,4 @@ pub enum DHTProgress {
     InProgress(QueryId),
     /// The query has not been started
     NotStarted,
-}
-
-// Diagnostics:
-// 1. use of deprecated associated function `libp2p::libp2p_swarm::NetworkBehaviour::inject_event`: Implement `NetworkBehaviour::on_connection_handler_event` instead. The default implementation of this `inject_*` method delegates to it.
-
-impl NetworkBehaviour for DHTBehaviour {
-    type ConnectionHandler =
-        <KademliaBehaviour<MemoryStore> as NetworkBehaviour>::ConnectionHandler;
-
-    type ToSwarm = DHTEvent;
-
-    fn poll(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<ToSwarm<DHTEvent, THandlerInEvent<Self>>> {
-        if matches!(self.bootstrap_state.state, State::NotStarted)
-            && self.bootstrap_state.backoff.is_expired()
-            && self.begin_bootstrap
-        {
-            match self.kadem.bootstrap() {
-                Ok(_) => {
-                    self.bootstrap_state.state = State::Started;
-                    info!("Starting bootstrap");
-                }
-                Err(e) => {
-                    warn!(
-                        "peer id {:?} FAILED TO START BOOTSTRAP {:?} adding peers {:?}",
-                        self.peer_id, e, self.bootstrap_nodes
-                    );
-                    for (peer, addrs) in self.bootstrap_nodes.clone() {
-                        for addr in addrs {
-                            self.kadem.add_address(&peer, addr);
-                        }
-                    }
-                }
-            }
-        }
-
-        // retry put/gets if they are ready
-        for _i in 0..self.queued_get_record_queries.len() {
-            let Some(req) = self.queued_get_record_queries.pop_front() else {
-                continue;
-            };
-            if req.backoff.is_expired() {
-                self.get_record(
-                    req.key,
-                    req.notify,
-                    req.num_replicas,
-                    req.backoff,
-                    req.retry_count,
-                );
-            } else {
-                self.queued_get_record_queries.push_back(req);
-            }
-        }
-
-        for _i in 0..self.queued_put_record_queries.len() {
-            let Some(req) = self.queued_put_record_queries.pop_front() else {
-                continue;
-            };
-            if req.backoff.is_expired() {
-                self.put_record(req);
-            } else {
-                self.queued_put_record_queries.push_back(req);
-            }
-        }
-
-        // poll behaviour which is a passthrough and call inject event
-        while let Poll::Ready(ready) = NetworkBehaviour::poll(&mut self.kadem, cx) {
-            match ready {
-                ToSwarm::GenerateEvent(e) => {
-                    self.dht_handle_event(e);
-                }
-                ToSwarm::Dial { opts } => {
-                    return Poll::Ready(ToSwarm::Dial { opts });
-                }
-                ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler,
-                    event,
-                } => {
-                    return Poll::Ready(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler,
-                        event,
-                    });
-                }
-                ToSwarm::CloseConnection {
-                    peer_id,
-                    connection,
-                } => {
-                    return Poll::Ready(ToSwarm::CloseConnection {
-                        peer_id,
-                        connection,
-                    });
-                }
-                ToSwarm::ListenOn { opts } => {
-                    return Poll::Ready(ToSwarm::ListenOn { opts });
-                }
-                ToSwarm::RemoveListener { id } => {
-                    return Poll::Ready(ToSwarm::RemoveListener { id });
-                }
-                ToSwarm::NewExternalAddrCandidate(c) => {
-                    return Poll::Ready(ToSwarm::NewExternalAddrCandidate(c));
-                }
-                ToSwarm::ExternalAddrConfirmed(c) => {
-                    return Poll::Ready(ToSwarm::ExternalAddrConfirmed(c));
-                }
-                ToSwarm::ExternalAddrExpired(c) => {
-                    return Poll::Ready(ToSwarm::ExternalAddrExpired(c));
-                }
-                e => {
-                    error!("UNHANDLED NEW SWARM VARIANT: {e:?}");
-                }
-            }
-        }
-        if !self.event_queue.is_empty() {
-            return Poll::Ready(ToSwarm::GenerateEvent(self.event_queue.remove(0)));
-        }
-        Poll::Pending
-    }
-
-    fn on_swarm_event(&mut self, event: libp2p::swarm::derive_prelude::FromSwarm<'_>) {
-        self.kadem.on_swarm_event(event);
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        peer_id: PeerId,
-        connection_id: libp2p::swarm::derive_prelude::ConnectionId,
-        event: THandlerOutEvent<Self>,
-    ) {
-        self.kadem
-            .on_connection_handler_event(peer_id, connection_id, event);
-    }
-
-    fn handle_pending_inbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
-    ) -> Result<(), libp2p::swarm::ConnectionDenied> {
-        self.kadem
-            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
-    }
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        peer: PeerId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
-    ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
-        self.kadem.handle_established_inbound_connection(
-            connection_id,
-            peer,
-            local_addr,
-            remote_addr,
-        )
-    }
-
-    fn handle_pending_outbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: libp2p::core::Endpoint,
-    ) -> Result<Vec<Multiaddr>, libp2p::swarm::ConnectionDenied> {
-        self.kadem.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        )
-    }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        connection_id: libp2p::swarm::ConnectionId,
-        peer: PeerId,
-        addr: &Multiaddr,
-        role_override: libp2p::core::Endpoint,
-    ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
-        self.kadem
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
-    }
 }
