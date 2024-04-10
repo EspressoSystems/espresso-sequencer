@@ -44,6 +44,7 @@ use jf_primitives::{
 };
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
@@ -338,19 +339,13 @@ impl<'a> StateCatchup for SqlStateCatchup<'a> {
         for account in accounts {
             let block_height = self.block_height;
 
-            let result = self
+            let proof = self
                 .db
                 .get_path(
                     Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
                     account,
                 )
-                .await;
-
-            if result.is_err() {
-                continue;
-            }
-
-            let proof = result?;
+                .await?;
 
             match proof.proof.first().context("empty proof")? {
                 MerkleNode::Leaf { pos, elem, .. } => {
@@ -407,22 +402,22 @@ impl<'a> StateCatchup for SqlStateCatchup<'a> {
 
 pub async fn update_state_storage(
     storage: &mut SqlDataSource<SeqTypes, Provider>,
-    instance: NodeState,
-    parent_leaf: LeafQueryData<SeqTypes>,
-    proposed_leaf: LeafQueryData<SeqTypes>,
+    instance: &NodeState,
+    parent_leaf: &LeafQueryData<SeqTypes>,
+    proposed_leaf: &LeafQueryData<SeqTypes>,
 ) -> anyhow::Result<()> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
-    let header = proposed_leaf.get_block_header();
+    let header = parent_leaf.get_block_header();
     let validated_state = ValidatedState::from_header(header);
 
     let catchup = SqlStateCatchup {
         db: storage,
-        block_height: proposed_leaf.get_height(),
+        block_height: parent_leaf.get_height(),
     };
 
     let (state, delta) = validated_state
-        .apply_header(&instance, parent_leaf, header, catchup)
+        .apply_header(instance, parent_leaf, header, catchup)
         .await?;
 
     let block_number = proposed_leaf.get_height();
@@ -450,10 +445,6 @@ pub async fn update_state_storage(
             .context("failed to insert merkle nodes for block merkle tree")?;
     }
 
-    if block_number == 0 {
-        return Ok(());
-    }
-
     // Insert block merkle tree nodes
     let (_, proof) = block_merkle_tree
         .lookup(block_number - 1)
@@ -473,7 +464,6 @@ pub async fn update_state_storage(
         .set_last_state_height(block_number as usize)
         .await
         .context("failed to set last state height")?;
-    storage.commit().await?;
 
     Ok(())
 }
@@ -491,25 +481,26 @@ pub async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            if update_state_storage(
-                &mut storage,
-                instance.clone(),
-                parent_leaf.clone(),
-                leaf.clone(),
-            )
-            .await
-            .is_err()
-            {
-                tracing::error!(
-                    "failed to update state storage for leaf {:?}. retrying..",
-                    leaf
-                );
-            } else {
-                break;
+            match update_state_storage(&mut storage, &instance, &parent_leaf, &leaf).await {
+                Ok(()) => {
+                    if let Err(e) = storage.commit().await {
+                        tracing::error!("failed to commit for leaf {leaf:?} {e}",);
+                        async_std::task::sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                    parent_leaf = leaf.clone();
+                    break;
+                }
+                Err(e) => {
+                    storage.revert().await;
+                    tracing::error!(
+                        "failed to update state storage for leaf {leaf:?} {e} retrying..",
+                    );
+                }
             }
-        }
 
-        parent_leaf = leaf;
+            async_std::task::sleep(Duration::from_secs(1)).await;
+        }
     }
 
     Ok(())
@@ -543,6 +534,35 @@ impl ValidatedState {
         } else {
             vec![]
         };
+
+        // pushing a block into merkle tree shouldn't fail
+        validated_state
+            .block_merkle_tree
+            .push(parent_leaf.get_block_header().commit())
+            .unwrap();
+
+        let mut delta = Delta::default();
+        for FeeInfo { account, amount } in l1_deposits.iter() {
+            validated_state
+                .fee_merkle_tree
+                .update_with(account, |balance| {
+                    Some(balance.cloned().unwrap_or_default().add(*amount))
+                })
+                .expect("update_with succeeds");
+            delta.fees_delta.insert(*account);
+        }
+
+        if charge_fee(
+            &mut validated_state.fee_merkle_tree,
+            proposed_header.fee_info,
+        )
+        .is_err()
+        {
+            bail!("Insufficient funds")
+        };
+
+        delta.fees_delta.insert(proposed_header.fee_info.account);
+
         let accounts = std::iter::once(proposed_header.fee_info.account);
 
         // Find missing state entries
@@ -555,17 +575,11 @@ impl ValidatedState {
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
             tracing::warn!("fetching block frontier from peers");
-            instance
-                .peers
-                .as_ref()
+
+            // Unwrapping here is okay as we retry until we get the proof or until the task is canceled.
+            catchup
                 .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
                 .await
-                .unwrap();
-
-            // validate proposal is descendent of parent by appending to parent
-            validated_state
-                .block_merkle_tree
-                .push(parent_leaf.get_block_header().commit())
                 .unwrap();
         }
 
@@ -576,9 +590,7 @@ impl ValidatedState {
                 missing_accounts.len()
             );
 
-            let missing_account_proofs = instance
-                .peers
-                .as_ref()
+            let missing_account_proofs = catchup
                 .fetch_accounts(
                     view,
                     validated_state.fee_merkle_tree.commitment(),
@@ -596,49 +608,6 @@ impl ValidatedState {
             }
         }
 
-        let mut delta = Delta::default();
-
-        // Unwrapping here is okay as we retry until we get the proof or until the task is canceled.
-        catchup
-            .remember_blocks_merkle_tree(
-                parent_leaf.get_view_number(),
-                &mut validated_state.block_merkle_tree,
-            )
-            .await
-            .expect("block merkle tree proof member");
-
-        for FeeInfo { account, amount } in l1_deposits {
-            let account_proof = catchup
-                .fetch_accounts(
-                    parent_leaf.get_view_number(),
-                    validated_state.fee_merkle_tree.commitment(),
-                    vec![account],
-                )
-                .await?;
-
-            let proof = &account_proof.first().unwrap().proof;
-
-            proof
-                .remember(&mut validated_state.fee_merkle_tree)
-                .unwrap();
-
-            validated_state
-                .fee_merkle_tree
-                .update_with(account, |balance| {
-                    Some(balance.cloned().unwrap_or_default().add(amount))
-                })
-                .expect("update_with succeeds");
-            delta.fees_delta.insert(account);
-        }
-
-        if charge_fee(
-            &mut validated_state.fee_merkle_tree,
-            proposed_header.fee_info,
-        )
-        .is_err()
-        {
-            bail!("Insufficient funds")
-        };
         Ok((validated_state, delta))
     }
 }
