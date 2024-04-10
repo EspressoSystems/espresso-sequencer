@@ -85,7 +85,7 @@ impl TestView {
         let quorum_proposal_inner = QuorumProposal::<TestTypes> {
             block_header: block_header.clone(),
             view_number: genesis_view,
-            justify_qc: QuorumCertificate::genesis(),
+            justify_qc: QuorumCertificate::genesis(&TestInstanceState {}),
             upgrade_certificate: None,
             proposal_certificate: None,
         };
@@ -112,7 +112,6 @@ impl TestView {
         leaf.fill_block_payload_unchecked(TestBlockPayload {
             transactions: transactions.clone(),
         });
-        leaf.set_parent_commitment(Leaf::genesis(&TestInstanceState {}).commit());
 
         let signature = <BLSPubKey as SignatureKey>::sign(&private_key, leaf.commit().as_ref())
             .expect("Failed to sign leaf commitment!");
