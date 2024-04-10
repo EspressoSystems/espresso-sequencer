@@ -2,7 +2,6 @@ use crate::{
     api::endpoints::{AccountQueryData, BlocksFrontier},
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
 };
-use anyhow::bail;
 use async_trait::async_trait;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_primitives::merkle_tree::ForgetableMerkleTreeScheme;
@@ -150,7 +149,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
                             Ok(_) => return Ok(()),
                             Err(err) => {
                                 tracing::warn!("Error verifying block proof: {}", err);
-                                bail!(err);
+                                continue;
                             }
                         }
                     }

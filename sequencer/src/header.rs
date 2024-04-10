@@ -271,6 +271,7 @@ impl BlockHeader<SeqTypes> for Header {
             );
 
             // Fetch missing fee state entries
+            // Unwrapping here is okay as we retry until we get the accounts or until the task is canceled.
             let missing_account_proofs = instance_state
                 .peers
                 .as_ref()

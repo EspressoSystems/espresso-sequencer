@@ -338,13 +338,19 @@ impl<'a> StateCatchup for SqlStateCatchup<'a> {
         for account in accounts {
             let block_height = self.block_height;
 
-            let proof = self
+            let result = self
                 .db
                 .get_path(
                     Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
                     account,
                 )
-                .await?;
+                .await;
+
+            if result.is_err() {
+                continue;
+            }
+
+            let proof = result?;
 
             match proof.proof.first().context("empty proof")? {
                 MerkleNode::Leaf { pos, elem, .. } => {
@@ -592,12 +598,14 @@ impl ValidatedState {
 
         let mut delta = Delta::default();
 
+        // Unwrapping here is okay as we retry until we get the proof or until the task is canceled.
         catchup
             .remember_blocks_merkle_tree(
                 parent_leaf.get_view_number(),
                 &mut validated_state.block_merkle_tree,
             )
-            .await?;
+            .await
+            .expect("block merkle tree proof member");
 
         for FeeInfo { account, amount } in l1_deposits {
             let account_proof = catchup
