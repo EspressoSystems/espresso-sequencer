@@ -377,9 +377,11 @@ impl SequencerPersistence for Persistence {
 
         transaction(self, |mut tx| {
             async move {
-                tx.execute_one_with_retries(
-                    "INSERT INTO vid_share (view, data) VALUES ($1, $2)",
-                    [sql_param(&(view as i64)), sql_param(&data_bytes)],
+                tx.upsert(
+                    "vid_share",
+                    ["view", "data"],
+                    ["view"],
+                    [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
                 )
                 .await?;
                 Ok(())
@@ -398,9 +400,11 @@ impl SequencerPersistence for Persistence {
 
         transaction(self, |mut tx| {
             async move {
-                tx.execute_one_with_retries(
-                    "INSERT INTO da_proposal (view, data) VALUES ($1, $2)",
-                    [sql_param(&(view as i64)), sql_param(&data_bytes)],
+                tx.upsert(
+                    "da_proposal",
+                    ["view", "data"],
+                    ["view"],
+                    [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
                 )
                 .await?;
                 Ok(())
