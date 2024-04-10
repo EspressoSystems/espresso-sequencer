@@ -48,7 +48,7 @@ use bit_vec::BitVec;
 use chrono::Utc;
 use committable::Committable;
 use futures::{
-    stream::{BoxStream, StreamExt, TryStreamExt},
+    stream::{self, BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
 };
@@ -64,6 +64,7 @@ use jf_primitives::merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
+use postgres::types::Json;
 use postgres_native_tls::TlsConnector;
 use snafu::OptionExt;
 use std::{
@@ -2055,204 +2056,135 @@ where
         let target = &range.target;
         let filter = &request.filter;
 
-        let (query, params, offset): (String, Vec<Box<dyn ToSql + Send + Sync>>, Option<usize>) =
-            match (target, filter) {
-                (_, TransactionSummaryFilter::RollUp(_)) => {
-                    // TODO: implement roll-up based filtering
-                    return Ok(vec![]);
-                }
-                (TransactionIdentifier::Latest, TransactionSummaryFilter::None) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                           FROM header AS h
-                           JOIN payload AS p ON h.height = p.height
-                           WHERE h.height IN (
-                                SELECT t1.block_height
-                                    FROM transaction AS t1
-                                    ORDER BY (t1.block_height, t1.index) DESC
-                                    LIMIT $1
-                            )
-                           ORDER BY h.height DESC"
-                    ),
-                    vec![Box::new(range.num_transactions.get() as i64)],
-                    Some(0),
-                ),
-                (TransactionIdentifier::Latest, TransactionSummaryFilter::Block(height)) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                           FROM header AS h
-                           JOIN payload AS p ON h.height = p.height
-                           WHERE h.height = $2
-                           ORDER BY h.height DESC"
-                    ),
-                    vec![
-                        Box::new(range.num_transactions.get() as i64),
-                        Box::new(*height as i64),
-                    ],
-                    Some(0),
-                ),
+        // We need to figure out the transaction target we are going to start
+        // returned results based on.
+        let transaction_target = match target {
+            TransactionIdentifier::Latest => self.query_one::<str, Vec<Box<dyn ToSql + Send + Sync>>>(
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                vec![],
+            ).await,
+            TransactionIdentifier::HeightAndOffset(height, offset) => self.query_one(
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.block_height = $1 ORDER BY (t.block_height, t.index) DESC OFFSET $2 LIMIT 1",
+                [*height as i64, *offset as i64],
+            ).await,
+            TransactionIdentifier::Hash(hash) => self.query_one(
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.hash = $1 ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                [hash.to_string()],
+            ).await,
+        };
 
-                (
-                    TransactionIdentifier::HeightAndOffset(height, offset),
-                    TransactionSummaryFilter::None,
-                ) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                            FROM header AS h
-                            JOIN payload AS p ON h.height = p.height
-                            WHERE h.height IN (
-                                SELECT t1.block_height
-                                    FROM transaction AS t1
-                                    WHERE (t1.block_height, t1.index) <= (
-                                        SELECT t2.block_height, t2.index
-                                            FROM transaction AS t2
-                                            WHERE t2.block_height = $1
-                                            ORDER BY (t2.block_height, t2.index) DESC
-                                            OFFSET $2
-                                            LIMIT 1
-                                    )
-                                    ORDER BY (t1.block_height, t1.index) DESC
-                                    LIMIT $3
-                            )
-                            ORDER BY h.height DESC"
-                    ),
-                    vec![
-                        Box::new(*height as i64),
-                        Box::new(*offset as i64),
-                        Box::new(range.num_transactions.get() as i64),
-                    ],
-                    Some(*offset),
-                ),
-                (
-                    TransactionIdentifier::HeightAndOffset(height, offset),
-                    TransactionSummaryFilter::Block(block_height),
-                ) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                            FROM header AS h
-                            JOIN payload AS p ON h.height = p.height
-                            WHERE h.height IN (
-                                SELECT t1.block_height
-                                    FROM transaction AS t1
-                                    WHERE (t1.block_height, t1.index) <= (
-                                        SELECT t2.block_height, t2.index
-                                            FROM transaction AS t2
-                                            WHERE t2.block_height = $1
-                                            ORDER BY (t2.block_height, t2.index) DESC
-                                            OFFSET $2
-                                            LIMIT 1
-                                    )
-                                    AND t1.block_height = $4
-                                    ORDER BY (t1.block_height, t1.index) DESC
-                                    LIMIT $3
-                            )
-                            ORDER BY h.height DESC"
-                    ),
-                    vec![
-                        Box::new(*height as i64),
-                        Box::new(*offset as i64),
-                        Box::new(range.num_transactions.get() as i64),
-                        Box::new(*block_height as i64),
-                    ],
-                    Some(*offset),
-                ),
-                (TransactionIdentifier::Hash(hash), TransactionSummaryFilter::None) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                            FROM header AS h
-                            JOIN payload AS p ON h.height = p.height
-                            WHERE h.height IN (
-                                SELECT t1.block_height
-                                    FROM transaction AS t1
-                                    WHERE (t1.block_height, t1.index) <= (
-                                        SELECT t2.block_height, t2.index
-                                            FROM transaction AS t2
-                                            WHERE t2.hash = $1
-                                            ORDER BY (t2.block_height, t2.index) DESC
-                                            OFFSET $2
-                                            LIMIT 1
-                                    )
-                                    ORDER BY (t1.block_height, t1.index) DESC
-                                    LIMIT $2
-                            )
-                            ORDER BY h.height DESC"
-                    ),
-                    vec![
-                        Box::new(hash.to_string()),
-                        Box::new(range.num_transactions.get() as i64),
-                    ],
-                    // This should be some value... but we have no way of
-                    // telling what that should be at this point.
-                    None,
-                ),
-                (TransactionIdentifier::Hash(hash), TransactionSummaryFilter::Block(height)) => (
-                    format!(
-                        "SELECT {BLOCK_COLUMNS}
-                            FROM header AS h
-                            JOIN payload AS p ON h.height = p.height
-                            WHERE h.height IN (
-                                SELECT t1.block_height
-                                    FROM transaction AS t1
-                                    WHERE (t1.block_height, t1.index) <= (
-                                        SELECT t2.block_height, t2.index
-                                            FROM transaction AS t2
-                                            WHERE t2.hash = $1
-                                            ORDER BY (t2.block_height, t2.index) DESC
-                                            OFFSET $2
-                                            LIMIT 1
-                                    )
-                                    AND t1.block_height = $3
-                                    ORDER BY (t1.block_height, t1.index) DESC
-                                    LIMIT $2
-                            )
-                            ORDER BY h.height DESC"
-                    ),
-                    vec![
-                        Box::new(hash.to_string()),
-                        Box::new(range.num_transactions.get() as i64),
-                        Box::new(*height as i64),
-                    ],
-                    // This should be some value... but we have no way of
-                    // telling what that should be at this point.
-                    None,
-                ),
-            };
+        let transaction_target = match transaction_target {
+            // If nothing is found, then we want to return an empty summary list
+            // as it means there is either no transaction, or the targeting
+            // criteria fails to identify any transaction
+            Err(QueryError::NotFound) => return Ok(vec![]),
+            _ => transaction_target,
+        }?;
 
-        let result = self.query(&query, params).await.map(|row_stream| {
-            row_stream.map(|row| -> Result<Vec<TransactionSummary<Types>>, QueryError> {
-                let block = parse_block::<Types>(row?)?;
-                let block_ref = &block;
+        let block_height = transaction_target.get::<_, i64>("height") as usize;
+        let transaction_index = transaction_target.get::<_, Json<TransactionIndex<Types>>>("index");
 
+        // Our block_stream is more-or-less always the same, the only difference
+        // is a an additional filter on the identified transactions being found
+        // In general, we use our `transaction_target` to identify the starting
+        // `block_height` and `transaction_index`, and we grab up to `limit`
+        // transactions from that point.  We then grab only the blocks for those
+        // identified transactions, as only those blocks are needed to pull all
+        // of the relevant transactions.
+        let block_stream = match filter {
+            TransactionSummaryFilter::RollUp(_) => return Ok(vec![]),
 
+            TransactionSummaryFilter::None => {
+                self.query::<str, Vec<Box<dyn ToSql + Send + Sync>>>(
+                    &format!(
+                        "SELECT {BLOCK_COLUMNS}
+                        FROM header AS h
+                        JOIN payload AS p ON h.height = p.height
+                        WHERE h.height IN (
+                            SELECT t.block_height
+                                FROM transaction AS t
+                                WHERE (t.block_height, t.index) <= ($1, $2)
+                                ORDER BY (t.block_height, t.index) DESC
+                                LIMIT $3
+                        )
+                        ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(block_height as i64),
+                        Box::new(&transaction_index),
+                        Box::new(range.num_transactions.get() as i64),
+                    ],
+                )
+                .await
+            }
+
+            TransactionSummaryFilter::Block(block) => {
+                self.query::<str, Vec<Box<dyn ToSql + Send + Sync>>>(
+                    &format!(
+                        "SELECT {BLOCK_COLUMNS}
+                    FROM header AS h
+                    JOIN payload AS p ON h.height = p.height
+                    WHERE h.height IN (
+                        SELECT t.block_height
+                            FROM transaction AS t
+                            WHERE (t.block_height, t.index) <= ($1, $2)
+                            ORDER BY (t.block_height, t.index) DESC
+                            LIMIT $3
+                    )
+                    AND h.height = $4
+                    ORDER BY h.height DESC"
+                    ),
+                    vec![
+                        Box::new(block_height as i64),
+                        Box::new(&transaction_index),
+                        Box::new(range.num_transactions.get() as i64),
+                        Box::new(*block as i64),
+                    ],
+                )
+                .await
+            }
+        }?
+        .map(|result| match result {
+            Ok(row) => parse_block::<Types>(row),
+            Err(err) => Err(err),
+        });
+
+        let transaction_summary_stream = block_stream.flat_map(|row| match row {
+            Ok(block) => stream::iter(
                 block
                     .enumerate()
                     .enumerate()
-                    .map(move |(index, (_, txn))| {
-                        Ok(TransactionSummary::try_from((block_ref, index, txn))?)
+                    .map(|(index, (_, txn))| {
+                        TransactionSummary::try_from((&block, index, txn)).map_err(|err| {
+                            QueryError::Error {
+                                message: err.to_string(),
+                            }
+                        })
                     })
-                    .try_collect::<TransactionSummary<Types>, Vec<TransactionSummary<Types>>, QueryError>()
-            })
+                    .collect::<Vec<QueryResult<TransactionSummary<Types>>>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<QueryResult<TransactionSummary<Types>>>>(),
+            ),
+            Err(err) => stream::iter(vec![Err(err)]),
         });
 
-        let non_flattened_results = result?
-            .try_collect::<Vec<Vec<TransactionSummary<Types>>>>()
+        let transaction_summary_vec = transaction_summary_stream
+            .try_collect::<Vec<TransactionSummary<Types>>>()
             .await?;
 
-        let flattened_results = non_flattened_results
+        Ok(transaction_summary_vec
             .into_iter()
-            .flat_map(|v| v.into_iter().rev())
-            .skip(offset.unwrap_or(0))
             .skip_while(|txn| {
                 if let TransactionIdentifier::Hash(hash) = target {
                     txn.hash != *hash
+                } else if let TransactionIdentifier::HeightAndOffset(height, offset) = target {
+                    txn.height != *height as u64 && txn.offset != *offset as u64
                 } else {
                     false
                 }
             })
-            .take(range.num_transactions.get())
-            .collect::<Vec<TransactionSummary<Types>>>();
-
-        Ok(flattened_results)
+            .collect::<Vec<TransactionSummary<Types>>>())
     }
 
     async fn get_transaction_detail(
