@@ -70,7 +70,7 @@ mod tests {
 
         tracing::info!("Client 1 Connected to server");
 
-        // client subscrive to hotshot events
+        // client 1 subscribe to hotshot events
         let mut events_1 = client_1
             .socket("events")
             .subscribe::<BuilderEvent<TestTypes>>()
@@ -89,7 +89,7 @@ mod tests {
 
         tracing::info!("Client 2 Connected to server");
 
-        // client 1  subscrive to hotshot events
+        // client 2 subscrive to hotshot events
         let mut events_2 = client_2
             .socket("events")
             .subscribe::<BuilderEvent<TestTypes>>()
