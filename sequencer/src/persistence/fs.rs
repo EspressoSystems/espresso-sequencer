@@ -97,6 +97,10 @@ impl SequencerPersistence for Persistence {
         let view_number = view.get_u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
+            if !dir_path.is_dir() {
+                return Ok(());
+            }
+
             for entry in fs::read_dir(dir_path)? {
                 let entry = entry?;
                 let path = entry.path();
@@ -243,8 +247,13 @@ impl SequencerPersistence for Persistence {
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-
-        tracing::info!("file path {:?}", file_path);
+        if file_path.exists() {
+            // HotShot sometimes sends duplicate VID shares. This is not necessarily a bug -- we
+            // just keep the first one -- so we return success, but it's worth mentioning in the
+            // logs.
+            tracing::warn!(view_number, "duplicate VID share");
+            return Ok(());
+        }
 
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -267,6 +276,13 @@ impl SequencerPersistence for Persistence {
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+        if file_path.exists() {
+            // HotShot sometimes sends duplicate DA proposals. This is not necessarily a bug -- we
+            // just keep the first one -- so we return success, but it's worth mentioning in the
+            // logs.
+            tracing::warn!(view_number, "duplicate DA proposal");
+            return Ok(());
+        }
 
         let mut file = fs::OpenOptions::new()
             .write(true)
