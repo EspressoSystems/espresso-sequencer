@@ -47,7 +47,7 @@ jobs:
         uses: ./.github/actions/install-capnp
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --locked --release
 
       - name: Test Demo
         run: |

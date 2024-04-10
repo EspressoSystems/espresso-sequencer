@@ -32,7 +32,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-            version: nightly-2cb875799419c907cc3709e586ece2559e6b340e # Not using the default version because likely of this bug https://github.com/foundry-rs/foundry/issues/7120
+          version: nightly-2cb875799419c907cc3709e586ece2559e6b340e # Not using the default version because likely of this bug https://github.com/foundry-rs/foundry/issues/7120
 
       - name: Install just command runner
         run: |
@@ -55,7 +55,7 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo build --bin diff-test --release
+          cargo build --locked --bin diff-test --release
           cargo test --release --workspace --all-features --no-run
           cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
         timeout-minutes: 30

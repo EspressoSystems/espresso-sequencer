@@ -68,7 +68,7 @@ jobs:
       - name: Compile all executables
         # timeout-minutes: 120
         run: |
-          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --release
+          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --locked --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
