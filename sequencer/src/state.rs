@@ -473,6 +473,12 @@ pub async fn update_state_storage(
             .store_state::<BlockMerkleTree, 3>(proof.proof, path, block_number)
             .await
             .context("failed to insert merkle nodes for block merkle tree")?;
+
+        storage
+            .write()
+            .await
+            .set_last_state_height(block_number as usize)
+            .await?;
     }
 
     Ok(())

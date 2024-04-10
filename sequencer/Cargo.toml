@@ -11,7 +11,6 @@ testing = ["hotshot-testing"]
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
-portpicker = "0.1.1"
 rand = "0.8.5"
 tempfile = "3.9.0"
 
@@ -87,6 +86,7 @@ typenum = { version = "1.15.0", default-features = false, features = [
 ] }
 url = { workspace = true }
 vbs = { workspace = true }
+portpicker = "0.1.1"
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]

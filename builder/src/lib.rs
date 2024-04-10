@@ -120,6 +120,7 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
+    use portpicker::pick_unused_port;
     //use sequencer::persistence::NoStorage;
     use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
@@ -223,7 +224,11 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
                 // ???
-                builder_url: Url::parse("http://127.0.0.1").unwrap(),
+                builder_url: Url::parse(&format!(
+                    "http://127.0.0.1:{}",
+                    pick_unused_port().unwrap()
+                ))
+                .unwrap(),
             };
 
             Self {

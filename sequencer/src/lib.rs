@@ -418,6 +418,8 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
+    use portpicker::pick_unused_port;
+
     use std::time::Duration;
 
     #[derive(Clone)]
@@ -478,7 +480,11 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
                 //??
-                builder_url: Url::parse("http://127.0.0.1").unwrap(),
+                builder_url: Url::parse(&format!(
+                    "http://127.0.0.1:{}",
+                    pick_unused_port().unwrap()
+                ))
+                .unwrap(),
             };
 
             Self {
