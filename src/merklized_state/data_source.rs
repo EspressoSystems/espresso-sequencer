@@ -20,9 +20,9 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::Display;
-use hotshot::traits::ValidatedState;
-use hotshot_types::{data::Leaf, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 use jf_primitives::merkle_tree::DigestAlgorithm;
 use jf_primitives::merkle_tree::{
     prelude::MerklePath, Element, Index, MerkleCommitment, MerkleTreeScheme, NodeValue,
@@ -33,7 +33,7 @@ use std::fmt::Display;
 use std::{fmt::Debug, str::FromStr};
 use tagged_base64::TaggedBase64;
 
-use std::{cmp::Ordering, sync::Arc};
+use std::cmp::Ordering;
 
 use crate::QueryResult;
 
@@ -49,7 +49,7 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>>;
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.
@@ -65,20 +65,10 @@ pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, 
     ) -> QueryResult<()>;
 }
 
-/// This trait should be implemented by types that represent validated states.
-/// It enables services using the module to implement update functionality.
-/// Some services may manage multiple Merkle trees within their validated state,
-/// requiring updates for all state types with each event.
-/// Therefore, the `insert_merkle_nodes` method of `UpdateStateData` should be called
-/// for all state types within the validated state.
 #[async_trait]
-pub trait UpdateStateStorage<Types: NodeType, D> {
-    async fn update_storage(
-        &self,
-        storage: &mut D,
-        leaf: &Leaf<Types>,
-        delta: Arc<<<Types as NodeType>::ValidatedState as ValidatedState<Types>>::Delta>,
-    ) -> anyhow::Result<()>;
+pub trait MerklizedStateHeightPersistence {
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()>;
+    async fn get_last_state_height(&self) -> QueryResult<usize>;
 }
 
 type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types, ARITY>>::Commit;

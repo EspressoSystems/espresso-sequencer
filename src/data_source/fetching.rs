@@ -85,7 +85,10 @@ use crate::{
         UpdateAvailabilityData, VidCommonQueryData,
     },
     fetching::{self, request, Provider},
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -94,6 +97,7 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -584,7 +588,7 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.fetcher
             .storage
             .read()
@@ -595,6 +599,33 @@ where
     }
 }
 
+#[async_trait]
+impl<Types, S, P> MerklizedStateHeightPersistence for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    S: MerklizedStateHeightPersistence + Send + Sync,
+    P: Send + Sync,
+{
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
+        self.fetcher
+            .storage
+            .write()
+            .await
+            .storage
+            .set_last_state_height(height)
+            .await
+    }
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        self.fetcher
+            .storage
+            .read()
+            .await
+            .storage
+            .get_last_state_height()
+            .await
+    }
+}
 #[async_trait]
 impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S, P>
 where

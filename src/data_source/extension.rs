@@ -17,7 +17,10 @@ use crate::{
         PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
@@ -26,6 +29,7 @@ use crate::{
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_primitives::merkle_tree::prelude::MerklePath;
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -291,8 +295,22 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.data_source.get_path(snapshot, key).await
+    }
+}
+
+#[async_trait]
+impl<D, U> MerklizedStateHeightPersistence for ExtensibleDataSource<D, U>
+where
+    D: MerklizedStateHeightPersistence + Send + Sync,
+    U: Send + Sync,
+{
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
+        self.data_source.set_last_state_height(height).await
+    }
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        self.data_source.get_last_state_height().await
     }
 }
 

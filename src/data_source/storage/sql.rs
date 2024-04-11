@@ -42,6 +42,7 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
+use jf_primitives::merkle_tree::prelude::MerkleProof;
 
 use std::fmt::Debug;
 use tokio_postgres::types::{private::BytesMut, to_sql_checked, FromSql, Type};
@@ -78,7 +79,10 @@ use crate::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
         VersionedDataSource,
     },
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot, UpdateStateData},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     task::BackgroundTask,
     types::HeightIndexed,
@@ -1376,7 +1380,7 @@ where
         &self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
-    ) -> QueryResult<MerklePath<State::Entry, State::Key, State::T>> {
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         let state_type = State::state_type();
         let tree_height = State::tree_height();
         let header_state_commitment_field = State::header_state_commitment_field();
@@ -1578,7 +1582,36 @@ where
             });
         }
 
-        Ok(proof_path)
+        Ok(MerkleProof {
+            pos: key,
+            proof: proof_path,
+        })
+    }
+}
+
+#[async_trait]
+impl MerklizedStateHeightPersistence for SqlStorage {
+    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
+        self.transaction()
+            .await?
+            .upsert(
+                "last_merklized_state_height",
+                ["id", "height"],
+                ["id"],
+                [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
+            )
+            .await?;
+
+        Ok(())
+    }
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        let row = self
+            .query_opt_static("SELECT * from last_merklized_state_height")
+            .await?;
+
+        let height = row.map(|r| r.get::<_, i64>("height") as usize);
+
+        Ok(height.unwrap_or(0))
     }
 }
 
@@ -2909,7 +2942,7 @@ mod test {
             tracing::info!("merkle path {:?}", merkle_path);
 
             // merkle path from the storage should match the path from test tree
-            assert_eq!(merkle_path, proof.proof.clone(), "merkle paths mismatch");
+            assert_eq!(merkle_path, proof.clone(), "merkle paths mismatch");
         }
 
         // Get the proof of index 0 with bh = 1
@@ -2981,7 +3014,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(path_with_bh_2, proof_bh_2.proof);
+        assert_eq!(path_with_bh_2, proof_bh_2);
         let path_with_bh_1 =
             <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
                 &storage,
@@ -2990,7 +3023,7 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(path_with_bh_1, proof_bh_1.proof);
+        assert_eq!(path_with_bh_1, proof_bh_1);
     }
 
     #[async_std::test]
@@ -3051,7 +3084,7 @@ mod test {
         // merkle path from the storage should match the path from test tree
         assert_eq!(
             merkle_path,
-            proof_before_remove.proof.clone(),
+            proof_before_remove.clone(),
             "merkle paths mismatch"
         );
 
@@ -3093,7 +3126,7 @@ mod test {
             .unwrap();
         // Assert that the paths from the db and the tree are equal
         assert_eq!(
-            non_membership_path, proof_after_remove.proof,
+            non_membership_path, proof_after_remove,
             "merkle paths dont match"
         );
 
@@ -3108,10 +3141,7 @@ mod test {
         )
         .await
         .unwrap();
-        assert_eq!(
-            proof_bh_1, proof_before_remove.proof,
-            "merkle paths dont match"
-        );
+        assert_eq!(proof_bh_1, proof_before_remove, "merkle paths dont match");
     }
 
     #[async_std::test]
@@ -3157,17 +3187,18 @@ mod test {
         .await
         .expect("failed to insert nodes");
 
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
-            &storage,
-            Snapshot::Commit(commitment),
-            0,
-        )
-        .await
-        .unwrap();
+        let merkle_proof =
+            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
+                &storage,
+                Snapshot::Commit(commitment),
+                0,
+            )
+            .await
+            .unwrap();
 
         let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
 
-        assert_eq!(merkle_path, proof.proof.clone(), "merkle paths mismatch");
+        assert_eq!(merkle_proof, proof.clone(), "merkle paths mismatch");
     }
     #[async_std::test]
     async fn test_merklized_state_missing_state() {
@@ -3256,14 +3287,15 @@ mod test {
                 .await
                 .unwrap();
         // Querying the path again
-        let merkle_path = <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
-            &storage,
-            Snapshot::Index(block_height as u64),
-            1,
-        )
-        .await
-        .unwrap();
-        assert_eq!(merkle_path, proof.proof, "path dont match");
+        let merkle_proof =
+            <SqlStorage as MerklizedStateDataSource<_, MockMerkleTree, 8>>::get_path(
+                &storage,
+                Snapshot::Index(block_height as u64),
+                1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(merkle_proof, proof, "path dont match");
 
         // Update the tree again for index 0 with created (bh) = 2
         // Delete one of the node in the traversal path

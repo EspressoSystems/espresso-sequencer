@@ -66,3 +66,8 @@ CREATE TABLE pruned_height (
     -- The height of the last pruned block.
     last_height BIGINT NOT NULL
 );
+
+CREATE TABLE last_merklized_state_height (
+    id SERIAL PRIMARY KEY,
+    height BIGINT NOT NULL
+);
