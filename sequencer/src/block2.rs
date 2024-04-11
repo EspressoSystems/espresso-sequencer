@@ -158,3 +158,6 @@ impl Committable for Payload {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod test;
