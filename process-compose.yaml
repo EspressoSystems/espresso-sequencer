@@ -242,7 +242,7 @@ processes:
   # Could do local (SQLite) discovery, but removes some of the spirit
   # from the local demo.
   keydb:
-    command: docker run -p 0.0.0.0:6379:6379 eqalpha/keydb --requirepass changeme!
+    command: docker run -p 0.0.0.0:6379:6379 eqalpha/keydb:latest --requirepass changeme!
     readiness_probe:
       exec:
         command: keydb-cli --pass changeme! --raw incr PING
