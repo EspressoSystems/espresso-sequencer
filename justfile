@@ -34,11 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-da-server:
-    target/release/web-server -p 8081
-
-dev-consensus-server:
-    target/release/web-server -p 8082
+dev-cdn:
+    RUST_LOG=info target/release/dev-cdn
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
@@ -46,8 +43,7 @@ dev-state-relay-server:
 dev-sequencer:
     target/release/sequencer \
     --orchestrator-url http://localhost:8080 \
-    --da-server-url http://localhost:8081 \
-    --consensus-server-url http://localhost:8082 \
+    --cdn-endpoint "127.0.0.1:1738" \
     --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 

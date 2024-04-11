@@ -50,13 +50,10 @@ orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer n
 The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
-options. Next, you must launch two `web-server` instances, which are necessary to facilitate consensus. One web server
-is for data availability, while the other coordinates consensus among sequencer nodes. Pick a `$DA_PORT` and a
-`$CONSENSUS_PORT` and run:
+options. Next, you must launch a `cdn` instance, which are necessary to facilitate consensus.
 
 ```bash
-target/release/web-server -p $DA_PORT
-target/release/web-server -p $CONSENSUS_PORT
+target/release/dev-cdn -p 1738
 ```
 
 Once you have started the orchestrator and the web servers, you must connect `$N` sequencer nodes to them, after which
@@ -65,8 +62,7 @@ the network will start up automatically. To start one node, run
 ```bash
 target/release/sequencer \
     --orchestrator-url http://localhost:$PORT \
-    --da-server-url http://localhost:$DA_PORT \
-    --consensus-server-url http://localhost:$CONSENSUS_PORT \
+    --cdn-endpoint "127.0.0.1:1738"  \
     -- http --port 8083 -- query --storage-path storage -- submit
 ```
 
@@ -76,14 +72,9 @@ A useful Bash snippet for running `$N` nodes simultaneously in the background of
 for i in `seq $N`; do
     target/release/sequencer \
         --orchestrator-url http://localhost:$PORT \
-        --da-server-url http://localhost:$DA_PORT \
-        --consensus-server-url http://localhost:$CONSENSUS_PORT
+        --cdn-endpoint "127.0.0.1:1738"  \
 done
 ```
-
-Note: if the sequencer shows a `"Connection refused"` error you may need to use `127.0.0.1` instead of `localhost` when
-connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking
-is enabled.
 
 For running a full demo natively run `just demo-native`.
 
