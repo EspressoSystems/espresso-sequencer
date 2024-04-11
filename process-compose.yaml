@@ -253,7 +253,7 @@ processes:
     command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT --metrics-enabled --metrics-port 9093
     depends_on:
       keydb:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -268,7 +268,7 @@ processes:
     command: cdn-broker -d "redis://:changeme!@localhost:6379" --metrics-enabled --metrics-port 9091
     depends_on:
       keydb:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -290,7 +290,7 @@ processes:
       --metrics-port 9092
     depends_on:
       keydb:
-        condition: process_started
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
