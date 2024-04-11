@@ -15,6 +15,7 @@ mod ns_payload;
 mod ns_proof;
 mod payload_bytes;
 mod tx_iter;
+mod tx_proof;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -117,6 +118,35 @@ impl BlockPayload for Payload {
     }
 }
 
+impl QueryablePayload for Payload {
+    // TODO change `QueryablePayload` trait: remove `Ord` bound from `TransactionIndex`
+    type TransactionIndex = Index;
+    type Iter<'a> = Iter<'a>;
+    type InclusionProof = (); // TODO
+
+    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    fn len(&self, _meta: &Self::Metadata) -> usize {
+        // Counting txs is nontrivial. The easiest solution is to consume an
+        // iterator. If performance is a concern then we could cache this count
+        // on construction of `Payload`.
+        self.iter(_meta).count()
+    }
+
+    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    fn iter<'a>(&'a self, _meta: &'a Self::Metadata) -> Self::Iter<'a> {
+        Iter::new(self)
+    }
+
+    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    fn transaction_with_proof(
+        &self,
+        _meta: &Self::Metadata,
+        _index: &Self::TransactionIndex,
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        todo!()
+    }
+}
+
 impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
@@ -125,29 +155,6 @@ impl Display for Payload {
 
 impl Committable for Payload {
     fn commit(&self) -> commit::Commitment<Self> {
-        todo!()
-    }
-}
-
-impl QueryablePayload for Payload {
-    // TODO change `QueryablePayload` trait so that `TransactionIndex` does not need `Ord`
-    type TransactionIndex = Index;
-    type Iter<'a> = Iter<'a>;
-    type InclusionProof = (); // TODO
-
-    fn len(&self, _meta: &Self::Metadata) -> usize {
-        todo!()
-    }
-
-    fn iter<'a>(&'a self, _meta: &'a Self::Metadata) -> Self::Iter<'a> {
-        todo!()
-    }
-
-    fn transaction_with_proof(
-        &self,
-        _meta: &Self::Metadata,
-        _index: &Self::TransactionIndex,
-    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         todo!()
     }
 }

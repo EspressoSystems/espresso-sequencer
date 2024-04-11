@@ -31,7 +31,7 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iter<'a> {
-    fn _new(block: &'a Payload) -> Self {
+    pub fn new(block: &'a Payload) -> Self {
         Self {
             ns_iter: NsIter::new(block).peekable(),
             tx_iter: TxIter::new(&[]),
