@@ -14,7 +14,10 @@
 
 use anyhow::{ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::{sync::RwLock, task::spawn};
+use async_std::{
+    sync::RwLock,
+    task::{sleep, spawn},
+};
 use clap::Parser;
 use commit::Committable;
 use derivative::Derivative;
@@ -472,12 +475,22 @@ impl<T: Queryable> ResourceManager<T> {
     }
 
     async fn adjust_index(&self, at: u64) -> anyhow::Result<u64> {
-        let block_height: u64 = self
-            .client
-            .get("status/block-height")
-            .send()
-            .await
-            .context("getting block height")?;
+        let block_height = loop {
+            let block_height: u64 = self
+                .client
+                .get("status/block-height")
+                .send()
+                .await
+                .context("getting block height")?;
+            if block_height == 0 {
+                // None of our tests work with an empty history, but if we just wait briefly there
+                // should be some blocks produced soon.
+                tracing::info!("waiting for block height");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            break block_height;
+        };
         Ok(at % block_height)
     }
 }
