@@ -6,6 +6,7 @@ use super::{
     Payload,
 };
 use crate::NamespaceId;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::Range};
 
 impl Payload {
@@ -22,11 +23,12 @@ impl Payload {
 }
 
 /// [`Iterator::Item`] for [`NsIter`].
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsIndex {
     pub(super) ns_id: NamespaceId,
     pub(super) ns_range: Range<usize>,
 }
+
 /// Return type for [`Payload::ns_iter`].
 pub struct NsIter<'a> {
     ns_table_start: usize,   // byte index into the namespace table

@@ -3,20 +3,35 @@ use super::{
     tx_iter::{TxIndex, TxIter},
     Payload,
 };
+use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
 
-struct Index {
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Index {
     ns_index: NsIndex,
     tx_index: TxIndex,
 }
 
-struct Iter<'a> {
+// TODO don't impl `PartialOrd`
+impl PartialOrd for Index {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(_other))
+    }
+}
+// TODO don't impl `Ord`
+impl Ord for Index {
+    fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
+        unimplemented!()
+    }
+}
+
+pub struct Iter<'a> {
     ns_iter: Peekable<NsIter<'a>>,
     tx_iter: TxIter<'a>,
 }
 
 impl<'a> Iter<'a> {
-    fn new(block: &'a Payload) -> Self {
+    fn _new(block: &'a Payload) -> Self {
         Self {
             ns_iter: NsIter::new(block).peekable(),
             tx_iter: TxIter::new(&[]),

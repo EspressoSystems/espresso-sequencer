@@ -1,7 +1,8 @@
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
-// use hotshot_query_service::availability::QueryablePayload;
+use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
+use iter::{Index, Iter};
 use ns_payload::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
@@ -128,28 +129,25 @@ impl Committable for Payload {
     }
 }
 
-// impl QueryablePayload for Payload {
-//     type TransactionIndex;
+impl QueryablePayload for Payload {
+    // TODO change `QueryablePayload` trait so that `TransactionIndex` does not need `Ord`
+    type TransactionIndex = Index;
+    type Iter<'a> = Iter<'a>;
+    type InclusionProof = (); // TODO
 
-//     type Iter<'a>
-//     where
-//         Self: 'a;
+    fn len(&self, _meta: &Self::Metadata) -> usize {
+        todo!()
+    }
 
-//     type InclusionProof;
+    fn iter<'a>(&'a self, _meta: &'a Self::Metadata) -> Self::Iter<'a> {
+        todo!()
+    }
 
-//     fn len(&self, meta: &Self::Metadata) -> usize {
-//         todo!()
-//     }
-
-//     fn iter<'a>(&'a self, meta: &'a Self::Metadata) -> Self::Iter<'a> {
-//         todo!()
-//     }
-
-//     fn transaction_with_proof(
-//         &self,
-//         meta: &Self::Metadata,
-//         index: &Self::TransactionIndex,
-//     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-//         todo!()
-//     }
-// }
+    fn transaction_with_proof(
+        &self,
+        _meta: &Self::Metadata,
+        _index: &Self::TransactionIndex,
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        todo!()
+    }
+}

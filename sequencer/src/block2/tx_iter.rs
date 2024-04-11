@@ -2,6 +2,7 @@ use super::payload_bytes::{
     num_txs_from_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 use crate::{NamespaceId, Transaction};
+use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 pub fn parse_ns_payload(ns_payload: &[u8], ns_id: NamespaceId) -> Vec<Transaction> {
@@ -10,6 +11,7 @@ pub fn parse_ns_payload(ns_payload: &[u8], ns_id: NamespaceId) -> Vec<Transactio
         .collect()
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxIndex {
     tx_range: Range<usize>,
 }
