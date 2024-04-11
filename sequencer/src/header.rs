@@ -2,7 +2,7 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
-    L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
+    ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
 
@@ -21,14 +21,61 @@ use hotshot_types::{
     },
     vid::VidCommitment,
 };
+use itertools::Either;
 use jf_primitives::merkle_tree::prelude::*;
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+#[derive(Clone, Debug, Copy, Deserialize, Serialize, Eq)]
+pub struct ResolvableChainConfig {
+    chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
+}
+
+impl ResolvableChainConfig {
+    fn commit(&self) -> Commitment<ChainConfig> {
+        match self.chain_config {
+            Either::Left(config) => config.commit(),
+            Either::Right(commitment) => commitment,
+        }
+    }
+}
+
+impl PartialEq for ResolvableChainConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.commit() == other.commit()
+    }
+}
+
+// Because we implement PartialEq ourselves, we aren't supposed to derive Hash
+impl std::hash::Hash for ResolvableChainConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.commit().hash(state)
+    }
+}
+
+impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
+    fn from(value: Commitment<ChainConfig>) -> Self {
+        Self {
+            chain_config: Either::Right(value),
+        }
+    }
+}
+
+impl From<ChainConfig> for ResolvableChainConfig {
+    fn from(value: ChainConfig) -> Self {
+        Self {
+            chain_config: Either::Left(value),
+        }
+    }
+}
+
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
+    /// A commitment to a ChainConfig or a full ChainConfig.
+    pub chain_config: ResolvableChainConfig,
+
     pub height: u64,
     pub timestamp: u64,
 
@@ -94,7 +141,9 @@ impl Committable for Header {
         self.fee_merkle_tree_root
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
+
         RawCommitmentBuilder::new(&Self::tag())
+            .field("chain_config", self.chain_config.commit())
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
             .u64_field("l1_head", self.l1_head)
@@ -137,6 +186,7 @@ impl Header {
         mut timestamp: u64,
         parent_state: &ValidatedState,
         builder_address: Wallet<SigningKey>,
+        chain_config: ChainConfig,
     ) -> Self {
         // Increment height.
         let parent_header = parent_leaf.get_block_header();
@@ -203,6 +253,7 @@ impl Header {
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
         let header = Self {
+            chain_config: chain_config.into(),
             height,
             timestamp,
             l1_head: l1.head,
@@ -312,6 +363,7 @@ impl BlockHeader<SeqTypes> for Header {
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             &validated_state,
             instance_state.builder_address.clone(),
+            instance_state.chain_config,
         )
     }
 
@@ -330,6 +382,7 @@ impl BlockHeader<SeqTypes> for Header {
         Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.
+            chain_config: instance_state.chain_config.into(),
             height: 0,
             timestamp: 0,
             l1_head: 0,
@@ -444,6 +497,7 @@ mod test_headers {
                 self.timestamp,
                 &validated_state,
                 genesis.instance_state.builder_address,
+                genesis.instance_state.chain_config,
             );
             assert_eq!(header.height, parent.height + 1);
             assert_eq!(header.timestamp, self.expected_timestamp);

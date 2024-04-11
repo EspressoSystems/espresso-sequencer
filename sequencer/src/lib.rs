@@ -1,7 +1,7 @@
 pub mod api;
 pub mod block;
 pub mod catchup;
-mod chain_variables;
+mod chain_config;
 pub mod context;
 mod header;
 pub mod hotshot_commitment;
@@ -78,7 +78,7 @@ use {
 };
 
 pub use block::payload::Payload;
-pub use chain_variables::ChainVariables;
+pub use chain_config::ChainConfig;
 pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
@@ -158,6 +158,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
+    chain_config: ChainConfig,
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
@@ -166,11 +167,13 @@ pub struct NodeState {
 
 impl NodeState {
     pub fn new(
+        chain_config: ChainConfig,
         l1_client: L1Client,
         builder_address: Wallet<SigningKey>,
         catchup: impl StateCatchup + 'static,
     ) -> Self {
         Self {
+            chain_config,
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
@@ -181,6 +184,7 @@ impl NodeState {
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
         Self::new(
+            ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
             state::FeeAccount::test_wallet(),
             catchup::mock::MockStateCatchup::default(),
@@ -403,6 +407,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState {
+        chain_config: ChainConfig::default(), // TODO: real chain config
         l1_client,
         builder_address: wallet,
         genesis_state,
@@ -583,6 +588,7 @@ pub mod testing {
             let wallet = Self::builder_wallet(i);
             tracing::info!("node {i} is builder {:x}", wallet.address());
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
                 wallet,
                 catchup,

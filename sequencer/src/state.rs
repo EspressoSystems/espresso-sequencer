@@ -546,7 +546,7 @@ impl Committable for FeeInfo {
 pub struct FeeAmount(U256);
 impl FeeAmount {
     /// Return array containing underlying bytes of inner `U256` type
-    fn to_fixed_bytes(self) -> [u8; 32] {
+    pub(crate) fn to_fixed_bytes(self) -> [u8; 32] {
         let mut bytes = [0u8; core::mem::size_of::<U256>()];
         self.0.to_little_endian(&mut bytes);
         bytes
