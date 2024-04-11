@@ -105,6 +105,7 @@ mod test {
     use crate::{NamespaceId, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot::traits::BlockPayload;
+    use hotshot_query_service::availability::QueryablePayload;
     use hotshot_types::vid::vid_scheme;
     use jf_primitives::vid::VidScheme;
     use rand::RngCore;
@@ -125,8 +126,15 @@ mod test {
         let mut vid = vid_scheme(10);
 
         for mut test in valid_tests {
+            let all_txs = test.all_txs();
             let block = Payload::from_transactions(test.all_txs()).unwrap().0;
             let disperse_data = vid.disperse(&block.payload).unwrap();
+
+            // test `QueryablePayload::transaction_with_proof`
+            for (tx_index, test_tx) in block.iter(&block.ns_table).zip(all_txs.iter()) {
+                let tx = block.transaction(&tx_index).unwrap();
+                assert_eq!(&tx, test_tx);
+            }
 
             assert_eq!(block.num_namespaces(), test.nss.len());
             for ns_id in block.ns_iter().map(|i| i.ns_id) {

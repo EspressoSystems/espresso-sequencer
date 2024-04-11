@@ -13,7 +13,7 @@ pub fn parse_ns_payload(ns_payload: &[u8], ns_id: NamespaceId) -> Vec<Transactio
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxIndex {
-    tx_range: Range<usize>,
+    pub(super) tx_range: Range<usize>,
 }
 
 pub struct TxIter<'a> {

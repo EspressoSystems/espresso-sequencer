@@ -7,8 +7,11 @@ use serde::{Deserialize, Serialize};
 pub struct TxProof {}
 
 impl Payload {
-    pub fn transaction(&self, _index: &Index) -> Option<Transaction> {
-        todo!()
+    pub fn transaction(&self, index: &Index) -> Option<Transaction> {
+        Some(Transaction::new(
+            index.ns_index.ns_id,
+            self.payload[index.ns_index.ns_range.clone()][index.tx_index.tx_range.clone()].to_vec(),
+        ))
     }
 
     pub fn transaction_with_proof(&self, _index: &Index) -> Option<(Transaction, TxProof)> {
