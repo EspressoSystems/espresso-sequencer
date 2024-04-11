@@ -61,6 +61,7 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
+
 // -- Rexports
 // External
 /// Reexport rand crate
@@ -222,7 +223,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                     return Err(HotShotError::BlockError { source: e });
                 }
             };
-            saved_payloads.insert(anchored_leaf.get_view_number(), encoded_txns.clone());
+
+            saved_payloads.insert(anchored_leaf.get_view_number(), encoded_txns);
         }
 
         let start_view = initializer.start_view;

@@ -71,7 +71,7 @@ struct WebServerState<KEY> {
     /// view sync: view number of oldest votes in memory
     oldest_view_sync_vote: u64,
     /// view number -> (secret, string)
-    vid_disperses: HashMap<u64, (String, Vec<u8>)>,
+    vid_disperses: HashMap<u64, Vec<Vec<u8>>>,
     /// view for the oldest vid disperal
     oldest_vid_disperse: u64,
     /// view of most recent vid dispersal
@@ -344,13 +344,13 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error> {
         match self.vid_disperses.get(&view_number) {
             Some(disperse) => {
-                if disperse.1.is_empty() {
+                if disperse.is_empty() {
                     Err(ServerError {
                         status: StatusCode::NotImplemented,
                         message: format!("VID disperse not found for view {view_number}"),
                     })
                 } else {
-                    Ok(Some(vec![disperse.1.clone()]))
+                    Ok(Some(disperse.clone()))
                 }
             }
             None => Err(ServerError {
@@ -692,8 +692,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         Ok(())
     }
 
-    fn post_vid_disperse(&mut self, view_number: u64, mut disperse: Vec<u8>) -> Result<(), Error> {
-        info!("Received VID disperse for view {}", view_number);
+    fn post_vid_disperse(&mut self, view_number: u64, disperse: Vec<u8>) -> Result<(), Error> {
         if view_number > self.recent_vid_disperse {
             self.recent_vid_disperse = view_number;
         }
@@ -707,8 +706,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         }
         self.vid_disperses
             .entry(view_number)
-            .and_modify(|(_, empty_proposal)| empty_proposal.append(&mut disperse))
-            .or_insert_with(|| (String::new(), disperse));
+            .or_default()
+            .push(disperse);
         Ok(())
     }
 

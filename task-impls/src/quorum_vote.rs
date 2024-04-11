@@ -49,21 +49,26 @@ enum VoteDependency {
 }
 
 /// Handler for the vote dependency.
-struct VoteDependencyHandle<TYPES: NodeType> {
+struct VoteDependencyHandle<TYPES: NodeType, S: Storage<TYPES>> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
     /// Private Key.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    /// Reference to the storage.
+    pub storage: Arc<RwLock<S>>,
     /// View number to vote on.
     view_number: TYPES::Time,
     /// Event sender.
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
 }
-impl<TYPES: NodeType> HandleDepOutput for VoteDependencyHandle<TYPES> {
+impl<TYPES: NodeType, S: Storage<TYPES> + 'static> HandleDepOutput
+    for VoteDependencyHandle<TYPES, S>
+{
     type Output = Vec<Arc<HotShotEvent<TYPES>>>;
     async fn handle_dep_result(self, res: Self::Output) {
         let mut payload_commitment = None;
         let mut leaf = None;
+        let mut disperse_share = None;
         for event in res {
             match event.as_ref() {
                 HotShotEvent::QuorumProposalValidated(proposal, parent_leaf) => {
@@ -95,7 +100,8 @@ impl<TYPES: NodeType> HandleDepOutput for VoteDependencyHandle<TYPES> {
                     }
                 }
                 HotShotEvent::VIDShareValidated(share) => {
-                    let vid_payload_commitment = share.payload_commitment;
+                    let vid_payload_commitment = share.data.payload_commitment;
+                    disperse_share = Some(share.clone());
                     if let Some(comm) = payload_commitment {
                         if vid_payload_commitment != comm {
                             error!("VID has inconsistent payload commitment with quorum proposal or DAC.");
@@ -139,6 +145,14 @@ impl<TYPES: NodeType> HandleDepOutput for VoteDependencyHandle<TYPES> {
                 "Sending vote to next quorum leader {:?}",
                 vote.get_view_number() + 1
             );
+            // Add to the storage.
+            let Some(disperse) = disperse_share else {
+                return;
+            };
+            if let Err(e) = self.storage.write().await.append_vid(&disperse).await {
+                error!("Failed to store VID share with error {:?}", e);
+                return;
+            }
             broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &self.sender).await;
         }
     }
@@ -215,7 +229,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     }
                     VoteDependency::Vid => {
                         if let HotShotEvent::VIDShareValidated(disperse) = event {
-                            disperse.view_number
+                            disperse.data.view_number
                         } else {
                             return false;
                         }
@@ -257,6 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             VoteDependencyHandle {
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
+                storage: self.storage.clone(),
                 view_number,
                 sender: event_sender.clone(),
             },
@@ -590,28 +605,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     }
                 }
 
-                // stop polling for the received disperse after verifying it's valid
-                self.quorum_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
-                        *disperse.data.view_number,
-                    ))
-                    .await;
-
-                // Add to the storage.
-                if let Err(e) = self.storage.write().await.append_vid(disperse).await {
-                    error!("Failed to store VID share with error {:?}", e);
-                    return;
-                }
                 self.consensus
                     .write()
                     .await
                     .vid_shares
                     .entry(view)
                     .or_default()
-                    .insert(disperse.data.recipient_key.clone(), disperse.data.clone());
-
+                    .insert(disperse.data.recipient_key.clone(), disperse.clone());
+                if disperse.data.recipient_key != self.public_key {
+                    debug!("Got a Valid VID share but it's not for our key");
+                    return;
+                }
+                // stop polling for the received disperse after verifying it's valid
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
                 broadcast_event(
-                    Arc::new(HotShotEvent::VIDShareValidated(disperse.data.clone())),
+                    Arc::new(HotShotEvent::VIDShareValidated(disperse.clone())),
                     &event_sender.clone(),
                 )
                 .await;

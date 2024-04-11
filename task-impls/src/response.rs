@@ -10,7 +10,9 @@ use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::Consensus,
     data::VidDisperseShare,
-    message::{CommitteeConsensusMessage, DataMessage, Message, MessageKind, SequencingMessage},
+    message::{
+        CommitteeConsensusMessage, DataMessage, Message, MessageKind, Proposal, SequencingMessage,
+    },
     traits::{
         election::Membership,
         network::{DataRequest, RequestKind, ResponseChannel, ResponseMessage},
@@ -123,7 +125,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         &self,
         view: TYPES::Time,
         key: &TYPES::SignatureKey,
-    ) -> Option<VidDisperseShare<TYPES>> {
+    ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
         let consensus = self.consensus.upgradable_read().await;
         let contained = consensus
             .vid_shares
@@ -137,11 +139,13 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             for share in shares {
                 let s = share.clone();
                 let key: <TYPES as NodeType>::SignatureKey = s.recipient_key;
-                consensus
-                    .vid_shares
-                    .entry(view)
-                    .or_default()
-                    .insert(key, share);
+                if let Some(prop) = share.to_proposal(&self.private_key) {
+                    consensus
+                        .vid_shares
+                        .entry(view)
+                        .or_default()
+                        .insert(key, prop);
+                }
             }
             return consensus.vid_shares.get(&view)?.get(key).cloned();
         }
@@ -157,11 +161,8 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                 let Some(share) = self.get_or_calc_vid_share(view, &pub_key).await else {
                     return self.make_msg(ResponseMessage::NotFound);
                 };
-                let Some(prop) = share.to_proposal(&self.private_key) else {
-                    return self.make_msg(ResponseMessage::NotFound);
-                };
                 let seq_msg =
-                    SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(prop));
+                    SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(share));
                 self.make_msg(ResponseMessage::Found(seq_msg))
             }
             // TODO impl for DA Proposal: https://github.com/EspressoSystems/HotShot/issues/2651

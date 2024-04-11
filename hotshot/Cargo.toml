@@ -57,6 +57,7 @@ vbs = { workspace = true }
 jf-primitives.workspace = true
 hotshot-orchestrator = { path = "../orchestrator" }
 blake3.workspace = true
+sha2 = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

@@ -126,7 +126,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Like [`HotShotEvent::DAProposalRecv`].
     VIDShareRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// VID share data is validated.
-    VIDShareValidated(VidDisperseShare<TYPES>),
+    VIDShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// Upgrade proposal has been received from the network
     UpgradeProposalRecv(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade proposal has been sent to the network
