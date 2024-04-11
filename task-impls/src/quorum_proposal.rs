@@ -16,7 +16,7 @@ use hotshot_types::{
     consensus::Consensus,
     constants::LOOK_AHEAD,
     data::{Leaf, QuorumProposal},
-    event::{Event, EventType, LeafInfo},
+    event::Event,
     message::Proposal,
     simple_certificate::UpgradeCertificate,
     traits::{
@@ -25,7 +25,6 @@ use hotshot_types::{
         network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        states::ValidatedState,
         storage::Storage,
     },
     vote::{Certificate, HasViewNumber},
@@ -197,11 +196,10 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             upgrade_certificate: None,
         };
 
-        let mut new_leaf = Leaf::from_quorum_proposal(&proposal);
-        new_leaf.set_parent_commitment(parent_leaf.commit());
+        let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
 
         let Ok(signature) =
-            TYPES::SignatureKey::sign(&self.private_key, new_leaf.commit().as_ref())
+            TYPES::SignatureKey::sign(&self.private_key, proposed_leaf.commit().as_ref())
         else {
             error!("Failed to sign new_leaf.commit()!");
             return false;
@@ -212,7 +210,11 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             signature,
             _pd: PhantomData,
         };
-        debug!("Sending proposal for view {:?}", view);
+        debug!(
+            "Sending null proposal for view {:?} \n {:?}",
+            proposed_leaf.get_view_number(),
+            ""
+        );
 
         async_sleep(Duration::from_millis(self.round_start_delay)).await;
         broadcast_event(
@@ -728,48 +730,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 let consensus = self.consensus.upgradable_read().await;
 
                 // Get the parent leaf and state.
-                let parent = if justify_qc.is_genesis {
-                    // Send the `Decide` event for the genesis block if the justify QC is genesis.
-                    let leaf = Leaf::genesis(&consensus.instance_state);
-                    let (validated_state, state_delta) =
-                        TYPES::ValidatedState::genesis(&consensus.instance_state);
-                    let state = Arc::new(validated_state);
-                    broadcast_event(
-                        Event {
-                            view_number: TYPES::Time::genesis(),
-                            event: EventType::Decide {
-                                leaf_chain: Arc::new(vec![LeafInfo::new(
-                                    leaf.clone(),
-                                    state.clone(),
-                                    Some(Arc::new(state_delta)),
-                                    None,
-                                )]),
-                                qc: Arc::new(justify_qc.clone()),
-                                block_size: None,
-                            },
-                        },
-                        &self.output_event_stream,
-                    )
-                    .await;
-                    Some((leaf, state))
-                } else {
-                    match consensus
-                        .saved_leaves
-                        .get(&justify_qc.get_data().leaf_commit)
-                        .cloned()
-                    {
-                        Some(leaf) => {
-                            if let (Some(state), _) =
-                                consensus.get_state_and_delta(leaf.get_view_number())
-                            {
-                                Some((leaf, state.clone()))
-                            } else {
-                                error!("Parent state not found! Consensus internally inconsistent");
-                                return;
-                            }
+                let parent = match consensus
+                    .saved_leaves
+                    .get(&justify_qc.get_data().leaf_commit)
+                    .cloned()
+                {
+                    Some(leaf) => {
+                        if let (Some(state), _) =
+                            consensus.get_state_and_delta(leaf.get_view_number())
+                        {
+                            Some((leaf, state.clone()))
+                        } else {
+                            error!("Parent state not found! Consensus internally inconsistent");
+                            return;
                         }
-                        None => None,
                     }
+                    None => None,
                 };
 
                 if justify_qc.get_view_number() > consensus.high_qc.view_number {
