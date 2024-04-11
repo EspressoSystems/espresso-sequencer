@@ -242,13 +242,12 @@ processes:
   # Could do local (SQLite) discovery, but removes some of the spirit
   # from the local demo.
   keydb:
-    command: docker run -p 0.0.0.0:6379:6379 eqalpha/keydb:latest --requirepass changeme!
+    command: docker run --name keydb -p 0.0.0.0:6379:6379 eqalpha/keydb --requirepass changeme!
     readiness_probe:
       exec:
-        command: keydb-cli --pass changeme! --raw incr PING
+        command: docker exec -it keydb keydb-cli --pass changeme! --raw incr PING
       period_seconds: 5
       timeout_seconds: 4
-      success_threshold: 2
       failure_threshold: 20
 
   # The CDN system's main entry point; where users contact first.
