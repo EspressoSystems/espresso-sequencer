@@ -51,6 +51,12 @@ services:
   keydb:
     image: docker.io/eqalpha/keydb:latest
     command: ["--requirepass", "changemeplease!!"]
+    healthcheck:
+      # Attempt to PING the database
+      test: keydb-cli --pass changemeplease!! --raw incr PING
+      interval: 5s
+      timeout: 4s
+      retries: 20
 
   # The CDN system's main entry point; where users contact first.
   marshal-0:
@@ -68,7 +74,7 @@ services:
       - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
-        condition: service_started
+        condition: service_healthy
 
   # A broker is the main message-routing unit of the CDN
   broker-0:
@@ -88,7 +94,7 @@ services:
     - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
-        condition: service_started
+        condition: service_healthy
 
   # A broker is the main message-routing unit of the CDN
   broker-1:
@@ -108,7 +114,7 @@ services:
     - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
-        condition: service_started
+        condition: service_healthy
 
   state-relay-server:
     image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main

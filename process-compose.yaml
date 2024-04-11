@@ -243,6 +243,10 @@ processes:
   # from the local demo.
   keydb:
     command: docker run -p 127.0.0.1:6379:6379 eqalpha/keydb --requirepass changeme!
+    readiness_probe:
+      exec:
+      command: keydb-cli --pass changemeplease!! --raw incr PING
+      failure_threshold: 100      
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
