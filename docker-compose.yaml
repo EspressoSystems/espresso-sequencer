@@ -56,6 +56,7 @@ services:
   marshal-0:
     environment:
       - RUST_LOG
+      - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main
     command:
       - -d
@@ -63,12 +64,8 @@ services:
       - --bind-port 
       - $ESPRESSO_CDN_SERVER_PORT
       - --metrics-enabled
-    healthcheck:
-      # Curl the metrics endpoint
-      test: "curl localhost:9090"
-      interval: 5s
-      timeout: 4s
-      retries: 20
+      - --metrics-port
+      - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_started
@@ -77,6 +74,7 @@ services:
   broker-0:
     environment:
       - RUST_LOG
+      - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
@@ -86,12 +84,8 @@ services:
     - --private-advertise-address
     - broker-0:1739
     - --metrics-enabled
-    healthcheck:
-      # Curl the metrics endpoint
-      test: "curl localhost:9090"
-      interval: 5s
-      timeout: 4s
-      retries: 20
+    - --metrics-port
+    - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_started
@@ -100,6 +94,7 @@ services:
   broker-1:
     environment:
       - RUST_LOG
+      - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
     - -d
@@ -109,12 +104,8 @@ services:
     - --private-advertise-address
     - broker-1:1739
     - --metrics-enabled
-    healthcheck:
-      # Curl the metrics endpoint
-      test: "curl localhost:9090"
-      interval: 5s
-      timeout: 4s
-      retries: 20
+    - --metrics-port
+    - $ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_started
