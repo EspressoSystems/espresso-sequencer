@@ -17,10 +17,10 @@ pub struct TxIndex {
 }
 
 pub struct TxIter<'a> {
-    tx_table_start: usize,    // byte index into the tx table
-    tx_payloads_start: usize, // byte index into the tx payloads
-    tx_table: &'a [u8],
-    tx_payloads: &'a [u8],
+    tx_table_start: usize,   // byte index into the tx table
+    tx_payload_start: usize, // byte index into the tx payloads
+    tx_table_byte_len: usize,
+    ns_payload: &'a [u8],
 }
 
 impl<'a> TxIter<'a> {
@@ -37,13 +37,12 @@ impl<'a> TxIter<'a> {
                 ns_payload.len(),
             )
         };
-        let (tx_table, tx_payloads) = ns_payload.split_at(tx_table_byte_len);
 
         Self {
             tx_table_start: NUM_TXS_BYTE_LEN,
-            tx_payloads_start: 0,
-            tx_table,
-            tx_payloads,
+            tx_payload_start: tx_table_byte_len,
+            tx_table_byte_len,
+            ns_payload,
         }
     }
 }
@@ -54,21 +53,22 @@ impl<'a> Iterator for TxIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // this iterator is done if there's not enough room for another entry in
         // the tx_table
-        if self.tx_table_start + TX_OFFSET_BYTE_LEN > self.tx_table.len() {
+        if self.tx_table_start + TX_OFFSET_BYTE_LEN > self.tx_table_byte_len {
             return None;
         }
 
         // Read the offset from the tx table.
+        // Offsets are 0-based; shift it to after the tx table.
         // This offset must not exceed the namespace byte length.
         let tx_payloads_end = std::cmp::min(
             tx_offset_from_bytes(
-                &self.tx_table[self.tx_table_start..self.tx_table_start + TX_OFFSET_BYTE_LEN],
-            ),
-            self.tx_payloads.len(),
+                &self.ns_payload[self.tx_table_start..self.tx_table_start + TX_OFFSET_BYTE_LEN],
+            ) + self.tx_table_byte_len,
+            self.ns_payload.len(),
         );
 
-        let tx_range = self.tx_payloads_start..tx_payloads_end;
-        self.tx_payloads_start = tx_payloads_end;
+        let tx_range = self.tx_payload_start..tx_payloads_end;
+        self.tx_payload_start = tx_payloads_end;
         self.tx_table_start += TX_OFFSET_BYTE_LEN;
         Some(TxIndex { tx_range })
     }

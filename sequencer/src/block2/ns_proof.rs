@@ -125,14 +125,15 @@ mod test {
         let mut vid = vid_scheme(10);
 
         for mut test in valid_tests {
-            let block = Payload::from_transactions(test.as_vec_tx()).unwrap().0;
+            let block = Payload::from_transactions(test.all_txs()).unwrap().0;
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             assert_eq!(block.num_namespaces(), test.nss.len());
             for ns_id in block.ns_iter().map(|i| i.ns_id) {
                 // tracing::info!("test ns_id {}", ns.ns_id);
 
-                test.nss
+                let txs = test
+                    .nss
                     .remove(&ns_id)
                     .expect("block ns_id missing from test");
 
@@ -142,11 +143,12 @@ mod test {
 
                 assert!(ns_proof.existence.is_some());
 
-                let (_ns_proof_txs, ns_proof_ns_id) = block
+                let (ns_proof_txs, ns_proof_ns_id) = block
                     .verify_namespace_proof(&ns_proof, &disperse_data.commit)
                     .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
                 assert_eq!(ns_proof_ns_id, ns_id);
+                assert_eq!(ns_proof_txs, txs);
             }
             assert!(
                 test.nss.is_empty(),
@@ -157,7 +159,7 @@ mod test {
 
     // TODO lots of infra here that could be reused in other tests.
     struct ValidTest {
-        nss: HashMap<NamespaceId, Vec<Vec<u8>>>,
+        nss: HashMap<NamespaceId, Vec<Transaction>>,
     }
 
     impl ValidTest {
@@ -165,15 +167,15 @@ mod test {
         where
             R: RngCore,
         {
-            let mut txs = HashMap::new();
+            let mut nss = HashMap::new();
             for (ns_index, tx_lens) in tx_lengths.into_iter().enumerate() {
                 let ns_id = NamespaceId::from(ns_index as u64);
                 for len in tx_lens {
-                    let ns: &mut Vec<Vec<u8>> = txs.entry(ns_id).or_default();
-                    ns.push(random_bytes(len, rng));
+                    let ns: &mut Vec<_> = nss.entry(ns_id).or_default();
+                    ns.push(Transaction::new(ns_id, random_bytes(len, rng)));
                 }
             }
-            Self { nss: txs }
+            Self { nss }
         }
 
         fn many_from_tx_lengths<R>(test_cases: Vec<Vec<Vec<usize>>>, rng: &mut R) -> Vec<Self>
@@ -186,14 +188,8 @@ mod test {
                 .collect()
         }
 
-        fn as_vec_tx(&self) -> Vec<Transaction> {
-            let mut txs = Vec::new();
-            for (ns_id, tx_payloads) in self.nss.iter() {
-                for tx_payload in tx_payloads {
-                    txs.push(Transaction::new(*ns_id, tx_payload.clone()));
-                }
-            }
-            txs
+        fn all_txs(&self) -> Vec<Transaction> {
+            self.nss.iter().flat_map(|(_, txs)| txs.clone()).collect()
         }
     }
 
