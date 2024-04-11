@@ -170,6 +170,12 @@ pub struct Options {
     /// Stake table capacity for the prover circuit
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE")]
+    pub max_block_size: u64,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
+    /// Minimum fee in WEI per byte of payload
+    pub base_fee: u64,
 }
 
 impl Options {

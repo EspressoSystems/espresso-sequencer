@@ -284,7 +284,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     l1_params: L1Params,
     stake_table_capacity: usize,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
+    chain_config: ChainConfig,
+) -> anyhow::Result<SequencerContext<network::Combined, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -407,7 +408,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState {
-        chain_config: ChainConfig::default(), // TODO: real chain config
+        chain_config,
         l1_client,
         builder_address: wallet,
         genesis_state,

@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, From, Into)]
 pub struct ChainId(U256);
 
+impl From<u16> for ChainId {
+    fn from(id: u16) -> Self {
+        Self(id.into())
+    }
+}
+
 impl ChainId {
     // TODO: this duplicate code, consider a macro for U256 newtypes
     pub(crate) fn to_fixed_bytes(self) -> [u8; 32] {
