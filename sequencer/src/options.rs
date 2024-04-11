@@ -3,6 +3,7 @@ use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use ethers::types::Address;
+use ethers::types::{Address, U256};
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
@@ -173,9 +174,10 @@ pub struct Options {
     /// Maximum size in bytes of a block
     #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE")]
     pub max_block_size: u64,
+
     #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
     /// Minimum fee in WEI per byte of payload
-    pub base_fee: u64,
+    pub base_fee: U256,
 }
 
 impl Options {
