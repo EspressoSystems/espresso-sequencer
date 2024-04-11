@@ -62,7 +62,7 @@ itertools = { workspace = true }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
-lazy_static = { workspace = true }
+lazy_static = "1.4"
 num-traits = "0.2.18"
 rand = "0.8.5"
 rand_chacha = { workspace = true }

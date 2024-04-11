@@ -27,7 +27,7 @@ processes:
   deploy-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
+    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --use-mock-contract
     environment:
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
     depends_on:

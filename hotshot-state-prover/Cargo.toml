@@ -36,7 +36,6 @@ jf-plonk = { workspace = true }
 jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
 jf-utils = { workspace = true }
-lazy_static = { workspace = true }
 rand_chacha = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }

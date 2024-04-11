@@ -41,7 +41,6 @@ use std::{iter, time::Duration};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::Instant;
-
 use url::Url;
 use versioned_binary_serialization::version::StaticVersionType;
 
@@ -68,13 +67,13 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Address f the hotshot orchestrator, used for stake table initialization.
+    /// Address off the hotshot orchestrator, used for stake table initialization.
     pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     pub port: Option<u16>,
-    // Stake table capacity for the prover circuit
+    /// Stake table capacity for the prover circuit.
     pub stake_table_capacity: usize,
 }
 
@@ -390,6 +389,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     let update_interval = config.update_interval;
 
     tracing::info!("Light client address: {:?}", config.light_client_address);
+
     if let Some(port) = config.port {
         if let Err(err) = start_http_server(port, config.light_client_address, bind_version) {
             tracing::error!("Error starting http server: {}", err);
