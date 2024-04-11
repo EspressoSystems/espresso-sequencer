@@ -66,7 +66,7 @@ type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYP
 /// a `QuorumProposalValidated` event.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
-async fn validate_proposal<TYPES: NodeType>(
+pub(crate) async fn validate_proposal<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
@@ -312,9 +312,6 @@ pub struct ConsensusTaskState<
     /// Consensus api
     pub api: A,
 
-    /// needed to typecheck
-    pub _pd: PhantomData<I>,
-
     /// Current Vote collection task, with it's view.
     pub vote_collector:
         RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>>,
@@ -491,7 +488,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
     /// Must only update the view and GC if the view actually changes
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus update view", level = "error")]
-
     async fn update_view(
         &mut self,
         new_view: TYPES::Time,
@@ -620,6 +616,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
         match event.as_ref() {
+            #[cfg(not(feature = "proposal-task"))]
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 let sender = sender.clone();
                 debug!(
@@ -1425,8 +1422,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
     }
 
+    /// Ignores old propose behavior and lets QuorumProposalTask take over.
+    #[cfg(feature = "proposal-task")]
+    pub async fn publish_proposal_if_able(
+        &mut self,
+        _view: TYPES::Time,
+        _event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
+    ) {
+    }
+
     /// Sends a proposal if possible from the high qc we have
     #[allow(clippy::too_many_lines)]
+    #[cfg(not(feature = "proposal-task"))]
     pub async fn publish_proposal_if_able(
         &mut self,
         view: TYPES::Time,

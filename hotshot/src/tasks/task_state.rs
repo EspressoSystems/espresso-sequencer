@@ -190,7 +190,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             cur_view: handle.get_cur_view().await,
             payload_commitment_and_metadata: None,
             api: handle.clone(),
-            _pd: PhantomData,
             vote_collector: None.into(),
             timeout_vote_collector: None.into(),
             timeout_task: None,
@@ -255,6 +254,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             consensus,
             timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
+            cur_view: handle.get_cur_view().await,
+            public_key: handle.public_key().clone(),
+            private_key: handle.private_key().clone(),
+            storage: handle.storage.clone(),
+            timeout: handle.hotshot.config.next_view_timeout,
+            timeout_task: None,
+            round_start_delay: handle.hotshot.config.round_start_delay,
             id: handle.hotshot.id,
         }
     }
