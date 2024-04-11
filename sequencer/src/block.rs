@@ -90,7 +90,9 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self, _: &Self::Metadata) -> &Vec<Self::Transaction> {
+    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
+        // self.enumerate(metadata).map(|(i, t)| t).collect()
+
         unimplemented!()
     }
 }
