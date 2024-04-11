@@ -157,9 +157,20 @@ impl<
                 data.block_payload.num_transactions(&data.metadata) < self.api.min_transactions()
             })
         {
+            let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+                &self.private_key,
+                last_leaf.get_block_header().payload_commitment().as_ref(),
+            ) else {
+                error!("Failed to sign block hash");
+                continue;
+            };
             let mut available_blocks = match self
                 .builder_client
-                .get_available_blocks(last_leaf.get_block_header().payload_commitment())
+                .get_available_blocks(
+                    last_leaf.get_block_header().payload_commitment(),
+                    self.public_key.clone(),
+                    &request_signature,
+                )
                 .await
             {
                 Ok(blocks) => blocks,
@@ -182,7 +193,7 @@ impl<
                 continue;
             }
 
-            let Ok(signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+            let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
                 &self.private_key,
                 block_info.block_hash.as_ref(),
             ) else {
@@ -191,8 +202,8 @@ impl<
             };
 
             let (block, header_input) = futures::join! {
-                self.builder_client.claim_block(block_info.block_hash.clone(), &signature),
-                self.builder_client.claim_block_header_input(block_info.block_hash, &signature)
+                self.builder_client.claim_block(block_info.block_hash.clone(), self.public_key.clone(), &request_signature),
+                self.builder_client.claim_block_header_input(block_info.block_hash, self.public_key.clone(), &request_signature)
             };
 
             let block = match block {

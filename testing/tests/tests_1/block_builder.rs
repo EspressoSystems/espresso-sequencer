@@ -35,10 +35,15 @@ async fn test_random_block_builder() {
     let client: BuilderClient<TestTypes, Version01> = BuilderClient::new(api_url);
     assert!(client.connect(Duration::from_millis(100)).await);
 
+    let (pub_key, private_key) =
+        <TestTypes as NodeType>::SignatureKey::generated_from_seed_indexed([0_u8; 32], 0);
+    let signature = <TestTypes as NodeType>::SignatureKey::sign(&private_key, &[0_u8; 32])
+        .expect("Failed to create dummy signature");
+
     let mut blocks = loop {
         // Test getting blocks
         let blocks = client
-            .get_available_blocks(vid_commitment(&vec![], 1))
+            .get_available_blocks(vid_commitment(&vec![], 1), pub_key, &signature)
             .await
             .expect("Failed to get available blocks");
 
@@ -54,16 +59,8 @@ async fn test_random_block_builder() {
         }
     };
 
-    // Test claiming available block
-    let signature = {
-        let (_key, private_key) =
-            <TestTypes as NodeType>::SignatureKey::generated_from_seed_indexed([0_u8; 32], 0);
-        <TestTypes as NodeType>::SignatureKey::sign(&private_key, &[0_u8; 32])
-            .expect("Failed to create dummy signature")
-    };
-
     let _: AvailableBlockData<TestTypes> = client
-        .claim_block(blocks.pop().unwrap().block_hash, &signature)
+        .claim_block(blocks.pop().unwrap().block_hash, pub_key, &signature)
         .await
         .expect("Failed to claim block");
 
@@ -73,7 +70,7 @@ async fn test_random_block_builder() {
     }
     .builder_commitment(&());
     let result = client
-        .claim_block(commitment_for_non_existent_block, &signature)
+        .claim_block(commitment_for_non_existent_block, pub_key, &signature)
         .await;
     assert!(matches!(result, Err(BuilderClientError::NotFound)));
 }

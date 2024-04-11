@@ -70,12 +70,11 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(node_id)),
     ];
 
-    let view_2_outputs = 
-        vec![
-            exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_validated(),
-            quorum_proposal_send(),
-        ];
+    let view_2_outputs = vec![
+        exact(ViewChange(ViewNumber::new(2))),
+        quorum_proposal_validated(),
+        quorum_proposal_send(),
+    ];
 
     let view_2_inputs = permute_input_with_index_order(inputs, input_permutation);
 

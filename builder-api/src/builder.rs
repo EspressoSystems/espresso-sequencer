@@ -123,6 +123,7 @@ where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + BuilderDataSource<Types>,
     Types: NodeType,
+    for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
     for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
@@ -136,8 +137,10 @@ where
         .get("available_blocks", |req, state| {
             async move {
                 let hash = req.blob_param("parent_hash")?;
+                let sender = req.blob_param("sender")?;
+                let signature = req.blob_param("signature")?;
                 state
-                    .get_available_blocks(&hash)
+                    .get_available_blocks(&hash, sender, &signature)
                     .await
                     .context(BlockAvailableSnafu {
                         resource: hash.to_string(),
@@ -148,9 +151,10 @@ where
         .get("claim_block", |req, state| {
             async move {
                 let hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let sender = req.blob_param("sender")?;
                 let signature = req.blob_param("signature")?;
                 state
-                    .claim_block(&hash, &signature)
+                    .claim_block(&hash, sender, &signature)
                     .await
                     .context(BlockClaimSnafu {
                         resource: hash.to_string(),
@@ -161,9 +165,10 @@ where
         .get("claim_header_input", |req, state| {
             async move {
                 let hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let sender = req.blob_param("sender")?;
                 let signature = req.blob_param("signature")?;
                 state
-                    .claim_block_header_input(&hash, &signature)
+                    .claim_block_header_input(&hash, sender, &signature)
                     .await
                     .context(BlockClaimSnafu {
                         resource: hash.to_string(),

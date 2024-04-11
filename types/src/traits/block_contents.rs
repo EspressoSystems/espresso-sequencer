@@ -167,4 +167,10 @@ pub trait BlockHeader<TYPES: NodeType>:
 
     /// Get the metadata.
     fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload>::Metadata;
+
+    /// Get the builder commitment
+    fn builder_commitment(
+        &self,
+        metadata: &<TYPES::BlockPayload as BlockPayload>::Metadata,
+    ) -> BuilderCommitment;
 }

@@ -30,17 +30,16 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
-
 use crate::{
     consensus::CommitmentAndMetadata,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, instrument, warn};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]

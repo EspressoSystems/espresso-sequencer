@@ -244,6 +244,15 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
     fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload>::Metadata {
         &()
     }
+
+    fn builder_commitment(
+        &self,
+        _metadata: &<TYPES::BlockPayload as BlockPayload>::Metadata,
+    ) -> BuilderCommitment {
+        let mut digest = sha2::Sha256::new();
+        digest.update(self.payload_commitment.as_ref());
+        BuilderCommitment::from_raw_digest(digest.finalize())
+    }
 }
 
 impl Committable for TestBlockHeader {

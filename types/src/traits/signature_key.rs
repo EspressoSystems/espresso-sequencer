@@ -141,3 +141,59 @@ pub trait SignatureKey:
     #[must_use]
     fn genesis_proposer_pk() -> Self;
 }
+
+/// Builder Signature Key trait with minimal requirements
+pub trait BuilderSignatureKey:
+    Send
+    + Sync
+    + Clone
+    + Sized
+    + Debug
+    + Hash
+    + Serialize
+    + for<'a> Deserialize<'a>
+    + PartialEq
+    + Eq
+    + PartialOrd
+    + Ord
+    + Display
+{
+    /// The type of the keys builder would use to sign its messages
+    type BuilderPrivateKey: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Hash;
+
+    /// The type of the signature builder would use to sign its messages
+    type BuilderSignature: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Hash;
+
+    /// Type of error that can occur when signing data
+    type SignError: std::error::Error + Send + Sync;
+
+    /// validate the message with the builder's public key
+    fn validate_builder_signature(&self, signature: &Self::BuilderSignature, data: &[u8]) -> bool;
+
+    /// sign the message with the builder's private key
+    /// # Errors
+    /// If unable to sign the data with the key
+    fn sign_builder_message(
+        private_key: &Self::BuilderPrivateKey,
+        data: &[u8],
+    ) -> Result<Self::BuilderSignature, Self::SignError>;
+
+    /// Generate a new key pair
+    fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::BuilderPrivateKey);
+}

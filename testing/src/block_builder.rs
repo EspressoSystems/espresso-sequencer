@@ -27,6 +27,7 @@ use hotshot_types::{
         block_contents::{vid_commitment, BlockHeader, Transaction},
         election::Membership,
         node_implementation::NodeType,
+        signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
     vid::VidCommitment,
@@ -51,6 +52,7 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     async fn start(
         _membership: Arc<TYPES::Membership>,
@@ -70,6 +72,7 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     async fn start(
         membership: Arc<TYPES::Membership>,
@@ -138,8 +141,8 @@ pub struct RandomBuilderSource<TYPES: NodeType> {
             LruCache<BuilderCommitment, BlockEntry<TYPES>>,
         >,
     >,
-    pub_key: TYPES::SignatureKey,
-    priv_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    pub_key: TYPES::BuilderSignatureKey,
+    priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
 }
 
 impl<TYPES: NodeType> RandomBuilderSource<TYPES> {
@@ -147,8 +150,8 @@ impl<TYPES: NodeType> RandomBuilderSource<TYPES> {
     #[must_use]
     #[allow(clippy::missing_panics_doc)] // ony panics if 256 == 0
     pub fn new(
-        pub_key: TYPES::SignatureKey,
-        priv_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+        pub_key: TYPES::BuilderSignatureKey,
+        priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
     ) -> Self {
         Self {
             blocks: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(256).unwrap()))),
@@ -220,6 +223,8 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
     async fn get_available_blocks(
         &self,
         _for_parent: &VidCommitment,
+        _sender: TYPES::SignatureKey,
+        _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuildError> {
         Ok(self
             .blocks
@@ -234,6 +239,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
     async fn claim_block(
         &self,
         block_hash: &BuilderCommitment,
+        _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockData<TYPES>, BuildError> {
         let mut blocks = self.blocks.write().await;
@@ -249,6 +255,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
     async fn claim_block_header_input(
         &self,
         block_hash: &BuilderCommitment,
+        _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError> {
         let mut blocks = self.blocks.write().await;
@@ -261,7 +268,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
         Ok(header_input)
     }
 
-    async fn get_builder_address(&self) -> Result<TYPES::SignatureKey, BuildError> {
+    async fn get_builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
         Ok(self.pub_key.clone())
     }
 }
@@ -275,8 +282,9 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
-    let (pub_key, priv_key) = TYPES::SignatureKey::generated_from_seed_indexed([1; 32], 0);
+    let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
     let source = RandomBuilderSource::new(pub_key, priv_key);
     source.run(RandomBuilderOptions::default());
 
@@ -293,8 +301,8 @@ where
 }
 
 pub struct SimpleBuilderSource<TYPES: NodeType> {
-    pub_key: TYPES::SignatureKey,
-    priv_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    pub_key: TYPES::BuilderSignatureKey,
+    priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
     membership: Arc<TYPES::Membership>,
     #[allow(clippy::type_complexity)]
     transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>,
@@ -318,6 +326,8 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
     async fn get_available_blocks(
         &self,
         _for_parent: &VidCommitment,
+        _sender: TYPES::SignatureKey,
+        _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuildError> {
         let transactions = self
             .transactions
@@ -347,6 +357,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
     async fn claim_block(
         &self,
         block_hash: &BuilderCommitment,
+        _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockData<TYPES>, BuildError> {
         let mut blocks = self.blocks.write().await;
@@ -357,6 +368,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
     async fn claim_block_header_input(
         &self,
         block_hash: &BuilderCommitment,
+        _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError> {
         let mut blocks = self.blocks.write().await;
@@ -364,7 +376,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
         entry.header_input.take().ok_or(BuildError::Missing)
     }
 
-    async fn get_builder_address(&self) -> Result<TYPES::SignatureKey, BuildError> {
+    async fn get_builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
         Ok(self.pub_key.clone())
     }
 }
@@ -374,6 +386,7 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     pub async fn run(self, url: Url) {
         let builder_api = hotshot_builder_api::builder::define_api::<
@@ -450,7 +463,7 @@ impl<TYPES: NodeType> BuilderTask<TYPES> for SimpleBuilderTask<TYPES> {
 pub async fn make_simple_builder<TYPES: NodeType>(
     membership: Arc<TYPES::Membership>,
 ) -> (SimpleBuilderSource<TYPES>, SimpleBuilderTask<TYPES>) {
-    let (pub_key, priv_key) = TYPES::SignatureKey::generated_from_seed_indexed([1; 32], 0);
+    let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
 
     let transactions = Arc::new(RwLock::new(HashMap::new()));
     let blocks = Arc::new(RwLock::new(HashMap::new()));
@@ -476,8 +489,8 @@ pub async fn make_simple_builder<TYPES: NodeType>(
 fn build_block<TYPES: NodeType>(
     transactions: Vec<TYPES::Transaction>,
     num_storage_nodes: usize,
-    pub_key: TYPES::SignatureKey,
-    priv_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    pub_key: TYPES::BuilderSignatureKey,
+    priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
 ) -> (
     AvailableBlockInfo<TYPES>,
     AvailableBlockData<TYPES>,
@@ -500,7 +513,7 @@ fn build_block<TYPES: NodeType>(
         block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
         block_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
         block_info.extend_from_slice(commitment.as_ref());
-        match TYPES::SignatureKey::sign(&priv_key, &block_info) {
+        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, &block_info) {
             Ok(sig) => sig,
             Err(e) => {
                 panic!("Failed to sign block: {}", e);
@@ -509,20 +522,22 @@ fn build_block<TYPES: NodeType>(
     };
 
     let signature_over_builder_commitment =
-        match TYPES::SignatureKey::sign(&priv_key, commitment.as_ref()) {
+        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, commitment.as_ref()) {
             Ok(sig) => sig,
             Err(e) => {
                 panic!("Failed to sign block: {}", e);
             }
         };
 
-    let signature_over_vid_commitment =
-        match TYPES::SignatureKey::sign(&priv_key, vid_commitment.as_ref()) {
-            Ok(sig) => sig,
-            Err(e) => {
-                panic!("Failed to sign block: {}", e);
-            }
-        };
+    let signature_over_vid_commitment = match TYPES::BuilderSignatureKey::sign_builder_message(
+        &priv_key,
+        vid_commitment.as_ref(),
+    ) {
+        Ok(sig) => sig,
+        Err(e) => {
+            panic!("Failed to sign block: {}", e);
+        }
+    };
 
     let block = AvailableBlockData {
         block_payload,

@@ -21,6 +21,7 @@ use super::{
     network::{
         AsyncGenerator, ConnectedNetwork, NetworkReliability, TestableNetworkingImplementation,
     },
+    signature_key::BuilderSignatureKey,
     states::TestableState,
     storage::Storage,
     ValidatedState,
@@ -238,4 +239,7 @@ pub trait NodeType:
 
     /// Membership used for this implementation
     type Membership: Membership<Self>;
+
+    /// The type builder uses to sign its messages
+    type BuilderSignatureKey: BuilderSignatureKey;
 }

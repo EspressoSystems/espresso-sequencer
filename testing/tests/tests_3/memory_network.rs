@@ -15,7 +15,7 @@ use hotshot_example_types::{
 };
 use hotshot_types::constants::STATIC_VER_0_1;
 use hotshot_types::message::Message;
-use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::signature_key::{BLSPubKey, BuilderKey};
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
@@ -54,6 +54,7 @@ impl NodeType for Test {
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
     type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
+    type BuilderSignatureKey = BuilderKey;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
