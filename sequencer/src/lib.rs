@@ -235,6 +235,7 @@ impl NodeType for SeqTypes {
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
+    type BuilderSignatureKey = PubKey;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]

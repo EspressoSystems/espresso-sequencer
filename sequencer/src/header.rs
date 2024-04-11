@@ -357,6 +357,13 @@ impl BlockHeader<SeqTypes> for Header {
     fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
         &self.ns_table
     }
+
+    fn builder_commitment(
+        &self,
+        metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+    ) -> hotshot_types::utils::BuilderCommitment {
+        unimplemented!()
+    }
 }
 
 impl QueryableHeader<SeqTypes> for Header {

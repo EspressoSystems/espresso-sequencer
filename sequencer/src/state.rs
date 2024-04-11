@@ -205,6 +205,7 @@ enum ChargeFeeError {
 
 fn charge_fee(
     fee_merkle_tree: &mut FeeMerkleTree,
+    delta: &mut Delta,
     fee_info: FeeInfo,
 ) -> Result<(), ChargeFeeError> {
     let FeeInfo { account, amount } = fee_info;
@@ -233,12 +234,13 @@ fn charge_fee(
     if let Some(err) = err {
         Err(err)
     } else {
+        delta.fees_delta.insert(account);
         Ok(())
     }
 }
 
 /// Validate builder account by verifying signature
-fn validate_builder(proposed_header: &Header) -> anyhow::Result<()> {
+fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     // Beware of Malice!
     let builder_signature = proposed_header
         .builder_signature
@@ -401,19 +403,19 @@ pub async fn update_state_storage(
         block_merkle_tree.height(),
     );
 
-    storage
-        .write()
-        .await
-        .store_state::<BlockMerkleTree, 3>(proof.proof, path, block_number)
-        .await
-        .context("failed to insert merkle nodes for block merkle tree")?;
+    {
+        let mut storage_write = storage.write().await;
 
-    storage
-        .write()
-        .await
-        .set_last_state_height(block_number as usize)
-        .await
-        .context("failed to set last state height")?;
+        storage_write
+            .store_state::<BlockMerkleTree, 3>(proof.proof, path, block_number)
+            .await
+            .context("failed to insert merkle nodes for block merkle tree")?;
+
+        storage_write
+            .set_last_state_height(block_number as usize)
+            .await
+            .context("failed to set last state height")?;
+    }
 
     Ok(())
 }
@@ -426,16 +428,10 @@ pub async fn update_state_storage_loop(
 
     let last_height = storage.get_last_state_height().await?;
 
-    let storage = Arc::new(RwLock::new(storage));
+    let mut parent_leaf = storage.get_leaf(last_height).await.resolve().await;
+    let mut leaves = storage.subscribe_leaves(last_height + 1).await;
 
-    let mut parent_leaf = storage
-        .read()
-        .await
-        .get_leaf(last_height)
-        .await
-        .resolve()
-        .await;
-    let mut leaves = storage.read().await.subscribe_leaves(last_height + 1).await;
+    let storage = Arc::new(RwLock::new(storage));
 
     while let Some(leaf) = leaves.next().await {
         loop {
@@ -526,18 +522,17 @@ impl ValidatedState {
 
         let mut delta = Delta::default();
 
-        apply_proposal(&mut validated_state, &mut delta, parent_leaf, l1_deposits);
-        // validate_builder(&mut self.fee_merkle_tree, &mut delta, proposed_header)?;
+        apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
+
         if charge_fee(
             &mut validated_state.fee_merkle_tree,
+            &mut delta,
             proposed_header.fee_info,
         )
         .is_err()
         {
             bail!("Insufficient funds")
         };
-
-        delta.fees_delta.insert(proposed_header.fee_info.account);
 
         Ok((validated_state, delta))
     }
@@ -565,11 +560,12 @@ pub async fn get_l1_deposits(
 }
 
 pub fn apply_proposal(
-    validated_state: &mut ValidatedState,
+    validated_state: &ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
     l1_deposits: Vec<FeeInfo>,
-) {
+) -> ValidatedState {
+    let mut validated_state = validated_state.clone();
     // pushing a block into merkle tree shouldn't fail
     validated_state
         .block_merkle_tree
@@ -585,6 +581,8 @@ pub fn apply_proposal(
             .expect("update_with succeeds");
         delta.fees_delta.insert(*account);
     }
+
+    validated_state
 }
 
 impl HotShotState<SeqTypes> for ValidatedState {
@@ -607,16 +605,16 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
     ) -> Result<(Self, Self::Delta), Self::Error> {
-        // convert to function
-        // Fetch the new L1 deposits between parent and current finalized L1 block.
-
-        validate_builder(proposed_header).unwrap();
-
+        //validate builder fee
+        validate_builder_fee(proposed_header).unwrap();
+        // Unwrapping here is okay as we retry in a loop
+        //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
             .apply_header(instance, parent_leaf, proposed_header)
             .await
             .unwrap();
 
+        // validate the proposal
         validate_proposal(self, parent_leaf, proposed_header).unwrap();
 
         Ok((validated_state, delta))
