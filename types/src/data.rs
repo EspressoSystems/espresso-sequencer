@@ -13,7 +13,7 @@ use std::{
 use anyhow::{ensure, Result};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
-use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
 use jf_primitives::vid::VidDisperse as JfVidDisperse;
 use rand::Rng;
@@ -26,7 +26,7 @@ use crate::{
     simple_certificate::{
         QuorumCertificate, TimeoutCertificate, UpgradeCertificate, ViewSyncFinalizeCertificate2,
     },
-    simple_vote::{QuorumData, UpgradeProposalData},
+    simple_vote::UpgradeProposalData,
     traits::{
         block_contents::{
             vid_commitment, BlockHeader, TestableBlock, GENESIS_VID_NUM_STORAGE_NODES,
@@ -429,24 +429,6 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> QuorumCertificate<TYPES> {
-    #[must_use]
-    /// Creat the Genesis certificate
-    pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
-        let data = QuorumData {
-            leaf_commit: Leaf::genesis(instance_state).commit(),
-        };
-        let commit = data.commit();
-        Self {
-            data,
-            vote_commitment: commit,
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: None,
-            _pd: PhantomData,
-        }
-    }
-}
-
 impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
     ///
@@ -464,23 +446,10 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
         let block_header =
             TYPES::BlockHeader::genesis(instance_state, payload_commitment, metadata);
-
-        let null_quorum_data = QuorumData {
-            leaf_commit: Commitment::<Leaf<TYPES>>::default_commitment_no_preimage(),
-        };
-
-        let justify_qc = QuorumCertificate {
-            data: null_quorum_data.clone(),
-            vote_commitment: null_quorum_data.commit(),
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: None,
-            _pd: PhantomData,
-        };
-
         Self {
             view_number: TYPES::Time::genesis(),
-            justify_qc,
-            parent_commitment: null_quorum_data.leaf_commit,
+            justify_qc: QuorumCertificate::<TYPES>::genesis(),
+            parent_commitment: fake_commitment(),
             upgrade_certificate: None,
             block_header: block_header.clone(),
             block_payload: Some(payload),
@@ -509,7 +478,11 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn get_parent_commitment(&self) -> Commitment<Self> {
         self.parent_commitment
     }
-    /// The block header contained in this leaf.
+    /// Commitment to this leaf's parent.
+    pub fn set_parent_commitment(&mut self, commitment: Commitment<Self>) {
+        self.parent_commitment = commitment;
+    }
+    /// Get a reference to the block header contained in this leaf.
     pub fn get_block_header(&self) -> &<TYPES as NodeType>::BlockHeader {
         &self.block_header
     }
@@ -575,10 +548,9 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             self.get_upgrade_certificate(),
             parent.get_upgrade_certificate(),
         ) {
-            // Easiest cases are:
-            //   - no upgrade certificate on either: this is the most common case, and is always fine.
-            //   - if the parent didn't have a certificate, but we see one now, it just means that we have begun an upgrade: again, this is always fine.
-            (None | Some(_), None) => {}
+            // If the parent didn't have a certificate, but we see one now, it just means that we have begun an upgrade. Again, this is always fine.
+            // But, if we have no upgrade certificate on either is the most common case, and is always fine.
+            (Some(_) | None, None) => {}
             // If we no longer see a cert, we have to make sure that we either:
             //    - no longer care because we have passed new_version_first_view, or
             //    - no longer care because we have passed `decide_by` without deciding the certificate.

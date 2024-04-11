@@ -89,13 +89,11 @@ pub(crate) async fn validate_proposal<TYPES: NodeType>(
 
     let state = Arc::new(validated_state);
     let delta = Arc::new(state_delta);
+    let parent_commitment = parent_leaf.commit();
     let view = proposal.data.get_view_number();
 
-    let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
-    ensure!(
-        proposed_leaf.get_parent_commitment() == parent_leaf.commit(),
-        "Proposed leaf does not extend the parent leaf."
-    );
+    let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+    proposed_leaf.set_parent_commitment(parent_commitment);
 
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
     //
@@ -239,10 +237,8 @@ async fn create_and_send_proposal<TYPES: NodeType>(
         upgrade_certificate: upgrade_cert,
     };
 
-    let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
-    if proposed_leaf.get_parent_commitment() != parent_leaf.commit() {
-        return;
-    }
+    let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal);
+    proposed_leaf.set_parent_commitment(parent_leaf.commit());
 
     let Ok(signature) = TYPES::SignatureKey::sign(&private_key, proposed_leaf.commit().as_ref())
     else {
@@ -411,10 +407,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let view = cert.view_number;
                 // TODO: do some of this logic without the vote token check, only do that when voting.
                 let justify_qc = proposal.justify_qc.clone();
-                let parent = consensus
-                    .saved_leaves
-                    .get(&justify_qc.get_data().leaf_commit)
-                    .cloned();
+                let parent = if justify_qc.is_genesis {
+                    Some(Leaf::genesis(&consensus.instance_state))
+                } else {
+                    consensus
+                        .saved_leaves
+                        .get(&justify_qc.get_data().leaf_commit)
+                        .cloned()
+                };
 
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
@@ -427,15 +427,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
                 let parent_commitment = parent.commit();
 
-                let proposed_leaf = Leaf::from_quorum_proposal(proposal);
-                if proposed_leaf.get_parent_commitment() != parent_commitment {
-                    return false;
-                }
+                let mut proposed_leaf = Leaf::from_quorum_proposal(proposal);
+                proposed_leaf.set_parent_commitment(parent_commitment);
 
                 // Validate the DAC.
                 let message = if cert.is_valid_cert(self.committee_membership.as_ref()) {
                     // Validate the block payload commitment for non-genesis DAC.
-                    if cert.get_data().payload_commit != proposal.block_header.payload_commitment()
+                    if !cert.is_genesis
+                        && cert.get_data().payload_commit
+                            != proposal.block_header.payload_commitment()
                     {
                         error!("Block payload commitment does not equal da cert payload commitment. View = {}", *view);
                         return false;
@@ -720,22 +720,48 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let consensus = self.consensus.upgradable_read().await;
 
                 // Get the parent leaf and state.
-                let parent = match consensus
-                    .saved_leaves
-                    .get(&justify_qc.get_data().leaf_commit)
-                    .cloned()
-                {
-                    Some(leaf) => {
-                        if let (Some(state), _) =
-                            consensus.get_state_and_delta(leaf.get_view_number())
-                        {
-                            Some((leaf, state.clone()))
-                        } else {
-                            error!("Parent state not found! Consensus internally inconsistent");
-                            return;
+                let parent = if justify_qc.is_genesis {
+                    // Send the `Decide` event for the genesis block if the justify QC is genesis.
+                    let leaf = Leaf::genesis(&consensus.instance_state);
+                    let (validated_state, state_delta) =
+                        TYPES::ValidatedState::genesis(&consensus.instance_state);
+                    let state = Arc::new(validated_state);
+                    broadcast_event(
+                        Event {
+                            view_number: TYPES::Time::genesis(),
+                            event: EventType::Decide {
+                                leaf_chain: Arc::new(vec![LeafInfo::new(
+                                    leaf.clone(),
+                                    state.clone(),
+                                    Some(Arc::new(state_delta)),
+                                    None,
+                                )]),
+                                qc: Arc::new(justify_qc.clone()),
+                                block_size: None,
+                            },
+                        },
+                        &self.output_event_stream,
+                    )
+                    .await;
+                    Some((leaf, state))
+                } else {
+                    match consensus
+                        .saved_leaves
+                        .get(&justify_qc.get_data().leaf_commit)
+                        .cloned()
+                    {
+                        Some(leaf) => {
+                            if let (Some(state), _) =
+                                consensus.get_state_and_delta(leaf.get_view_number())
+                            {
+                                Some((leaf, state.clone()))
+                            } else {
+                                error!("Parent state not found! Consensus internally inconsistent");
+                                return;
+                            }
                         }
+                        None => None,
                     }
-                    None => None,
                 };
 
                 if justify_qc.get_view_number() > consensus.high_qc.view_number {
@@ -764,7 +790,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.get_data().leaf_commit
                     );
-                    let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+                    let leaf = Leaf::from_quorum_proposal(&proposal.data);
 
                     let state = Arc::new(
                         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(
@@ -776,15 +802,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         view,
                         View {
                             view_inner: ViewInner::Leaf {
-                                leaf: proposed_leaf.commit(),
+                                leaf: leaf.commit(),
                                 state,
                                 delta: None,
                             },
                         },
                     );
-                    consensus
-                        .saved_leaves
-                        .insert(proposed_leaf.commit(), proposed_leaf.clone());
+                    consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
 
                     if let Err(e) = self
                         .storage
@@ -1582,7 +1606,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .as_ref()
                 .filter(|cert| cert.is_valid_for_view(&view))
                 .cloned();
-
             let pub_key = self.public_key.clone();
             let priv_key = self.private_key.clone();
             let consensus = self.consensus.clone();

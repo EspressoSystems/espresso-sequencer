@@ -263,7 +263,7 @@ async fn build_quorum_proposal_and_signature(
     let mut proposal = QuorumProposal::<TestTypes> {
         block_header: block_header.clone(),
         view_number: ViewNumber::new(1),
-        justify_qc: QuorumCertificate::genesis(&TestInstanceState {}),
+        justify_qc: QuorumCertificate::genesis(),
         upgrade_certificate: None,
         proposal_certificate: None,
     };
