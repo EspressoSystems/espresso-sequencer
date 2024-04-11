@@ -89,13 +89,25 @@ pub trait BlockPayload:
     fn transaction_commitments(
         &self,
         metadata: &Self::Metadata,
-    ) -> Vec<Commitment<Self::Transaction>>;
+    ) -> Vec<Commitment<Self::Transaction>> {
+        self.get_transactions(metadata)
+            .map(|tx| tx.commit())
+            .collect()
+    }
+
+    /// Number of transactions in the block.
+    fn num_transactions(&self, metadata: &Self::Metadata) -> usize {
+        self.get_transactions(metadata).count()
+    }
 
     /// Generate commitment that builders use to sign block options.
     fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment;
 
     /// Get the transactions in the payload.
-    fn get_transactions(&self, metadata: &Self::Metadata) -> &Vec<Self::Transaction>;
+    fn get_transactions<'a>(
+        &'a self,
+        metadata: &'a Self::Metadata,
+    ) -> impl 'a + Iterator<Item = Self::Transaction>;
 }
 
 /// extra functions required on block to be usable by hotshot-testing

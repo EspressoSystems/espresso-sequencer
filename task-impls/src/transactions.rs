@@ -154,8 +154,7 @@ impl<
         )> = None;
         while task_start_time.elapsed() < self.api.propose_max_round_time()
             && latest_block.as_ref().map_or(true, |(data, _)| {
-                data.block_payload.get_transactions(&data.metadata).len()
-                    < self.api.min_transactions()
+                data.block_payload.num_transactions(&data.metadata) < self.api.min_transactions()
             })
         {
             let mut available_blocks = match self
@@ -212,7 +211,7 @@ impl<
                 }
             };
 
-            let num_txns = block.block_payload.get_transactions(&block.metadata).len();
+            let num_txns = block.block_payload.num_transactions(&block.metadata);
 
             latest_block = Some((block, header_input));
             if num_txns >= self.api.min_transactions() {
