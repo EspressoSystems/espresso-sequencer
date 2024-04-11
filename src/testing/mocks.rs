@@ -96,6 +96,7 @@ impl NodeType for MockTypes {
     type InstanceState = TestInstanceState;
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
+    type BuilderSignatureKey = BLSPubKey;
 }
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
