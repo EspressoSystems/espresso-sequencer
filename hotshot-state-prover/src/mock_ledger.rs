@@ -254,7 +254,7 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = self
             .st
@@ -262,7 +262,7 @@ impl MockLedger {
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _>(
             &mut self.rng,
             &pk,
             &stake_table_entries,
@@ -270,6 +270,7 @@ impl MockLedger {
             &sigs,
             &self.state,
             &self.threshold,
+            STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
         (pi, proof)
@@ -312,14 +313,14 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = adv_st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _>(
             &mut self.rng,
             &pk,
             &stake_table_entries,
@@ -327,6 +328,7 @@ impl MockLedger {
             &sigs,
             &new_state,
             &self.threshold, // it's fine to use the old threshold
+            STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
 

@@ -126,8 +126,8 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a quorum threshold
-/// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
-/// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
+/// Lengths of input vectors should not exceed the `stake_table_capacity`.
+/// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.
 /// It checks that
 /// - the vector that indicates who signed is a bit vector
 /// - the signers' accumulated weight exceeds the quorum threshold
@@ -138,12 +138,13 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - A list of public inputs for verification
 /// - A `PlonkError` if any error happens when building the circuit
 #[allow(clippy::too_many_lines)]
-pub(crate) fn build<F, P, STIter, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
+pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
     signatures: SigIter,
     lightclient_state: &GenericLightClientState<F>,
     threshold: &U256,
+    stake_table_capacity: usize,
 ) -> Result<(PlonkCircuit<F>, GenericPublicInput<F>), PlonkError>
 where
     F: RescueParameter,
@@ -161,30 +162,30 @@ where
     let stake_table_entries = stake_table_entries.into_iter();
     let signer_bit_vec = signer_bit_vec.into_iter();
     let signatures = signatures.into_iter();
-    if stake_table_entries.len() > STAKE_TABLE_CAPACITY {
+    if stake_table_entries.len() > stake_table_capacity {
         return Err(PlonkError::CircuitError(CircuitError::ParameterError(
             format!(
                 "Number of input stake table entries {} exceeds the capacity {}",
                 stake_table_entries.len(),
-                STAKE_TABLE_CAPACITY,
+                stake_table_capacity,
             ),
         )));
     }
-    if signer_bit_vec.len() > STAKE_TABLE_CAPACITY {
+    if signer_bit_vec.len() > stake_table_capacity {
         return Err(PlonkError::CircuitError(CircuitError::ParameterError(
             format!(
                 "Length of input bit vector {} exceeds the capacity {}",
                 signer_bit_vec.len(),
-                STAKE_TABLE_CAPACITY,
+                stake_table_capacity,
             ),
         )));
     }
-    if signatures.len() > STAKE_TABLE_CAPACITY {
+    if signatures.len() > stake_table_capacity {
         return Err(PlonkError::CircuitError(CircuitError::ParameterError(
             format!(
                 "Number of input signatures {} exceeds the capacity {}",
                 signatures.len(),
-                STAKE_TABLE_CAPACITY,
+                stake_table_capacity,
             ),
         )));
     }
@@ -192,7 +193,7 @@ where
     let mut circuit = PlonkCircuit::new_turbo_plonk();
 
     // creating variables for stake table entries
-    let stake_table_entries_pad_len = STAKE_TABLE_CAPACITY - stake_table_entries.len();
+    let stake_table_entries_pad_len = stake_table_capacity - stake_table_entries.len();
     let mut stake_table_var = stake_table_entries
         .map(|item| {
             let item = item.borrow();
@@ -219,7 +220,7 @@ where
     );
 
     // creating variables for signatures
-    let sig_pad_len = STAKE_TABLE_CAPACITY - signatures.len();
+    let sig_pad_len = stake_table_capacity - signatures.len();
     let mut sig_vars = signatures
         .map(|sig| circuit.create_signature_variable(sig.borrow()))
         .collect::<Result<Vec<_>, CircuitError>>()?;
@@ -230,7 +231,7 @@ where
     );
 
     // creating Boolean variables for the bit vector
-    let bit_vec_pad_len = STAKE_TABLE_CAPACITY - signer_bit_vec.len();
+    let bit_vec_pad_len = stake_table_capacity - signer_bit_vec.len();
     let collect = signer_bit_vec
         .map(|b| {
             let var = circuit.create_variable(*b.borrow())?;
@@ -264,7 +265,7 @@ where
     ];
 
     // Checking whether the accumulated weight exceeds the quorum threshold
-    let mut signed_amount_var = (0..STAKE_TABLE_CAPACITY / 2)
+    let mut signed_amount_var = (0..stake_table_capacity / 2)
         .map(|i| {
             circuit.mul_add(
                 &[
@@ -277,11 +278,11 @@ where
             )
         })
         .collect::<Result<Vec<_>, CircuitError>>()?;
-    // Adding the last if STAKE_TABLE_CAPACITY is not a multiple of 2
-    if STAKE_TABLE_CAPACITY % 2 == 1 {
+    // Adding the last if stake_table_capacity is not a multiple of 2
+    if stake_table_capacity % 2 == 1 {
         signed_amount_var.push(circuit.mul(
-            stake_table_var[STAKE_TABLE_CAPACITY - 1].stake_amount,
-            signer_bit_vec_var[STAKE_TABLE_CAPACITY - 1].0,
+            stake_table_var[stake_table_capacity - 1].stake_amount,
+            signer_bit_vec_var[stake_table_capacity - 1].0,
         )?);
     }
     let acc_amount_var = circuit.sum(&signed_amount_var)?;
@@ -348,7 +349,8 @@ where
 }
 
 /// Internal function to build a dummy circuit
-pub(crate) fn build_for_preprocessing<F, P, const STAKE_TABLE_CAPCITY: usize>(
+pub(crate) fn build_for_preprocessing<F, P>(
+    stake_table_capacity: usize,
 ) -> Result<(PlonkCircuit<F>, GenericPublicInput<F>), PlonkError>
 where
     F: RescueParameter,
@@ -361,7 +363,14 @@ where
         fee_ledger_comm: F::default(),
         stake_table_comm: (F::default(), F::default(), F::default()),
     };
-    build::<F, P, _, _, _, STAKE_TABLE_CAPCITY>(&[], &[], &[], &lightclient_state, &U256::zero())
+    build::<F, P, _, _, _>(
+        &[],
+        &[],
+        &[],
+        &lightclient_state,
+        &U256::zero(),
+        stake_table_capacity,
+    )
 }
 
 #[cfg(test)]
@@ -439,24 +448,26 @@ mod tests {
             .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
         // good path
-        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(26u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(circuit
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
-        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(10u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(circuit
@@ -465,12 +476,13 @@ mod tests {
 
         // bad path: feeding non-bit vector
         let bit_vec = [F::from(2u64); 10];
-        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(26u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(circuit
@@ -498,12 +510,13 @@ mod tests {
             .into_iter()
             .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bad_bit_vec,
             &bad_bit_masked_sigs,
             &lightclient_state,
             &U256::from(25u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(bad_circuit
@@ -521,12 +534,13 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &sig_for_bad_state,
             &bad_lightclient_state,
             &U256::from(26u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(bad_circuit
@@ -545,12 +559,13 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &wrong_sigs,
             &lightclient_state,
             &U256::from(26u32),
+            ST_CAPACITY,
         )
         .unwrap();
         assert!(bad_circuit
@@ -558,12 +573,13 @@ mod tests {
             .is_err());
 
         // bad path: overflowing stake table size
-        assert!(build::<_, _, _, _, _, 9>(
+        assert!(build::<_, _, _, _, _>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(26u32),
+            9
         )
         .is_err());
     }

@@ -64,6 +64,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.2" }
+lazy_static = "1.4"
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.5.0" }

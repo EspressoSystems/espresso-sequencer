@@ -18,6 +18,7 @@ use ethers::{
 };
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
 use std::{
     collections::HashMap,
@@ -94,6 +95,10 @@ struct Options {
 
     #[clap(flatten)]
     contracts: DeployedContracts,
+
+    /// Stake table capacity for the prover circuit
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    pub stake_table_capacity: usize,
 }
 
 /// Set of predeployed contracts.
@@ -255,7 +260,8 @@ async fn main() -> anyhow::Result<()> {
                         .await?,
                     l1.clone(),
                 );
-                let genesis = light_client_genesis(&orchestrator_url).await?;
+                let genesis =
+                    light_client_genesis(&orchestrator_url, opt.stake_table_capacity).await?;
                 let data = light_client
                     .initialize(genesis.into(), u32::MAX, owner)
                     .calldata()
@@ -303,11 +309,9 @@ async fn deploy_light_client_contract<M: Middleware + 'static>(
     // contract artifacts: this is no different than foundry inlining bytecode objects in generated
     // bindings, except that foundry doesn't provide the bytecode for contracts that link with
     // libraries, so we have to do it ourselves.
-    dbg!("here");
     let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
         "../../../contract-bindings/artifacts/LightClientMock_bytecode.json"
     ))?;
-    dbg!("here2");
     bytecode
         .link_fully_qualified(
             "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
@@ -315,7 +319,6 @@ async fn deploy_light_client_contract<M: Middleware + 'static>(
         )
         .resolve()
         .context("error linking PlonkVerifier lib")?;
-    dbg!("here3");
     bytecode
         .link_fully_qualified(
             "contracts/tests/mocks/LightClientStateUpdateVKMock.sol:LightClientStateUpdateVKMock",
@@ -323,9 +326,7 @@ async fn deploy_light_client_contract<M: Middleware + 'static>(
         )
         .resolve()
         .context("error linking LightClientStateUpdateVK lib")?;
-    dbg!("here4");
     ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
-    dbg!("here5");
 
     // Deploy light client.
     let light_client_factory = ContractFactory::new(

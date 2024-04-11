@@ -25,7 +25,7 @@ fn main() {
             powers_of_h: vec![srs.h, srs.beta_h],
         }
     };
-    let (_, vk) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+    let (_, vk) = hotshot_state_prover::preprocess(&srs, STAKE_TABLE_CAPACITY)
         .expect("Circuit preprocess failed");
     let vk: ParsedVerifyingKey = vk.into();
 

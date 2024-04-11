@@ -3,6 +3,7 @@ use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use ethers::types::Address;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
@@ -165,6 +166,10 @@ pub struct Options {
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     pub state_peers: Vec<Url>,
+
+    /// Stake table capacity for the prover circuit
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    pub stake_table_capacity: usize,
 }
 
 impl Options {
