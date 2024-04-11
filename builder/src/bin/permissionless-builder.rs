@@ -4,7 +4,6 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
-use ethers::types::Address;
 use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_types::data::ViewNumber;
 use hotshot_types::light_client::StateSignKey;
@@ -102,19 +101,15 @@ pub struct NonPermissionedBuilderOptions {
     pub state_peers: Vec<Url>,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_SERVER_PORT")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     pub port: u16,
 
-    /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_ADDRESS")]
-    pub address: Address,
-
     /// Bootstrapping View number
-    #[clap(short, long, env = "BUILDER_BOOTSTRAPPED_VIEW")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(short, long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 }
 
