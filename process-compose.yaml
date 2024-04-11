@@ -92,6 +92,7 @@ processes:
     environment:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=30s
     depends_on:
       orchestrator:
         condition: process_healthy
