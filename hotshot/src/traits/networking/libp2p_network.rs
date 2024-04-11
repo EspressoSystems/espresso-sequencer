@@ -236,6 +236,7 @@ where
                             // the worst case of 7/2+3 > 5
                             mesh_n: (expected_node_count / 2 + 3),
                         }))
+                        .server_mode(true)
                         .replication_factor(replication_factor)
                         .node_type(NetworkNodeType::Bootstrap)
                         .bound_addr(Some(addr))
@@ -256,6 +257,7 @@ where
                             mesh_outbound_min: 4,
                             mesh_n: 8,
                         }))
+                        .server_mode(true)
                         .replication_factor(replication_factor)
                         .node_type(NetworkNodeType::Regular)
                         .bound_addr(Some(addr))
@@ -586,6 +588,7 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
 
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
+                    handle.begin_bootstrap().await?;
                 }
 
                 handle.subscribe(QC_TOPIC.to_string()).await.unwrap();
