@@ -120,7 +120,7 @@ jobs:
     outputs:
       sequencer-tag: ${{ steps.sequencer.outputs.tags }}
       cdn-broker-tag: ${{ steps.cdn-broker.outputs.tags }}
-      cdn-marshal-tag: ${{ steps.cdn-broker.outputs.tags }}
+      cdn-marshal-tag: ${{ steps.cdn-marshal.outputs.tags }}
       state-relay-server-tag: ${{ steps.state-relay-server.outputs.tags }}
       prover-service-tag: ${{ steps.prover-service.outputs.tags }}
       orchestrator-tag: ${{ steps.orchestrator.outputs.tags }}
