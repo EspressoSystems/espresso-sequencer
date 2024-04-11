@@ -246,9 +246,6 @@ processes:
     readiness_probe:
       exec:
         command: keydb-cli --pass changeme! --raw incr PING
-      initial_delay_seconds: 5
-      period_seconds: 5
-      timeout_seconds: 4
       failure_threshold: 20
 
   # The CDN system's main entry point; where users contact first.
