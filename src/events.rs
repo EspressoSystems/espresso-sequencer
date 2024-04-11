@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{api::load_api, events_source::EventsSource};
 
