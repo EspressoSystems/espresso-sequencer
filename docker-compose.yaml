@@ -114,13 +114,15 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"
     # Run the full API server with all modules, default storage
-    command: sequencer -- http -- query -- catchup -- status -- submit
+    command: sequencer -- http -- query -- catchup -- status -- submit -- hotshot-events
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -302,19 +304,20 @@ services:
         condition: service_healthy
 
   permissionless-builder:
-    image: ghcr.io/espressosystems/espresso-sequencer/builder:main
+    image: ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_URL
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL
-      - ESPRESSO_BUILDER_KEY_FILE
+      - ESPRESSO_BUILDER_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_BUILDER_PRIVATE_STAKING_KEY
+      - ESPRESSO_BUILDER_PRIVATE_STATE_KEY
       - ESPRESSO_BUILDER_ETH_MNEMONIC
       - ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
       - ESPRESSO_BUILDER_L1_PROVIDER
-      - BUILDER_SERVER_PORT=$ESPRESSO_BUILDER_SERVER_PORT
-      - BUILDER_ADDRESS
-      - BUILDER_CHANNEL_CAPACITY=$BUILDER_CHANNEL_CAPACITY
+      - ESPRESSO_BUILDER_SERVER_PORT
+      - ESPRESSO_BUILDER_CHANNEL_CAPACITY
+      - ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
