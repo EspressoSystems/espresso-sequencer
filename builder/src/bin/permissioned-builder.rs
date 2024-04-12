@@ -215,7 +215,9 @@ async fn main() -> anyhow::Result<()> {
         .libp2p_advertise_address
         .to_socket_addrs()?
         .next()
-        .ok_or(anyhow::anyhow!("Failed to resolve Libp2p advertise address"))?;
+        .ok_or(anyhow::anyhow!(
+            "Failed to resolve Libp2p advertise address"
+        ))?;
     let libp2p_bind_address = opt
         .libp2p_bind_address
         .to_socket_addrs()?
