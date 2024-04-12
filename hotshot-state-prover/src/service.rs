@@ -622,7 +622,7 @@ mod test {
 
         //set this wallet as an approved prover so that it can update the state
         light_client_proxy
-            .update_approved_prover(l1_wallet.clone().address())
+            .update_permissioned_prover(l1_wallet.clone().address())
             .send()
             .await?;
 
