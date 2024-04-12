@@ -89,5 +89,5 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
-docker build -t ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
