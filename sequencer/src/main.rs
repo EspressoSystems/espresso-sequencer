@@ -62,14 +62,14 @@ where
     let libp2p_advertise_address = opt
         .libp2p_advertise_address
         .to_socket_addrs()?
-        .next()
+        .find(|x| x.is_ipv4())
         .ok_or(anyhow::anyhow!(
             "Failed to resolve Libp2p advertise address"
         ))?;
     let libp2p_bind_address = opt
         .libp2p_bind_address
         .to_socket_addrs()?
-        .next()
+        .find(|x| x.is_ipv4())
         .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
 
     let network_params = NetworkParams {
