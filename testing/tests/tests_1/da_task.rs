@@ -7,7 +7,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::da::DATaskState;
 use hotshot_task_impls::events::HotShotEvent::*;
 use hotshot_testing::{
-    predicates::exact,
+    predicates::event::exact,
     script::{run_test_script, TestScriptStage},
     task_helpers::build_system_handle,
     view_generator::TestViewGenerator,

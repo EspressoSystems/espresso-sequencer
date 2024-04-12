@@ -10,7 +10,7 @@ use hotshot_testing::task_helpers::get_vid_share;
 async fn test_quorum_vote_task_success() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        predicates::{exact, quorum_proposal_validated,quorum_vote_send},
+        predicates::event::{exact, quorum_proposal_validated, quorum_vote_send},
         script::{run_test_script, TestScriptStage},
         task_helpers::build_system_handle,
         view_generator::TestViewGenerator,
@@ -58,7 +58,7 @@ async fn test_quorum_vote_task_success() {
 async fn test_quorum_vote_task_miss_dependency() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        predicates::{exact, quorum_proposal_validated},
+        predicates::event::{exact, quorum_proposal_validated},
         script::{run_test_script, TestScriptStage},
         task_helpers::build_system_handle,
         view_generator::TestViewGenerator,
@@ -126,7 +126,7 @@ async fn test_quorum_vote_task_miss_dependency() {
         QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
     run_test_script(
-        vec![ view_no_dac, view_no_vid, view_no_quorum_proposal],
+        vec![view_no_dac, view_no_vid, view_no_quorum_proposal],
         quorum_vote_state,
     )
     .await;

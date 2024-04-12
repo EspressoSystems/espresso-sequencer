@@ -12,8 +12,8 @@ pub const RECV_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub struct TestScriptStage<TYPES: NodeType, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>> {
     pub inputs: Vec<HotShotEvent<TYPES>>,
-    pub outputs: Vec<Predicate<Arc<HotShotEvent<TYPES>>>>,
-    pub asserts: Vec<Predicate<S>>,
+    pub outputs: Vec<Box<dyn Predicate<Arc<HotShotEvent<TYPES>>>>>,
+    pub asserts: Vec<Box<dyn Predicate<S>>>,
 }
 
 /// A `TestScript` is a sequence of triples (input sequence, output sequence, assertions).
@@ -43,24 +43,28 @@ where
     panic!("{}", output_missing_error);
 }
 
-pub fn validate_task_state_or_panic<S>(stage_number: usize, state: &S, assert: &mut Predicate<S>) {
+pub async fn validate_task_state_or_panic<S>(
+    stage_number: usize,
+    state: &S,
+    assert: &dyn Predicate<S>,
+) {
     assert!(
-        (assert.function)(state) == PredicateResult::Pass,
+        assert.evaluate(state).await == PredicateResult::Pass,
         "Stage {} | Task state failed to satisfy: {:?}",
         stage_number,
         assert
     );
 }
 
-pub fn validate_output_or_panic<S>(
+pub async fn validate_output_or_panic<S>(
     stage_number: usize,
     output: &S,
-    assert: &mut Predicate<S>,
+    assert: &(dyn Predicate<S> + 'static),
 ) -> PredicateResult
 where
     S: std::fmt::Debug,
 {
-    let result = (assert.function)(output);
+    let result = assert.evaluate(output).await;
 
     match result {
         PredicateResult::Pass => result,
@@ -126,7 +130,14 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>
             {
                 tracing::debug!("Test received: {:?}", received_output);
 
-                result = validate_output_or_panic(stage_number, &received_output, assert);
+                result = validate_output_or_panic(
+                    stage_number,
+                    &received_output,
+                    // The first * dereferences &Box<dyn> to Box<dyn>, the second one then dereferences the Box<dyn> to the
+                    // trait object itself and then we're good to go.
+                    &**assert,
+                )
+                .await;
 
                 to_task
                     .broadcast(received_output.clone())
@@ -154,7 +165,7 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>
         }
 
         for assert in &mut stage.asserts {
-            validate_task_state_or_panic(stage_number, task.state(), assert);
+            validate_task_state_or_panic(stage_number, task.state(), &**assert).await;
         }
 
         if let Ok(received_output) = from_task.try_recv() {
@@ -169,8 +180,8 @@ pub struct TaskScript<TYPES: NodeType, S> {
 }
 
 pub struct Expectations<TYPES: NodeType, S> {
-    pub output_asserts: Vec<Predicate<Arc<HotShotEvent<TYPES>>>>,
-    pub task_state_asserts: Vec<Predicate<S>>,
+    pub output_asserts: Vec<Box<dyn Predicate<Arc<HotShotEvent<TYPES>>>>>,
+    pub task_state_asserts: Vec<Box<dyn Predicate<S>>>,
 }
 
 pub fn panic_extra_output_in_script<S>(stage_number: usize, script_name: String, output: &S)
@@ -197,14 +208,14 @@ where
     panic!("{}", output_missing_error);
 }
 
-pub fn validate_task_state_or_panic_in_script<S>(
+pub async fn validate_task_state_or_panic_in_script<S>(
     stage_number: usize,
     script_name: String,
     state: &S,
-    assert: &mut Predicate<S>,
+    assert: &dyn Predicate<S>,
 ) {
     assert!(
-        (assert.function)(state) == PredicateResult::Pass,
+        assert.evaluate(state).await == PredicateResult::Pass,
         "Stage {} | Task state in {} failed to satisfy: {:?}",
         stage_number,
         script_name,
@@ -212,14 +223,14 @@ pub fn validate_task_state_or_panic_in_script<S>(
     );
 }
 
-pub fn validate_output_or_panic_in_script<S: std::fmt::Debug>(
+pub async fn validate_output_or_panic_in_script<S: std::fmt::Debug>(
     stage_number: usize,
     script_name: String,
     output: &S,
-    assert: &mut Predicate<S>,
+    assert: &dyn Predicate<S>,
 ) {
     assert!(
-        (assert.function)(output) == PredicateResult::Pass,
+        assert.evaluate(output).await == PredicateResult::Pass,
         "Stage {} | Output in {} failed to satisfy: {:?}.\n\nReceived:\n\n{:?}",
         stage_number,
         script_name,

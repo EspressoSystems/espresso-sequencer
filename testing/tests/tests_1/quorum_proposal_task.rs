@@ -4,7 +4,7 @@ use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_task_impls::events::HotShotEvent::*;
 use hotshot_task_impls::quorum_proposal::QuorumProposalTaskState;
-use hotshot_testing::predicates::quorum_proposal_send;
+use hotshot_testing::predicates::event::quorum_proposal_send;
 use hotshot_testing::task_helpers::vid_scheme_from_view_number;
 use hotshot_testing::{
     script::{run_test_script, TestScriptStage},

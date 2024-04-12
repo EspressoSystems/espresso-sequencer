@@ -364,7 +364,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
 
                         let assert = &mut output_asserts[#output_index_names];
 
-                        validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, assert);
+                        validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, &**assert).await;
 
                         #output_index_names += 1;
                     }
@@ -392,7 +392,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
 
                         let mut assert = &mut output_asserts[#output_index_names];
 
-                        validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, assert);
+                        validate_output_or_panic_in_script(stage_number, #script_names.to_string(), &received_output, &**assert).await;
 
                         #output_index_names += 1;
                     }
@@ -410,7 +410,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
             let task_state_asserts = &mut #task_expectations[stage_number].task_state_asserts;
 
             for assert in task_state_asserts {
-                validate_task_state_or_panic_in_script(stage_number, #script_names.to_string(), #task_names.state(), assert);
+                validate_task_state_or_panic_in_script(stage_number, #script_names.to_string(), #task_names.state(), &**assert).await;
             }
         )*
     } }

@@ -9,7 +9,8 @@ use hotshot_task_impls::{
     consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
-    predicates::*,
+    predicates::event::*,
+    predicates::upgrade::*,
     script::{Expectations, TaskScript},
     view_generator::TestViewGenerator,
 };
@@ -260,9 +261,9 @@ async fn test_upgrade_and_consensus_task() {
         expectations: vec![
             Expectations {
                 output_asserts: vec![
-                    exact(ViewChange(ViewNumber::new(1))),
-                    quorum_proposal_validated(),
-                    quorum_vote_send(),
+                    exact::<TestTypes>(ViewChange(ViewNumber::new(1))),
+                    quorum_proposal_validated::<TestTypes>(),
+                    quorum_vote_send::<TestTypes>(),
                 ],
                 task_state_asserts: vec![],
             },
@@ -272,13 +273,13 @@ async fn test_upgrade_and_consensus_task() {
             },
             Expectations {
                 output_asserts: vec![
-                    exact(ViewChange(ViewNumber::new(2))),
-                    quorum_proposal_validated(),
+                    exact::<TestTypes>(ViewChange(ViewNumber::new(2))),
+                    quorum_proposal_validated::<TestTypes>(),
                 ],
                 task_state_asserts: vec![],
             },
             Expectations {
-                output_asserts: vec![quorum_proposal_send_with_upgrade_certificate()],
+                output_asserts: vec![quorum_proposal_send_with_upgrade_certificate::<TestTypes>()],
                 task_state_asserts: vec![],
             },
         ],
@@ -292,7 +293,7 @@ async fn test_upgrade_and_consensus_task() {
                 task_state_asserts: vec![],
             },
             Expectations {
-                output_asserts: vec![upgrade_certificate_formed()],
+                output_asserts: vec![upgrade_certificate_formed::<TestTypes>()],
                 task_state_asserts: vec![],
             },
             Expectations {
@@ -496,7 +497,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         expectations: vec![
             Expectations {
                 output_asserts: vec![
-                    exact(ViewChange(ViewNumber::new(1))),
+                    exact::<TestTypes>(ViewChange(ViewNumber::new(1))),
                     quorum_proposal_validated(),
                     quorum_vote_send(),
                 ],
