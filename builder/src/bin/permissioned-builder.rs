@@ -14,7 +14,7 @@ use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::persistence::no_storage::NoStorage;
 use sequencer::{BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::num::NonZeroUsize;
 use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
@@ -44,24 +44,24 @@ pub struct PermissionedBuilderOptions {
     )]
     pub cdn_endpoint: String,
 
-    /// The address to bind to for Libp2p (in `IP:port` form)
+    /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
     )]
-    pub libp2p_bind_address: SocketAddr,
+    pub libp2p_bind_address: String,
 
     /// The address we advertise to other nodes as being a Libp2p endpoint.
-    /// Should be supplied in `IP:port` form.
+    /// Should be supplied in `host:port` form.
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
-        default_value = "127.0.0.1:1769"
+        default_value = "localhost:1769"
     )]
-    pub libp2p_advertise_address: SocketAddr,
+    pub libp2p_advertise_address: String,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -210,10 +210,22 @@ async fn main() -> anyhow::Result<()> {
     // get from the private key
     let builder_pub_key = BLSPubKey::from_private(&private_staking_key);
 
+    // Parse supplied Libp2p addresses to their socket form
+    let libp2p_advertise_address = opt
+        .libp2p_advertise_address
+        .to_socket_addrs()?
+        .next()
+        .ok_or(anyhow::anyhow!("Failed to resolve Libp2p advertise address"))?;
+    let libp2p_bind_address = opt
+        .libp2p_bind_address
+        .to_socket_addrs()?
+        .next()
+        .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
+
     let network_params = NetworkParams {
         cdn_endpoint: opt.cdn_endpoint,
-        libp2p_advertise_address: opt.libp2p_advertise_address,
-        libp2p_bind_address: opt.libp2p_bind_address,
+        libp2p_advertise_address,
+        libp2p_bind_address,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),
