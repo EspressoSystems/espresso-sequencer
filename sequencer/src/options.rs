@@ -9,7 +9,6 @@ use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
     iter::once,
-    net::SocketAddr,
     path::PathBuf,
     str::FromStr,
     time::Duration,
@@ -60,24 +59,24 @@ pub struct Options {
     )]
     pub cdn_endpoint: String,
 
-    /// The address to bind to for Libp2p (in `IP:port` form)
+    /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
     )]
-    pub libp2p_bind_address: SocketAddr,
+    pub libp2p_bind_address: String,
 
     /// The address we advertise to other nodes as being a Libp2p endpoint.
-    /// Should be supplied in `IP:port` form.
+    /// Should be supplied in `host:port` form.
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
-        default_value = "127.0.0.1:1769"
+        default_value = "localhost:1769"
     )]
-    pub libp2p_advertise_address: SocketAddr,
+    pub libp2p_advertise_address: String,
 
     /// URL of the Light Client State Relay Server
     #[clap(
