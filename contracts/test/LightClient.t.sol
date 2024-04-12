@@ -40,6 +40,10 @@ contract LightClientCommonTest is Test {
         //cast the proxy to be of type light client test
         lc = LCTest(lcTestProxy);
 
+        //set permissioned flag
+        vm.prank(admin);
+        lc.setPermissionedProverMode(true);
+
         //update approved prover
         vm.prank(admin);
         lc.updateApprovedProver(approvedProver);
@@ -135,8 +139,90 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 }
 
 contract LightClient_approvedProver_Test is LightClientCommonTest {
+    LC.LightClientState internal newState;
+    V.PlonkProof internal newProof;
+
     function setUp() public {
         init();
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(1));
+        cmds[5] = vm.toString(uint64(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        newState = states[0];
+        newProof = proofs[0];
+    }
+
+    function test_NoProverPermissionsRequired() external {
+        //set permissioned flag to false
+        vm.prank(admin);
+        lc.setPermissionedProverMode(false);
+
+        //any prover can call the newFinalizedState method as the contract is not in permissioned
+        // prover mode
+        vm.prank(makeAddr("randomUser"));
+        lc.newFinalizedState(newState, newProof);
+    }
+
+    function test_NoProverPermissionsRequiredAndProverNotSet() external {
+        //set permissioned flag to false
+        vm.prank(admin);
+        lc.setPermissionedProverMode(false);
+
+        //assert that the contract is not permissioned
+        assert(lc.permissionedProverMode() == false);
+
+        //any prover can call the newFinalizedState method as the contract is not in permissioned
+        // prover mode
+        vm.prank(makeAddr("randomUser"));
+        lc.newFinalizedState(newState, newProof);
+    }
+
+    function test_NoProverPermissionsRequiredAndNoProverSet() external {
+        //deploy a fresh light client proxy
+        (address newLcTestProxy,,) = deployer.deployContract(genesis, BLOCKS_PER_EPOCH_TEST, admin);
+
+        //cast the proxy to be of type light client test
+        LCTest newLc = LCTest(newLcTestProxy);
+
+        //assert that the contract is not permissioned
+        assert(newLc.permissionedProverMode() == false);
+        //assert that the approvedProver has not been set and thus the zero address
+        assert(newLc.approvedProver() == address(0));
+
+        //any prover can call the newFinalizedState method as the contract is not in permissioned
+        // prover mode
+        vm.prank(makeAddr("randomUser"));
+        newLc.newFinalizedState(newState, newProof);
+    }
+
+    function test_RevertWhen_NoPermissionedProverSetInPermissionedMode() external {
+        //deploy a fresh light client proxy
+        (address newLcTestProxy,,) = deployer.deployContract(genesis, BLOCKS_PER_EPOCH_TEST, admin);
+
+        //cast the proxy to be of type light client test
+        LCTest newLc = LCTest(newLcTestProxy);
+
+        //set permissioned prover mode to true but do not set the approvedProver address so that
+        // it's still address(0)
+        vm.prank(admin);
+        newLc.setPermissionedProverMode(true);
+
+        assert(newLc.approvedProver() == address(0));
+
+        //any prover can call the newFinalizedState method as the contract is not in permissioned
+        // prover mode
+        vm.prank(approvedProver);
+        vm.expectRevert(LC.PermissionedProverNotSet.selector);
+        newLc.newFinalizedState(newState, newProof);
     }
 
     function test_RevertWhen_UpdateApprovedProverToZeroAddress() external {
@@ -152,41 +238,15 @@ contract LightClient_approvedProver_Test is LightClientCommonTest {
     }
 
     function test_RevertWhen_UnapprovedProver() external {
-        // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](6);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[4] = vm.toString(uint64(3));
-        cmds[5] = vm.toString(uint64(3));
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
         vm.expectRevert(LC.UnapprovedProver.selector);
         vm.prank(makeAddr("UnapprovedProver"));
-        lc.newFinalizedState(states[0], proofs[0]);
+        lc.newFinalizedState(newState, newProof);
     }
 
     function test_RevertWhen_UnapprovedProverEvenIfAdmin() external {
-        // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](6);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[4] = vm.toString(uint64(3));
-        cmds[5] = vm.toString(uint64(3));
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
         vm.expectRevert(LC.UnapprovedProver.selector);
         vm.prank(admin);
-        lc.newFinalizedState(states[0], proofs[0]);
+        lc.newFinalizedState(newState, newProof);
     }
 }
 

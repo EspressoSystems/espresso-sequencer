@@ -37,6 +37,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
+    /// @notice the approved prover was updated
+    event ApprovedProverUpdated(address approvedProver);
+
+    /// @notice an approved prover is needed to interact `newFinalizedState`
+    event ApprovedProverRequired();
+
+    /// @notice an approved prover is no longer needed to interact `newFinalizedState`
+    event ApprovedProverNotRequired();
+
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
@@ -71,6 +80,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice updating the finalized state is permissioned to one approved prover for this release
     address public approvedProver;
+
+    /// @notice a flag that determines when the contract is operating in permissionedProver mode
+    bool public permissionedProverMode;
 
     // === Data Structure ===
     //
@@ -114,6 +126,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidAddress();
     /// @notice Only an approved prover can perform this action
     error UnapprovedProver();
+    /// @notice If the contract is in permissioned mode and the permissioned prover is not set when
+    /// the newFinalizedState method is called, then revert
+    error PermissionedProverNotSet();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -196,9 +211,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
     ) external {
-        if (msg.sender != approvedProver) {
+        //revert if we're in permissionedProver mode and the permissioned prover has not been set
+        if (permissionedProverMode == true && msg.sender != approvedProver) {
+            if (approvedProver == address(0)) {
+                revert PermissionedProverNotSet();
+            }
             revert UnapprovedProver();
         }
+
         if (
             newState.viewNum <= getFinalizedState().viewNum
                 || newState.blockHeight <= getFinalizedState().blockHeight
@@ -308,5 +328,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidAddress();
         }
         approvedProver = _prover;
+        emit ApprovedProverUpdated(_prover);
+    }
+
+    function setPermissionedProverMode(bool mode) public onlyOwner {
+        permissionedProverMode = mode;
+        if (mode) {
+            emit ApprovedProverRequired();
+        } else {
+            emit ApprovedProverNotRequired();
+        }
     }
 }

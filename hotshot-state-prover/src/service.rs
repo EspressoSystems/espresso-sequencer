@@ -626,6 +626,12 @@ mod test {
             .send()
             .await?;
 
+        //turn on the permissionedProverMode
+        light_client_proxy
+            .set_permissioned_prover_mode(true)
+            .send()
+            .await?;
+
         Ok((l1_wallet, light_client_proxy))
     }
 
