@@ -56,11 +56,11 @@ where
         eth_account_index: opt.eth_account_index,
     };
     let network_params = NetworkParams {
-        da_server_url: opt.da_server_url,
-        consensus_server_url: opt.consensus_server_url,
+        cdn_endpoint: opt.cdn_endpoint,
+        libp2p_advertise_address: opt.libp2p_advertise_address,
+        libp2p_bind_address: opt.libp2p_bind_address,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
