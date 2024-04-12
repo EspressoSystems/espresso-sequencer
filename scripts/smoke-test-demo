@@ -7,13 +7,30 @@ set -a; source .env; set +a;
 
 SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
 LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT
-TIMEOUT=60
+SEQUENCER_BLOCKS_TIMEOUT=60
+
+# usage: wait_for timeout_in_secs name URL
+function wait_for() {
+	timeout=$1
+	what=$2
+	url=$3
+	start=$SECONDS
+	elapsed=0
+	echo "Checking if $what @ $url is available, timeout in $timeout seconds"
+	while ! curl -s --fail "$url" > /dev/null; do
+		elapsed=$((SECONDS - start))
+		if [[ $elapsed -gt $timeout ]]; then
+			echo "Timeout waiting for $what @ $url"
+			exit 1
+		fi
+		echo "Waiting for $what @ $url, $elapsed of $timeout seconds elapsed"
+		sleep 1
+	done
+	echo "Endpoint $what @ $url is Ok, after $elapsed seconds"
+}
 
 # Wait for the load generator to start.
-while ! curl -s --fail $LOAD_GENERATOR/healthcheck > /dev/null; do
-	echo "Waiting for demo to start"
-	sleep 1
-done
+wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
@@ -28,7 +45,7 @@ echo "  transactions: $num_tx"
 START=$SECONDS
 
 # Check blocks and transactions are increasing
-# Every second until timeout after 60 seconds
+# Every second until timeout after $TIMEOUT seconds
 while true; do
 	new_block_height=`curl -s $SEQUENCER_API/node/block-height`
 	new_num_tx=`curl -s $SEQUENCER_API/node/transactions/count`
@@ -40,7 +57,7 @@ while true; do
 		break
 	fi
 	sleep 1
-	if [[ $((SECONDS - START)) -gt $TIMEOUT ]]; then
+	if [[ $((SECONDS - START)) -gt $SEQUENCER_BLOCKS_TIMEOUT ]]; then
 		echo "Timeout waiting for block height and transaction count to increase"
 		echo "Final state:"
 		echo "  block_height: $new_block_height"
@@ -57,10 +74,9 @@ while true; do
 	fi
 done
 
-echo "Checking if builder is healthy at http://localhost:$ESPRESSO_BUILDER_SERVER_PORT"
-curl -s --fail http://localhost:$ESPRESSO_BUILDER_SERVER_PORT > /dev/null
-echo "Ok"
 
-echo "Checking if prover is healthy at http://localhost:$ESPRESSO_PROVER_SERVICE_PORT"
-curl -s --fail "http://localhost:$ESPRESSO_PROVER_SERVICE_PORT" > /dev/null
-echo "Ok"
+BUILDER_URL="http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/healthcheck"
+wait_for 60 builder "$BUILDER_URL"
+
+PROVER_URL="http://localhost:$ESPRESSO_PROVER_SERVICE_PORT/healthcheck"
+wait_for 300 prover "$PROVER_URL"
