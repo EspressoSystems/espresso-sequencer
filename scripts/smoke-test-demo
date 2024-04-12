@@ -59,8 +59,8 @@ done
 
 echo "Checking if builder is healthy at http://localhost:$ESPRESSO_BUILDER_SERVER_PORT"
 curl -s --fail http://localhost:$ESPRESSO_BUILDER_SERVER_PORT > /dev/null
+echo "Ok"
 
-# TODO, uncomment: currently the healthcheck may hang for a long time if the prover
-# is generating a proof. See https://github.com/EspressoSystems/espresso-sequencer/issues/1325
-# echo "Checking if prover is healthy at http://localhost:$ESPRESSO_PROVER_SERVICE_PORT"
-# curl -s --fail "http://localhost:$ESPRESSO_PROVER_SERVICE_PORT" > /dev/null
+echo "Checking if prover is healthy at http://localhost:$ESPRESSO_PROVER_SERVICE_PORT"
+curl -s --fail "http://localhost:$ESPRESSO_PROVER_SERVICE_PORT" > /dev/null
+echo "Ok"
