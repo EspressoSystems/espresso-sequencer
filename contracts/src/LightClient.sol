@@ -201,7 +201,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
-    /// will call this function
+    /// can call this function
     ///
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
@@ -323,6 +323,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         );
     }
 
+    /// @notice Update the address of the permissioned prover
+    /// @dev this address is only considered when the `permissionedProverMode` is set to true
     function updatePermissionedProver(address _prover) public onlyOwner {
         if (_prover == address(0)) {
             revert InvalidAddress();
@@ -331,6 +333,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit PermissionedProverUpdated(_prover);
     }
 
+    /// @notice Set the permissioned prover mode
+    /// @dev when this is set to true, only the `permissionedProver` is able to execute the
+    /// `newFinalizedState` method
     function setPermissionedProverMode(bool mode) public onlyOwner {
         permissionedProverMode = mode;
         if (mode) {
