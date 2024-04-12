@@ -59,6 +59,8 @@ where
     };
 
     // Parse supplied Libp2p addresses to their socket form
+    // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
+    // Downstream in HotShot we pin the IP address to v4, but this can be fixed in the future.
     let libp2p_advertise_address = opt
         .libp2p_advertise_address
         .to_socket_addrs()?
