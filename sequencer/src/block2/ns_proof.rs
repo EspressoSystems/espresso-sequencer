@@ -29,7 +29,6 @@ struct NsProofExistence {
     #[serde(with = "base64_bytes")]
     ns_payload_flat: Vec<u8>,
     ns_proof: LargeRangeProofType,
-    vid_common: VidCommon,
 }
 
 impl Payload {
@@ -40,12 +39,8 @@ impl Payload {
     /// verifier in the block header:
     /// - the namespace payload bytes
     /// - `vid_common` needed to verify the proof
-    pub fn namespace_with_proof(
-        &self,
-        ns_id: NamespaceId,
-        vid_common: VidCommon,
-    ) -> Option<NsProof> {
-        if self.payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
+    pub fn namespace_with_proof(&self, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
+        if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
         }
 
@@ -62,10 +57,9 @@ impl Payload {
             ns_id,
             existence: Some(NsProofExistence {
                 ns_payload_flat: self.payload[ns_range.clone()].into(),
-                ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
+                ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(common))
                     .payload_proof(&self.payload, ns_range)
                     .ok()?, // error: failure to make a payload proof
-                vid_common,
             }),
         })
     }
@@ -75,18 +69,21 @@ impl Payload {
         &self,
         ns_proof: &NsProof,
         commit: &VidCommitment,
+        common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
+        VidSchemeType::is_consistent(commit, common).ok()?;
+
         let ns_index = self.ns_iter().find(|i| ns_proof.ns_id == i.ns_id);
 
         match (ns_index, &ns_proof.existence) {
             (Some(ns_index), Some(pf)) => {
-                vid_scheme(VidSchemeType::get_num_storage_nodes(&pf.vid_common))
+                vid_scheme(VidSchemeType::get_num_storage_nodes(common))
                     .payload_verify(
                         Statement {
                             payload_subslice: &pf.ns_payload_flat,
                             range: ns_index.ns_range,
                             commit,
-                            common: &pf.vid_common,
+                            common,
                         },
                         &pf.ns_proof,
                     )

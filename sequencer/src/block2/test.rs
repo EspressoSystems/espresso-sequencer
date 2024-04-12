@@ -48,13 +48,13 @@ fn basic_correctness() {
                 .expect("block ns_id missing from test");
 
             let ns_proof = block
-                .namespace_with_proof(ns_id, disperse_data.common.clone())
+                .namespace_with_proof(ns_id, &disperse_data.common)
                 .expect("namespace_with_proof should succeed");
 
             assert!(ns_proof.is_existence());
 
             let (ns_proof_txs, ns_proof_ns_id) = block
-                .verify_namespace_proof(&ns_proof, &disperse_data.commit)
+                .verify_namespace_proof(&ns_proof, &disperse_data.commit, &disperse_data.common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
             assert_eq!(ns_proof_ns_id, ns_id);
