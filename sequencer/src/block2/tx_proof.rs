@@ -1,16 +1,35 @@
-use super::{iter::Index, Payload};
+use super::{
+    iter::Index,
+    payload_bytes::{NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    Payload,
+};
 use crate::Transaction;
+use hotshot_types::vid::SmallRangeProofType;
 use serde::{Deserialize, Serialize};
-// use std::ops::Range;
+use std::ops::Range;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TxProof {}
+pub struct TxProof {
+    ns_range: Range<usize>,
+
+    tx_table_len: [u8; NUM_TXS_BYTE_LEN], // serialized usize
+    tx_table_len_proof: SmallRangeProofType,
+
+    tx_table_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
+    tx_table_range_end: [u8; TX_OFFSET_BYTE_LEN],           // serialized usize
+    tx_table_range_proof: SmallRangeProofType,
+
+    tx_payload_proof: Option<SmallRangeProofType>, // `None` if the tx has zero length
+}
 
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         Some(Transaction::new(
             index.ns_index.ns_id,
-            self.payload[index.ns_index.ns_range.clone()][index.tx_index.tx_range.clone()].to_vec(),
+            self.payload
+                .get(index.ns_index.ns_range.clone())?
+                .get(index.tx_index.range.clone())?
+                .to_vec(),
         ))
     }
 

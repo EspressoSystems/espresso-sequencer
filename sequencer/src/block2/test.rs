@@ -27,12 +27,17 @@ fn basic_correctness() {
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
         let disperse_data = vid.disperse(&block.payload).unwrap();
 
-        // test `QueryablePayload::transaction_with_proof`
+        // test iterate over all txs
+        assert_eq!(
+            block.len(&block.ns_table),
+            block.iter(&block.ns_table).count()
+        );
         for (tx_index, test_tx) in block.iter(&block.ns_table).zip(all_txs.iter()) {
             let tx = block.transaction(&tx_index).unwrap();
             assert_eq!(&tx, test_tx);
         }
 
+        // test iterate over all namespaces
         assert_eq!(block.num_namespaces(), test.nss.len());
         for ns_id in block.ns_iter().map(|i| i.ns_id) {
             // tracing::info!("test ns_id {}", ns.ns_id);

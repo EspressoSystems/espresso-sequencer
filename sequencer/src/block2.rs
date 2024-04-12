@@ -8,6 +8,7 @@ use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
+use tx_proof::TxProof;
 
 mod iter;
 mod ns_iter;
@@ -122,7 +123,7 @@ impl QueryablePayload for Payload {
     // TODO change `QueryablePayload` trait: remove `Ord` bound from `TransactionIndex`
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
-    type InclusionProof = (); // TODO
+    type InclusionProof = TxProof;
 
     // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
     fn len(&self, _meta: &Self::Metadata) -> usize {
