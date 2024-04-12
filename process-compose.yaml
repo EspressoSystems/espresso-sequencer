@@ -260,7 +260,7 @@ processes:
     command: permissionless-builder
     environment:
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
-      - ESPRESSO_SEQUENCER_DA_SERVER_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_BUILDER_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
     depends_on:
       sequencer0:
         condition: process_healthy

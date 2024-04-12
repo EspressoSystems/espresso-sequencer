@@ -24,12 +24,11 @@ pub struct NonPermissionedBuilderOptions {
     /// URL of the HotShot DA web server.
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
+        env = "ESPRESSO_BUILDER_SEQUENCER_URL",
         default_value = "http://localhost:8081"
     )]
-    pub da_server_url: Url,
+    pub sequencer_url: Url,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -191,7 +190,7 @@ async fn main() -> anyhow::Result<()> {
         bootstrapped_view,
         opt.channel_capacity,
         instance_state,
-        opt.da_server_url,
+        opt.sequencer_url,
         builder_server_url,
     )
     .await;
