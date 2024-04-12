@@ -65,22 +65,7 @@ impl Committable for TestTransaction {
     }
 }
 
-impl Transaction for TestTransaction {
-    /// Create a transaction from bytes
-    fn from_bytes(bytes: &[u8]) -> Self {
-        Self(bytes.to_vec())
-    }
-
-    /// Get the length of the transaction in bytes
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Returns whether or not the transaction is empty
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
+impl Transaction for TestTransaction {}
 
 /// A [`BlockPayload`] that contains a list of `TestTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]

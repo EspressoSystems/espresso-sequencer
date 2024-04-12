@@ -21,10 +21,11 @@ use hotshot_builder_api::{
     builder::{BuildError, Error, Options},
     data_source::BuilderDataSource,
 };
+use hotshot_example_types::block_types::TestTransaction;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
     traits::{
-        block_contents::{vid_commitment, BlockHeader, Transaction},
+        block_contents::{vid_commitment, BlockHeader},
         election::Membership,
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -52,6 +53,7 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    TYPES: NodeType<Transaction = TestTransaction>,
     for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     async fn start(
@@ -145,7 +147,10 @@ pub struct RandomBuilderSource<TYPES: NodeType> {
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
 }
 
-impl<TYPES: NodeType> RandomBuilderSource<TYPES> {
+impl<TYPES: NodeType> RandomBuilderSource<TYPES>
+where
+    TYPES: NodeType<Transaction = TestTransaction>,
+{
     /// Create new [`RandomBuilderSource`]
     #[must_use]
     #[allow(clippy::missing_panics_doc)] // ony panics if 256 == 0
@@ -170,7 +175,7 @@ impl<TYPES: NodeType> RandomBuilderSource<TYPES> {
             let time_per_block = Duration::from_secs(1) / options.blocks_per_second;
             loop {
                 let start = std::time::Instant::now();
-                let transactions: Vec<TYPES::Transaction> = (0..options.txn_in_block)
+                let transactions: Vec<TestTransaction> = (0..options.txn_in_block)
                     .map(|_| {
                         let mut bytes = vec![
                             0;
@@ -179,7 +184,7 @@ impl<TYPES: NodeType> RandomBuilderSource<TYPES> {
                                 .expect("We are NOT running on a 16-bit platform")
                         ];
                         rng.fill_bytes(&mut bytes);
-                        TYPES::Transaction::from_bytes(&bytes)
+                        TestTransaction(bytes)
                     })
                     .collect();
 
@@ -282,6 +287,7 @@ where
     for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
+    TYPES: NodeType<Transaction = TestTransaction>,
     for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
@@ -496,8 +502,6 @@ fn build_block<TYPES: NodeType>(
     AvailableBlockData<TYPES>,
     AvailableBlockHeaderInput<TYPES>,
 ) {
-    let block_size = transactions.iter().map(|t| t.len() as u64).sum::<u64>();
-
     let (block_payload, metadata) = TYPES::BlockPayload::from_transactions(transactions)
         .expect("failed to build block payload from transactions");
 
@@ -507,6 +511,13 @@ fn build_block<TYPES: NodeType>(
         &block_payload.encode().unwrap().collect(),
         num_storage_nodes,
     );
+
+    // Get block size from the encoded payload
+    let block_size = block_payload
+        .encode()
+        .expect("failed to encode block")
+        .collect::<Vec<u8>>()
+        .len() as u64;
 
     let signature_over_block_info = {
         let mut block_info: Vec<u8> = Vec::new();

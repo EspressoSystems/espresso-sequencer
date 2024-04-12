@@ -25,14 +25,6 @@ use crate::{
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
-    /// Build a transaction from bytes
-    fn from_bytes(bytes: &[u8]) -> Self;
-
-    /// Get the length of the transaction
-    fn len(&self) -> usize;
-
-    /// Whether or not the transaction is empty
-    fn is_empty(&self) -> bool;
 }
 
 /// Abstraction over the full contents of a block
