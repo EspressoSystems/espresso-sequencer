@@ -195,5 +195,8 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
+    // Sleep forever
+    async_std::future::pending::<()>().await;
+
     Ok(())
 }
