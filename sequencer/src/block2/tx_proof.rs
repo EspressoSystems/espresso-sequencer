@@ -4,6 +4,7 @@ use super::{
     Payload,
 };
 use crate::Transaction;
+use hotshot_query_service::VidCommon;
 use hotshot_types::vid::SmallRangeProofType;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -33,7 +34,22 @@ impl Payload {
         ))
     }
 
-    pub fn transaction_with_proof(&self, _index: &Index) -> Option<(Transaction, TxProof)> {
+    pub fn transaction_with_proof(
+        &self,
+        _index: &Index,
+        _common: &VidCommon,
+    ) -> Option<(Transaction, TxProof)> {
+        // Read the tx payload range from the tx table into
+        // `tx_table_range_[start|end]` and compute a proof that this range is
+        // correct.
+        //
+        // This correctness proof requires a range of its own, which we read
+        // into `tx_table_range_proof_[start|end]`.
+        //
+        // Edge case--the first transaction: tx payload range `start` is
+        // implicitly 0 and we do not include this item in the correctness
+        // proof.
+
         todo!()
     }
 }

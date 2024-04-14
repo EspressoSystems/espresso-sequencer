@@ -34,11 +34,6 @@ struct NsProofExistence {
 impl Payload {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.
-    ///
-    /// RPC-friendly proof contains everything not already available to the
-    /// verifier in the block header:
-    /// - the namespace payload bytes
-    /// - `vid_common` needed to verify the proof
     pub fn namespace_with_proof(&self, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
         if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
