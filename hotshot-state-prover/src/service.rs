@@ -178,7 +178,7 @@ pub fn load_proving_key() -> ProvingKey {
 
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
-        let srs = ark_srs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
         let srs_elapsed = srs_timer.elapsed();
         std::println!("Done in {srs_elapsed:.3}");
 
@@ -540,7 +540,7 @@ mod test {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440

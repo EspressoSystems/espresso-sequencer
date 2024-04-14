@@ -14,7 +14,7 @@ use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 fn main() {
     let srs = {
         // load SRS from Aztec's ceremony
-        let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(20) as usize + 2)
+        let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(20) as usize + 2)
             .expect("Aztec SRS fail to load");
         // convert to Jellyfish type
         // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
