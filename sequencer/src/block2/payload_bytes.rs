@@ -1,12 +1,61 @@
 use crate::NamespaceId;
 use paste::paste;
-use std::mem::size_of;
+use std::{mem::size_of, ops::Range};
 
 pub const NUM_TXS_BYTE_LEN: usize = 4;
 pub const TX_OFFSET_BYTE_LEN: usize = 4;
 pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
 pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
 pub const NS_ID_BYTE_LEN: usize = 4;
+
+/// Return a byte range into the tx table for use in a transaction proof.
+///
+/// The bytes in this range encode tx table entries that contain the (start,end)
+/// byte indices for the `tx_index`th transaction payload.
+///
+/// The returned range is guaranteed to satisfy `start <= end <=
+/// ns_payload.len()`. It is the responsibility of the caller to ensure that
+/// `tx_index` is less than the number of entries in the tx table. This function
+/// does not check that condition.
+///
+/// # Tx table format
+///
+/// The `tx_index`th entry in the tx table encodes the byte index of the *end*
+/// of this transaction's payload range. By deinition, this byte index is also
+/// the *start* of the *previous* transaction's payload range. Thus, the
+/// returned range includes `(tx_index - 1)`th and `tx_index`th entries of the
+/// tx table.
+///
+/// Special case: If `tx_index` is 0 then the start index is implicitly 0, so
+/// the returned range contains only one entry from the tx table: the first
+/// entry of the tx table.
+pub fn _tx_table_range(ns_payload: &[u8], tx_index: usize) -> Range<usize> {
+    let tx_table_range_proof_end = std::cmp::min(
+        // The desired range ends at the end of this transaction's tx table entry
+        tx_index
+            .saturating_add(1)
+            .saturating_mul(TX_OFFSET_BYTE_LEN)
+            .saturating_add(NUM_TXS_BYTE_LEN),
+        // Do not allow the range to extend beyond this namespace
+        ns_payload.len(),
+    );
+
+    let tx_table_range_proof_start = std::cmp::min(
+        if tx_index == 0 {
+            // Special case: the desired range includes only one entry from the tx table: the first entry. This entry starts immediately following the bytes that encode the tx table length.
+            NUM_NSS_BYTE_LEN
+        } else {
+            // the desired range starts at the beginning of the previous transaction's tx table entry
+            (tx_index - 1)
+                .saturating_mul(TX_OFFSET_BYTE_LEN)
+                .saturating_add(NUM_TXS_BYTE_LEN)
+        },
+        // Enforce start <= end
+        tx_table_range_proof_end,
+    );
+
+    tx_table_range_proof_start..tx_table_range_proof_end
+}
 
 /// Serialize `num_txs` into [`NUM_TXS_BYTE_LEN`] bytes.
 ///
@@ -158,6 +207,11 @@ mod test {
     use fluent_asserter::prelude::*;
     use paste::paste;
     use std::mem::size_of;
+
+    #[test]
+    fn tx_table_range() {
+        // TODO
+    }
 
     macro_rules! uint_bytes_test_impl {
             ($T:ty) => {
