@@ -17,7 +17,7 @@ ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
-blake3 = "1.5"
+blake3 = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }

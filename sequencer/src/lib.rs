@@ -3,11 +3,13 @@ pub mod block;
 pub mod catchup;
 mod chain_variables;
 pub mod context;
+pub mod eth_signature_key;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use crate::eth_signature_key::EthSigKey;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
@@ -235,7 +237,7 @@ impl NodeType for SeqTypes {
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
-    type BuilderSignatureKey = PubKey;
+    type BuilderSignatureKey = EthSigKey;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]

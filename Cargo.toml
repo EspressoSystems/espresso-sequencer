@@ -35,6 +35,7 @@ async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
 base64 = "0.22"
 base64-bytes = "0.1"
+blake3 = "1.5"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
