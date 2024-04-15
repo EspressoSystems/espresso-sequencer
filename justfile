@@ -57,7 +57,7 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
