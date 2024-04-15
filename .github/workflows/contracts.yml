@@ -18,6 +18,7 @@ concurrency:
 
 env:
   RUST_LOG: info,libp2p=off
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   contracts:
