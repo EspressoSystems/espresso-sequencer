@@ -70,3 +70,21 @@ impl Committable for ChainConfig {
             .finalize()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chain_config_equality() {
+        let chain_config = ChainConfig::default();
+        assert_eq!(chain_config, chain_config.clone());
+        let ChainConfig {
+            chain_id,
+            max_block_size,
+            ..
+        } = chain_config;
+        let other_config = ChainConfig::new(chain_id, max_block_size, 1);
+        assert!(chain_config != other_config);
+    }
+}

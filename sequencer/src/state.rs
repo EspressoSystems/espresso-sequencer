@@ -332,6 +332,12 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // through returned value.
         let mut validated_state = self.clone();
 
+        // validate `ChainConfig`
+        if proposed_header.chain_config != instance.chain_config.into() {
+            tracing::warn!("Invalid Proposal: Invalid Chain Config");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         let accounts = std::iter::once(proposed_header.fee_info.account);
 
         // Fetch the new L1 deposits between parent and current finalized L1 block.
