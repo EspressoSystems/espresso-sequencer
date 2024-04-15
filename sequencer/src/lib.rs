@@ -8,6 +8,7 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
@@ -34,7 +35,10 @@ use derivative::Derivative;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MemoryNetwork, NetworkingMetricsValue, WebServerNetwork},
+        implementations::{
+            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork, MemoryNetwork,
+            NetworkingMetricsValue, PushCdnNetwork, WrappedSignatureKey,
+        },
     },
     types::SignatureKey,
     Networks,
@@ -45,7 +49,6 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    constants::WebServerVersion,
     data::{DAProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -65,7 +68,10 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc,
+    time::Duration,
+};
 use vbs::version::StaticVersionType;
 
 pub use block::payload::Payload;
@@ -76,21 +82,22 @@ pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
 pub mod network {
+    use hotshot::traits::implementations::CombinedNetworks;
     use hotshot_types::message::Message;
 
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
-        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey> + Debug;
+        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
+        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
     }
 
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct Web;
+    #[derive(Clone, Copy, Default)]
+    pub struct Combined;
 
-    impl Type for Web {
-        type DAChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
-        type QuorumChannel = WebServerNetwork<SeqTypes, WebServerVersion>;
+    impl Type for Combined {
+        type DAChannel = CombinedNetworks<SeqTypes>;
+        type QuorumChannel = CombinedNetworks<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -265,14 +272,17 @@ pub enum Error {
 
 #[derive(Clone, Debug)]
 pub struct NetworkParams {
-    pub da_server_url: Url,
-    pub consensus_server_url: Url,
+    /// The address where a CDN marshal is located
+    pub cdn_endpoint: String,
     pub orchestrator_url: Url,
     pub state_relay_server_url: Url,
-    pub webserver_poll_interval: Duration,
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    /// The address to send to other Libp2p nodes to contact us
+    pub libp2p_advertise_address: SocketAddr,
+    /// The address to bind to for Libp2p
+    pub libp2p_bind_address: SocketAddr,
 }
 
 #[derive(Clone, Debug)]
@@ -293,14 +303,13 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, P, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Combined, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        advertise_address: None,
+        advertise_address: Some(network_params.libp2p_advertise_address),
         network_config_file: None,
     };
-
     let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
@@ -309,6 +318,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         stake_value: 1,
         state_key_pair,
     };
+
+    // Derive our Libp2p public key from our private key
+    let libp2p_public_key =
+        derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
+            .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
@@ -321,8 +335,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
                 &orchestrator_client,
                 None,
                 my_config.clone(),
-                None,
-                None,
+                // Register in our Libp2p advertise address and public key so other nodes
+                // can contact us on startup
+                Some(network_params.libp2p_advertise_address),
+                Some(libp2p_public_key),
             )
             .await?
             .0;
@@ -337,20 +353,45 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     };
     let node_index = config.node_index;
 
-    // Initialize networking.
+    // Initialize the push CDN network (and perform the initial connection)
+    let cdn_network = PushCdnNetwork::new(
+        network_params.cdn_endpoint,
+        vec!["Global".into(), "DA".into()],
+        KeyPair {
+            public_key: WrappedSignatureKey(my_config.public_key),
+            private_key: my_config.private_key.clone(),
+        },
+    )
+    .with_context(|| "Failed to create CDN network")?;
+
+    // Initialize the Libp2p network
+    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+        config.clone(),
+        network_params.libp2p_bind_address,
+        &my_config.public_key,
+        // We need the private key so we can derive our Libp2p keypair
+        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+        &my_config.private_key,
+    )
+    .await
+    .with_context(|| "Failed to create libp2p network")?;
+
+    // Combine the two communication channels
+    let da_network = Arc::from(CombinedNetworks::new(
+        cdn_network.clone(),
+        p2p_network.clone(),
+        Duration::from_secs(1),
+    ));
+    let quorum_network = Arc::from(CombinedNetworks::new(
+        cdn_network,
+        p2p_network,
+        Duration::from_secs(1),
+    ));
+
+    // Convert to the sequencer-compatible type
     let networks = Networks {
-        da_network: Arc::new(WebServerNetwork::create(
-            network_params.da_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            true,
-        )),
-        quorum_network: Arc::new(WebServerNetwork::create(
-            network_params.consensus_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            false,
-        )),
+        da_network,
+        quorum_network,
         _pd: Default::default(),
     };
 

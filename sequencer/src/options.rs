@@ -49,23 +49,34 @@ pub struct Options {
     )]
     pub orchestrator_url: Url,
 
-    /// URL of the HotShot DA web server.
+    /// The socket address of the HotShot CDN's main entry point (the marshal)
+    /// in `IP:port` form
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
-        default_value = "http://localhost:8081"
+        env = "ESPRESSO_SEQUENCER_CDN_ENDPOINT",
+        default_value = "127.0.0.1:8081"
     )]
-    pub da_server_url: Url,
+    pub cdn_endpoint: String,
 
-    /// URL of the HotShot consensus web server.
+    /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL",
-        default_value = "http://localhost:8082"
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
+        default_value = "0.0.0.0:1769"
     )]
-    pub consensus_server_url: Url,
+    pub libp2p_bind_address: String,
+
+    /// The address we advertise to other nodes as being a Libp2p endpoint.
+    /// Should be supplied in `host:port` form.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
+        default_value = "localhost:1769"
+    )]
+    pub libp2p_advertise_address: String,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -75,17 +86,6 @@ pub struct Options {
         default_value = "http://localhost:8083"
     )]
     pub state_relay_server_url: Url,
-
-    /// The amount of time to wait between each request to the HotShot
-    /// consensus or DA web servers during polling.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL",
-        default_value = "100ms",
-        value_parser = parse_duration
-    )]
-    pub webserver_poll_interval: Duration,
 
     /// Path to file containing private keys.
     ///

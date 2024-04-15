@@ -30,9 +30,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
-
       - name: Format Check
         run: cargo fmt -- --check
 
