@@ -77,19 +77,7 @@ impl Transaction {
     }
 }
 
-impl HotShotTransaction for Transaction {
-    fn from_bytes(_bytes: &[u8]) -> Self {
-        todo!()
-    }
-
-    fn len(&self) -> usize {
-        todo!()
-    }
-
-    fn is_empty(&self) -> bool {
-        todo!()
-    }
-}
+impl HotShotTransaction for Transaction {}
 
 impl Namespaced for Transaction {
     type Namespace = NamespaceId;

@@ -119,6 +119,10 @@ struct Args {
     /// The seed is a 32 byte integer, encoded in hex.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
     keygen_seed: [u8; 32],
+
+    /// HotShot builder URL
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
+    builder_url: String,
 }
 
 #[derive(Debug, Snafu, From)]

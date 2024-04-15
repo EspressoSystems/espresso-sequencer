@@ -103,7 +103,7 @@ mod test_helpers {
         catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
-        testing::{wait_for_decide_on_handle, TestConfig},
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
         Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -141,7 +141,17 @@ mod test_helpers {
             persistence: [P; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
-            let cfg = TestConfig::default();
+            let mut cfg = TestConfig::default();
+
+            let hotshot_config = cfg.hotshot_config();
+            let (builder_task, builder_url) = run_test_builder(
+                hotshot_config.num_nodes_with_stake,
+                hotshot_config.known_nodes_with_stake.clone(),
+            )
+            .await;
+
+            cfg.set_builder_url(builder_url);
+
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
@@ -183,6 +193,13 @@ mod test_helpers {
                 },
             ))
             .await;
+
+            let handle_0 = &nodes[0];
+
+            // Hook the builder up to the event stream from the first node
+            if let Some(builder_task) = builder_task {
+                builder_task.start(Box::new(handle_0.get_event_stream()));
+            }
 
             for ctx in &nodes {
                 ctx.start_consensus().await;

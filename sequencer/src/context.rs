@@ -15,7 +15,6 @@ use hotshot::{
 use hotshot_orchestrator::client::OrchestratorClient;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     traits::{election::Membership, metrics::Metrics},
@@ -72,7 +71,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 {
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        mut config: HotShotConfig<PubKey, ElectionConfig>,
+        config: HotShotConfig<PubKey, ElectionConfig>,
         instance_state: NodeState,
         persistence: P,
         networks: Networks<SeqTypes, Node<N, P>>,
@@ -113,13 +112,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         let persistence = Arc::new(RwLock::new(persistence));
 
-        let (builder_task, builder_url) =
-            <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(Arc::new(
-                membership,
-            ))
-            .await;
-
-        config.builder_url = builder_url;
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
             config.my_own_validator_config.private_key.clone(),
@@ -137,11 +129,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let mut state_signer = StateSigner::new(state_key_pair, stake_table_commit);
         if let Some(url) = state_relay_server {
             state_signer = state_signer.with_relay_server(url);
-        }
-
-        // Hook the builder up to the event stream from the first node
-        if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle.get_event_stream()));
         }
 
         Ok(Self::new(

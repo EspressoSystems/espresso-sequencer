@@ -522,7 +522,8 @@ impl ValidatedState {
 
         let mut delta = Delta::default();
 
-        apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
+        let mut validated_state =
+            apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
         if charge_fee(
             &mut validated_state.fee_merkle_tree,
@@ -559,6 +560,7 @@ pub async fn get_l1_deposits(
     }
 }
 
+#[must_use]
 pub fn apply_proposal(
     validated_state: &ValidatedState,
     delta: &mut Delta,
@@ -615,7 +617,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .unwrap();
 
         // validate the proposal
-        validate_proposal(self, parent_leaf, proposed_header).unwrap();
+        validate_proposal(&validated_state, parent_leaf, proposed_header).unwrap();
 
         Ok((validated_state, delta))
     }
