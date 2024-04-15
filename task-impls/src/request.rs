@@ -207,8 +207,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
         request: RequestKind<TYPES>,
         signature: Signature<TYPES>,
     ) {
-        // Do the delay then start sending
-        async_sleep(self.delay).await;
+        // Do the delay only if primary is up and then start sending
+        if !self.network.is_primary_down() {
+            async_sleep(self.delay).await;
+        }
         match request {
             RequestKind::VID(view, key) => {
                 self.do_vid::<Ver>(VidRequest(view, key), signature).await;

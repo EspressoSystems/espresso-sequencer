@@ -427,6 +427,11 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
 
     /// handles view update
     fn update_view(&self, _view: u64) {}
+
+    /// Is primary network down? Makes sense only for combined network
+    fn is_primary_down(&self) -> bool {
+        false
+    }
 }
 
 /// A channel generator for types that need asynchronous execution
