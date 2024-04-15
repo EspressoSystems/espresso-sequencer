@@ -67,6 +67,7 @@ gen-bindings:
     # date, without needed to recompile the contracts.
     mkdir -p contract-bindings/artifacts
     jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
+    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
 
     cargo fmt --all
     cargo sort -g -w
