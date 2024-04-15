@@ -201,6 +201,8 @@ pub mod testing {
 
             let master_map = MasterMap::new();
 
+            let builder_url = hotshot_builder_url();
+
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
@@ -223,12 +225,7 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
-                // ???
-                builder_url: Url::parse(&format!(
-                    "http://127.0.0.1:{}",
-                    pick_unused_port().unwrap()
-                ))
-                .unwrap(),
+                builder_url,
             };
 
             Self {

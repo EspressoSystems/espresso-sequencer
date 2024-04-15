@@ -525,8 +525,7 @@ mod test {
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_builder_url();
-
+        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
         let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
             hotshot_config,
             hotshot_context_handle,
