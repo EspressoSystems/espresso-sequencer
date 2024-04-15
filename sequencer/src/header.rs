@@ -43,7 +43,16 @@ impl ResolvableChainConfig {
 
 impl PartialEq for ResolvableChainConfig {
     fn eq(&self, other: &Self) -> bool {
-        self.commit() == other.commit()
+        match self.chain_config {
+            Either::Left(config) => {
+                if let Either::Left(other) = other.chain_config {
+                    config == other
+                } else {
+                    false
+                }
+            }
+            Either::Right(commitment) => commitment == other.commit(),
+        }
     }
 }
 
