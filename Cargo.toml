@@ -103,7 +103,7 @@ include_dir = { version = "0.7", optional = true }
 native-tls = { version = "0.2", optional = true }
 postgres-native-tls = { version = "0.5", optional = true }
 refinery = { version = "0.8", features = ["tokio-postgres"], optional = true }
-tokio = { version = "1.36", optional = true }
+tokio = { version = "1.37", optional = true }
 tokio-postgres = { version = "0.7", optional = true, default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
 	"with-serde_json-1",
 	"with-time-0_3",
