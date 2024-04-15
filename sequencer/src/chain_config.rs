@@ -59,7 +59,7 @@ impl ChainConfig {
 
 impl Committable for ChainConfig {
     fn tag() -> String {
-        "ChainConfig".to_string()
+        "CHAIN_CONFIG".to_string()
     }
 
     fn commit(&self) -> Commitment<Self> {
