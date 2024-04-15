@@ -27,7 +27,7 @@ use jf_primitives::merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-#[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq)]
+#[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
 pub struct ResolvableChainConfig {
     chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
 }
@@ -38,13 +38,6 @@ impl ResolvableChainConfig {
             Either::Left(config) => config.commit(),
             Either::Right(commitment) => commitment,
         }
-    }
-}
-
-// Because we implement PartialEq ourselves, we aren't supposed to derive Hash
-impl std::hash::Hash for ResolvableChainConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.commit().hash(state)
     }
 }
 
