@@ -27,7 +27,7 @@ use jf_primitives::merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-#[derive(Clone, Debug, Copy, Deserialize, Serialize, Eq)]
+#[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq)]
 pub struct ResolvableChainConfig {
     chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
 }
@@ -37,21 +37,6 @@ impl ResolvableChainConfig {
         match self.chain_config {
             Either::Left(config) => config.commit(),
             Either::Right(commitment) => commitment,
-        }
-    }
-}
-
-impl PartialEq for ResolvableChainConfig {
-    fn eq(&self, other: &Self) -> bool {
-        match self.chain_config {
-            Either::Left(config) => {
-                if let Either::Left(other) = other.chain_config {
-                    config == other
-                } else {
-                    false
-                }
-            }
-            Either::Right(commitment) => commitment == other.commit(),
         }
     }
 }
