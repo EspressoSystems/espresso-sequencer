@@ -90,4 +90,4 @@ zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.4" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.5" }
