@@ -1,5 +1,3 @@
-use crate::api::data_source::Provider;
-use crate::api::data_source::SequencerDataSource;
 use crate::{
     api::endpoints::AccountQueryData, catchup::StateCatchup, Header, Leaf, NodeState, SeqTypes,
 };
@@ -21,12 +19,14 @@ use ethers::{
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
-use hotshot_query_service::availability::AvailabilityDataSource;
-use hotshot_query_service::availability::LeafQueryData;
-use hotshot_query_service::data_source::SqlDataSource;
-use hotshot_query_service::data_source::VersionedDataSource;
-use hotshot_query_service::merklized_state::{
-    MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+use hotshot_query_service::{
+    availability::{AvailabilityDataSource, LeafQueryData},
+    data_source::VersionedDataSource,
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
+    types::HeightIndexed,
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -262,13 +262,16 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
 }
 
 #[derive(Debug)]
-struct SqlStateCatchup {
-    db: Arc<RwLock<SqlDataSource<SeqTypes, Provider>>>,
+struct SqlStateCatchup<T> {
+    db: Arc<RwLock<T>>,
     block_height: u64,
 }
 
 #[async_trait]
-impl StateCatchup for SqlStateCatchup {
+impl<T> StateCatchup for SqlStateCatchup<T>
+where
+    T: SequencerStateDataSource,
+{
     async fn fetch_accounts(
         &self,
         _view: ViewNumber,
@@ -287,9 +290,12 @@ impl StateCatchup for SqlStateCatchup {
                     Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
                     account,
                 )
-                .await?;
+                .await
+                .context(format!("fetching account {account}; height {block_height}"))?;
 
-            match proof.proof.first().context("empty proof")? {
+            match proof.proof.first().context(format!(
+                "empty proof for account {account}; height {block_height}"
+            ))? {
                 MerkleNode::Leaf { pos, elem, .. } => {
                     ret.push(AccountQueryData {
                         balance: elem.0,
@@ -333,9 +339,14 @@ impl StateCatchup for SqlStateCatchup {
             .read()
             .await
             .get_path(Snapshot::<SeqTypes, BlockMerkleTree, 3>::Index(bh), bh - 1)
-            .await?;
+            .await
+            .context(format!("fetching frontier at height {bh}"))?;
 
-        match proof.proof.first().context("proof is empty")? {
+        match proof
+            .proof
+            .first()
+            .context(format!("empty proof for frontier at height {bh}"))?
+        {
             MerkleNode::Leaf { pos, elem, .. } => mt
                 .remember(pos, elem, proof.clone())
                 .context("failed to remember proof"),
@@ -344,34 +355,38 @@ impl StateCatchup for SqlStateCatchup {
     }
 }
 
-pub async fn update_state_storage(
-    storage: Arc<RwLock<SqlDataSource<SeqTypes, Provider>>>,
+async fn compute_state_update(
+    storage: Arc<RwLock<impl SequencerStateDataSource>>,
     instance: &mut NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
     let header = proposed_leaf.get_block_header();
-    let validated_state = ValidatedState::from_header(header);
+    let validated_state = ValidatedState::from_header(parent_leaf.get_block_header());
 
     let catchup = SqlStateCatchup {
-        db: storage.clone(),
+        db: storage,
         block_height: parent_leaf.get_height(),
     };
-
     instance.peers = Arc::new(catchup);
 
-    let (state, delta) = validated_state
+    validated_state
         .apply_header(instance, parent_leaf, header)
-        .await?;
+        .await
+}
 
-    let block_number = proposed_leaf.get_height();
+async fn store_state_update(
+    storage: &mut impl SequencerStateDataSource,
+    block_number: u64,
+    state: ValidatedState,
+    delta: Delta,
+) -> anyhow::Result<()> {
     let ValidatedState {
         fee_merkle_tree,
         block_merkle_tree,
     } = state;
-
     let Delta { fees_delta } = delta;
 
     // Insert fee merkle tree nodes
@@ -380,17 +395,20 @@ pub async fn update_state_storage(
             .universal_lookup(delta)
             .expect_ok()
             .context("Index not found in fee merkle tree")?;
-        let path: Vec<usize> = <FeeAccount as ToTraversalPath<256>>::to_traversal_path(
-            &delta,
-            fee_merkle_tree.height(),
-        );
+        let path: Vec<usize> =
+            <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
+                &delta,
+                fee_merkle_tree.height(),
+            );
 
-        storage
-            .write()
-            .await
-            .store_state::<FeeMerkleTree, 256>(proof.proof, path, block_number)
-            .await
-            .context("failed to insert merkle nodes for block merkle tree")?;
+        UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof.proof,
+            path,
+            block_number,
+        )
+        .await
+        .context("failed to store fee merkle nodes")?;
     }
 
     // Insert block merkle tree nodes
@@ -404,60 +422,151 @@ pub async fn update_state_storage(
     );
 
     {
-        let mut storage_write = storage.write().await;
+        UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof.proof,
+            path,
+            block_number,
+        )
+        .await
+        .context("failed to store block merkle nodes")?;
+    }
 
-        storage_write
-            .store_state::<BlockMerkleTree, 3>(proof.proof, path, block_number)
-            .await
-            .context("failed to insert merkle nodes for block merkle tree")?;
+    storage.commit().await.context("committing state update")?;
+    Ok(())
+}
 
-        storage_write
-            .set_last_state_height(block_number as usize)
+async fn update_state_storage(
+    storage: &Arc<RwLock<impl SequencerStateDataSource>>,
+    instance: &mut NodeState,
+    parent_leaf: &LeafQueryData<SeqTypes>,
+    proposed_leaf: &LeafQueryData<SeqTypes>,
+) -> anyhow::Result<()> {
+    let (state, delta) =
+        compute_state_update(storage.clone(), instance, parent_leaf, proposed_leaf)
             .await
-            .context("failed to set last state height")?;
+            .context("computing state update")?;
+
+    let mut storage = storage.write().await;
+    if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), state, delta).await
+    {
+        storage.revert().await;
+        return Err(err);
     }
 
     Ok(())
 }
 
+async fn store_genesis_state(
+    storage: &mut impl SequencerStateDataSource,
+    state: &ValidatedState,
+) -> anyhow::Result<()> {
+    ensure!(
+        state.block_merkle_tree.num_leaves() == 0,
+        "genesis state with non-empty block tree is unsupported"
+    );
+
+    // Insert fee merkle tree nodes
+    for (account, _) in state.fee_merkle_tree.iter() {
+        let (_, proof) = state
+            .fee_merkle_tree
+            .universal_lookup(account)
+            .expect_ok()
+            .context("Index not found in fee merkle tree")?;
+        let path: Vec<usize> =
+            <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
+                account,
+                state.fee_merkle_tree.height(),
+            );
+
+        UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof.proof,
+            path,
+            0,
+        )
+        .await
+        .context("failed to store fee merkle nodes")?;
+    }
+
+    storage.commit().await?;
+    Ok(())
+}
+
 pub async fn update_state_storage_loop(
-    storage: SqlDataSource<SeqTypes, Provider>,
+    storage: Arc<RwLock<impl SequencerStateDataSource>>,
     mut instance: NodeState,
 ) -> anyhow::Result<()> {
     // get last saved merklized state
+    let (last_height, parent_leaf, mut leaves) = {
+        let state = storage.upgradable_read().await;
 
-    let last_height = storage.get_last_state_height().await?;
+        let last_height = state.get_last_state_height().await?;
+        tracing::info!(last_height, "updating state storage");
 
-    let mut parent_leaf = storage.get_leaf(last_height).await.resolve().await;
-    let mut leaves = storage.subscribe_leaves(last_height + 1).await;
+        let parent_leaf = state.get_leaf(last_height).await;
+        let leaves = state.subscribe_leaves(last_height + 1).await;
+        (last_height, parent_leaf, leaves)
+    };
+    // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
+    // ready yet and another task needs a mutable lock on the state to produce the parent leaf.
+    let mut parent_leaf = parent_leaf.await;
 
-    let storage = Arc::new(RwLock::new(storage));
+    if last_height == 0 {
+        // If the last height is 0, we need to insert the genesis state, since this state is
+        // never the result of a state update and thus is not inserted in the loop below.
+        tracing::info!("storing genesis merklized state");
+        let mut storage = storage.write().await;
+        if let Err(err) = store_genesis_state(&mut *storage, &instance.genesis_state).await {
+            tracing::error!("failed to store genesis state: {err:#}");
+            storage.revert().await;
+            return Err(err);
+        }
+    }
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(storage.clone(), &mut instance, &parent_leaf, &leaf).await {
+            match update_state_storage(&storage, &mut instance, &parent_leaf, &leaf).await {
                 Ok(()) => {
-                    if let Err(e) = storage.write().await.commit().await {
-                        tracing::error!("failed to commit for leaf {leaf:?} {e}",);
-                        async_std::task::sleep(Duration::from_secs(2)).await;
-                        continue;
-                    }
-                    parent_leaf = leaf.clone();
+                    parent_leaf = leaf;
                     break;
                 }
-                Err(e) => {
-                    storage.write().await.revert().await;
-                    tracing::error!(
-                        "failed to update state storage for leaf {leaf:?} {e} retrying..",
-                    );
+                Err(err) => {
+                    tracing::error!("{err:#}");
+                    // If we fail, delay for a second and retry.
+                    async_std::task::sleep(Duration::from_secs(1)).await;
                 }
             }
-
-            async_std::task::sleep(Duration::from_secs(1)).await;
         }
     }
 
     Ok(())
+}
+
+pub trait SequencerStateDataSource:
+    'static
+    + Debug
+    + AvailabilityDataSource<SeqTypes>
+    + VersionedDataSource
+    + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+    + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+    + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + MerklizedStateHeightPersistence
+{
+}
+
+impl<T> SequencerStateDataSource for T where
+    T: 'static
+        + Debug
+        + AvailabilityDataSource<SeqTypes>
+        + VersionedDataSource
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + MerklizedStateHeightPersistence
+{
 }
 
 impl ValidatedState {
@@ -625,8 +734,20 @@ impl HotShotState<SeqTypes> for ValidatedState {
     ///
     /// This can also be used to rebuild the state for catchup.
     fn from_header(block_header: &Header) -> Self {
-        let fee_merkle_tree = FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
-        let block_merkle_tree = BlockMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
+        let fee_merkle_tree = if block_header.fee_merkle_tree_root.size() == 0 {
+            // If the commitment tells us that the tree is supposed to be empty, it is convenient to
+            // just create an empty tree, rather than a commitment-only tree.
+            FeeMerkleTree::new(FEE_MERKLE_TREE_HEIGHT)
+        } else {
+            FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+        };
+        let block_merkle_tree = if block_header.block_merkle_tree_root.size() == 0 {
+            // If the commitment tells us that the tree is supposed to be empty, it is convenient to
+            // just create an empty tree, rather than a commitment-only tree.
+            BlockMerkleTree::new(BLOCK_MERKLE_TREE_HEIGHT)
+        } else {
+            BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root)
+        };
         Self {
             fee_merkle_tree,
             block_merkle_tree,
@@ -755,7 +876,21 @@ impl Committable for FeeInfo {
 // New Type for `U256` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
 #[derive(
-    Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
+    Default,
+    Hash,
+    Copy,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Add,
+    Sub,
+    From,
+    Into,
 )]
 pub struct FeeAmount(U256);
 impl FeeAmount {

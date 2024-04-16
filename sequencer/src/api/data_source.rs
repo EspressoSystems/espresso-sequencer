@@ -16,12 +16,10 @@ use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
-    merklized_state::MerklizedState,
     node::NodeDataSource,
     status::StatusDataSource,
 };
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use jf_primitives::merkle_tree::prelude::MerklePath;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -64,13 +62,6 @@ pub trait SequencerDataSource:
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
-    /// Wrapper function to store merkle nodes
-    async fn store_state<S: MerklizedState<SeqTypes, A>, const A: usize>(
-        &mut self,
-        path: MerklePath<S::Entry, S::Key, S::T>,
-        traversal_path: Vec<usize>,
-        block_number: u64,
-    ) -> anyhow::Result<()>;
 }
 
 /// Provider for fetching missing data for the query service.
