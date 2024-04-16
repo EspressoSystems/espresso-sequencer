@@ -96,3 +96,11 @@ code-coverage:
   grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
       --ignore 'contract-bindings/*' --ignore 'contracts/*'
   @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
+
+download-srs:
+    @echo "Check existence or download SRS for production"
+    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" ./scripts/download_srs_aztec.sh
+
+dev-download-srs:
+    @echo "Check existence or download SRS for dev/test"
+    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
