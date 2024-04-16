@@ -113,10 +113,10 @@ custom_debug = { workspace = true }
 dashmap = "5"
 either = { workspace = true }
 futures = { workspace = true }
-hotshot-web-server = { version = "0.5.26", path = "../web_server", default-features = false }
-hotshot-orchestrator = { version = "0.5.26", path = "../orchestrator", default-features = false }
+hotshot-web-server = { version = "0.5.36", path = "../web_server", default-features = false }
+hotshot-orchestrator = { version = "0.5.36", path = "../orchestrator", default-features = false }
 hotshot-types = { path = "../types" }
-hotshot-task-impls = { path = "../task-impls", version = "0.5.26", default-features = false }
+hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
 rand = { workspace = true }
