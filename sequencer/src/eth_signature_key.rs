@@ -1,4 +1,3 @@
-use coins_bip32::path::DerivationPath;
 use ethers::{
     signers::{
         coins_bip39::{English, Mnemonic},
@@ -14,7 +13,6 @@ use snafu::Snafu;
 use std::{
     fmt::{Display, Formatter},
     hash::Hash,
-    str::FromStr as _,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
@@ -71,12 +69,12 @@ impl From<SigningKey> for EthKeyPair {
 impl EthKeyPair {
     pub fn from_mnemonic(phrase: &str, index: impl Into<u32>) -> Result<Self, WalletError> {
         let index: u32 = index.into();
-        let derivation_path = DerivationPath::from_str(&format!("m/44'/60'/0'/0/{index}"))?;
         let mnemonic = Mnemonic::<English>::new_from_phrase(phrase)?;
-        let derived_priv_key = mnemonic.derive_key(derivation_path, /* password */ None)?;
-        let key: &coins_bip32::prelude::SigningKey = derived_priv_key.as_ref();
-        let signing_key = SigningKey::from_bytes(&key.to_bytes())?;
-        Ok(signing_key.into())
+        let derivation_path = format!("m/44'/60'/0'/0/{index}");
+        let derived_priv_key =
+            mnemonic.derive_key(derivation_path.as_str(), /* password */ None)?;
+        let signing_key: &SigningKey = derived_priv_key.as_ref();
+        Ok(signing_key.clone().into())
     }
 
     pub fn verifying_key(&self) -> EthVerifyingKey {
