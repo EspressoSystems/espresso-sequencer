@@ -28,8 +28,8 @@ use hotshot_types::{
     },
 };
 use sequencer::{
-    catchup::StatePeers, l1_client::L1Client, BuilderParams, L1Params, NetworkParams, NodeState,
-    PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, eth_signature_key::EthSigningKey, l1_client::L1Client, BuilderParams,
+    L1Params, NetworkParams, NodeState, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -77,8 +77,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 
 impl BuilderConfig {
     pub async fn init(
-        pub_key: PubKey,
-        priv_key: PrivKey,
+        builder_keys: (EthSigningKey, EthSigningKey),
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -106,7 +105,7 @@ impl BuilderConfig {
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (pub_key, priv_key),
+            builder_keys,
             req_sender,
             res_receiver,
             tx_sender.clone(),
