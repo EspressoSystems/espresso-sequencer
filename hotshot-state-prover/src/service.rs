@@ -38,10 +38,12 @@ use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::{iter, time::Duration};
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
-use time::Instant;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -180,7 +182,7 @@ pub fn load_proving_key() -> ProvingKey {
         let srs_timer = Instant::now();
         let srs = ark_srs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
         let srs_elapsed = srs_timer.elapsed();
-        std::println!("Done in {srs_elapsed:.3}");
+        std::println!("Done in {srs_elapsed:?}");
 
         // convert to Jellyfish type
         // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -197,7 +199,7 @@ pub fn load_proving_key() -> ProvingKey {
     let (pk, _) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
         .expect("Fail to preprocess state prover circuit");
     let key_gen_elapsed = key_gen_timer.elapsed();
-    std::println!("Done in {key_gen_elapsed:.3}");
+    std::println!("Done in {key_gen_elapsed:?}");
     pk
 }
 
@@ -325,7 +327,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     // );
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let proof_gen_start = time::Instant::now();
+    let proof_gen_start = Instant::now();
     let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
@@ -336,7 +338,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
         &threshold,
     )?;
     let proof_gen_elapsed = proof_gen_start.elapsed();
-    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
+    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:?}");
 
     submit_state_and_proof(proof, public_input, config).await?;
 
