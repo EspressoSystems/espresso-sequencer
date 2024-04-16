@@ -12,62 +12,7 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use std::{
-    borrow::Cow,
-    cmp::min,
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    ops::{Bound, RangeBounds},
-    pin::Pin,
-    str::FromStr,
-    time::Duration,
-};
-
-pub use anyhow::Error;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
-use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
-use async_trait::async_trait;
-use bit_vec::BitVec;
-use chrono::Utc;
-use committable::Committable;
-use futures::{
-    stream::{BoxStream, StreamExt, TryStreamExt},
-    task::{Context, Poll},
-    AsyncRead, AsyncWrite,
-};
-use hotshot_types::{
-    simple_certificate::QuorumCertificate,
-    traits::{
-        block_contents::{BlockHeader, BlockPayload},
-        node_implementation::NodeType,
-    },
-};
-use jf_primitives::merkle_tree::prelude::MerkleProof;
-
-use std::fmt::Debug;
-use tokio_postgres::types::{private::BytesMut, to_sql_checked, FromSql, Type};
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use include_dir::include_dir;
-use itertools::{izip, Itertools};
-use postgres_native_tls::TlsConnector;
-pub use refinery::Migration;
-use snafu::OptionExt;
-pub use tokio_postgres as postgres;
-use tokio_postgres::{
-    config::Host,
-    tls::TlsConnect,
-    types::{BorrowToSql, ToSql},
-    Client, NoTls, Row, ToStatement,
-};
-
 use super::{pruning::PrunedHeightStorage, AvailabilityStorage};
-pub use crate::include_migrations;
-use jf_primitives::merkle_tree::{
-    prelude::MerkleNode, DigestAlgorithm, MerkleCommitment, ToTraversalPath,
-};
-
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
@@ -87,6 +32,56 @@ use crate::{
     types::HeightIndexed,
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidShare,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
+use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
+use async_trait::async_trait;
+use bit_vec::BitVec;
+use chrono::Utc;
+use committable::Committable;
+use futures::{
+    stream::{BoxStream, StreamExt, TryStreamExt},
+    task::{Context, Poll},
+    AsyncRead, AsyncWrite,
+};
+use hotshot_types::{
+    simple_certificate::QuorumCertificate,
+    traits::{
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::NodeType,
+    },
+};
+use itertools::{izip, Itertools};
+use jf_primitives::merkle_tree::{
+    prelude::{MerkleNode, MerkleProof},
+    DigestAlgorithm, MerkleCommitment, ToTraversalPath,
+};
+use postgres_native_tls::TlsConnector;
+use snafu::OptionExt;
+use std::{
+    borrow::Cow,
+    cmp::min,
+    collections::{HashMap, HashSet, VecDeque},
+    fmt::{Debug, Display},
+    ops::{Bound, RangeBounds},
+    pin::Pin,
+    str::FromStr,
+    time::Duration,
+};
+use tokio_postgres::{
+    config::Host,
+    tls::TlsConnect,
+    types::{private::BytesMut, to_sql_checked, BorrowToSql, FromSql, ToSql, Type},
+    Client, NoTls, Row, ToStatement,
+};
+
+pub use anyhow::Error;
+// This needs to be reexported so that we can reference it by absolute path relative to this crate
+// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
+// crate which doesn't have `include_dir` as a dependency.
+pub use crate::include_migrations;
+pub use include_dir::include_dir;
+pub use refinery::Migration;
+pub use tokio_postgres as postgres;
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -1438,7 +1433,7 @@ where
             .try_collect()
             .await?;
 
-        let mut proof_path = Vec::new();
+        let mut proof_path = VecDeque::with_capacity(State::tree_height());
         for Node {
             hash_id,
             children,
@@ -1481,7 +1476,7 @@ where
                             })
                             .collect::<QueryResult<Vec<_>>>()?;
                         // Use the Children merkle nodes to reconstruct the branch node
-                        proof_path.push(MerkleNode::Branch {
+                        proof_path.push_back(MerkleNode::Branch {
                             value: State::T::deserialize_compressed(value.as_slice())
                                 .map_err(ParseError::Deserialize)?,
                             children: child_nodes,
@@ -1489,7 +1484,7 @@ where
                     }
                     // No children but if there is an entry then its a leaf
                     (None, None, Some(index), Some(entry)) => {
-                        proof_path.push(MerkleNode::Leaf {
+                        proof_path.push_back(MerkleNode::Leaf {
                             value: State::T::deserialize_compressed(value.as_slice())
                                 .map_err(ParseError::Deserialize)?,
                             pos: serde_json::from_value(index.clone())
@@ -1500,7 +1495,7 @@ where
                     }
                     // No children and no entry then its an Empty Node
                     (None, None, Some(_), None) => {
-                        proof_path.push(MerkleNode::Empty);
+                        proof_path.push_back(MerkleNode::Empty);
                     }
                     _ => {
                         return Err(QueryError::Error {
@@ -1512,15 +1507,19 @@ where
         }
 
         // Reconstruct the merkle commitment from the path
-        let init = match proof_path.first() {
+        let init = match proof_path.front() {
             Some(MerkleNode::Leaf { value, .. }) => *value,
-            Some(MerkleNode::Empty) => State::T::default(),
-            Some(_) => {
-                return Err(QueryError::Error {
-                    message: "Missing State ".to_string(),
-                })
+            _ => {
+                // If the path ends in a branch (or, as a special case, if the path and thus the
+                // entire tree is empty), we are looking up an entry that is not present in the
+                // tree. We always store all the nodes on all the paths to all the entries in the
+                // tree, so the only nodes we could be missing are empty nodes from unseen entries.
+                // Thus, we can reconstruct what the path should be by prepending empty nodes.
+                while proof_path.len() <= State::tree_height() {
+                    proof_path.push_front(MerkleNode::Empty);
+                }
+                State::T::default()
             }
-            None => return Err(QueryError::Missing),
         };
         let commitment_from_path = traversal_path
             .iter()
@@ -1565,7 +1564,7 @@ where
 
         Ok(MerkleProof {
             pos: key,
-            proof: proof_path,
+            proof: proof_path.into(),
         })
     }
 
@@ -3250,6 +3249,62 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_merklized_state_non_membership_proof_unseen_entry() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let mut storage = SqlStorage::connect(db.config()).await.unwrap();
+
+        // define a test tree
+        let mut test_tree = MockMerkleTree::new(MockMerkleTree::tree_height());
+
+        // For each case (where the root is empty, a leaf, and a branch) test getting a
+        // non-membership proof for an entry node the database has never seen.
+        for i in 0..=2 {
+            tracing::info!(i, ?test_tree, "testing non-membership proof");
+
+            // Insert a dummy header
+            storage
+                .query_opt(
+                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3)",
+                    [
+                        sql_param(&(i as i64)),
+                        sql_param(&format!("hash{i}")),
+                        sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
+                    ],
+                )
+                .await
+                .unwrap();
+            // update saved state height
+            storage.set_last_state_height(i).await.unwrap();
+
+            // get a non-membership proof for a never-before-seen node.
+            let proof = MerklizedStateDataSource::get_path(
+                &storage,
+                Snapshot::<MockTypes, MockMerkleTree, 8>::Index(i as u64),
+                100,
+            )
+            .await
+            .unwrap();
+            assert_eq!(proof.elem(), None);
+            assert!(test_tree.non_membership_verify(100, proof).unwrap());
+
+            // insert an additional node into the tree.
+            test_tree.update(i, i).unwrap();
+            let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
+            let traversal_path = ToTraversalPath::<8>::to_traversal_path(&i, test_tree.height());
+            UpdateStateData::<_, MockMerkleTree, 8>::insert_merkle_nodes(
+                &mut storage,
+                proof,
+                traversal_path,
+                (i + 1) as u64,
+            )
+            .await
+            .expect("failed to insert nodes");
+        }
+    }
+
+    #[async_std::test]
     async fn test_merklized_storage_with_commit() {
         // This test insert a merkle path into the database and queries the path using the merkle commitment
         setup_test();
@@ -3586,10 +3641,10 @@ mod test {
                 LookupResult::NotFound(proof) => proof,
                 LookupResult::NotInMemory => panic!("failed to find reserved key {RESERVED_KEY}"),
             };
-            // assert_eq!(
-            //     proof,
-            //     storage.get_path(snapshot, RESERVED_KEY).await.unwrap()
-            // );
+            assert_eq!(
+                proof,
+                storage.get_path(snapshot, RESERVED_KEY).await.unwrap()
+            );
             assert_eq!(proof.elem(), None);
             // Check path is valid for test_tree
             assert!(tree.non_membership_verify(RESERVED_KEY, proof).unwrap());
