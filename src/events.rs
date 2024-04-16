@@ -80,13 +80,12 @@ impl tide_disco::error::Error for Error {
     }
 }
 
-pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
-    options: &Options,
-) -> Result<Api<State, Error, Ver>, ApiError>
+pub fn define_api<State, Types, Ver>(options: &Options) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + EventsSource<Types>,
     Types: NodeType,
+    Ver: StaticVersionType + 'static,
 {
     let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
