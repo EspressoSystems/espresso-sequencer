@@ -13,8 +13,9 @@ use libp2p::kad::{
     /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapOk, GetClosestPeersOk,
     GetRecordOk, GetRecordResult, ProgressStep, PutRecordResult, QueryId, QueryResult, Record,
 };
-use libp2p::kad::{store::RecordStore, Behaviour as KademliaBehaviour};
-use libp2p::kad::{BootstrapError, Event as KademliaEvent};
+use libp2p::kad::{
+    store::RecordStore, Behaviour as KademliaBehaviour, BootstrapError, Event as KademliaEvent,
+};
 use libp2p_identity::PeerId;
 use tracing::{error, info, warn};
 
@@ -27,9 +28,8 @@ lazy_static! {
     static ref MAX_DHT_QUERY_SIZE: NonZeroUsize = NonZeroUsize::new(50).unwrap();
 }
 
-use crate::network::{ClientRequest, NetworkEvent};
-
 use super::exponential_backoff::ExponentialBackoff;
+use crate::network::{ClientRequest, NetworkEvent};
 
 /// Behaviour wrapping libp2p's kademlia
 /// included:

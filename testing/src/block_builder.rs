@@ -1,10 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::Display,
     num::NonZeroUsize,
-    ops::{Deref, Range},
+    ops::Deref,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -22,11 +21,11 @@ use hotshot_builder_api::{
     data_source::BuilderDataSource,
 };
 use hotshot_example_types::block_types::TestTransaction;
+use hotshot_orchestrator::config::RandomBuilderConfig;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
     traits::{
         block_contents::{precompute_vid_commitment, BlockHeader},
-        election::Membership,
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
@@ -34,33 +33,34 @@ use hotshot_types::{
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
-use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, App, Url};
 
 #[async_trait]
 pub trait TestBuilderImplementation<TYPES: NodeType> {
+    type Config: Default;
+
     async fn start(
-        membership: Arc<<TYPES>::Membership>,
+        num_storage_nodes: usize,
+        options: Self::Config,
     ) -> (Option<Box<dyn BuilderTask<TYPES>>>, Url);
 }
 
 pub struct RandomBuilderImplementation;
 
 #[async_trait]
-impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for RandomBuilderImplementation
+impl<TYPES> TestBuilderImplementation<TYPES> for RandomBuilderImplementation
 where
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
     TYPES: NodeType<Transaction = TestTransaction>,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
+    type Config = RandomBuilderConfig;
+
     async fn start(
-        _membership: Arc<TYPES::Membership>,
+        num_storage_nodes: usize,
+        config: RandomBuilderConfig,
     ) -> (Option<Box<dyn BuilderTask<TYPES>>>, Url) {
         let port = portpicker::pick_unused_port().expect("No free ports");
         let url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
-        run_random_builder::<TYPES>(url.clone());
+        run_random_builder::<TYPES>(url.clone(), num_storage_nodes, config);
         (None, url)
     }
 }
@@ -68,19 +68,16 @@ where
 pub struct SimpleBuilderImplementation;
 
 #[async_trait]
-impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplementation
-where
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
-{
+impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplementation {
+    type Config = ();
+
     async fn start(
-        membership: Arc<TYPES::Membership>,
+        num_storage_nodes: usize,
+        _config: Self::Config,
     ) -> (Option<Box<dyn BuilderTask<TYPES>>>, Url) {
         let port = portpicker::pick_unused_port().expect("No free ports");
         let url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
-        let (source, task) = make_simple_builder(membership).await;
+        let (source, task) = make_simple_builder(num_storage_nodes).await;
 
         let builder_api = hotshot_builder_api::builder::define_api::<
             SimpleBuilderSource<TYPES>,
@@ -105,30 +102,6 @@ struct BlockEntry<TYPES: NodeType> {
     header_input: Option<AvailableBlockHeaderInput<TYPES>>,
 }
 
-/// Options controlling how the random builder generates blocks
-#[derive(Clone, Debug)]
-pub struct RandomBuilderOptions {
-    /// How many transactions to include in a block
-    pub txn_in_block: u64,
-    /// How many blocks to generate per second
-    pub blocks_per_second: u32,
-    /// Range of how big a transaction can be (in bytes)
-    pub txn_size: Range<u32>,
-    /// Number of storage nodes for VID commitment
-    pub num_storage_nodes: usize,
-}
-
-impl Default for RandomBuilderOptions {
-    fn default() -> Self {
-        Self {
-            txn_in_block: 100,
-            blocks_per_second: 1,
-            txn_size: 20..100,
-            num_storage_nodes: 1,
-        }
-    }
-}
-
 /// A mock implementation of the builder data source.
 /// Builds random blocks, doesn't track HotShot state at all.
 /// Evicts old available blocks if HotShot doesn't keep up.
@@ -146,7 +119,7 @@ pub struct RandomBuilderSource<TYPES: NodeType> {
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
 }
 
-impl<TYPES: NodeType> RandomBuilderSource<TYPES>
+impl<TYPES> RandomBuilderSource<TYPES>
 where
     TYPES: NodeType<Transaction = TestTransaction>,
 {
@@ -166,7 +139,7 @@ where
 
     /// Spawn a task building blocks, configured with given options
     #[allow(clippy::missing_panics_doc)] // ony panics on 16-bit platforms
-    pub fn run(&self, options: RandomBuilderOptions) {
+    pub fn run(&self, num_storage_nodes: usize, options: RandomBuilderConfig) {
         let blocks = self.blocks.clone();
         let (priv_key, pub_key) = (self.priv_key.clone(), self.pub_key.clone());
         async_spawn(async move {
@@ -189,7 +162,7 @@ where
 
                 let (metadata, payload, header_input) = build_block(
                     transactions,
-                    options.num_storage_nodes,
+                    num_storage_nodes,
                     pub_key.clone(),
                     priv_key.clone(),
                 );
@@ -281,17 +254,13 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
-pub fn run_random_builder<TYPES: NodeType>(url: Url)
+pub fn run_random_builder<TYPES>(url: Url, num_storage_nodes: usize, options: RandomBuilderConfig)
 where
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
     TYPES: NodeType<Transaction = TestTransaction>,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
     let source = RandomBuilderSource::new(pub_key, priv_key);
-    source.run(RandomBuilderOptions::default());
+    source.run(num_storage_nodes, options);
 
     let builder_api =
         hotshot_builder_api::builder::define_api::<RandomBuilderSource<TYPES>, TYPES, Version01>(
@@ -305,12 +274,18 @@ where
     async_spawn(app.serve(url, STATIC_VER_0_1));
 }
 
+#[derive(Debug, Clone)]
+struct SubmittedTransaction<TYPES: NodeType> {
+    claimed: Option<Instant>,
+    transaction: TYPES::Transaction,
+}
+
 pub struct SimpleBuilderSource<TYPES: NodeType> {
     pub_key: TYPES::BuilderSignatureKey,
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
-    membership: Arc<TYPES::Membership>,
+    num_storage_nodes: usize,
     #[allow(clippy::type_complexity)]
-    transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>,
+    transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, SubmittedTransaction<TYPES>>>>,
     blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry<TYPES>>>>,
 }
 
@@ -337,12 +312,25 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
         let transactions = self
             .transactions
             .read(|txns| {
-                Box::pin(async { txns.values().cloned().collect::<Vec<TYPES::Transaction>>() })
+                Box::pin(async {
+                    txns.values()
+                        .filter(|txn| {
+                            // We want transactions that are either unclaimed, or claimed long ago
+                            // and thus probably not included, or they would've been decided on
+                            // already and removed from the queue
+                            txn.claimed
+                                .map(|claim_time| claim_time.elapsed() > Duration::from_secs(30))
+                                .unwrap_or(true)
+                        })
+                        .cloned()
+                        .map(|txn| txn.transaction)
+                        .collect::<Vec<TYPES::Transaction>>()
+                })
             })
             .await;
         let (metadata, payload, header_input) = build_block(
             transactions,
-            self.membership.total_nodes(),
+            self.num_storage_nodes,
             self.pub_key.clone(),
             self.priv_key.clone(),
         );
@@ -365,9 +353,26 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockData<TYPES>, BuildError> {
-        let mut blocks = self.blocks.write().await;
-        let entry = blocks.get_mut(block_hash).ok_or(BuildError::NotFound)?;
-        entry.payload.take().ok_or(BuildError::Missing)
+        let payload = {
+            let mut blocks = self.blocks.write().await;
+            let entry = blocks.get_mut(block_hash).ok_or(BuildError::NotFound)?;
+            entry.payload.take().ok_or(BuildError::Missing)?
+        };
+
+        let now = Instant::now();
+
+        let claimed_transactions = payload
+            .block_payload
+            .transaction_commitments(&payload.metadata);
+
+        let mut transactions = self.transactions.write().await;
+        for txn_hash in claimed_transactions {
+            if let Some(txn) = transactions.get_mut(&txn_hash) {
+                txn.claimed = Some(now);
+            }
+        }
+
+        Ok(payload)
     }
 
     async fn claim_block_header_input(
@@ -386,13 +391,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> SimpleBuilderSource<TYPES>
-where
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
-{
+impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
     pub async fn run(self, url: Url) {
         let builder_api = hotshot_builder_api::builder::define_api::<
             SimpleBuilderSource<TYPES>,
@@ -411,7 +410,7 @@ where
 #[derive(Clone)]
 pub struct SimpleBuilderTask<TYPES: NodeType> {
     #[allow(clippy::type_complexity)]
-    transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>,
+    transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, SubmittedTransaction<TYPES>>>>,
     blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry<TYPES>>>>,
     decided_transactions: LruCache<Commitment<TYPES::Transaction>, ()>,
 }
@@ -449,11 +448,33 @@ impl<TYPES: NodeType> BuilderTask<TYPES> for SimpleBuilderTask<TYPES> {
                             }
                             self.blocks.write().await.clear();
                         }
+                        EventType::DAProposal { proposal, .. } => {
+                            let payload = TYPES::BlockPayload::from_bytes(
+                                proposal.data.encoded_transactions.into_iter(),
+                                &proposal.data.metadata,
+                            );
+                            let now = Instant::now();
+
+                            let mut queue = self.transactions.write().await;
+                            for commitment in
+                                payload.transaction_commitments(&proposal.data.metadata)
+                            {
+                                if let Some(txn) = queue.get_mut(&commitment) {
+                                    txn.claimed = Some(now);
+                                }
+                            }
+                        }
                         EventType::Transactions { transactions } => {
                             let mut queue = self.transactions.write().await;
                             for transaction in transactions {
                                 if !self.decided_transactions.contains(&transaction.commit()) {
-                                    queue.insert(transaction.commit(), transaction.clone());
+                                    queue.insert(
+                                        transaction.commit(),
+                                        SubmittedTransaction {
+                                            claimed: None,
+                                            transaction: transaction.clone(),
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -466,7 +487,7 @@ impl<TYPES: NodeType> BuilderTask<TYPES> for SimpleBuilderTask<TYPES> {
 }
 
 pub async fn make_simple_builder<TYPES: NodeType>(
-    membership: Arc<TYPES::Membership>,
+    num_storage_nodes: usize,
 ) -> (SimpleBuilderSource<TYPES>, SimpleBuilderTask<TYPES>) {
     let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
 
@@ -478,7 +499,7 @@ pub async fn make_simple_builder<TYPES: NodeType>(
         priv_key,
         transactions: transactions.clone(),
         blocks: blocks.clone(),
-        membership,
+        num_storage_nodes,
     };
 
     let task = SimpleBuilderTask {

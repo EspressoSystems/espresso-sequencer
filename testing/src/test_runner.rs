@@ -342,12 +342,7 @@ where
             )
         });
         let (mut builder_task, builder_url) =
-            B::start(Arc::new(<TYPES as NodeType>::Membership::create_election(
-                known_nodes_with_stake.clone(),
-                quorum_election_config.clone(),
-                config.fixed_leader_for_gpuvid,
-            )))
-            .await;
+            B::start(config.num_nodes_with_stake.into(), B::Config::default()).await;
         for i in 0..total {
             let mut config = config.clone();
             let node_id = self.next_node_id;

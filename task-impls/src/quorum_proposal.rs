@@ -1,9 +1,10 @@
-use crate::{consensus::validate_proposal, helpers::AnyhowTracing};
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use committable::Committable;
 use either::Either;
 use futures::future::FutureExt;
@@ -29,17 +30,15 @@ use hotshot_types::{
     },
     vote::{Certificate, HasViewNumber},
 };
-
-use crate::{
-    consensus::CommitmentAndMetadata,
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::{
+    consensus::{validate_proposal, CommitmentAndMetadata},
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task, AnyhowTracing},
+};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]

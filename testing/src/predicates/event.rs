@@ -1,10 +1,11 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use hotshot_task_impls::events::{HotShotEvent, HotShotEvent::*};
 use hotshot_types::{
     data::null_block,
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
 };
-use std::sync::Arc;
 
 use crate::predicates::{Predicate, PredicateResult};
 

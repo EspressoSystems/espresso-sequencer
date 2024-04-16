@@ -68,6 +68,11 @@ mesh_n = 4
 online_time = 10
 server_mode = true
 
+[random_builder]
+txn_in_block = 100
+blocks_per_second = 1
+txn_size = { start = 20, end = 100 }
+
 [web_server_config]
 url = "http://localhost:9000"
 

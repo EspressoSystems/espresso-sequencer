@@ -12,18 +12,6 @@ pub mod types;
 
 pub mod tasks;
 
-#[cfg(feature = "proposal-task")]
-use crate::tasks::add_quorum_proposal_task;
-
-use crate::{
-    tasks::{
-        add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
-        add_transaction_task, add_upgrade_task, add_view_sync_task,
-    },
-    traits::NodeImplementation,
-    types::{Event, SystemContextHandle},
-};
-
 use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
@@ -61,7 +49,6 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
-
 // -- Rexports
 // External
 /// Reexport rand crate
@@ -69,6 +56,17 @@ pub use rand;
 use tasks::{add_request_network_task, add_response_task, add_vid_task};
 use tracing::{debug, instrument, trace};
 use vbs::version::Version;
+
+#[cfg(feature = "proposal-task")]
+use crate::tasks::add_quorum_proposal_task;
+use crate::{
+    tasks::{
+        add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
+        add_transaction_task, add_upgrade_task, add_view_sync_task,
+    },
+    traits::NodeImplementation,
+    types::{Event, SystemContextHandle},
+};
 
 /// Length, in bytes, of a 512 bit hash
 pub const H_512: usize = 64;

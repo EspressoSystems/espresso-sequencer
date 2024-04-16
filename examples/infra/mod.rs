@@ -15,7 +15,7 @@ use async_compatibility_layer::{
 use async_trait::async_trait;
 use cdn_broker::reexports::{crypto::signature::KeyPair, message::Topic};
 use chrono::Utc;
-use clap::{Arg, Command, Parser};
+use clap::{value_parser, Arg, Command, Parser};
 use futures::StreamExt;
 use hotshot::{
     traits::{
@@ -38,9 +38,12 @@ use hotshot_orchestrator::{
     self,
     client::{BenchResults, OrchestratorClient, ValidatorArgs},
     config::{
-        CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, NetworkConfigSource,
+        BuilderType, CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, NetworkConfigSource,
         WebServerConfig,
     },
+};
+use hotshot_testing::block_builder::{
+    RandomBuilderImplementation, SimpleBuilderImplementation, TestBuilderImplementation,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -190,6 +193,15 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
                 .help("Sets the number of fixed leader for gpu vid, only be used when leaders running on gpu")
                 .required(false),
         )
+        .arg(
+            Arg::new("builder")
+                .short('b')
+                .long("builder")
+                .value_name("BUILDER_TYPE")
+                .value_parser(value_parser!(BuilderType))
+                .help("Sets type of builder. `simple` or `random` to run corresponding integrated builder, `external` to use the one specified by `[config.builder_url]` in config")
+                .required(false),
+        )
         .get_matches();
 
     if let Some(config_file_string) = matches.get_one::<String>("config_file") {
@@ -249,6 +261,9 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (
             wait_between_polls: config.da_web_server_config.unwrap().wait_between_polls,
         };
         config.da_web_server_config = Some(updated_da_web_server_config);
+    }
+    if let Some(builder_type) = matches.get_one::<BuilderType>("builder") {
+        config.builder = *builder_type;
     }
 
     (config, orchestrator_url)
@@ -1016,7 +1031,7 @@ pub async fn main_entry_point<
     // It returns the complete config which also includes peer's public key and public config.
     // This function will be taken solely by sequencer right after OrchestratorClient::new,
     // which means the previous `generate_validator_config_when_init` will not be taken by sequencer, it's only for key pair generation for testing in hotshot.
-    let (run_config, source) =
+    let (mut run_config, source) =
         NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::get_complete_config(
             &orchestrator_client,
             args.clone().network_config_file,
@@ -1027,9 +1042,41 @@ pub async fn main_entry_point<
         .await
         .expect("failed to get config");
 
+    let builder_task = match run_config.builder {
+        BuilderType::External => None,
+        BuilderType::Random => {
+            let (builder_task, builder_url) =
+                <RandomBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
+                    run_config.config.num_nodes_with_stake.into(),
+                    run_config.random_builder.clone().unwrap_or_default(),
+                )
+                .await;
+
+            run_config.config.builder_url = builder_url;
+
+            builder_task
+        }
+        BuilderType::Simple => {
+            let (builder_task, builder_url) =
+                <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
+                    run_config.config.num_nodes_with_stake.into(),
+                    (),
+                )
+                .await;
+
+            run_config.config.builder_url = builder_url;
+
+            builder_task
+        }
+    };
+
     info!("Initializing networking");
     let run = RUNDA::initialize_networking(run_config.clone(), args.advertise_address).await;
     let hotshot = run.initialize_state_and_hotshot().await;
+
+    if let Some(task) = builder_task {
+        task.start(Box::new(hotshot.get_event_stream()));
+    }
 
     // pre-generate transactions
     let NetworkConfig {
