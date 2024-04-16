@@ -137,7 +137,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
-) -> anyhow::Result<BuilderContext<network::Networks, P, Ver>> {
+) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,

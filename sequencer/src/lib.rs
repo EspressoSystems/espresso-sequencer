@@ -95,16 +95,16 @@ pub mod network {
     }
 
     #[derive(Clone, Copy, Default)]
-    pub struct Networks;
+    pub struct Production;
 
     #[cfg(feature = "libp2p")]
-    impl Type for Networks {
+    impl Type for Production {
         type DAChannel = CombinedNetworks<SeqTypes>;
         type QuorumChannel = CombinedNetworks<SeqTypes>;
     }
 
     #[cfg(not(feature = "libp2p"))]
-    impl Type for Networks {
+    impl Type for Production {
         type DAChannel = PushCdnNetwork<SeqTypes>;
         type QuorumChannel = PushCdnNetwork<SeqTypes>;
     }
@@ -311,7 +311,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Networks, P, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
