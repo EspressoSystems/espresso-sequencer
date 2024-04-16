@@ -53,7 +53,7 @@ hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.36" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.36" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.36" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.4" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.5" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", default-features = false, tag = "0.1.24" }
