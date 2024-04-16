@@ -65,6 +65,7 @@ services:
       - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main
     command:
+      - cdn-marshal
       - -d
       - redis://:changemeplease!!@keydb:6379
       - --bind-port 
@@ -83,6 +84,7 @@ services:
       - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
+    - cdn-broker
     - -d
     - redis://:changemeplease!!@keydb:6379
     - --public-advertise-address
@@ -103,6 +105,7 @@ services:
       - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
     command: 
+    - cdn-broker
     - -d
     - redis://:changemeplease!!@keydb:6379
     - --public-advertise-address
