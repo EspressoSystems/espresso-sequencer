@@ -84,7 +84,7 @@ sol-test:
 
 # Deploy contracts to local blockchain for development and testing
 dev-deploy url="" mnemonics="" num_blocks_per_epoch="10" num_init_validators="5" admin="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" private_key="":
-    MNEMONICS="{{mnemonics}}" forge script contracts/test/mocks/DeployLightClientTestScript.sol:DeployLightClientTestScript \
+    MNEMONICS="{{mnemonics}}" forge script contracts/test/DeployLightClientTestScript.s.sol:DeployLightClientTestScript \
     --sig "run(uint32 numBlocksPerEpoch, uint64 numInitValidators, address owner)" {{num_blocks_per_epoch}} {{num_init_validators}} {{admin}} \
     --fork-url {{url}} --broadcast \
     --private-key {{private_key}}
