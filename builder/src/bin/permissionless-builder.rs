@@ -21,11 +21,11 @@ pub struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: u16,
 
-    /// URL of the HotShot DA web server.
+    /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
         long,
-        env = "ESPRESSO_BUILDER_SEQUENCER_URL",
+        env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
         default_value = "http://localhost:8081"
     )]
     pub sequencer_url: Url,
