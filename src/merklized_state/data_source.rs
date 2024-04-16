@@ -22,11 +22,9 @@ use derivative::Derivative;
 use derive_more::Display;
 use hotshot_types::traits::node_implementation::NodeType;
 
-use jf_primitives::merkle_tree::prelude::MerkleProof;
-use jf_primitives::merkle_tree::DigestAlgorithm;
 use jf_primitives::merkle_tree::{
-    prelude::MerklePath, Element, Index, MerkleCommitment, MerkleTreeScheme, NodeValue,
-    ToTraversalPath,
+    prelude::MerkleProof, DigestAlgorithm, Element, ForgetableMerkleTreeScheme, Index,
+    MerkleCommitment, NodeValue, ToTraversalPath,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Display;
@@ -50,6 +48,25 @@ where
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
+
+    /// List all keys in the given snapshot of the state.
+    ///
+    /// This includes all keys _known to_ the snapshot, or in other words all keys for which
+    /// [`get_path`](Self::get_path) will successfully return a [`MerkleProof`]. In particular this
+    /// may include keys which are _not present_ in the Merklized state, but whose absence is
+    /// specifically known to the dadtabase, such as keys which were inserted in a previous snapshot
+    /// and then deleted. For these keys, [`get_path`](Self::get_path) will return a non-membership
+    /// proof; for all other keys it will return a membership proof.
+    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>>;
+
+    /// Load a complete snapshot of the given state.
+    ///
+    /// The result is a complete Merkle tree, which can be queried for any entry, present or absent,
+    /// and will always successfully return either a presence or absence proof.
+    ///
+    /// This function may be extremely expensive, so should be used infrequently, for example at
+    /// initialization time only.
+    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State>;
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.
@@ -59,7 +76,7 @@ pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, 
 {
     async fn insert_merkle_nodes(
         &mut self,
-        path: MerklePath<State::Entry, State::Key, State::T>,
+        path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()>;
@@ -72,21 +89,31 @@ pub trait MerklizedStateHeightPersistence {
 }
 
 type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types, ARITY>>::Commit;
+
+/// Snapshot can be queried by block height (index) or merkle tree commitment
 #[derive(Derivative, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
 #[derivative(
+    Copy(bound = ""),
     Debug(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     Ord(bound = ""),
     Hash(bound = "")
 )]
-// Snapshot can be queried by block height (index) or merkle tree commitment
 pub enum Snapshot<Types: NodeType, T: MerklizedState<Types, ARITY>, const ARITY: usize> {
     #[display(fmt = "{_0}")]
     Commit(StateCommitment<Types, T, ARITY>),
     #[display(fmt = "{_0}")]
     Index(u64),
+}
+
+impl<T: MerklizedState<Types, ARITY>, Types: NodeType, const ARITY: usize> Clone
+    for Snapshot<Types, T, ARITY>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<T: MerklizedState<Types, ARITY>, Types: NodeType, const ARITY: usize> PartialOrd
@@ -100,7 +127,7 @@ impl<T: MerklizedState<Types, ARITY>, Types: NodeType, const ARITY: usize> Parti
 /// This trait should be implemented by the MerkleTree that the module is initialized for.
 /// It defines methods utilized by the module.
 pub trait MerklizedState<Types, const ARITY: usize>:
-    MerkleTreeScheme + Send + Sync + Clone + 'static
+    ForgetableMerkleTreeScheme<Commitment = Self::Commit> + Send + Sync + Clone + 'static
 where
     Types: NodeType,
 {
@@ -139,4 +166,11 @@ where
 
     /// Get the height of the tree
     fn tree_height() -> usize;
+
+    /// Insert a forgotten path into the tree.
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, ARITY>,
+    ) -> anyhow::Result<()>;
 }

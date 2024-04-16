@@ -33,8 +33,9 @@ use hotshot_types::{
 };
 
 use jf_primitives::merkle_tree::{
-    prelude::{Sha3Digest, Sha3Node},
+    prelude::{MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
+    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -134,6 +135,18 @@ impl MerklizedState<MockTypes, 8> for MockMerkleTree {
     }
 
     fn tree_height() -> usize {
-        3
+        12
+    }
+
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, 8>,
+    ) -> anyhow::Result<()> {
+        match proof.elem() {
+            Some(elem) => self.remember(key, elem, proof)?,
+            None => self.non_membership_remember(key, proof)?,
+        }
+        Ok(())
     }
 }

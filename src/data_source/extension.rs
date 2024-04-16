@@ -28,7 +28,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::prelude::MerklePath;
 use jf_primitives::merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
@@ -298,6 +297,14 @@ where
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.data_source.get_path(snapshot, key).await
     }
+
+    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
+        self.data_source.keys(snapshot).await
+    }
+
+    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
+        self.data_source.get_snapshot(snapshot).await
+    }
 }
 
 #[async_trait]
@@ -325,7 +332,7 @@ where
 {
     async fn insert_merkle_nodes(
         &mut self,
-        path: MerklePath<State::Entry, State::Key, State::T>,
+        path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
