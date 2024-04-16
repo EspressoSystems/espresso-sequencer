@@ -3,7 +3,7 @@ use std::{hash::Hash, marker::PhantomData};
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,7 +33,12 @@ pub struct AvailableBlockData<TYPES: NodeType> {
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
     pub vid_commitment: VidCommitment,
-    pub signature:
+    pub vid_precompute_data: VidPrecomputeData,
+    // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
+    pub fee_signature:
+        <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
+    // signature over the current response
+    pub message_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,
     pub _phantom: PhantomData<TYPES>,

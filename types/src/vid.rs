@@ -72,6 +72,8 @@ pub type VidCommitment = <VidSchemeType as VidScheme>::Commit;
 pub type VidCommon = <VidSchemeType as VidScheme>::Common;
 /// VID share type
 pub type VidShare = <VidSchemeType as VidScheme>::Share;
+/// VID PrecomputeData type
+pub type VidPrecomputeData = <VidSchemeType as Precomputable>::PrecomputeData;
 
 #[cfg(not(feature = "gpu-vid"))]
 /// Internal Jellyfish VID scheme

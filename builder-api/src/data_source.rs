@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 
 use crate::{
@@ -15,7 +14,7 @@ pub trait BuilderDataSource<TYPES: NodeType> {
     /// To get the list of available blocks
     async fn get_available_blocks(
         &self,
-        for_parent: &VidCommitment,
+        for_parent: &BuilderCommitment,
         sender: TYPES::SignatureKey,
         signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuildError>;

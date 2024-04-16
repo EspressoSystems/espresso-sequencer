@@ -25,13 +25,12 @@ use hotshot_example_types::block_types::TestTransaction;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
     traits::{
-        block_contents::{vid_commitment, BlockHeader},
+        block_contents::{precompute_vid_commitment, BlockHeader},
         election::Membership,
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
@@ -227,7 +226,7 @@ impl<TYPES: NodeType> ReadState for RandomBuilderSource<TYPES> {
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
     async fn get_available_blocks(
         &self,
-        _for_parent: &VidCommitment,
+        _for_parent: &BuilderCommitment,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuildError> {
@@ -331,7 +330,7 @@ impl<TYPES: NodeType> ReadState for SimpleBuilderSource<TYPES> {
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
     async fn get_available_blocks(
         &self,
-        _for_parent: &VidCommitment,
+        _for_parent: &BuilderCommitment,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuildError> {
@@ -507,7 +506,7 @@ fn build_block<TYPES: NodeType>(
 
     let commitment = block_payload.builder_commitment(&metadata);
 
-    let vid_commitment = vid_commitment(
+    let (vid_commitment, precompute_data) = precompute_vid_commitment(
         &block_payload.encode().unwrap().collect(),
         num_storage_nodes,
     );
@@ -524,6 +523,7 @@ fn build_block<TYPES: NodeType>(
         block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
         block_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
         block_info.extend_from_slice(commitment.as_ref());
+
         match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, &block_info) {
             Ok(sig) => sig,
             Err(e) => {
@@ -550,15 +550,28 @@ fn build_block<TYPES: NodeType>(
         }
     };
 
+    let signature_over_fee_info = {
+        let mut fee_info: Vec<u8> = Vec::new();
+        fee_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
+        fee_info.extend_from_slice(commitment.as_ref());
+        fee_info.extend_from_slice(vid_commitment.as_ref());
+        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, &fee_info) {
+            Ok(sig) => sig,
+            Err(e) => {
+                panic!("Failed to sign block: {}", e);
+            }
+        }
+    };
+
     let block = AvailableBlockData {
         block_payload,
         metadata,
         sender: pub_key.clone(),
-        signature: signature_over_block_info,
+        signature: signature_over_builder_commitment,
     };
     let metadata = AvailableBlockInfo {
         sender: pub_key.clone(),
-        signature: signature_over_builder_commitment,
+        signature: signature_over_block_info,
         block_hash: commitment,
         block_size,
         offered_fee: 123,
@@ -566,7 +579,9 @@ fn build_block<TYPES: NodeType>(
     };
     let header_input = AvailableBlockHeaderInput {
         vid_commitment,
-        signature: signature_over_vid_commitment,
+        vid_precompute_data: precompute_data,
+        message_signature: signature_over_vid_commitment.clone(),
+        fee_signature: signature_over_fee_info,
         sender: pub_key,
         _phantom: std::marker::PhantomData,
     };

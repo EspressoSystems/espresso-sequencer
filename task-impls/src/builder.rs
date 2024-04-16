@@ -8,7 +8,6 @@ use hotshot_builder_api::{
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -104,7 +103,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
     pub async fn get_available_blocks(
         &self,
-        parent: VidCommitment,
+        parent: BuilderCommitment,
         sender: TYPES::SignatureKey,
         signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuilderClientError> {

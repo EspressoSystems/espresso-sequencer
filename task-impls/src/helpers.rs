@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use async_broadcast::{SendError, Sender};
 #[cfg(async_executor_impl = "async-std")]
-use async_std::task::{spawn_blocking, JoinHandle};
+use async_std::task::JoinHandle;
 use hotshot_types::{
     data::VidDisperse,
     traits::{election::Membership, node_implementation::NodeType},
-    vid::vid_scheme,
+    vid::{vid_scheme, VidPrecomputeData},
 };
-use jf_primitives::vid::VidScheme;
+use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
 #[cfg(async_executor_impl = "tokio")]
-use tokio::task::{spawn_blocking, JoinHandle};
+use tokio::task::JoinHandle;
 
 /// Cancel a task
 pub async fn cancel_task<T>(task: JoinHandle<T>) {
@@ -42,20 +42,31 @@ pub async fn broadcast_event<E: Clone + std::fmt::Debug>(event: E, sender: &Send
 ///
 /// # Panics
 /// Panics if the VID calculation fails, this should not happen.
-pub async fn calculate_vid_disperse<TYPES: NodeType>(
-    txns: Vec<u8>,
-    membership: Arc<TYPES::Membership>,
+#[allow(clippy::panic)]
+pub fn calculate_vid_disperse<TYPES: NodeType>(
+    txns: &[u8],
+    membership: &Arc<TYPES::Membership>,
     view: TYPES::Time,
 ) -> VidDisperse<TYPES> {
     let num_nodes = membership.total_nodes();
-    let vid_disperse = spawn_blocking(move || {
-        #[allow(clippy::panic)]
-        vid_scheme(num_nodes).disperse(&txns).unwrap_or_else(|err|panic!("VID disperse failure:\n\t(num_storage nodes,payload_byte_len)=({num_nodes},{})\n\terror: : {err}", txns.len()))
-    })
-    .await;
-    #[cfg(async_executor_impl = "tokio")]
-    // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
-    let vid_disperse = vid_disperse.unwrap();
+    let vid_disperse = vid_scheme(num_nodes).disperse(txns).unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()));
+
+    VidDisperse::from_membership(view, vid_disperse, membership.as_ref())
+}
+
+/// Calculate the vid disperse information from the payload given a view and membership, and precompute data from builder
+///
+/// # Panics
+/// Panics if the VID calculation fails, this should not happen.
+#[allow(clippy::panic)]
+pub fn calculate_vid_disperse_using_precompute_data<TYPES: NodeType>(
+    txns: &Vec<u8>,
+    membership: &Arc<TYPES::Membership>,
+    view: TYPES::Time,
+    pre_compute_data: &VidPrecomputeData,
+) -> VidDisperse<TYPES> {
+    let num_nodes = membership.total_nodes();
+    let vid_disperse = vid_scheme(num_nodes).disperse_precompute(txns, pre_compute_data).unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()));
 
     VidDisperse::from_membership(view, vid_disperse, membership.as_ref())
 }
