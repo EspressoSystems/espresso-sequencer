@@ -31,8 +31,58 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_no_active_receiver() {
+        tracing::info!("Starting test_no_active_receiver");
+        setup_logging();
+        setup_backtrace();
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+        let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        let known_nodes_with_stake = vec![];
+        let non_staked_node_count = 0;
+        let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
+            known_nodes_with_stake,
+            non_staked_node_count,
+        )));
+
+        // Start the web server.
+        let mut app = App::<_, Error>::with_state(events_streamer.clone());
+
+        let hotshot_events_api =
+            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, Version01>(
+                &Options::default(),
+            )
+            .expect("Failed to define hotshot eventsAPI");
+
+        app.register_module("hotshot_events", hotshot_events_api)
+            .expect("Failed to register hotshot events API");
+
+        async_spawn(app.serve(api_url, STATIC_VER_0_1));
+        let total_count = 5;
+        let send_handle = async_spawn(async move {
+            let mut send_count = 0;
+            loop {
+                let tx_event = generate_event(send_count);
+                tracing::debug!("Before writing to events_source");
+                events_streamer
+                    .write()
+                    .await
+                    .handle_event(tx_event.clone())
+                    .await;
+                send_count += 1;
+                tracing::debug!("After writing to events_source");
+                if send_count >= total_count {
+                    break;
+                }
+            }
+        });
+
+        send_handle.await;
+    }
+
+    #[async_std::test]
     async fn test_event_stream() {
-        tracing::info!("Starting hotshot test_event_stream");
+        tracing::info!("Starting test_event_stream");
         setup_logging();
         setup_backtrace();
 
@@ -107,11 +157,11 @@ mod tests {
                 tracing::info!("Received event in Client 1: {:?}", event);
                 receive_count += 1;
                 if receive_count > total_count {
-                    tracing::info!("Clien1 Received all sent events, exiting loop");
+                    tracing::info!("Client1 Received all sent events, exiting loop");
                     break;
                 }
             }
-            // Offest 1 is due to the startup event info
+            // Offset 1 is due to the startup event info
             assert_eq!(receive_count, total_count + 1);
         });
 
@@ -127,7 +177,7 @@ mod tests {
                     break;
                 }
             }
-            // Offest 1 is due to the startup event info
+            // Offset 1 is due to the startup event info
             assert_eq!(receive_count, total_count + 1);
         });
 

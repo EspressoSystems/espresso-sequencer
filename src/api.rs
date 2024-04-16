@@ -16,7 +16,7 @@ use tide_disco::api::{Api, ApiError};
 use toml::{map::Entry, Value};
 use vbs::version::StaticVersionType;
 
-pub(crate) fn load_api<State: 'static, Error : 'static, Ver: StaticVersionType + 'static>(
+pub(crate) fn load_api<State: 'static, Error: 'static, Ver: StaticVersionType + 'static>(
     path: Option<impl AsRef<Path>>,
     default: &str,
     extensions: impl IntoIterator<Item = Value>,
