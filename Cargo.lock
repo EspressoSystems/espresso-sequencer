@@ -8440,6 +8440,7 @@ dependencies = [
  "bytesize",
  "clap",
  "cld",
+ "coins-bip32",
  "committable",
  "contract-bindings",
  "derivative",

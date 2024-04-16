@@ -32,6 +32,7 @@ blake3 = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
+coins-bip32 = "0.8.7"
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
