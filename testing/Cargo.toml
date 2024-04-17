@@ -10,7 +10,7 @@ default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
 gpu-vid = ["hotshot-types/gpu-vid"]
-proposal-task = ["hotshot/proposal-task"]
+proposal-dependency-tasks = ["hotshot/dependency-tasks"]
 
 [dependencies]
 automod = "1.0.14"
