@@ -311,16 +311,16 @@ impl Options {
                 "fee-state",
                 endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
             )?;
+
+            context.spawn(
+                "merklized state storage update loop",
+                update_state_storage_loop(state, context.node_state()),
+            );
         }
 
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
         }
-
-        context.spawn(
-            "merklized state storage update loop",
-            update_state_storage_loop(state, context.node_state()),
-        );
 
         context.spawn(
             "API server",
