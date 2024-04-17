@@ -321,7 +321,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
     use ark_bn254::{g1::Config as Param254, Fq as Fq254, Fr as Fr254};
     use ark_ec::{
@@ -333,6 +332,8 @@ mod tests {
     use jf_relation::{
         errors::CircuitError, gadgets::ecc::SWToTEConParam, Circuit, PlonkCircuit, Variable,
     };
+
+    use super::*;
 
     #[test]
     fn crypto_test_vk_aggregate_sw_circuit() -> Result<(), CircuitError> {

@@ -193,11 +193,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use jf_primitives::signatures::{
         bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
         SignatureScheme,
     };
+
+    use super::*;
 
     macro_rules! test_quorum_certificate {
         ($aggsig:tt) => {
