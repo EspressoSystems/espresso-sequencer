@@ -97,8 +97,6 @@ use crate::{
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
-use jf_primitives::merkle_tree::prelude::MerkleProof;
-
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::sleep,
@@ -111,7 +109,7 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::{prelude::MerklePath, MerkleTreeScheme};
+use jf_primitives::merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 
 use std::{
     cmp::min,
@@ -560,7 +558,7 @@ where
 {
     async fn insert_merkle_nodes(
         &mut self,
-        path: MerklePath<State::Entry, State::Key, State::T>,
+        path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
         traversal_path: Vec<usize>,
         block_number: u64,
     ) -> QueryResult<()> {
@@ -595,6 +593,26 @@ where
             .await
             .storage
             .get_path(snapshot, key)
+            .await
+    }
+
+    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
+        self.fetcher
+            .storage
+            .read()
+            .await
+            .storage
+            .keys(snapshot)
+            .await
+    }
+
+    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
+        self.fetcher
+            .storage
+            .read()
+            .await
+            .storage
+            .get_snapshot(snapshot)
             .await
     }
 }

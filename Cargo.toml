@@ -77,8 +77,8 @@ derive_more = "0.99"
 either = "1.10"
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
 itertools = "0.12.1"
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3" }
 prometheus = "0.13"
@@ -135,6 +135,6 @@ generic-array = "0.14"
 hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
 portpicker = "0.1"
 rand = "0.8"
+reqwest = "0.12.3"
 spin_sleep = "1.2"
 tempfile = "3.10"
-reqwest = "0.12.3"
