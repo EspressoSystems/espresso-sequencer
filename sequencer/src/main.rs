@@ -49,6 +49,7 @@ where
     S: DataSourceOptions,
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
+    let stake_table_capacity = opt.stake_table_capacity;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
@@ -121,6 +122,7 @@ where
                             storage,
                             builder_params,
                             l1_params,
+                            stake_table_capacity,
                             bind_version,
                         )
                         .await
@@ -139,6 +141,7 @@ where
                 storage_opt.create().await?,
                 builder_params,
                 l1_params,
+                stake_table_capacity,
                 bind_version,
             )
             .await?

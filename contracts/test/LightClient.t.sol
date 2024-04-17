@@ -10,13 +10,13 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientTest as LCTest } from "./mocks/LightClientTest.sol";
+import { LightClientMock as LCMock } from "./mocks/LightClientMock.sol";
 import { DeployLightClientTestScript } from "./DeployLightClientTestScript.s.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
-    LCTest public lc;
+    LCMock public lc;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
@@ -27,7 +27,7 @@ contract LightClientCommonTest is Test {
     address public permissionedProver = makeAddr("prover");
 
     function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
-        lc = new LCTest(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch);
     }
 
     function deployAndInitProxy(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
@@ -38,7 +38,7 @@ contract LightClientCommonTest is Test {
         (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
 
         //cast the proxy to be of type light client test
-        lc = LCTest(lcTestProxy);
+        lc = LCMock(lcTestProxy);
 
         //set permissioned flag
         vm.expectEmit(true, true, true, true);
@@ -104,7 +104,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         private
     {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -199,7 +199,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         (address newLcTestProxy,,) = deployer.deployContract(genesis, BLOCKS_PER_EPOCH_TEST, admin);
 
         //cast the proxy to be of type light client test
-        LCTest newLc = LCTest(newLcTestProxy);
+        LCMock newLc = LCMock(newLcTestProxy);
 
         //assert that the contract is not permissioned
         assert(newLc.permissionedProverMode() == false);
@@ -217,7 +217,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         (address newLcTestProxy,,) = deployer.deployContract(genesis, BLOCKS_PER_EPOCH_TEST, admin);
 
         //cast the proxy to be of type light client test
-        LCTest newLc = LCTest(newLcTestProxy);
+        LCMock newLc = LCMock(newLcTestProxy);
 
         //set permissioned prover mode to true but do not set the permissionedProver address so that
         // it's still address(0)

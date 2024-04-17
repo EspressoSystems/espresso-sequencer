@@ -12,7 +12,7 @@ ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
-ark-srs = { git = "https://github.com/alxiong/ark-srs", tag = "v0.1.0" }
+ark-srs = { workspace = true }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
