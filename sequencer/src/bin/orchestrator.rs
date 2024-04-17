@@ -11,6 +11,7 @@ use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
 use std::str::FromStr;
 use std::time::Duration;
+use url::Url;
 
 #[derive(Parser)]
 struct Args {
@@ -128,7 +129,7 @@ struct Args {
 
     /// HotShot builder URL
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
-    builder_url: String,
+    builder_url: Url,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -236,6 +237,7 @@ async fn main() {
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
     config.config.min_transactions = args.min_transactions;
+    config.config.builder_url = args.builder_url;
 
     run_orchestrator(
         config,
