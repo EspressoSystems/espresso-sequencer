@@ -7,6 +7,7 @@ edition = "2021"
 
 [features]
 testing = ["hotshot-testing"]
+libp2p = []
 
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
@@ -44,6 +45,7 @@ tagged-base64 = { workspace = true }
 zeroize = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-contract-adapter ={ path = "../contracts/rust/adapter" }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
