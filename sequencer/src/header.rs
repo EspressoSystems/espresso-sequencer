@@ -415,7 +415,7 @@ mod test_headers {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
-        types::{Address, RecoveryMessage},
+        types::{Address, RecoveryMessage, U256},
         utils::Anvil,
     };
 
@@ -695,8 +695,21 @@ mod test_headers {
         let mut proposal = parent_header.clone();
         let mut delta = Delta::default();
 
+        // Pass a different chain config to trigger a chain config validation error.
+        let result = validate_and_apply_proposal(
+            ChainConfig::new(U256::zero(), 0u64, U256::zero()),
+            &mut validated_state,
+            &mut delta,
+            &parent_leaf,
+            &proposal,
+            vec![],
+        )
+        .unwrap_err();
+        assert!(format!("{}", result.root_cause()).starts_with("Invalid Chain Config:"));
+
         // Advance `proposal.height` to trigger validation error.
         let result = validate_and_apply_proposal(
+            genesis.instance_state.chain_config,
             &mut validated_state,
             &mut delta,
             &parent_leaf,
@@ -709,10 +722,10 @@ mod test_headers {
             "Invalid Height Error: 0, 0"
         );
 
-        // proposed `Header` root should include parent +
-        // parent.commit
+        // proposed `Header` root should include parent + parent.commit
         proposal.height += 1;
         let result = validate_and_apply_proposal(
+            genesis.instance_state.chain_config,
             &mut validated_state,
             &mut delta,
             &parent_leaf,
@@ -789,6 +802,7 @@ mod test_headers {
 
         let mut delta = Delta::default();
         validate_and_apply_proposal(
+            genesis.instance_state.chain_config,
             &mut proposal_state,
             &mut delta,
             &parent_leaf,

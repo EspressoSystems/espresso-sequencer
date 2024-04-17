@@ -1,4 +1,4 @@
-use crate::{Header, Leaf, NodeState, SeqTypes};
+use crate::{ChainConfig, Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -139,6 +139,7 @@ impl ValidatedState {
 }
 
 pub fn validate_and_apply_proposal(
+    expected_chain_config: ChainConfig,
     state: &mut ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -146,6 +147,17 @@ pub fn validate_and_apply_proposal(
     receipts: Vec<FeeInfo>,
 ) -> anyhow::Result<()> {
     let parent_header = parent_leaf.get_block_header();
+
+    // validate `ChainConfig`
+    anyhow::ensure!(
+        proposal.chain_config == expected_chain_config.into(),
+        anyhow::anyhow!(
+            "Invalid Chain Config: local={:?}, proposal={:?}",
+            expected_chain_config,
+            proposal.chain_config
+        )
+    );
+
     // validate height
     anyhow::ensure!(
         proposal.height == parent_header.height + 1,
@@ -275,6 +287,7 @@ fn validate_and_charge_builder(
 /// It assumes that all state required to validate and apply the header
 /// is available in the `validated_state`.
 fn validate_and_apply_header(
+    chain_config: ChainConfig,
     validated_state: &mut ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -283,6 +296,7 @@ fn validate_and_apply_header(
 ) -> Result<(), BlockError> {
     // validate proposed header against parent
     match validate_and_apply_proposal(
+        chain_config,
         validated_state,
         delta,
         parent_leaf,
@@ -331,12 +345,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
-
-        // validate `ChainConfig`
-        if proposed_header.chain_config != instance.chain_config.into() {
-            tracing::warn!("Invalid Proposal: Invalid Chain Config");
-            return Err(BlockError::InvalidBlockHeader);
-        }
 
         let accounts = std::iter::once(proposed_header.fee_info.account);
 
@@ -403,6 +411,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Lastly validate and apply the header
         validate_and_apply_header(
+            instance.chain_config,
             &mut validated_state,
             &mut delta,
             parent_leaf,
