@@ -132,7 +132,7 @@ mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
-    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+    pub const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
     pub struct TestNetwork<P: SequencerPersistence> {
         pub server: SequencerContext<network::Memory, P, SequencerVersion>,
@@ -811,7 +811,6 @@ mod test {
     use self::{
         data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
     };
-
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
@@ -822,14 +821,19 @@ mod test {
         Header, NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
-    use es_version::SequencerVersion;
-    use futures::stream::{StreamExt, TryStreamExt};
+    use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use futures::{
+        future,
+        stream::{StreamExt, TryStreamExt},
+    };
     use hotshot::types::EventType;
     use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
-    use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
+    use hotshot_types::{
+        event::LeafInfo,
+        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+    };
     use jf_primitives::merkle_tree::{
         prelude::{MerkleProof, Sha3Node},
         AppendableMerkleTreeScheme,
@@ -1013,6 +1017,97 @@ mod test {
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let height = leaf.get_block_header().height;
+                let leaf_builder = leaf.get_block_header().fee_info.account();
+                tracing::info!(
+                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
+                );
+                if height > 1 && leaf_builder == builder {
+                    break 'outer;
+                }
+            }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_catchup_live() {
+        setup_logging();
+        setup_backtrace();
+
+        // Similar to `test_catchup`, but instead of _starting_ with a non-trivial state and a node
+        // that is missing the state, we start consensus normally, wait for it to make some
+        // progress, stop one node and let it fall behind, then start it again and check that it
+        // catches up.
+
+        // Start a sequencer network, using the query service for catchup.
+        let port = pick_unused_port().expect("No ports free");
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }).catchup(Default::default()),
+            Default::default(),
+            [NoStorage; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+        )
+        .await;
+
+        // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
+        let mut events = network.peers[0].get_event_stream();
+        loop {
+            let event = events.next().await.unwrap();
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            if leaf_chain[0].leaf.get_height() > 0 {
+                break;
+            }
+        }
+
+        // Shut down and restart replica 0. We don't just stop consensus and restart it; we fully
+        // drop the node and recreate it so it loses all of its temporary state and starts off from
+        // genesis. It should be able to catch up by listening to proposals and then rebuild its
+        // state from its peers.
+        tracing::info!("shutting down node");
+        network.peers.remove(0);
+
+        // Wait for a few blocks to pass while the node is down, so it falls behind.
+        network
+            .server
+            .get_event_stream()
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        tracing::info!("restarting node");
+        let node = network
+            .cfg
+            .init_node(
+                1,
+                ValidatedState::default(),
+                NoStorage,
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()]),
+                &NoMetrics,
+                test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                SEQUENCER_VERSION,
+            )
+            .await;
+        let mut events = node.get_event_stream();
+
+        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
+        // up.
+        let builder = TestConfig::builder_key(1).fee_account();
+        'outer: loop {
+            let event = events.next().await.unwrap();
+            tracing::info!(?event, "restarted node got event");
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
+                let height = leaf.get_height();
                 let leaf_builder = leaf.get_block_header().fee_info.account();
                 tracing::info!(
                     "waiting for block from {builder}, block {height} is from {leaf_builder}",
