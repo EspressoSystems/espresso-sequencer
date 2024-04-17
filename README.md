@@ -1,4 +1,4 @@
-# Espresso Sequencer
+# Espresso
 
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
 [![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
@@ -7,9 +7,9 @@
 [![Ubuntu](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
-The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
-Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2
-rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
+Espresso offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
+Consisting of a marketplace for shared sequencing, the HotShot finality gadget, and the Tiramisu data availability layer, applications such as
+rollups and general layer-2 chains can leverage Espresso to give developers and end users fast confirmations, low fees,
 and robust infrastructure.
 
 [Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
@@ -19,7 +19,7 @@ and robust infrastructure.
 # Running the demo
 
 Refer to [sequencer-example-l2](https://github.com/EspressoSystems/sequencer-example-l2) for instructions on how to run
-a dockerized Espresso Sequencer network with an example Layer 2 rollup application.
+a dockerized Espresso network with an example Layer 2 rollup application.
 
 # Development
 
