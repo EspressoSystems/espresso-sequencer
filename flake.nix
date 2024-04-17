@@ -111,7 +111,7 @@
         RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
         RUST_BACKTRACE = 1;
         RUST_LOG = "info";
-        RUSTFLAGS=" --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+        RUSTFLAGS=" --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
         # Use a distinct target dir for builds from within nix shells.
         CARGO_TARGET_DIR = "target/nix";
       in {

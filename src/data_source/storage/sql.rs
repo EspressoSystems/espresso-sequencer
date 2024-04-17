@@ -1212,7 +1212,8 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         let mut traversal_path = traversal_path.iter();
         let txn = self.transaction().await?;
 
-        // All the nodes are collected here, They depend on the hash ids which are returned after hashes are upserted in the db
+        // All the nodes are collected here, They depend on the hash ids which are returned after
+        // hashes are upserted in the db
         let mut nodes = Vec::new();
 
         for node in path.iter() {
@@ -1447,8 +1448,8 @@ where
                 let value = hashes.get(hash_id).ok_or(QueryError::Error {
                     message: format!("node's value references non-existent hash {hash_id}"),
                 })?;
-                // If the row has children then its a branch
                 match (children, children_bitvec, index, entry) {
+                    // If the row has children then its a branch
                     (Some(children), Some(children_bitvec), None, None) => {
                         let mut children = children.iter();
 
@@ -1482,7 +1483,7 @@ where
                             children: child_nodes,
                         });
                     }
-                    // No children but if there is an entry then its a leaf
+                    // If it has an entry, it's a leaf
                     (None, None, Some(index), Some(entry)) => {
                         proof_path.push_back(MerkleNode::Leaf {
                             value: State::T::deserialize_compressed(value.as_slice())
@@ -1493,7 +1494,7 @@ where
                                 .map_err(ParseError::Serde)?,
                         });
                     }
-                    // No children and no entry then its an Empty Node
+                    // Otherwise, it's empty.
                     (None, None, Some(_), None) => {
                         proof_path.push_back(MerkleNode::Empty);
                     }
@@ -1507,19 +1508,18 @@ where
         }
 
         // Reconstruct the merkle commitment from the path
-        let init = match proof_path.front() {
-            Some(MerkleNode::Leaf { value, .. }) => *value,
-            _ => {
-                // If the path ends in a branch (or, as a special case, if the path and thus the
-                // entire tree is empty), we are looking up an entry that is not present in the
-                // tree. We always store all the nodes on all the paths to all the entries in the
-                // tree, so the only nodes we could be missing are empty nodes from unseen entries.
-                // Thus, we can reconstruct what the path should be by prepending empty nodes.
-                while proof_path.len() <= State::tree_height() {
-                    proof_path.push_front(MerkleNode::Empty);
-                }
-                State::T::default()
+        let init = if let Some(MerkleNode::Leaf { value, .. }) = proof_path.front() {
+            *value
+        } else {
+            // If the path ends in a branch (or, as a special case, if the path and thus the entire
+            // tree is empty), we are looking up an entry that is not present in the tree. We always
+            // store all the nodes on all the paths to all the entries in the tree, so the only
+            // nodes we could be missing are empty nodes from unseen entries. Thus, we can
+            // reconstruct what the path should be by prepending empty nodes.
+            while proof_path.len() <= State::tree_height() {
+                proof_path.push_front(MerkleNode::Empty);
             }
+            State::T::default()
         };
         let commitment_from_path = traversal_path
             .iter()
@@ -1539,13 +1539,24 @@ where
                             .collect::<QueryResult<Vec<_>>>()?;
 
                         if data[*branch as usize] != val {
-                            return Err(QueryError::Error {
-                                message: "Some earlier state was used to calculate root commitment"
-                                    .to_string(),
-                            });
+                            // This can only happen if data is missing: we have an old version of
+                            // one of the nodes in the path, which is why it is not matching up with
+                            // its parent.
+                            tracing::warn!(
+                                ?key,
+                                parent = ?data[*branch as usize],
+                                child = ?val,
+                                branch = %*branch,
+                                %created,
+                                %merkle_commitment,
+                                "missing data in merklized state; parent-child mismatch",
+                            );
+                            return Err(QueryError::Missing);
                         }
 
-                        State::Digest::digest(&data).map_err(|_| QueryError::Missing)
+                        State::Digest::digest(&data).map_err(|err| QueryError::Error {
+                            message: format!("failed to update digest: {err:#}"),
+                        })
                     }
                     MerkleNode::Empty => Ok(init),
                     _ => Err(QueryError::Error {
@@ -1557,8 +1568,7 @@ where
         if commitment_from_path != merkle_commitment.digest() {
             return Err(QueryError::Error {
                 message:
-                    "Commitment calcuated from merkle path does not match the commitment in the header"
-                        .to_string(),
+                    format!("Commitment calcuated from merkle path ({commitment_from_path:?}) does not match the commitment in the header ({:?})", merkle_commitment.digest()),
             });
         }
 
@@ -3667,5 +3677,90 @@ mod test {
 
         // Ensure the original snapshot is still valid.
         validate(&storage, &test_tree, &expected, 1).await;
+    }
+
+    #[async_std::test]
+    async fn test_merklized_state_missing_leaf() {
+        // Check that if a leaf is missing but its ancestors are present/key is in the tree, we
+        // catch it rather than interpreting the entry as an empty node by default. Note that this
+        // scenario should be impossible in normal usage, since we never store or delete partial
+        // paths. But we should never return an invalid proof even in extreme cases like database
+        // corruption.
+        setup_test();
+
+        for tree_size in 1..=3 {
+            let db = TmpDb::init().await;
+            let mut storage = SqlStorage::connect(db.config()).await.unwrap();
+
+            // Define a test tree
+            let mut test_tree = MockMerkleTree::new(MockMerkleTree::tree_height());
+            for i in 0..tree_size {
+                test_tree.update(i, i).unwrap();
+            }
+
+            // Insert a header with the tree commitment.
+            storage
+                .query_opt(
+                    "INSERT INTO HEADER VALUES (0, 'hash', 'hash', 0, $1)",
+                    [
+                        sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
+                    ],
+                )
+                .await
+                .unwrap();
+
+            // Insert Merkle nodes.
+            for i in 0..tree_size {
+                let proof = test_tree.lookup(i).expect_ok().unwrap().1;
+                let traversal_path =
+                    ToTraversalPath::<8>::to_traversal_path(&i, test_tree.height());
+                UpdateStateData::<_, MockMerkleTree, 8>::insert_merkle_nodes(
+                    &mut storage,
+                    proof,
+                    traversal_path,
+                    0,
+                )
+                .await
+                .unwrap();
+            }
+            storage.set_last_state_height(0).await.unwrap();
+            storage.commit().await.unwrap();
+
+            // Test that we can get all the entries.
+            let snapshot = Snapshot::<MockTypes, MockMerkleTree, 8>::Index(0);
+            for i in 0..tree_size {
+                let proof = test_tree.lookup(i).expect_ok().unwrap().1;
+                assert_eq!(proof, storage.get_path(snapshot, i).await.unwrap());
+                assert_eq!(*proof.elem().unwrap(), i);
+            }
+
+            // Now delete the leaf node for the last entry we inserted, corrupting the database.
+            let index = serde_json::to_value(tree_size - 1).unwrap();
+            storage
+                .transaction()
+                .await
+                .unwrap()
+                .execute_one_with_retries(
+                    &format!(
+                        "DELETE FROM {} WHERE index = $1",
+                        MockMerkleTree::state_type()
+                    ),
+                    [index],
+                )
+                .await
+                .unwrap();
+            storage.commit().await.unwrap();
+
+            // Test that we can still get the entries we didn't delete.
+            for i in 0..tree_size - 1 {
+                let proof = test_tree.lookup(i).expect_ok().unwrap().1;
+                assert_eq!(proof, storage.get_path(snapshot, i).await.unwrap());
+                assert_eq!(*proof.elem().unwrap(), i);
+            }
+
+            // Looking up the entry we deleted fails, rather than return an invalid path.
+            let err = storage.get_path(snapshot, tree_size - 1).await.unwrap_err();
+            assert!(matches!(err, QueryError::Missing));
+        }
     }
 }
