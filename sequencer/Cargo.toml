@@ -92,8 +92,8 @@ url = { workspace = true }
 versioned-binary-serialization = { workspace = true }
 
 # CDN imports
-cdn-broker.workspace = true
-cdn-marshal.workspace = true
+cdn-broker = { workspace = true }
+cdn-marshal = { workspace = true }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
