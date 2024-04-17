@@ -2,13 +2,14 @@
 //! a `Broker` object.
 
 use anyhow::{Context, Result};
-use cdn_broker::{Broker, Config, ConfigBuilder};
+use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config, ConfigBuilder};
 use clap::Parser;
 
-use hotshot::traits::implementations::{KeyPair, ProductionDef, WrappedSignatureKey};
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::traits::signature_key::SignatureKey;
-use sequencer::SeqTypes;
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use sequencer::{
+    network::cdn::{ProductionDef, WrappedSignatureKey},
+    SeqTypes,
+};
 use sha2::Digest;
 
 #[derive(Parser, Debug)]
