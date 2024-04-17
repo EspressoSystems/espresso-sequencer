@@ -2,7 +2,6 @@ use crate::{api, persistence};
 use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
-use ethers::types::Address;
 use ethers::types::{Address, U256};
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;

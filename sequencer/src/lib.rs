@@ -276,6 +276,7 @@ pub struct L1Params {
     pub url: Url,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
@@ -285,7 +286,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     stake_table_capacity: usize,
     bind_version: Ver,
     chain_config: ChainConfig,
-) -> anyhow::Result<SequencerContext<network::Combined, P, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
