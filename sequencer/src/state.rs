@@ -30,6 +30,7 @@ use jf_primitives::{
     },
 };
 use num_traits::CheckedSub;
+use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::Add, str::FromStr};
 use typenum::{Unsigned, U3};
@@ -559,14 +560,7 @@ impl Committable for FeeInfo {
     Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
 )]
 pub struct FeeAmount(U256);
-impl FeeAmount {
-    /// Return array containing underlying bytes of inner `U256` type
-    pub(crate) fn to_fixed_bytes(self) -> [u8; 32] {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        bytes
-    }
-}
+impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
     fn from(amt: u64) -> Self {

@@ -2,23 +2,17 @@ use crate::state::FeeAmount;
 use commit::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::U256;
+use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, From, Into)]
 pub struct ChainId(U256);
 
+impl_to_fixed_bytes!(ChainId, U256);
+
 impl From<u16> for ChainId {
     fn from(id: u16) -> Self {
         Self(id.into())
-    }
-}
-
-impl ChainId {
-    // TODO: this duplicate code, consider a macro for U256 newtypes
-    pub(crate) fn to_fixed_bytes(self) -> [u8; 32] {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        bytes
     }
 }
 
