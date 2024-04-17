@@ -1339,7 +1339,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot",
- "hotshot-builder-api",
+ "hotshot-builder-api 0.1.7 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
  "hotshot-builder-core",
  "hotshot-events-service",
  "hotshot-orchestrator",
@@ -3971,7 +3971,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3994,7 +3994,7 @@ dependencies = [
  "futures",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
  "hotshot-types",
  "hotshot-web-server",
  "jf-primitives 0.4.3",
@@ -4033,6 +4033,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-builder-api"
+version = "0.1.7"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
+dependencies = [
+ "async-trait",
+ "clap",
+ "committable",
+ "derive_more",
+ "futures",
+ "hotshot-types",
+ "serde",
+ "snafu 0.8.2",
+ "tagged-base64 0.4.0",
+ "tide-disco",
+ "toml",
+ "vbs",
+]
+
+[[package]]
 name = "hotshot-builder-core"
 version = "0.1.7"
 source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.7#f9a23191973e63e616e27d9a2046e4a64cec8824"
@@ -4046,7 +4065,7 @@ dependencies = [
  "committable",
  "futures",
  "hotshot",
- "hotshot-builder-api",
+ "hotshot-builder-api 0.1.7 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
  "hotshot-events-service",
  "hotshot-types",
  "serde",
@@ -4125,7 +4144,37 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
+ "hotshot-types",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "snafu 0.8.2",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "hotshot-example-types"
+version = "0.5.40"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bitvec",
+ "committable",
+ "either",
+ "ethereum-types",
+ "futures",
+ "hotshot",
+ "hotshot-task",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
  "hotshot-types",
  "rand 0.8.5",
  "serde",
@@ -4140,7 +4189,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4151,7 +4200,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4201,7 +4250,7 @@ dependencies = [
  "espresso-macros",
  "futures",
  "hotshot",
- "hotshot-example-types",
+ "hotshot-example-types 0.5.40 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
  "hotshot-testing",
  "hotshot-types",
  "include_dir",
@@ -4234,7 +4283,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4301,7 +4350,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4328,7 +4377,40 @@ dependencies = [
  "committable",
  "either",
  "futures",
- "hotshot-builder-api",
+ "hotshot-builder-api 0.1.7 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
+ "hotshot-task",
+ "hotshot-types",
+ "jf-primitives 0.4.3",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.2",
+ "surf-disco",
+ "tagged-base64 0.4.0",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-task-impls"
+version = "0.5.40"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "chrono",
+ "committable",
+ "either",
+ "futures",
+ "hotshot-builder-api 0.1.7 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
  "hotshot-task",
  "hotshot-types",
  "jf-primitives 0.4.3",
@@ -4347,7 +4429,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4361,12 +4443,12 @@ dependencies = [
  "ethereum-types",
  "futures",
  "hotshot",
- "hotshot-builder-api",
- "hotshot-example-types",
+ "hotshot-builder-api 0.1.7 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
+ "hotshot-example-types 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
  "hotshot-macros",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus)",
  "hotshot-types",
  "jf-primitives 0.4.3",
  "lru 0.12.3",
@@ -4386,7 +4468,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4437,7 +4519,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4680,7 +4762,7 @@ dependencies = [
  "iana-time-zone-haiku",
  "js-sys",
  "wasm-bindgen",
- "windows-core 0.52.0",
+ "windows-core",
 ]
 
 [[package]]
@@ -5633,7 +5715,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=jb/start-consensus#1d977bdd63a9424640c566b7c9a7562639811152"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -10880,7 +10962,7 @@ version = "0.51.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca229916c5ee38c2f2bc1e9d8f04df975b4bd93f9955dc69fabb5d91270045c9"
 dependencies = [
- "windows-core 0.51.1",
+ "windows-core",
  "windows-targets 0.48.5",
 ]
 
@@ -10891,15 +10973,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1f8cf84f35d2db49a46868f947758c7a1138116f7fac3bc844f43ade1292e64"
 dependencies = [
  "windows-targets 0.48.5",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
-dependencies = [
- "windows-targets 0.52.5",
 ]
 
 [[package]]

@@ -98,3 +98,12 @@ vbs = "0.1"
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
+
+[patch."https://github.com/EspressoSystems/hotshot"]
+hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-task = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems//hotshot", branch = "jb/start-consensus" }

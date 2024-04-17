@@ -8,8 +8,10 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{ElectionConfig, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber};
-use anyhow::Context;
+use crate::{
+    ElectionConfig, Header, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber,
+};
+use anyhow::{ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use committable::Committable;
@@ -58,15 +60,18 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     ///
     /// If the height of the new leaf is not greater than the height of the previous decided leaf,
     /// storage is not updated.
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()>;
+    async fn save_anchor_leaf(
+        &mut self,
+        leaf: &Leaf,
+        qc: &QuorumCertificate<SeqTypes>,
+    ) -> anyhow::Result<()>;
 
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
 
     /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
-    async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>>;
-
-    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>>;
+    async fn load_anchor_leaf(&self)
+        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
 
     async fn load_vid_share(
         &self,
@@ -77,8 +82,8 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
 
-    /// Load the validated state after block `height`, if available.
-    async fn load_validated_state(&self, height: u64) -> anyhow::Result<ValidatedState>;
+    /// Load the validated state after `header`, if available.
+    async fn load_validated_state(&self, header: &Header) -> anyhow::Result<ValidatedState>;
 
     /// Load the latest known consensus state.
     ///
@@ -102,14 +107,24 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let (leaf, validated_state) = match self
+        let (leaf, high_qc, validated_state) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
         {
-            Some(leaf) => {
-                tracing::info!(?leaf, "starting from saved leaf");
-                let validated_state = match self.load_validated_state(leaf.get_height()).await {
+            Some((leaf, high_qc)) => {
+                tracing::info!(?leaf, ?high_qc, "starting from saved leaf");
+                ensure!(
+                    leaf.get_view_number() == high_qc.view_number,
+                    format!(
+                        "loaded anchor leaf from view {:?}, but high QC is from view {:?}",
+                        leaf.get_view_number(),
+                        high_qc.view_number
+                    )
+                );
+
+                let validated_state = match self.load_validated_state(leaf.get_block_header()).await
+                {
                     Ok(validated_state) => Some(Arc::new(validated_state)),
                     Err(err) => {
                         tracing::error!(
@@ -118,12 +133,14 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                         None
                     }
                 };
-                (leaf, validated_state)
+
+                (leaf, high_qc, validated_state)
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&state),
+                    QuorumCertificate::genesis(),
                     Some(Arc::new(ValidatedState::genesis(&state).0)),
                 )
             }
@@ -134,13 +151,8 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         // restart, and prevents unnecessary catchup from starting in a view earlier than the anchor
         // leaf.
         let view = max(highest_voted_view, leaf.get_view_number());
-        tracing::info!(?leaf, ?view, "loaded consensus state");
 
-        let high_qc = self
-            .load_high_qc()
-            .await?
-            .unwrap_or_else(QuorumCertificate::genesis);
-
+        tracing::info!(?leaf, ?view, ?high_qc, "loaded consensus state");
         Ok(HotShotInitializer::from_reload(
             leaf,
             state,
@@ -154,9 +166,17 @@ pub trait SequencerPersistence: Send + Sync + 'static {
 
     /// Update storage based on an event from consensus.
     async fn handle_event(&mut self, event: &Event<SeqTypes>) {
-        if let EventType::Decide { leaf_chain, .. } = &event.event {
+        if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                if let Err(err) = self.save_anchor_leaf(leaf).await {
+                if qc.view_number != leaf.get_view_number() {
+                    tracing::error!(
+                        leaf_view = ?leaf.get_view_number(),
+                        qc_view = ?qc.view_number,
+                        "latest leaf and QC are from different views!",
+                    );
+                    return;
+                }
+                if let Err(err) = self.save_anchor_leaf(leaf, qc).await {
                     tracing::error!(
                         ?leaf,
                         hash = %leaf.commit(),
@@ -184,7 +204,6 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         view: ViewNumber,
         action: HotShotAction,
     ) -> anyhow::Result<()>;
-    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
@@ -210,7 +229,7 @@ mod persistence_tests {
 
     use hotshot::types::SignatureKey;
     use hotshot::{traits::BlockPayload, types::BLSPubKey};
-    use hotshot_types::{event::HotShotAction, vid::vid_scheme, vote::HasViewNumber};
+    use hotshot_types::{event::HotShotAction, vid::vid_scheme};
     use jf_primitives::vid::VidScheme;
     use rand::{RngCore, SeedableRng};
     use sha2::{Digest, Sha256};
@@ -229,18 +248,31 @@ mod persistence_tests {
 
         // Store a leaf.
         let leaf1 = Leaf::genesis(&NodeState::mock());
-        storage.save_anchor_leaf(&leaf1).await.unwrap();
-        assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf1);
+        let qc1 = QuorumCertificate::genesis();
+        storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
+        assert_eq!(
+            storage.load_anchor_leaf().await.unwrap().unwrap(),
+            (leaf1.clone(), qc1.clone())
+        );
 
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
         leaf2.get_block_header_mut().height += 1;
-        storage.save_anchor_leaf(&leaf2).await.unwrap();
-        assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf2);
+        let mut qc2 = qc1.clone();
+        qc2.data.leaf_commit = leaf2.commit();
+        qc2.vote_commitment = qc2.data.commit();
+        storage.save_anchor_leaf(&leaf2, &qc2).await.unwrap();
+        assert_eq!(
+            storage.load_anchor_leaf().await.unwrap().unwrap(),
+            (leaf2.clone(), qc2.clone())
+        );
 
         // Store an old leaf, make sure storage is unchanged.
-        storage.save_anchor_leaf(&leaf1).await.unwrap();
-        assert_eq!(storage.load_anchor_leaf().await.unwrap().unwrap(), leaf2);
+        storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
+        assert_eq!(
+            storage.load_anchor_leaf().await.unwrap().unwrap(),
+            (leaf2, qc2)
+        );
     }
 
     #[async_std::test]
@@ -284,57 +316,6 @@ mod persistence_tests {
         assert_eq!(
             storage.load_latest_acted_view().await.unwrap().unwrap(),
             view2
-        );
-    }
-
-    #[async_std::test]
-    pub async fn test_high_qc<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
-
-        let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
-
-        assert_eq!(storage.load_high_qc().await.unwrap(), None);
-
-        let mut qc = QuorumCertificate::genesis();
-
-        storage.update_high_qc(qc.clone()).await.unwrap();
-        assert_eq!(
-            storage.load_high_qc().await.unwrap().unwrap(),
-            QuorumCertificate::genesis()
-        );
-
-        // store qcs with different view number
-        qc.view_number += 1;
-        storage.update_high_qc(qc.clone()).await.unwrap();
-
-        qc.view_number += 1;
-        storage.update_high_qc(qc.clone()).await.unwrap();
-
-        assert_eq!(
-            storage
-                .load_high_qc()
-                .await
-                .unwrap()
-                .unwrap()
-                .get_view_number(),
-            qc.get_view_number()
-        );
-
-        let highest_view_number = qc.view_number;
-
-        qc.view_number = qc.view_number - 1;
-        storage.update_high_qc(qc.clone()).await.unwrap();
-
-        assert_eq!(
-            storage
-                .load_high_qc()
-                .await
-                .unwrap()
-                .unwrap()
-                .get_view_number(),
-            highest_view_number,
         );
     }
 

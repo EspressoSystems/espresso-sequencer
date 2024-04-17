@@ -142,8 +142,8 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         self.write().await.record_action(view, action).await
     }
-    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        self.write().await.update_high_qc(high_qc).await
+    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn update_undecided_state(

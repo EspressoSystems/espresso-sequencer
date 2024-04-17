@@ -482,12 +482,13 @@ mod api_tests {
 
     use super::*;
     use crate::{
-        catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
+        catchup::{mock::MockStateCatchup, StatePeers},
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
@@ -502,6 +503,7 @@ mod api_tests {
     };
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -624,7 +626,9 @@ mod api_tests {
             .unwrap();
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
-            D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
+            D::options(&storage[0], options::Http { port }.into())
+                .state(Default::default())
+                .status(Default::default()),
             Default::default(),
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
@@ -635,6 +639,7 @@ mod api_tests {
         let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
+        tracing::info!(port, "server running");
 
         // Wait until some blocks have been decided.
         client
@@ -672,6 +677,20 @@ mod api_tests {
 
         // Get the most recent state, for catchup.
         let state = network.server.consensus().get_decided_state().await;
+        tracing::info!(?decided_view, ?state, "consensus state");
+
+        // Wait for merklized state storage to update.
+        while let Err(err) = client
+            .get::<()>(&format!("block-state/{}/{}", height - 1, height - 2))
+            .send()
+            .await
+        {
+            tracing::info!(
+                height,
+                "waiting for merklized state to become available ({err:#})"
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
 
         // Fully shut down the API servers.
         drop(network);
@@ -683,30 +702,23 @@ mod api_tests {
             .try_into()
             .unwrap();
         let _network = TestNetwork::with_state(
-            D::options(&storage[0], options::Http { port }.into()),
+            D::options(&storage[0], options::Http { port }.into()).catchup(Default::default()),
             Default::default(),
             persistence,
-            std::array::from_fn(|i| {
-                let catchup: Box<dyn StateCatchup> = if i == 0 {
-                    // Give the server node a copy of the full state to use for catchup. This
-                    // simulates a node with archival state storage, which is then able to seed the
-                    // rest of the network after a restart.
-                    Box::new(MockStateCatchup::from_iter([(decided_view, state.clone())]))
-                } else {
-                    // The remaining nodes should use this archival node as a peer for catchup.
-                    Box::new(StatePeers::<SequencerVersion>::from_urls(vec![format!(
-                        "http://localhost:{port}"
-                    )
+            std::array::from_fn(|_| {
+                // Catchup using node 0 as a peer. Node 0 was running the archival state service
+                // before the restart, so it should be able to resume without catching up by loading
+                // state from storage.
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
                     .parse()
-                    .unwrap()]))
-                };
-                catchup
+                    .unwrap()])
             }),
         )
         .await;
         let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
+        tracing::info!(port, "server running");
 
         // Make sure we can decide new blocks after the restart.
         tracing::info!("waiting for decide, height {}", height + 1);
