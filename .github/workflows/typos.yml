@@ -25,5 +25,3 @@ jobs:
 
       - name: typos-action
         uses: crate-ci/typos@v1.19.0
-        with:
-          files: '!./contract-bindings/artifacts/**'
