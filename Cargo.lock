@@ -8330,6 +8330,7 @@ dependencies = [
  "ethers-contract-derive",
  "futures",
  "hotshot",
+ "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
