@@ -2,6 +2,7 @@ use crate::state::FeeAmount;
 use commit::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::U256;
+use itertools::Either;
 use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +63,36 @@ impl Committable for ChainConfig {
             .u64_field("max_block_size", self.max_block_size)
             .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
             .finalize()
+    }
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
+pub struct ResolvableChainConfig {
+    chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
+}
+
+impl ResolvableChainConfig {
+    pub fn commit(&self) -> Commitment<ChainConfig> {
+        match self.chain_config {
+            Either::Left(config) => config.commit(),
+            Either::Right(commitment) => commitment,
+        }
+    }
+}
+
+impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
+    fn from(value: Commitment<ChainConfig>) -> Self {
+        Self {
+            chain_config: Either::Right(value),
+        }
+    }
+}
+
+impl From<ChainConfig> for ResolvableChainConfig {
+    fn from(value: ChainConfig) -> Self {
+        Self {
+            chain_config: Either::Left(value),
+        }
     }
 }
 

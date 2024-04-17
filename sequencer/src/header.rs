@@ -1,5 +1,6 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
+    chain_config::ResolvableChainConfig,
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
@@ -21,41 +22,10 @@ use hotshot_types::{
     },
     vid::VidCommitment,
 };
-use itertools::Either;
 use jf_primitives::merkle_tree::prelude::*;
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-
-#[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
-pub struct ResolvableChainConfig {
-    chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
-}
-
-impl ResolvableChainConfig {
-    fn commit(&self) -> Commitment<ChainConfig> {
-        match self.chain_config {
-            Either::Left(config) => config.commit(),
-            Either::Right(commitment) => commitment,
-        }
-    }
-}
-
-impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
-    fn from(value: Commitment<ChainConfig>) -> Self {
-        Self {
-            chain_config: Either::Right(value),
-        }
-    }
-}
-
-impl From<ChainConfig> for ResolvableChainConfig {
-    fn from(value: ChainConfig) -> Self {
-        Self {
-            chain_config: Either::Left(value),
-        }
-    }
-}
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
