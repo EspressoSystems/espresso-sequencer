@@ -447,7 +447,7 @@ pub mod testing {
 
             let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
 
-            app.register_module("hotshot_events", hotshot_events_api)
+            app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
             async_spawn(app.serve(url, STATIC_VER_0_1));
