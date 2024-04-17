@@ -2,7 +2,6 @@
 use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
 use async_broadcast::{Receiver, Sender};
-use async_lock::RwLockUpgradableReadGuard;
 use bitvec::bitvec;
 use committable::Committable;
 use ethereum_types::U256;
@@ -11,26 +10,23 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_example_types::{
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
-    state_types::{TestInstanceState, TestValidatedState},
+    state_types::TestInstanceState,
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewNumber},
     message::{GeneralConsensusMessage, Proposal},
-    simple_certificate::{DACertificate, QuorumCertificate},
+    simple_certificate::DACertificate,
     simple_vote::{DAData, DAVote, QuorumData, QuorumVote, SimpleVote},
     traits::{
-        block_contents::{vid_commitment, BlockHeader, TestableBlock},
+        block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
-        states::ValidatedState,
-        BlockPayload,
     },
-    utils::{View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
 };
@@ -210,141 +206,6 @@ pub fn build_assembled_sig<
     );
 
     real_qc_sig
-}
-
-/// build a quorum proposal and signature
-#[allow(clippy::too_many_lines)]
-async fn build_quorum_proposal_and_signature(
-    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
-    private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
-    public_key: &BLSPubKey,
-    view: u64,
-) -> (
-    QuorumProposal<TestTypes>,
-    <BLSPubKey as SignatureKey>::PureAssembledSignatureType,
-) {
-    // build the genesis view
-    let genesis_consensus = handle.get_consensus();
-    let cur_consensus = genesis_consensus.upgradable_read().await;
-    let mut consensus = RwLockUpgradableReadGuard::upgrade(cur_consensus).await;
-    // parent_view_number should be equal to 0
-    let parent_view_number = &consensus.high_qc.get_view_number();
-    assert_eq!(parent_view_number.get_u64(), 0);
-    let Some(parent_view) = consensus.validated_state_map.get(parent_view_number) else {
-        panic!("Couldn't find high QC parent in state map.");
-    };
-    let Some(leaf_view_0) = parent_view.get_leaf_commitment() else {
-        panic!("Parent of high QC points to a view without a proposal");
-    };
-    let Some(leaf_view_0) = consensus.saved_leaves.get(&leaf_view_0) else {
-        panic!("Failed to find high QC parent.");
-    };
-    let parent_leaf = leaf_view_0.clone();
-
-    // every event input is seen on the event stream in the output.
-    let block = <TestBlockPayload as TestableBlock>::genesis();
-    let payload_commitment = vid_commitment(
-        &block.encode().unwrap().collect(),
-        handle.hotshot.memberships.quorum_membership.total_nodes(),
-    );
-    let mut parent_state = Arc::new(
-        <TestValidatedState as ValidatedState<TestTypes>>::from_header(
-            parent_leaf.get_block_header(),
-        ),
-    );
-    let block_header = TestBlockHeader::new(
-        &*parent_state,
-        &TestInstanceState {},
-        &parent_leaf,
-        payload_commitment,
-        (),
-    )
-    .await;
-    let mut proposal = QuorumProposal::<TestTypes> {
-        block_header: block_header.clone(),
-        view_number: ViewNumber::new(1),
-        justify_qc: QuorumCertificate::genesis(),
-        upgrade_certificate: None,
-        proposal_certificate: None,
-    };
-    // current leaf that can be re-assigned everytime when entering a new view
-    let mut leaf = Leaf::from_quorum_proposal(&proposal);
-
-    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref())
-        .expect("Failed to sign leaf commitment!");
-
-    // Only view 2 is tested, higher views are not tested
-    for cur_view in 2..=view {
-        let (state_new_view, delta_new_view) = parent_state
-            .validate_and_apply_header(&TestInstanceState {}, &parent_leaf, &block_header)
-            .await
-            .unwrap();
-        let state_new_view = Arc::new(state_new_view);
-        // save states for the previous view to pass all the qc checks
-        // In the long term, we want to get rid of this, do not manually update consensus state
-        consensus.validated_state_map.insert(
-            ViewNumber::new(cur_view - 1),
-            View {
-                view_inner: ViewInner::Leaf {
-                    leaf: leaf.commit(),
-                    state: state_new_view.clone(),
-                    delta: Some(Arc::new(delta_new_view)),
-                },
-            },
-        );
-        consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
-        // create a qc by aggregate signatures on the previous view (the data signed is last leaf commitment)
-        let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-        let quorum_data = QuorumData {
-            leaf_commit: leaf.commit(),
-        };
-        let created_qc = build_cert::<
-            TestTypes,
-            QuorumData<TestTypes>,
-            QuorumVote<TestTypes>,
-            QuorumCertificate<TestTypes>,
-        >(
-            quorum_data,
-            &quorum_membership,
-            ViewNumber::new(cur_view - 1),
-            public_key,
-            private_key,
-        );
-        // create a new leaf for the current view
-        let proposal_new_view = QuorumProposal::<TestTypes> {
-            block_header: block_header.clone(),
-            view_number: ViewNumber::new(cur_view),
-            justify_qc: created_qc,
-            upgrade_certificate: None,
-            proposal_certificate: None,
-        };
-        let leaf_new_view = Leaf::from_quorum_proposal(&proposal_new_view);
-        let signature_new_view =
-            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref())
-                .expect("Failed to sign leaf commitment!");
-        proposal = proposal_new_view;
-        signature = signature_new_view;
-        leaf = leaf_new_view;
-        parent_state = state_new_view;
-    }
-
-    (proposal, signature)
-}
-
-/// create a quorum proposal
-pub async fn build_quorum_proposal(
-    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
-    private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
-    view: u64,
-) -> Proposal<TestTypes, QuorumProposal<TestTypes>> {
-    let public_key = &BLSPubKey::from_private(private_key);
-    let (proposal, signature) =
-        build_quorum_proposal_and_signature(handle, private_key, public_key, view).await;
-    Proposal {
-        data: proposal,
-        signature,
-        _pd: PhantomData,
-    }
 }
 
 /// get the keypair for a node id

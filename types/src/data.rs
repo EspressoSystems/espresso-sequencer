@@ -674,7 +674,13 @@ pub mod null_block {
     use jf_primitives::vid::VidScheme;
     use memoize::memoize;
 
-    use crate::vid::{vid_scheme, VidCommitment};
+    use crate::{
+        traits::{
+            block_contents::BuilderFee, node_implementation::NodeType,
+            signature_key::BuilderSignatureKey, BlockPayload,
+        },
+        vid::{vid_scheme, VidCommitment},
+    };
 
     /// The commitment for a null block payload.
     ///
@@ -689,6 +695,34 @@ pub mod null_block {
 
         match vid_result {
             Ok(r) => Some(r),
+            Err(_) => None,
+        }
+    }
+
+    /// Builder fee data for a null block payload
+    #[must_use]
+    pub fn builder_fee<TYPES: NodeType>(num_storage_nodes: usize) -> Option<BuilderFee<TYPES>> {
+        /// Arbitrary fee amount, this block doesn't actually come from a builder
+        const FEE_AMOUNT: u64 = 0;
+
+        let (_, priv_key) =
+            <TYPES::BuilderSignatureKey as BuilderSignatureKey>::generated_from_seed_indexed(
+                [0_u8; 32], 0,
+            );
+
+        let (null_block, null_block_metadata) =
+            <TYPES::BlockPayload as BlockPayload>::from_transactions([]).ok()?;
+
+        match TYPES::BuilderSignatureKey::sign_fee(
+            &priv_key,
+            FEE_AMOUNT,
+            &null_block.builder_commitment(&null_block_metadata),
+            &commitment(num_storage_nodes)?,
+        ) {
+            Ok(sig) => Some(BuilderFee {
+                fee_amount: FEE_AMOUNT,
+                fee_signature: sig,
+            }),
             Err(_) => None,
         }
     }

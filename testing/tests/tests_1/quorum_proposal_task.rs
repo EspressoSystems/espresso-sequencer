@@ -1,20 +1,22 @@
-use hotshot::tasks::inject_quorum_proposal_polls;
-use hotshot::tasks::task_state::CreateTaskState;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_example_types::state_types::TestValidatedState;
-use hotshot_task_impls::events::HotShotEvent::*;
-use hotshot_task_impls::quorum_proposal::QuorumProposalTaskState;
-use hotshot_testing::predicates::event::quorum_proposal_send;
-use hotshot_testing::task_helpers::vid_scheme_from_view_number;
+use hotshot::tasks::{inject_quorum_proposal_polls, task_state::CreateTaskState};
+use hotshot_example_types::{
+    node_types::{MemoryImpl, TestTypes},
+    state_types::TestValidatedState,
+};
+use hotshot_task_impls::{events::HotShotEvent::*, quorum_proposal::QuorumProposalTaskState};
 use hotshot_testing::{
+    predicates::event::quorum_proposal_send,
     script::{run_test_script, TestScriptStage},
-    task_helpers::build_system_handle,
+    task_helpers::{build_system_handle, vid_scheme_from_view_number},
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
     data::{ViewChangeEvidence, ViewNumber},
     simple_vote::ViewSyncFinalizeData,
-    traits::node_implementation::{ConsensusTime, NodeType},
+    traits::{
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType},
+    },
     utils::{View, ViewInner},
     vid::VidSchemeType,
 };
@@ -35,6 +37,8 @@ fn make_payload_commitment(
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_quorum_proposal() {
+    use hotshot_types::data::null_block;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -89,7 +93,12 @@ async fn test_quorum_proposal_task_quorum_proposal() {
         inputs: vec![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[1].clone()),
             QCFormed(either::Left(cert.clone())),
-            SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
+            SendPayloadCommitmentAndMetadata(
+                payload_commitment,
+                (),
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            ),
         ],
         outputs: vec![quorum_proposal_send()],
         asserts: vec![],
@@ -107,7 +116,7 @@ async fn test_quorum_proposal_task_quorum_proposal() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_qc_timeout() {
-    use hotshot_types::simple_vote::TimeoutData;
+    use hotshot_types::{data::null_block, simple_vote::TimeoutData};
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -142,7 +151,12 @@ async fn test_quorum_proposal_task_qc_timeout() {
     let view_2 = TestScriptStage {
         inputs: vec![
             QCFormed(either::Right(cert.clone())),
-            SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
+            SendPayloadCommitmentAndMetadata(
+                payload_commitment,
+                (),
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            ),
         ],
         outputs: vec![quorum_proposal_send()],
         asserts: vec![],
@@ -160,6 +174,8 @@ async fn test_quorum_proposal_task_qc_timeout() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_view_sync() {
+    use hotshot_types::data::null_block;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -198,7 +214,12 @@ async fn test_quorum_proposal_task_view_sync() {
     let view_2 = TestScriptStage {
         inputs: vec![
             ViewSyncFinalizeCertificate2Recv(cert.clone()),
-            SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
+            SendPayloadCommitmentAndMetadata(
+                payload_commitment,
+                (),
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            ),
         ],
         outputs: vec![quorum_proposal_send()],
         asserts: vec![],
@@ -219,6 +240,7 @@ async fn test_quorum_proposal_task_propose_now() {
     use hotshot_testing::task_helpers::{build_cert, key_pair_for_id};
     use hotshot_types::{
         consensus::{CommitmentAndMetadata, ProposalDependencyData},
+        data::null_block,
         simple_certificate::{TimeoutCertificate, ViewSyncFinalizeCertificate2},
         simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeVote},
     };
@@ -248,6 +270,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             metadata: (),
+            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::QuorumProposalAndCertificate(
@@ -261,6 +284,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             metadata: (),
+            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::Timeout(build_cert::<
@@ -284,6 +308,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             metadata: (),
+            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::ViewSync(build_cert::<

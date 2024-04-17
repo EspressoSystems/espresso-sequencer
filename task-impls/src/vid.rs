@@ -60,7 +60,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
-            HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number) => {
+            HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number, fee) => {
                 let vid_disperse = calculate_vid_disperse(
                     &encoded_transactions.clone(),
                     &self.membership.clone(),
@@ -72,6 +72,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         vid_disperse.payload_commitment,
                         metadata.clone(),
                         *view_number,
+                        fee.clone(),
                     )),
                     &event_stream,
                 )
@@ -167,7 +168,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         !matches!(
             event.as_ref(),
             HotShotEvent::Shutdown
-                | HotShotEvent::BlockRecv(_, _, _)
+                | HotShotEvent::BlockRecv(_, _, _, _)
                 | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)
         )

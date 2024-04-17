@@ -1,11 +1,9 @@
-use hotshot::tasks::task_state::CreateTaskState;
-use hotshot::types::SystemContextHandle;
+use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
 };
-use hotshot_task_impls::da::DATaskState;
-use hotshot_task_impls::events::HotShotEvent::*;
+use hotshot_task_impls::{da::DATaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     predicates::event::exact,
     script::{run_test_script, TestScriptStage},
@@ -13,7 +11,7 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::ViewNumber,
+    data::{null_block, ViewNumber},
     simple_vote::DAData,
     traits::{
         block_contents::vid_commitment, election::Membership, node_implementation::ConsensusTime,
@@ -69,7 +67,12 @@ async fn test_da_task() {
         inputs: vec![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
-            BlockRecv(encoded_transactions.clone(), (), ViewNumber::new(2)),
+            BlockRecv(
+                encoded_transactions.clone(),
+                (),
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            ),
         ],
         outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],
         asserts: vec![],
@@ -143,7 +146,12 @@ async fn test_da_task_storage_failure() {
         inputs: vec![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
-            BlockRecv(encoded_transactions.clone(), (), ViewNumber::new(2)),
+            BlockRecv(
+                encoded_transactions.clone(),
+                (),
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            ),
         ],
         outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],
         asserts: vec![],

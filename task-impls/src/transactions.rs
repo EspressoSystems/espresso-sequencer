@@ -14,7 +14,7 @@ use hotshot_types::{
     consensus::Consensus,
     event::{Event, EventType},
     traits::{
-        block_contents::BlockHeader,
+        block_contents::{BlockHeader, BuilderFee},
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
@@ -122,7 +122,12 @@ impl<
                     return None;
                 }
 
-                if let Some(BuilderResponses { block_data, .. }) = self.wait_for_block().await {
+                if let Some(BuilderResponses {
+                    block_data,
+                    blocks_initial_info,
+                    block_header,
+                }) = self.wait_for_block().await
+                {
                     // send the sequenced transactions to VID and DA tasks
                     let block_view = if make_block { view } else { view + 1 };
                     let encoded_transactions = match block_data.block_payload.encode() {
@@ -137,6 +142,10 @@ impl<
                             encoded_transactions,
                             block_data.metadata,
                             block_view,
+                            BuilderFee {
+                                fee_amount: blocks_initial_info.offered_fee,
+                                fee_signature: block_header.fee_signature,
+                            },
                         )),
                         &event_stream,
                     )

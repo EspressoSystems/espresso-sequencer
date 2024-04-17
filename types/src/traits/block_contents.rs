@@ -14,6 +14,7 @@ use committable::{Commitment, Committable};
 use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
 use serde::{de::DeserializeOwned, Serialize};
 
+use super::signature_key::BuilderSignatureKey;
 use crate::{
     data::Leaf,
     traits::{node_implementation::NodeType, ValidatedState},
@@ -145,6 +146,15 @@ pub fn precompute_vid_commitment(
 /// do dispersal for the genesis block. For simplicity and performance, we use 1.
 pub const GENESIS_VID_NUM_STORAGE_NODES: usize = 1;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Information about builder fee for proposed block
+pub struct BuilderFee<TYPES: NodeType> {
+    /// Proposed fee amount
+    pub fee_amount: u64,
+    /// Signature over fee amount
+    pub fee_signature: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
+}
+
 /// Header of a block, which commits to a [`BlockPayload`].
 pub trait BlockHeader<TYPES: NodeType>:
     Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned + Committable
@@ -157,6 +167,7 @@ pub trait BlockHeader<TYPES: NodeType>:
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+        builder_fee: BuilderFee<TYPES>,
     ) -> impl Future<Output = Self> + Send;
 
     /// Build the genesis header, payload, and metadata.

@@ -41,5 +41,4 @@ pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
     pub message_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,
-    pub _phantom: PhantomData<TYPES>,
 }

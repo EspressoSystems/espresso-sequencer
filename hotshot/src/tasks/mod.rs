@@ -5,7 +5,6 @@ pub mod task_state;
 
 use std::{sync::Arc, time::Duration};
 
-use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
@@ -35,6 +34,8 @@ use hotshot_types::{
     },
 };
 use tracing::error;
+
+use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 
 /// event for global event stream
 #[derive(Clone, Debug)]

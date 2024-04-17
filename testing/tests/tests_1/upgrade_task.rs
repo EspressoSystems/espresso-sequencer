@@ -1,5 +1,9 @@
-use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
-use hotshot::types::SystemContextHandle;
+use std::time::Duration;
+
+use hotshot::{
+    tasks::{inject_consensus_polls, task_state::CreateTaskState},
+    types::SystemContextHandle,
+};
 use hotshot_example_types::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
@@ -9,26 +13,26 @@ use hotshot_task_impls::{
     consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
-    predicates::event::*,
-    predicates::upgrade::*,
+    predicates::{event::*, upgrade::*},
     script::{Expectations, TaskScript},
+    task_helpers::get_vid_share,
     view_generator::TestViewGenerator,
 };
-use hotshot_testing::task_helpers::get_vid_share;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{null_block, ViewNumber},
     simple_vote::UpgradeProposalData,
     traits::{election::Membership, node_implementation::ConsensusTime},
 };
-use std::time::Duration;
 use vbs::version::Version;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Tests that we correctly update our internal consensus state when reaching a decided upgrade certificate.
 async fn test_consensus_task_upgrade() {
-    use hotshot_testing::script::{run_test_script, TestScriptStage};
-    use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::{
+        script::{run_test_script, TestScriptStage},
+        task_helpers::build_system_handle,
+    };
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -251,6 +255,7 @@ async fn test_upgrade_and_consensus_task() {
                 vids[2].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QCFormed(either::Either::Left(proposals[1].data.justify_qc.clone())),
         ],
@@ -439,6 +444,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[1].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
         ],
         vec![
@@ -448,6 +454,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[2].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(3),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
         ],
@@ -458,6 +465,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[3].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(4),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
         ],
@@ -468,6 +476,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[4].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(5),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[4].clone(), leaders[4]),
         ],
@@ -477,6 +486,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[5].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(6),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QCFormed(either::Either::Left(proposals[5].data.justify_qc.clone())),
         ],
@@ -487,6 +497,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 vids[6].0[0].data.payload_commitment,
                 (),
                 ViewNumber::new(7),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[6].clone(), leaders[6]),
         ],

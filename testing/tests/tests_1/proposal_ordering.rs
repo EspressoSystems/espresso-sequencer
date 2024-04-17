@@ -2,21 +2,24 @@ use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
-    predicates::event::{
-        exact, quorum_proposal_send, quorum_proposal_validated,
-    },
+    predicates::event::{exact, quorum_proposal_send, quorum_proposal_validated},
     task_helpers::{get_vid_share, vid_scheme_from_view_number},
     test_helpers::permute_input_with_index_order,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::{null_block, ViewNumber},
+    traits::{election::Membership, node_implementation::ConsensusTime},
+};
 use jf_primitives::vid::VidScheme;
 
 /// Runs a basic test where a qualified proposal occurs (i.e. not initiated by the genesis view or node 1).
 /// This proposal should happen no matter how the `input_permutation` is specified.
 async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
-    use hotshot_testing::script::{run_test_script, TestScriptStage};
-    use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::{
+        script::{run_test_script, TestScriptStage},
+        task_helpers::build_system_handle,
+    };
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -69,7 +72,12 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let inputs = vec![
         QuorumProposalRecv(proposals[1].clone(), leaders[1]),
         QCFormed(either::Left(cert)),
-        SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(node_id)),
+        SendPayloadCommitmentAndMetadata(
+            payload_commitment,
+            (),
+            ViewNumber::new(node_id),
+            null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+        ),
     ];
 
     let view_2_inputs = permute_input_with_index_order(inputs, input_permutation);

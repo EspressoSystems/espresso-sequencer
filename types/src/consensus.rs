@@ -18,6 +18,7 @@ use crate::{
         DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncFinalizeCertificate2,
     },
     traits::{
+        block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
         node_implementation::NodeType,
         BlockPayload, ValidatedState,
@@ -396,11 +397,13 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 /// Alias for the block payload commitment and the associated metadata. The primary data
 /// needed in order to submit a proposal.
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {
+pub struct CommitmentAndMetadata<TYPES: NodeType> {
     /// Vid Commitment
     pub commitment: VidCommitment,
     /// Metadata for the block payload
-    pub metadata: <PAYLOAD as BlockPayload>::Metadata,
+    pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+    /// Builder fee data
+    pub fee: BuilderFee<TYPES>,
 }
 
 /// Helper type to hold the optional secondary information required to propose.
@@ -418,7 +421,7 @@ pub enum SecondaryProposalInformation<TYPES: NodeType> {
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ProposalDependencyData<TYPES: NodeType> {
     /// The primary data in a proposal.
-    pub commitment_and_metadata: CommitmentAndMetadata<TYPES::BlockPayload>,
+    pub commitment_and_metadata: CommitmentAndMetadata<TYPES>,
     /// The secondary data in a proposal
     pub secondary_proposal_information: SecondaryProposalInformation<TYPES>,
 }

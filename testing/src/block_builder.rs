@@ -539,50 +539,21 @@ fn build_block<TYPES: NodeType>(
         .collect::<Vec<u8>>()
         .len() as u64;
 
-    let signature_over_block_info = {
-        let mut block_info: Vec<u8> = Vec::new();
-        block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
-        block_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
-        block_info.extend_from_slice(commitment.as_ref());
-
-        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, &block_info) {
-            Ok(sig) => sig,
-            Err(e) => {
-                panic!("Failed to sign block: {}", e);
-            }
-        }
-    };
+    let signature_over_block_info =
+        TYPES::BuilderSignatureKey::sign_block_info(&priv_key, block_size, 123, &commitment)
+            .expect("Failed to sign block info");
 
     let signature_over_builder_commitment =
-        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, commitment.as_ref()) {
-            Ok(sig) => sig,
-            Err(e) => {
-                panic!("Failed to sign block: {}", e);
-            }
-        };
+        TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, commitment.as_ref())
+            .expect("Failed to sign commitment");
 
-    let signature_over_vid_commitment = match TYPES::BuilderSignatureKey::sign_builder_message(
-        &priv_key,
-        vid_commitment.as_ref(),
-    ) {
-        Ok(sig) => sig,
-        Err(e) => {
-            panic!("Failed to sign block: {}", e);
-        }
-    };
+    let signature_over_vid_commitment =
+        TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, vid_commitment.as_ref())
+            .expect("Failed to sign block vid commitment");
 
-    let signature_over_fee_info = {
-        let mut fee_info: Vec<u8> = Vec::new();
-        fee_info.extend_from_slice(123_u64.to_be_bytes().as_ref());
-        fee_info.extend_from_slice(commitment.as_ref());
-        fee_info.extend_from_slice(vid_commitment.as_ref());
-        match TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, &fee_info) {
-            Ok(sig) => sig,
-            Err(e) => {
-                panic!("Failed to sign block: {}", e);
-            }
-        }
-    };
+    let signature_over_fee_info =
+        TYPES::BuilderSignatureKey::sign_fee(&priv_key, 123_u64, &commitment, &vid_commitment)
+            .expect("Failed to sign fee info");
 
     let block = AvailableBlockData {
         block_payload,
@@ -604,7 +575,6 @@ fn build_block<TYPES: NodeType>(
         message_signature: signature_over_vid_commitment.clone(),
         fee_signature: signature_over_fee_info,
         sender: pub_key,
-        _phantom: std::marker::PhantomData,
     };
 
     (metadata, block, header_input)

@@ -6,9 +6,11 @@ use std::{
 
 use bitvec::prelude::*;
 use ethereum_types::U256;
-use jf_primitives::errors::PrimitivesError;
+use jf_primitives::{errors::PrimitivesError, vid::VidScheme};
 use serde::{Deserialize, Serialize};
 use tagged_base64::TaggedBase64;
+
+use crate::{utils::BuilderCommitment, vid::VidSchemeType};
 
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType {
@@ -193,6 +195,38 @@ pub trait BuilderSignatureKey:
         private_key: &Self::BuilderPrivateKey,
         data: &[u8],
     ) -> Result<Self::BuilderSignature, Self::SignError>;
+
+    /// sign fee offer for proposed payload
+    /// # Errors
+    /// If unable to sign the data with the key
+    fn sign_fee(
+        private_key: &Self::BuilderPrivateKey,
+        fee_amount: u64,
+        payload_commitment: &BuilderCommitment,
+        vid_commitment: &<VidSchemeType as VidScheme>::Commit,
+    ) -> Result<Self::BuilderSignature, Self::SignError> {
+        let mut fee_info: Vec<u8> = Vec::new();
+        fee_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());
+        fee_info.extend_from_slice(payload_commitment.as_ref());
+        fee_info.extend_from_slice(vid_commitment.as_ref());
+        Self::sign_builder_message(private_key, &fee_info)
+    }
+
+    /// sign information about offered block
+    /// # Errors
+    /// If unable to sign the data with the key
+    fn sign_block_info(
+        private_key: &Self::BuilderPrivateKey,
+        block_size: u64,
+        fee_amount: u64,
+        payload_commitment: &BuilderCommitment,
+    ) -> Result<Self::BuilderSignature, Self::SignError> {
+        let mut block_info: Vec<u8> = Vec::new();
+        block_info.extend_from_slice(block_size.to_be_bytes().as_ref());
+        block_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());
+        block_info.extend_from_slice(payload_commitment.as_ref());
+        Self::sign_builder_message(private_key, &block_info)
+    }
 
     /// Generate a new key pair
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::BuilderPrivateKey);
