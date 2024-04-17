@@ -75,7 +75,7 @@ processes:
         condition: process_completed
 
   sequencer0:
-    command: sequencer -- http -- query -- catchup -- status -- submit
+    command: sequencer -- http -- query -- catchup -- status -- submit -- hotshot-events
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
@@ -342,10 +342,12 @@ processes:
 
   permissionless-builder:
     command: permissionless-builder
+    environment:
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
     depends_on:
       sequencer0:
         condition: process_healthy
-      da_server:
 
   nasty-client:
     command: nasty-client
