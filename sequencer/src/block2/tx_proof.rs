@@ -1,30 +1,40 @@
 use super::{
     iter::Index,
-    payload_bytes::{NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{
+        ns_offset_as_bytes, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
+        TX_OFFSET_BYTE_LEN,
+    },
     Payload,
 };
 use crate::Transaction;
 use hotshot_query_service::VidCommon;
-use hotshot_types::vid::SmallRangeProofType;
+use hotshot_types::vid::{vid_scheme, SmallRangeProofType, VidSchemeType};
+use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxProof {
-    ns_range: Range<usize>,
+    // Conventions:
+    // - `payload_x`: bytes from the payload
+    // - `payload_proof_x`: a proof of those bytes from the payload
+    ns_range_start: [u8; NS_OFFSET_BYTE_LEN], // serialized usize
+    ns_range_end: [u8; NS_OFFSET_BYTE_LEN],   // serialized usize
 
-    tx_table_len: [u8; NUM_TXS_BYTE_LEN], // serialized usize
-    tx_table_len_proof: SmallRangeProofType,
+    payload_num_txs: [u8; NUM_TXS_BYTE_LEN], // serialized usize
+    payload_proof_num_txs: SmallRangeProofType,
 
-    tx_table_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
-    tx_table_range_end: [u8; TX_OFFSET_BYTE_LEN],           // serialized usize
-    tx_table_range_proof: SmallRangeProofType,
+    payload_tx_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
+    payload_tx_range_end: [u8; TX_OFFSET_BYTE_LEN],           // serialized usize
+    payload_proof_tx_range: SmallRangeProofType,
 
-    tx_payload_proof: Option<SmallRangeProofType>, // `None` if the tx has zero length
+    payload_proof_tx: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
 
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
+        // TODO don't copy the tx bytes into the return value
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(Transaction::new(
             index.ns_index.ns_id,
             self.payload
@@ -36,165 +46,105 @@ impl Payload {
 
     pub fn transaction_with_proof(
         &self,
-        _index: &Index,
-        _common: &VidCommon,
+        index: &Index,
+        common: &VidCommon,
     ) -> Option<(Transaction, TxProof)> {
-        // Read the tx payload range from the tx table into
-        // `tx_table_range_[start|end]` and compute a proof that this range is
-        // correct.
-        //
-        // This correctness proof requires a range of its own, which we read
-        // into `tx_table_range_proof_[start|end]`.
-        //
-        // Edge case--the first transaction: tx payload range `start` is
-        // implicitly 0 and we do not include this item in the correctness
-        // proof.
+        if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
+            return None; // error: common inconsistent with self
+        }
 
-        todo!()
+        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+
+        // range of contiguous bytes in this namespace's tx table
+        // TODO refactor as a function of `index`?
+        let tx_table_range = {
+            let start = if index.tx_index.index == 0 {
+                // Special case: the desired range includes only one entry from
+                // the tx table: the first entry. This entry starts immediately
+                // following the bytes that encode the tx table length.
+                NUM_NSS_BYTE_LEN
+            } else {
+                // the desired range starts at the beginning of the previous
+                // transaction's tx table entry
+                (index.tx_index.index - 1)
+                    .saturating_mul(TX_OFFSET_BYTE_LEN)
+                    .saturating_add(NUM_TXS_BYTE_LEN)
+            };
+            // The desired range ends at the end of this transaction's tx table
+            // entry
+            let end = index
+                .tx_index
+                .index
+                .saturating_add(1)
+                .saturating_mul(TX_OFFSET_BYTE_LEN)
+                .saturating_add(NUM_TXS_BYTE_LEN);
+            Range {
+                start: start.saturating_add(index.ns_index.ns_range.start),
+                end: end.saturating_add(index.ns_index.ns_range.start),
+            }
+        };
+
+        let payload_tx_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]> = if index.tx_index.index == 0
+        {
+            None
+        } else {
+            Some(
+                self.payload
+                    .get(
+                        tx_table_range.start
+                            ..tx_table_range.start.saturating_add(TX_OFFSET_BYTE_LEN),
+                    )?
+                    .try_into()
+                    .unwrap(), // panic is impossible
+            )
+        };
+
+        let payload_tx_range_end: [u8; TX_OFFSET_BYTE_LEN] = self
+            .payload
+            .get(tx_table_range.end.saturating_sub(TX_OFFSET_BYTE_LEN)..tx_table_range.end)?
+            .try_into()
+            .unwrap(); // panic is impossible
+
+        let tx_range = Range {
+            start: index
+                .tx_index
+                .range
+                .start
+                .saturating_add(index.ns_index.ns_range.start),
+            end: index
+                .tx_index
+                .range
+                .end
+                .saturating_add(index.ns_index.ns_range.start),
+        };
+
+        // shift the tx range to the current namespace
+        // TODO a bit ugly, refactor?
+        let num_txs_range = Range {
+            start: index.ns_index.ns_range.start,
+            end: index
+                .ns_index
+                .ns_range
+                .start
+                .saturating_add(NUM_TXS_BYTE_LEN),
+        };
+
+        Some((
+            self.transaction(index)?,
+            TxProof {
+                ns_range_start: ns_offset_as_bytes(index.ns_index.ns_range.start),
+                ns_range_end: ns_offset_as_bytes(index.ns_index.ns_range.end),
+                payload_num_txs: self.payload.get(num_txs_range.clone())?.try_into().unwrap(), // panic is impossible
+                payload_proof_num_txs: vid.payload_proof(&self.payload, num_txs_range).ok()?,
+                payload_tx_range_start,
+                payload_tx_range_end,
+                payload_proof_tx_range: vid.payload_proof(&self.payload, tx_table_range).ok()?,
+                payload_proof_tx: if tx_range.is_empty() {
+                    None
+                } else {
+                    Some(vid.payload_proof(&self.payload, tx_range).ok()?)
+                },
+            },
+        ))
     }
 }
-
-// #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-// pub struct TxInclusionProof {
-//     ns_range: Range<usize>,
-//     tx_table_len: TxTableEntry,
-//     tx_table_len_proof: SmallRangeProofType,
-
-//     tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
-//     tx_table_range_end: TxTableEntry,
-//     tx_table_range_proof: SmallRangeProofType,
-
-//     tx_payload_proof: Option<SmallRangeProofType>, // `None` if the tx has zero length
-// }
-
-// impl TxInclusionProof {
-//     // TODO currently broken, fix in https://github.com/EspressoSystems/espresso-sequencer/issues/1010
-//     //
-//     // - We need to decide where to store VID params.
-//     // - Returns `None` if an error occurred.
-//     // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
-//     #[allow(dead_code)] // TODO temporary
-//     #[allow(clippy::too_many_arguments)]
-//     pub fn verify<V>(
-//         &self,
-//         tx: &Transaction,
-//         tx_index: TxIndex,
-//         vid: &V,
-//         vid_commit: &V::Commit,
-//         vid_common: &V::Common,
-//     ) -> Option<Result<(), ()>>
-//     where
-//         V: PayloadProver<SmallRangeProofType>,
-//     {
-//         V::is_consistent(vid_commit, vid_common).ok()?;
-
-//         // Verify proof for tx payload.
-//         // Proof is `None` if and only if tx has zero length.
-//         let tx_payloads_offset = usize::try_from(self.tx_table_len.clone())
-//             .ok()?
-//             .checked_add(1)?
-//             .checked_mul(TxTableEntry::byte_len())?
-//             .checked_add(self.ns_range.start)?;
-//         let tx_payload_range = {
-//             let start = usize::try_from(
-//                 self.tx_table_range_start
-//                     .clone()
-//                     .unwrap_or(TxTableEntry::zero()),
-//             )
-//             .ok()?
-//             .checked_add(tx_payloads_offset)?;
-//             let end = usize::try_from(self.tx_table_range_end.clone())
-//                 .ok()?
-//                 .checked_add(tx_payloads_offset)?;
-//             let end = std::cmp::min(end, self.ns_range.end);
-//             let start = std::cmp::min(start, end);
-//             start..end
-//         };
-//         match &self.tx_payload_proof {
-//             Some(tx_payload_proof) => {
-//                 if vid
-//                     .payload_verify(
-//                         Statement {
-//                             payload_subslice: tx.payload(),
-//                             range: tx_payload_range,
-//                             commit: vid_commit,
-//                             common: vid_common,
-//                         },
-//                         tx_payload_proof,
-//                     )
-//                     .ok()?
-//                     .is_err()
-//                 {
-//                     return Some(Err(())); // TODO it would be nice to use ? here...
-//                 }
-//             }
-//             None => {
-//                 if !tx.payload().is_empty() || !tx_payload_range.is_empty() {
-//                     return None; // error: nonempty payload but no proof
-//                 }
-//             }
-//         };
-
-//         // Verify proof for tx table len.
-//         if vid
-//             .payload_verify(
-//                 Statement {
-//                     payload_subslice: &self.tx_table_len.to_bytes(),
-//                     range: self.ns_range.start
-//                         ..self.ns_range.start.checked_add(TxTableEntry::byte_len())?,
-//                     commit: vid_commit,
-//                     common: vid_common,
-//                 },
-//                 &self.tx_table_len_proof,
-//             )
-//             .ok()?
-//             .is_err()
-//         {
-//             return Some(Err(()));
-//         }
-
-//         // Verify proof for tx table entries.
-//         // Start index missing for the 0th tx
-//         let index: usize = tx_index.tx_idx;
-//         let mut tx_table_range_bytes =
-//             Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
-//         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
-//             if index == 0 {
-//                 return None; // error: first tx should have empty start index
-//             }
-//             tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
-//             index
-//                 .checked_mul(TxTableEntry::byte_len())?
-//                 .checked_add(self.ns_range.start)?
-//         } else {
-//             if index != 0 {
-//                 return None; // error: only the first tx should have empty start index
-//             }
-//             TxTableEntry::byte_len().checked_add(self.ns_range.start)?
-//         };
-//         tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
-//         let range = start
-//             ..index
-//                 .checked_add(2)?
-//                 .checked_mul(TxTableEntry::byte_len())?
-//                 .checked_add(self.ns_range.start)?;
-
-//         if vid
-//             .payload_verify(
-//                 Statement {
-//                     payload_subslice: &tx_table_range_bytes,
-//                     range,
-//                     commit: vid_commit,
-//                     common: vid_common,
-//                 },
-//                 &self.tx_table_range_proof,
-//             )
-//             .ok()?
-//             .is_err()
-//         {
-//             return Some(Err(()));
-//         }
-
-//         Some(Ok(()))
-//     }
-// }

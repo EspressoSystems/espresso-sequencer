@@ -1,3 +1,5 @@
+//! Low-level utils for reading from and writing to the binary block payload.
+
 use crate::NamespaceId;
 use paste::paste;
 use std::{mem::size_of, ops::Range};
@@ -29,6 +31,8 @@ pub const NS_ID_BYTE_LEN: usize = 4;
 /// Special case: If `tx_index` is 0 then the start index is implicitly 0, so
 /// the returned range contains only one entry from the tx table: the first
 /// entry of the tx table.
+///
+/// TODO DELETE ME, this isn't the right API
 pub fn _tx_table_range(ns_payload: &[u8], tx_index: usize) -> Range<usize> {
     let tx_table_range_proof_end = std::cmp::min(
         // The desired range ends at the end of this transaction's tx table entry
