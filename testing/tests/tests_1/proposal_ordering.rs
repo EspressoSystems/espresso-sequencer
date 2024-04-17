@@ -10,8 +10,10 @@ use hotshot_testing::{
 use hotshot_types::{
     data::{null_block, ViewNumber},
     traits::{election::Membership, node_implementation::ConsensusTime},
+    utils::BuilderCommitment,
 };
 use jf_primitives::vid::VidScheme;
+use sha2::Digest;
 
 /// Runs a basic test where a qualified proposal occurs (i.e. not initiated by the genesis view or node 1).
 /// This proposal should happen no matter how the `input_permutation` is specified.
@@ -69,11 +71,13 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
 
     // Node 2 is the leader up next, so we form the QC for it.
     let cert = proposals[1].data.justify_qc.clone();
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let inputs = vec![
         QuorumProposalRecv(proposals[1].clone(), leaders[1]),
         QCFormed(either::Left(cert)),
         SendPayloadCommitmentAndMetadata(
             payload_commitment,
+            builder_commitment,
             (),
             ViewNumber::new(node_id),
             null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),

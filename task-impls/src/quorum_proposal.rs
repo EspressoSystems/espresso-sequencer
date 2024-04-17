@@ -184,6 +184,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             &consensus.instance_state,
             &parent_leaf,
             commit_and_metadata.commitment,
+            commit_and_metadata.builder_commitment,
             commit_and_metadata.metadata,
             commit_and_metadata.fee,
         )
@@ -255,6 +256,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                 }
                 HotShotEvent::SendPayloadCommitmentAndMetadata(
                     payload_commitment,
+                    builder_commitment,
                     metadata,
                     _view,
                     fee,
@@ -262,6 +264,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                     debug!("Got commit and meta {:?}", payload_commitment);
                     commit_and_metadata = Some(CommitmentAndMetadata {
                         commitment: *payload_commitment,
+                        builder_commitment: builder_commitment.clone(),
                         metadata: metadata.clone(),
                         fee: fee.clone(),
                     });
@@ -413,6 +416,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     ProposalDependency::PayloadAndMetadata => {
                         if let HotShotEvent::SendPayloadCommitmentAndMetadata(
                             _payload_commitment,
+                            _builder_commitment,
                             _metadata,
                             view,
                             _fee,
@@ -675,6 +679,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             }
             HotShotEvent::SendPayloadCommitmentAndMetadata(
                 payload_commitment,
+                _builder_commitment,
                 _metadata,
                 view,
                 _fee,

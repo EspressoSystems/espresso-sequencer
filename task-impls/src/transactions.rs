@@ -181,10 +181,7 @@ impl<
         {
             let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
                 &self.private_key,
-                last_leaf
-                    .get_block_header()
-                    .builder_commitment(last_leaf.get_block_header().metadata())
-                    .as_ref(),
+                last_leaf.get_block_header().builder_commitment().as_ref(),
             ) else {
                 error!("Failed to sign block hash");
                 continue;
@@ -193,9 +190,7 @@ impl<
             let mut available_blocks = match self
                 .builder_client
                 .get_available_blocks(
-                    last_leaf
-                        .get_block_header()
-                        .builder_commitment(last_leaf.get_block_header().metadata()),
+                    last_leaf.get_block_header().builder_commitment(),
                     self.public_key.clone(),
                     &request_signature,
                 )

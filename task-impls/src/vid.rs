@@ -12,6 +12,7 @@ use hotshot_types::{
         network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
+        BlockPayload,
     },
 };
 use tracing::{debug, error, instrument, warn};
@@ -61,6 +62,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
             HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number, fee) => {
+                let payload = <TYPES as NodeType>::BlockPayload::from_bytes(
+                    encoded_transactions.clone().into_iter(),
+                    metadata,
+                );
+                let builder_commitment = payload.builder_commitment(metadata);
                 let vid_disperse = calculate_vid_disperse(
                     &encoded_transactions.clone(),
                     &self.membership.clone(),
@@ -70,6 +76,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 broadcast_event(
                     Arc::new(HotShotEvent::SendPayloadCommitmentAndMetadata(
                         vid_disperse.payload_commitment,
+                        builder_commitment,
                         metadata.clone(),
                         *view_number,
                         fee.clone(),

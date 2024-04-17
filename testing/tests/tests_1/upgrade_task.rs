@@ -253,6 +253,7 @@ async fn test_upgrade_and_consensus_task() {
             DACertificateRecv(dacs[1].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
+                proposals[2].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -442,6 +443,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             DACertificateRecv(dacs[1].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[1].0[0].data.payload_commitment,
+                proposals[1].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -452,6 +454,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
+                proposals[2].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(3),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -463,6 +466,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             VIDShareRecv(get_vid_share(&vids[3].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[3].0[0].data.payload_commitment,
+                proposals[3].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(4),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -474,6 +478,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             VIDShareRecv(get_vid_share(&vids[4].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[4].0[0].data.payload_commitment,
+                proposals[4].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(5),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -484,6 +489,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             DACertificateRecv(dacs[5].clone()),
             SendPayloadCommitmentAndMetadata(
                 vids[5].0[0].data.payload_commitment,
+                proposals[5].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(6),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -495,6 +501,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
             VIDShareRecv(get_vid_share(&vids[6].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[6].0[0].data.payload_commitment,
+                proposals[6].data.block_header.builder_commitment.clone(),
                 (),
                 ViewNumber::new(7),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),

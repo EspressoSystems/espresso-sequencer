@@ -19,8 +19,10 @@ use hotshot_types::{
     data::{ViewChangeEvidence, ViewNumber},
     simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeData},
     traits::{election::Membership, node_implementation::ConsensusTime},
+    utils::BuilderCommitment,
 };
 use jf_primitives::vid::VidScheme;
+use sha2::Digest;
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
@@ -72,6 +74,7 @@ async fn test_consensus_task() {
     };
 
     let cert = proposals[1].data.justify_qc.clone();
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
     // Run view 2 and propose.
     let view_2 = TestScriptStage {
@@ -81,6 +84,7 @@ async fn test_consensus_task() {
             // We must have a payload commitment and metadata to propose.
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
+                builder_commitment,
                 (),
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
@@ -354,6 +358,7 @@ async fn test_view_sync_finalize_propose() {
     )
     .unwrap();
 
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let view_4 = TestScriptStage {
         inputs: vec![
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
@@ -362,6 +367,7 @@ async fn test_view_sync_finalize_propose() {
             ViewSyncFinalizeCertificate2Recv(cert),
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
+                builder_commitment,
                 (),
                 ViewNumber::new(4),
                 null_block::builder_fee(4).unwrap(),

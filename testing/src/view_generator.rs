@@ -21,6 +21,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeType},
+        BlockPayload,
     },
 };
 use sha2::{Digest, Sha256};
@@ -55,6 +56,10 @@ impl TestView {
 
         let transactions = Vec::new();
 
+        let (block_payload, metadata) =
+            TestBlockPayload::from_transactions(transactions.clone()).unwrap();
+        let builder_commitment = block_payload.builder_commitment(&metadata);
+
         let (private_key, public_key) = key_pair_for_id(*genesis_view);
 
         let leader_public_key = public_key;
@@ -80,6 +85,7 @@ impl TestView {
             block_number: 1,
             timestamp: 1,
             payload_commitment,
+            builder_commitment,
         };
 
         let quorum_proposal_inner = QuorumProposal::<TestTypes> {
@@ -165,6 +171,10 @@ impl TestView {
         let (private_key, public_key) = key_pair_for_id(*next_view);
 
         let leader_public_key = public_key;
+
+        let (block_payload, metadata) =
+            TestBlockPayload::from_transactions(transactions.clone()).unwrap();
+        let builder_commitment = block_payload.builder_commitment(&metadata);
 
         let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
 
@@ -263,6 +273,7 @@ impl TestView {
             block_number: *next_view,
             timestamp: *next_view,
             payload_commitment,
+            builder_commitment,
         };
 
         let proposal = QuorumProposal::<TestTypes> {

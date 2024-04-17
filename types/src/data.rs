@@ -439,13 +439,18 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     #[must_use]
     pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
         let (payload, metadata) = TYPES::BlockPayload::genesis();
+        let builder_commitment = payload.builder_commitment(&metadata);
         let payload_bytes = payload
             .encode()
             .expect("unable to encode genesis payload")
             .collect();
         let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
-        let block_header =
-            TYPES::BlockHeader::genesis(instance_state, payload_commitment, metadata);
+        let block_header = TYPES::BlockHeader::genesis(
+            instance_state,
+            payload_commitment,
+            builder_commitment,
+            metadata,
+        );
         Self {
             view_number: TYPES::Time::genesis(),
             justify_qc: QuorumCertificate::<TYPES>::genesis(),
