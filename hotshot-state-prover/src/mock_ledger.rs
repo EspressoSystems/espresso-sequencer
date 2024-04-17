@@ -243,7 +243,7 @@ impl MockLedger {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -302,7 +302,7 @@ impl MockLedger {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -432,7 +432,7 @@ pub fn gen_plonk_proof_for_test(
     // 1. Simulate universal setup
     let rng = &mut jf_utils::test_rng();
     let srs = {
-        let aztec_srs = ark_srs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
+        let aztec_srs = ark_srs::kzg10::aztec20::setup(1024).expect("Aztec SRS fail to load");
 
         UnivariateUniversalParams {
             powers_of_g: aztec_srs.powers_of_g,
