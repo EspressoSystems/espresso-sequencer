@@ -1,5 +1,6 @@
 use either::Either;
 use hotshot_types::{
+    consensus::ProposalDependencyData,
     data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare},
     message::Proposal,
     simple_certificate::{
@@ -12,6 +13,7 @@ use hotshot_types::{
     },
     traits::{node_implementation::NodeType, BlockPayload},
     vid::VidCommitment,
+    vote::VoteDependencyData,
 };
 use vbs::version::Version;
 
@@ -23,6 +25,7 @@ pub struct HotShotTaskCompleted;
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum HotShotEvent<TYPES: NodeType> {
     /// Shutdown the task
     Shutdown,
@@ -139,4 +142,8 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
     /// HotShot was upgraded, with a new network version.
     VersionUpgrade(Version),
+    /// Initiate a proposal right now for a provided view.
+    ProposeNow(TYPES::Time, ProposalDependencyData<TYPES>),
+    /// Initiate a vote right now for the designated view.
+    VoteNow(TYPES::Time, VoteDependencyData<TYPES>),
 }

@@ -12,7 +12,9 @@ use ethereum_types::U256;
 use tracing::error;
 
 use crate::{
-    simple_certificate::Threshold,
+    data::{Leaf, QuorumProposal, VidDisperseShare},
+    message::Proposal,
+    simple_certificate::{DACertificate, Threshold},
     simple_vote::Voteable,
     traits::{
         election::Membership,
@@ -180,3 +182,20 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
 
 /// Mapping of commitments to vote tokens by key.
 type VoteMap2<COMMITMENT, PK, SIG> = HashMap<COMMITMENT, (U256, BTreeMap<PK, (SIG, COMMITMENT)>)>;
+
+/// Payload for the `HotShotEvents::VoteNow` event type. The proposal and leaf are
+/// obtained via a `QuorumProposalValidated` event being processed.
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct VoteDependencyData<TYPES: NodeType> {
+    /// The quorum proposal (not necessarily valid).
+    pub quorum_proposal: QuorumProposal<TYPES>,
+
+    /// The leaf we've obtained from the `QuorumProposalValidated` event.
+    pub leaf: Leaf<TYPES>,
+
+    /// The Vid disperse proposal.
+    pub disperse_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
+
+    /// The DA certificate.
+    pub da_cert: DACertificate<TYPES>,
+}

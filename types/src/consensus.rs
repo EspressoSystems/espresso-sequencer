@@ -11,16 +11,19 @@ use tracing::error;
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf, VidDisperseShare},
+    data::{Leaf, QuorumProposal, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
-    simple_certificate::{DACertificate, QuorumCertificate},
+    simple_certificate::{
+        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncFinalizeCertificate2,
+    },
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
         node_implementation::NodeType,
-        ValidatedState,
+        BlockPayload, ValidatedState,
     },
     utils::{StateAndDelta, Terminator},
+    vid::VidCommitment,
 };
 
 /// A type alias for `HashMap<Commitment<T>, T>`
@@ -388,4 +391,34 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .0
             .expect("Decided state not found! Consensus internally inconsistent")
     }
+}
+
+/// Alias for the block payload commitment and the associated metadata. The primary data
+/// needed in order to submit a proposal.
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct CommitmentAndMetadata<PAYLOAD: BlockPayload> {
+    /// Vid Commitment
+    pub commitment: VidCommitment,
+    /// Metadata for the block payload
+    pub metadata: <PAYLOAD as BlockPayload>::Metadata,
+}
+
+/// Helper type to hold the optional secondary information required to propose.
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub enum SecondaryProposalInformation<TYPES: NodeType> {
+    /// The quorum proposal and certificate needed to propose.
+    QuorumProposalAndCertificate(QuorumProposal<TYPES>, QuorumCertificate<TYPES>),
+    /// The timeout certificate which we can propose from.
+    Timeout(TimeoutCertificate<TYPES>),
+    /// The view sync certificate which we can propose from.
+    ViewSync(ViewSyncFinalizeCertificate2<TYPES>),
+}
+
+/// Dependency data required to submit a proposal
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct ProposalDependencyData<TYPES: NodeType> {
+    /// The primary data in a proposal.
+    pub commitment_and_metadata: CommitmentAndMetadata<TYPES::BlockPayload>,
+    /// The secondary data in a proposal
+    pub secondary_proposal_information: SecondaryProposalInformation<TYPES>,
 }
