@@ -136,6 +136,10 @@ impl BuilderConfig {
 
         // create a client for it
         // Start Client for the event streaming api
+        tracing::info!(
+            "Builder client connecting to hotshot events API at {}",
+            hotshot_events_api_url.to_string()
+        );
         let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
 
         assert!(client.connect(Some(Duration::from_secs(60))).await);
@@ -144,8 +148,7 @@ impl BuilderConfig {
 
         // client subscrive to hotshot events
         let subscribed_events = client
-            .socket("hotshot_events/events")
-            .header(ACCEPT, "application/octet-stream")
+            .socket("hotshot-events/events")
             .subscribe::<BuilderEvent<SeqTypes>>()
             .await
             .unwrap();

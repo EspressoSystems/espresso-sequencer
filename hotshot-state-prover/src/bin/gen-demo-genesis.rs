@@ -1,5 +1,6 @@
 use clap::Parser;
 use ethers::abi::AbiEncode;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
 use url::Url;
 
@@ -18,6 +19,8 @@ struct Args {
 #[async_std::main]
 async fn main() {
     let args = Args::parse();
-    let pi = light_client_genesis(&args.orchestrator_url).await.unwrap();
+    let pi = light_client_genesis(&args.orchestrator_url, STAKE_TABLE_CAPACITY)
+        .await
+        .unwrap();
     println!("{}", pi.encode_hex());
 }

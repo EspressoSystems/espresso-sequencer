@@ -2,8 +2,11 @@
 
 set -e
 
-SERVER=http://localhost:50000
-LOAD_GENERATOR=http://localhost:44010
+# load env vars in .env
+set -a; source .env; set +a;
+
+SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT
 TIMEOUT=60
 
 # Wait for the load generator to start.
@@ -14,8 +17,8 @@ done
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
-block_height=`curl -s $SERVER/node/block-height`
-num_tx=`curl -s $SERVER/node/transactions/count`
+block_height=`curl -s $SEQUENCER_API/node/block-height`
+num_tx=`curl -s $SEQUENCER_API/node/transactions/count`
 
 echo "Initial state:"
 echo "  block_height: $block_height"
@@ -27,8 +30,8 @@ START=$SECONDS
 # Check blocks and transactions are increasing
 # Every second until timeout after 60 seconds
 while true; do
-	new_block_height=`curl -s $SERVER/node/block-height`
-	new_num_tx=`curl -s $SERVER/node/transactions/count`
+	new_block_height=`curl -s $SEQUENCER_API/node/block-height`
+	new_num_tx=`curl -s $SEQUENCER_API/node/transactions/count`
 	if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
 		echo "Final state:"
 		echo "  block_height: $new_block_height"
@@ -53,3 +56,11 @@ while true; do
 		exit 1
 	fi
 done
+
+echo "Checking if builder is healthy at http://localhost:$ESPRESSO_BUILDER_SERVER_PORT"
+curl -s --fail http://localhost:$ESPRESSO_BUILDER_SERVER_PORT > /dev/null
+
+# TODO, uncomment: currently the healthcheck may hang for a long time if the prover
+# is generating a proof. See https://github.com/EspressoSystems/espresso-sequencer/issues/1325
+# echo "Checking if prover is healthy at http://localhost:$ESPRESSO_PROVER_SERVICE_PORT"
+# curl -s --fail "http://localhost:$ESPRESSO_PROVER_SERVICE_PORT" > /dev/null

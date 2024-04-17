@@ -13,8 +13,6 @@ use hotshot::{
     Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::client::OrchestratorClient;
-// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     traits::{election::Membership, metrics::Metrics},
@@ -78,6 +76,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         node_id: u64,
+        stake_table_capacity: usize,
         _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
@@ -102,7 +101,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         };
 
         let stake_table_commit =
-            static_stake_table_commitment(&config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
+            static_stake_table_commitment(&config.known_nodes_with_stake, stake_table_capacity);
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(

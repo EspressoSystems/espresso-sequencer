@@ -311,6 +311,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     mut persistence: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
+    stake_table_capacity: usize,
     bind_version: Ver,
 ) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
     // Orchestrator client
@@ -448,6 +449,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         Some(network_params.state_relay_server_url),
         metrics,
         node_index,
+        stake_table_capacity,
         bind_version,
     )
     .await?;
@@ -485,7 +487,8 @@ pub mod testing {
 
     use std::{num::NonZeroUsize, time::Duration};
 
-    // TODO: pass membership
+    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+
     pub async fn run_test_builder(
         num_of_nodes_with_stake: NonZeroUsize,
         known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
@@ -605,6 +608,7 @@ pub mod testing {
                     NoStorage,
                     MockStateCatchup::default(),
                     &NoMetrics,
+                    STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
                 )
                 .await
@@ -612,6 +616,7 @@ pub mod testing {
             .await
         }
 
+        #[allow(clippy::too_many_arguments)]
         pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
             &self,
             i: usize,
@@ -619,6 +624,7 @@ pub mod testing {
             persistence: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
+            stake_table_capacity: usize,
             bind_version: Ver,
         ) -> SequencerContext<network::Memory, P, Ver> {
             let mut config = self.config.clone();
@@ -661,6 +667,7 @@ pub mod testing {
                 None,
                 metrics,
                 i as u64,
+                stake_table_capacity,
                 bind_version,
             )
             .await

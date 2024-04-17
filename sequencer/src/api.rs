@@ -132,6 +132,8 @@ mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
+    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+
     pub struct TestNetwork<P: SequencerPersistence> {
         pub server: SequencerContext<network::Memory, P, SequencerVersion>,
         pub peers: Vec<SequencerContext<network::Memory, P, SequencerVersion>>,
@@ -172,6 +174,7 @@ mod test_helpers {
                                             persistence,
                                             catchup,
                                             &*metrics,
+                                            STAKE_TABLE_CAPACITY_FOR_TEST,
                                             SEQUENCER_VERSION,
                                         )
                                         .await
@@ -189,6 +192,7 @@ mod test_helpers {
                                 persistence,
                                 catchup,
                                 &NoMetrics,
+                                STAKE_TABLE_CAPACITY_FOR_TEST,
                                 SEQUENCER_VERSION,
                             )
                             .await

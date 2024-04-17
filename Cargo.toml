@@ -28,6 +28,7 @@ ark-ed-on-bn254 = "0.4"
 ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
+ark-srs = "0.2.0"
 async-compatibility-layer = { version = "1.1", default-features = false, features = [
     "logging-utils",
 ] }
@@ -61,11 +62,9 @@ cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", default-fea
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3", features = [
   "test-apis",
-  "test-srs",
 ] }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3", features = [
   "std",
-  "test-srs",
 ] }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3", features = [
   "std",
