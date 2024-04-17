@@ -1351,7 +1351,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-types",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
@@ -1359,7 +1359,7 @@ dependencies = [
  "snafu 0.8.2",
  "surf",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "tracing",
  "url",
@@ -1519,7 +1519,7 @@ dependencies = [
  "dashmap",
  "derivative",
  "derive_builder",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "lazy_static",
  "local-ip-address",
  "parking_lot",
@@ -1542,7 +1542,7 @@ dependencies = [
  "dashmap",
  "derivative",
  "derive_builder",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "lazy_static",
  "local-ip-address",
  "parking_lot",
@@ -1563,7 +1563,7 @@ dependencies = [
  "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19)",
  "clap",
  "derive_builder",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "rand 0.8.5",
  "tokio",
  "tracing",
@@ -1579,7 +1579,7 @@ dependencies = [
  "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.19)",
  "clap",
  "derive_builder",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -1594,7 +1594,7 @@ dependencies = [
  "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
  "clap",
  "derive_builder",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -1611,7 +1611,7 @@ dependencies = [
  "async-trait",
  "capnp",
  "derivative",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "kanal",
  "lazy_static",
  "mnemonic",
@@ -1643,7 +1643,7 @@ dependencies = [
  "async-trait",
  "capnp",
  "derivative",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "kanal",
  "lazy_static",
  "mnemonic",
@@ -1889,7 +1889,7 @@ dependencies = [
  "hex",
  "serde",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -2632,10 +2632,10 @@ dependencies = [
  "hotshot-state-prover",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-plonk",
- "jf-primitives",
- "jf-relation",
- "jf-utils",
+ "jf-plonk 0.4.3",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-relation 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "sha3",
 ]
 
@@ -3697,7 +3697,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
 ]
 
 [[package]]
@@ -4080,7 +4080,7 @@ dependencies = [
  "hotshot-task-impls",
  "hotshot-types",
  "hotshot-web-server",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "libp2p-identity",
  "libp2p-networking",
  "lru 0.12.3",
@@ -4108,7 +4108,7 @@ dependencies = [
  "hotshot-types",
  "serde",
  "snafu 0.8.2",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "toml",
  "versioned-binary-serialization",
@@ -4135,7 +4135,7 @@ dependencies = [
  "sha2 0.10.8",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "tracing",
  "versioned-binary-serialization",
@@ -4157,9 +4157,9 @@ dependencies = [
  "diff-test-bn254",
  "ethers",
  "hotshot-types",
- "jf-plonk",
- "jf-primitives",
- "jf-utils",
+ "jf-plonk 0.4.3",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "num-bigint",
  "num-traits",
 ]
@@ -4182,7 +4182,7 @@ dependencies = [
  "hotshot-types",
  "serde",
  "snafu 0.8.2",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "toml",
  "tracing",
@@ -4286,7 +4286,7 @@ dependencies = [
  "hotshot-types",
  "include_dir",
  "itertools 0.12.1",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "native-tls",
  "portpicker",
  "postgres-native-tls",
@@ -4298,7 +4298,7 @@ dependencies = [
  "snafu 0.8.2",
  "spin_sleep",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tempfile",
  "tide-disco",
  "time 0.3.34",
@@ -4324,10 +4324,10 @@ dependencies = [
  "digest 0.10.7",
  "ethereum-types",
  "hotshot-types",
- "jf-primitives",
- "jf-utils",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "serde",
- "tagged-base64",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -4360,16 +4360,16 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-plonk",
- "jf-primitives",
- "jf-relation",
- "jf-utils",
+ "jf-plonk 0.4.3",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-relation 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "rand_chacha 0.3.1",
  "sequencer-utils",
  "serde",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide-disco",
  "time 0.3.34",
  "toml",
@@ -4410,14 +4410,14 @@ dependencies = [
  "hotshot-builder-api",
  "hotshot-task",
  "hotshot-types",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "memoize",
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.2",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -4447,7 +4447,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
- "jf-primitives",
+ "jf-primitives 0.4.0-pre.0",
  "lru 0.12.3",
  "portpicker",
  "rand 0.8.5",
@@ -4492,16 +4492,16 @@ dependencies = [
  "ethereum-types",
  "futures",
  "generic-array",
- "jf-plonk",
- "jf-primitives",
- "jf-utils",
+ "jf-plonk 0.4.0-pre.0",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "lazy_static",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.2",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -5003,16 +5003,45 @@ dependencies = [
  "espresso-systems-common 0.4.0",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-primitives",
- "jf-relation",
- "jf-utils",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-relation 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "merlin",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
  "serde",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.3.4",
+]
+
+[[package]]
+name = "jf-plonk"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "displaydoc",
+ "downcast-rs",
+ "dyn-clone 1.0.16",
+ "espresso-systems-common 0.4.0",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-primitives 0.4.3",
+ "jf-relation 0.4.3",
+ "jf-utils 0.4.3",
+ "merlin",
+ "num-bigint",
+ "rand_chacha 0.3.1",
+ "rayon",
+ "serde",
+ "sha3",
+ "tagged-base64 0.4.0",
 ]
 
 [[package]]
@@ -5045,8 +5074,8 @@ dependencies = [
  "generic-array",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-relation",
- "jf-utils",
+ "jf-relation 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "merlin",
  "num-bigint",
  "num-traits",
@@ -5055,8 +5084,52 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sha3",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "typenum",
+ "zeroize",
+]
+
+[[package]]
+name = "jf-primitives"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+dependencies = [
+ "anyhow",
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ed-on-bls12-377",
+ "ark-ed-on-bls12-381",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-pallas",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "blst",
+ "chacha20poly1305",
+ "crypto_kx",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "espresso-systems-common 0.4.0",
+ "generic-array",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-relation 0.4.3",
+ "jf-utils 0.4.3",
+ "merlin",
+ "num-bigint",
+ "num-traits",
+ "rand_chacha 0.3.1",
+ "rayon",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "tagged-base64 0.4.0",
  "zeroize",
 ]
 
@@ -5080,7 +5153,33 @@ dependencies = [
  "dyn-clone 1.0.16",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-utils",
+ "jf-utils 0.4.0-pre.0",
+ "num-bigint",
+ "rand_chacha 0.3.1",
+ "rayon",
+]
+
+[[package]]
+name = "jf-relation"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "displaydoc",
+ "downcast-rs",
+ "dyn-clone 1.0.16",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-utils 0.4.3",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
@@ -5099,7 +5198,23 @@ dependencies = [
  "rayon",
  "serde",
  "sha2 0.10.8",
- "tagged-base64",
+ "tagged-base64 0.3.4",
+]
+
+[[package]]
+name = "jf-utils"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "digest 0.10.7",
+ "rayon",
+ "serde",
+ "sha2 0.10.8",
+ "tagged-base64 0.4.0",
 ]
 
 [[package]]
@@ -8421,8 +8536,8 @@ dependencies = [
  "hotshot-web-server",
  "include_dir",
  "itertools 0.12.1",
- "jf-primitives",
- "jf-utils",
+ "jf-primitives 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0",
  "lazy_static",
  "num-traits",
  "portpicker",
@@ -8436,7 +8551,7 @@ dependencies = [
  "snafu 0.8.2",
  "strum",
  "surf-disco",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tempfile",
  "tide-disco",
  "time 0.3.34",
@@ -9540,7 +9655,23 @@ dependencies = [
  "crc-any",
  "serde",
  "snafu 0.7.5",
- "tagged-base64-macros",
+ "tagged-base64-macros 0.3.3",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "tagged-base64"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b74bbf1db405a3fd2c6f8cd403bfa14727faa145925efe3012fa270b61551f1"
+dependencies = [
+ "ark-serialize",
+ "ark-std",
+ "base64 0.22.0",
+ "crc-any",
+ "serde",
+ "snafu 0.8.2",
+ "tagged-base64-macros 0.4.0",
  "wasm-bindgen",
 ]
 
@@ -9548,6 +9679,16 @@ dependencies = [
 name = "tagged-base64-macros"
 version = "0.3.3"
 source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+dependencies = [
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "tagged-base64-macros"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcdea3c0150898fad2f7196a173ec3264f7fc455ba570939163c558f48ae85ac"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -9686,7 +9827,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "surf",
- "tagged-base64",
+ "tagged-base64 0.3.4",
  "tide",
  "tide-websockets",
  "toml",
