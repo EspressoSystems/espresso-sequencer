@@ -62,10 +62,7 @@ sha2 = { workspace = true }
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
 cdn-client = { workspace = true }
-cdn-broker = { workspace = true, features = [
-  "strong-consistency",
-  "global-permits",
-] }
+cdn-broker = { workspace = true, features = ["global-permits"] }
 cdn-marshal = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
@@ -73,10 +70,9 @@ async-std = { workspace = true }
 cdn-client = { workspace = true, features = ["runtime-async-std"] }
 cdn-broker = { workspace = true, features = [
   "runtime-async-std",
-  "strong-consistency",
   "global-permits",
 ] }
-cdn-marshal = { workspace = true, features = ["runtime-async-std"] }
+cdn-marshal = { workspace = true, features = ["runtime-async-std", "global-permits"] }
 
 
 [dev-dependencies]
