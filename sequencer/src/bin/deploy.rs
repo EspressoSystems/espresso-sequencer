@@ -9,7 +9,7 @@ use ethers::prelude::{coins_bip39::English, *};
 use futures::future::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
-use sequencer::deployer::{
+use sequencer_utils::deployer::{
     deploy_light_client_contract, deploy_mock_light_client_contract, Contract, Contracts,
     DeployedContracts,
 };

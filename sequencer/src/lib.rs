@@ -3,7 +3,6 @@ pub mod block;
 pub mod catchup;
 mod chain_variables;
 pub mod context;
-pub mod deployer;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
