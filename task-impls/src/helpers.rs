@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_broadcast::{SendError, Sender};
 #[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
+use async_std::task::{spawn_blocking, JoinHandle};
 use hotshot_types::{
     data::VidDisperse,
     traits::{election::Membership, node_implementation::NodeType},
@@ -10,7 +10,7 @@ use hotshot_types::{
 };
 use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
 #[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
+use tokio::task::{spawn_blocking, JoinHandle};
 
 /// Cancel a task
 pub async fn cancel_task<T>(task: JoinHandle<T>) {
@@ -43,13 +43,19 @@ pub async fn broadcast_event<E: Clone + std::fmt::Debug>(event: E, sender: &Send
 /// # Panics
 /// Panics if the VID calculation fails, this should not happen.
 #[allow(clippy::panic)]
-pub fn calculate_vid_disperse<TYPES: NodeType>(
-    txns: &[u8],
+pub async fn calculate_vid_disperse<TYPES: NodeType>(
+    txns: Vec<u8>,
     membership: &Arc<TYPES::Membership>,
     view: TYPES::Time,
 ) -> VidDisperse<TYPES> {
     let num_nodes = membership.total_nodes();
-    let vid_disperse = vid_scheme(num_nodes).disperse(txns).unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()));
+    let vid_disperse = spawn_blocking(move || {
+        vid_scheme(num_nodes).disperse(&txns).unwrap_or_else(|err| panic!("VID precompute disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
+    })
+    .await;
+    #[cfg(async_executor_impl = "tokio")]
+    // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
+    let vid_disperse = vid_disperse.unwrap();
 
     VidDisperse::from_membership(view, vid_disperse, membership.as_ref())
 }
@@ -59,14 +65,20 @@ pub fn calculate_vid_disperse<TYPES: NodeType>(
 /// # Panics
 /// Panics if the VID calculation fails, this should not happen.
 #[allow(clippy::panic)]
-pub fn calculate_vid_disperse_using_precompute_data<TYPES: NodeType>(
-    txns: &Vec<u8>,
+pub async fn calculate_vid_disperse_using_precompute_data<TYPES: NodeType>(
+    txns: Vec<u8>,
     membership: &Arc<TYPES::Membership>,
     view: TYPES::Time,
-    pre_compute_data: &VidPrecomputeData,
+    pre_compute_data: VidPrecomputeData,
 ) -> VidDisperse<TYPES> {
     let num_nodes = membership.total_nodes();
-    let vid_disperse = vid_scheme(num_nodes).disperse_precompute(txns, pre_compute_data).unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()));
+    let vid_disperse = spawn_blocking(move || {
+        vid_scheme(num_nodes).disperse_precompute(&txns, &pre_compute_data).unwrap_or_else(|err| panic!("VID precompute disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
+    })
+    .await;
+    #[cfg(async_executor_impl = "tokio")]
+    // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
+    let vid_disperse = vid_disperse.unwrap();
 
     VidDisperse::from_membership(view, vid_disperse, membership.as_ref())
 }
