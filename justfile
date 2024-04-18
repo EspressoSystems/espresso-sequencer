@@ -95,7 +95,7 @@ code-coverage:
 # Download Aztec's SRS for production
 download-srs:
     @echo "Check existence or download SRS for production"
-    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" ./scripts/download_srs_aztec.sh
+    @./scripts/download_srs_aztec.sh
 
 # Download Aztec's SRS for test (smaller degree usually)
 dev-download-srs:
