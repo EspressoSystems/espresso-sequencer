@@ -50,7 +50,7 @@ jobs:
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
-          cargo build --release --workspace
+          cargo build --locked --release --workspace
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -92,7 +92,7 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --release --workspace
+          cargo build --locked --release --workspace
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
