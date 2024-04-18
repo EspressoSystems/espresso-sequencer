@@ -12,15 +12,17 @@ use hotshot_builder_api::block_info::{
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
+    data::Leaf,
     event::{Event, EventType},
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         consensus_api::ConsensusApi,
         election::Membership,
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
     },
+    utils::BuilderCommitment,
 };
 use tracing::{debug, error, instrument};
 use vbs::version::StaticVersionType;
@@ -164,11 +166,47 @@ impl<
         None
     }
 
+    /// Get last known builder commitment from consensus.
+    async fn latest_known_builder_commitment(&self) -> BuilderCommitment {
+        let consensus = self.consensus.read().await;
+
+        let mut prev_view = TYPES::Time::new(self.cur_view.saturating_sub(1));
+
+        // Search through all previous views...
+        while prev_view != TYPES::Time::genesis() {
+            if let Some(commitment) =
+                consensus
+                    .validated_state_map
+                    .get(&prev_view)
+                    .and_then(|view| match view.view_inner {
+                        // For a view for which we have a Leaf stored
+                        hotshot_types::utils::ViewInner::Leaf { leaf, .. } => consensus
+                            .saved_leaves
+                            .get(&leaf)
+                            .map(Leaf::get_block_header)
+                            .map(BlockHeader::builder_commitment), // and return it's commitment
+                        _ => None,
+                    })
+            {
+                return commitment;
+            }
+            prev_view = prev_view - 1;
+        }
+
+        // If not found, return commitment for last decided block
+        consensus
+            .get_decided_leaf()
+            .get_block_header()
+            .builder_commitment()
+    }
+
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_block(&self) -> Option<BuilderResponses<TYPES>> {
         let task_start_time = Instant::now();
 
-        let last_leaf = self.consensus.read().await.get_decided_leaf();
+        // Find commitment to the block we want to build upon
+        let parent_commitment = self.latest_known_builder_commitment().await;
+
         let mut latest_block: Option<BuilderResponses<TYPES>> = None;
         let mut first_iteration = true;
         while task_start_time.elapsed() < self.api.propose_max_round_time()
@@ -189,7 +227,7 @@ impl<
 
             let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
                 &self.private_key,
-                last_leaf.get_block_header().builder_commitment().as_ref(),
+                parent_commitment.as_ref(),
             ) else {
                 error!("Failed to sign block hash");
                 continue;
@@ -198,7 +236,7 @@ impl<
             let mut available_blocks = match self
                 .builder_client
                 .get_available_blocks(
-                    last_leaf.get_block_header().builder_commitment(),
+                    parent_commitment.clone(),
                     self.public_key.clone(),
                     &request_signature,
                 )

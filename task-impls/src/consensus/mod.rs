@@ -3,14 +3,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    consensus::{proposal::validate_proposal, view_change::update_view},
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
-    },
-};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
@@ -52,6 +44,15 @@ use {
         data::{null_block, VidDisperseShare},
         message::GeneralConsensusMessage,
         simple_vote::QuorumData,
+    },
+};
+
+use crate::{
+    consensus::{proposal::validate_proposal, view_change::update_view},
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task},
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
     },
 };
 
