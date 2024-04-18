@@ -755,10 +755,11 @@ mod test {
                 .status(Default::default()),
         );
 
+        // Populate one account so we have something to look up later. Leave the other accounts
+        // unpopulated, which proves we can handle state updates even with missing accounts.
+        let account = TestConfig::builder_key(0).fee_account();
         let mut state = ValidatedState::default();
-        for i in 0..TestConfig::NUM_NODES {
-            state.prefund_account(TestConfig::builder_key(i).fee_account(), 1.into());
-        }
+        state.prefund_account(account, 1.into());
         let mut network = TestNetwork::with_state(
             options,
             std::array::from_fn(|_| state.clone()),
@@ -803,7 +804,6 @@ mod test {
             assert_eq!(*path.elem().unwrap(), block.hash());
 
             tracing::info!(i, "get fee state");
-            let account = TestConfig::builder_key(0).fee_account();
             let path = client
                 .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
                     "fee-state/{}/{}",
