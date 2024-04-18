@@ -482,28 +482,19 @@ mod api_tests {
 
     use super::*;
     use crate::{
-        catchup::{mock::MockStateCatchup, StatePeers},
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
-    use futures::{
-        future::join_all,
-        stream::{StreamExt, TryStreamExt},
-    };
-    use hotshot_query_service::{
-        availability::{BlockQueryData, LeafQueryData},
-        types::HeightIndexed,
-    };
+    use futures::stream::StreamExt;
+    use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
@@ -612,143 +603,6 @@ mod api_tests {
         state_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[ignore]
-    #[async_std::test]
-    pub(crate) async fn test_restart<D: TestableSequencerDataSource>() {
-        setup_logging();
-        setup_backtrace();
-
-        // Initialize nodes.
-        let storage = join_all((0..TestConfig::NUM_NODES).map(|_| D::create_storage())).await;
-        let persistence = join_all(storage.iter().map(D::connect))
-            .await
-            .try_into()
-            .unwrap();
-        let port = pick_unused_port().unwrap();
-        let mut network = TestNetwork::with_state(
-            D::options(&storage[0], options::Http { port }.into())
-                .state(Default::default())
-                .status(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|_| MockStateCatchup::default()),
-        )
-        .await;
-
-        // Connect client.
-        let client: Client<ServerError, SequencerVersion> =
-            Client::new(format!("http://localhost:{port}").parse().unwrap());
-        client.connect(None).await;
-        tracing::info!(port, "server running");
-
-        // Wait until some blocks have been decided.
-        client
-            .socket("availability/stream/blocks/0")
-            .subscribe::<BlockQueryData<SeqTypes>>()
-            .await
-            .unwrap()
-            .take(3)
-            .collect::<Vec<_>>()
-            .await;
-
-        // Shut down the consensus nodes.
-        tracing::info!("shutting down nodes");
-        network.stop_consensus().await;
-
-        // Get the block height we reached.
-        let height = client
-            .get::<usize>("status/block-height")
-            .send()
-            .await
-            .unwrap();
-        tracing::info!("decided {height} blocks before shutting down");
-
-        // Get the decided chain, so we can check consistency after the restart.
-        let chain: Vec<LeafQueryData<SeqTypes>> = client
-            .socket("availability/stream/leaves/0")
-            .subscribe()
-            .await
-            .unwrap()
-            .take(height)
-            .try_collect()
-            .await
-            .unwrap();
-        let decided_view = chain.last().unwrap().leaf().get_view_number();
-
-        // Get the most recent state, for catchup.
-        let state = network.server.consensus().get_decided_state().await;
-        tracing::info!(?decided_view, ?state, "consensus state");
-
-        // Wait for merklized state storage to update.
-        while let Err(err) = client
-            .get::<()>(&format!("block-state/{}/{}", height - 1, height - 2))
-            .send()
-            .await
-        {
-            tracing::info!(
-                height,
-                "waiting for merklized state to become available ({err:#})"
-            );
-            sleep(Duration::from_secs(1)).await;
-        }
-
-        // Fully shut down the API servers.
-        drop(network);
-
-        // Start up again, resuming from the last decided leaf.
-        let port = pick_unused_port().expect("No ports free");
-        let persistence = join_all(storage.iter().map(D::connect))
-            .await
-            .try_into()
-            .unwrap();
-        let _network = TestNetwork::with_state(
-            D::options(&storage[0], options::Http { port }.into()).catchup(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|_| {
-                // Catchup using node 0 as a peer. Node 0 was running the archival state service
-                // before the restart, so it should be able to resume without catching up by loading
-                // state from storage.
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-        )
-        .await;
-        let client: Client<ServerError, SequencerVersion> =
-            Client::new(format!("http://localhost:{port}").parse().unwrap());
-        client.connect(None).await;
-        tracing::info!(port, "server running");
-
-        // Make sure we can decide new blocks after the restart.
-        tracing::info!("waiting for decide, height {height}");
-        let new_leaf: LeafQueryData<SeqTypes> = client
-            .socket(&format!("availability/stream/leaves/{height}"))
-            .subscribe()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(new_leaf.height(), height as u64);
-        assert_eq!(
-            new_leaf.leaf().get_parent_commitment(),
-            chain[height - 1].hash()
-        );
-
-        // Ensure the new chain is consistent with the old chain.
-        let new_chain: Vec<LeafQueryData<SeqTypes>> = client
-            .socket("availability/stream/leaves/0")
-            .subscribe()
-            .await
-            .unwrap()
-            .take(height)
-            .try_collect()
-            .await
-            .unwrap();
-        assert_eq!(chain, new_chain);
-    }
     #[async_std::test]
     pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
         use hotshot_events_service::events_source::BuilderEvent;
@@ -825,11 +679,14 @@ mod test {
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use futures::{
-        future,
+        future::{self, join_all},
         stream::{StreamExt, TryStreamExt},
     };
     use hotshot::types::EventType;
-    use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, LeafQueryData},
+        types::HeightIndexed,
+    };
     use hotshot_types::{
         event::LeafInfo,
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
@@ -1117,5 +974,152 @@ mod test {
                 }
             }
         }
+    }
+
+    #[async_std::test]
+    pub(crate) async fn test_restart() {
+        setup_logging();
+        setup_backtrace();
+
+        // Initialize nodes.
+        let storage =
+            join_all((0..TestConfig::NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
+        let persistence = join_all(
+            storage
+                .iter()
+                .map(<SqlDataSource as TestableSequencerDataSource>::connect),
+        )
+        .await
+        .try_into()
+        .unwrap();
+        let port = pick_unused_port().unwrap();
+        let mut network = TestNetwork::with_state(
+            SqlDataSource::options(&storage[0], options::Http { port }.into())
+                .state(Default::default())
+                .status(Default::default()),
+            Default::default(),
+            persistence,
+            std::array::from_fn(|_| MockStateCatchup::default()),
+        )
+        .await;
+
+        // Connect client.
+        let client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+        tracing::info!(port, "server running");
+
+        // Wait until some blocks have been decided.
+        client
+            .socket("availability/stream/blocks/0")
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        // Shut down the consensus nodes.
+        tracing::info!("shutting down nodes");
+        network.stop_consensus().await;
+
+        // Get the block height we reached.
+        let height = client
+            .get::<usize>("status/block-height")
+            .send()
+            .await
+            .unwrap();
+        tracing::info!("decided {height} blocks before shutting down");
+
+        // Get the decided chain, so we can check consistency after the restart.
+        let chain: Vec<LeafQueryData<SeqTypes>> = client
+            .socket("availability/stream/leaves/0")
+            .subscribe()
+            .await
+            .unwrap()
+            .take(height)
+            .try_collect()
+            .await
+            .unwrap();
+        let decided_view = chain.last().unwrap().leaf().get_view_number();
+
+        // Get the most recent state, for catchup.
+        let state = network.server.consensus().get_decided_state().await;
+        tracing::info!(?decided_view, ?state, "consensus state");
+
+        // Wait for merklized state storage to update.
+        while let Err(err) = client
+            .get::<()>(&format!("block-state/{}/{}", height - 1, height - 2))
+            .send()
+            .await
+        {
+            tracing::info!(
+                height,
+                "waiting for merklized state to become available ({err:#})"
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Fully shut down the API servers.
+        drop(network);
+
+        // Start up again, resuming from the last decided leaf.
+        let port = pick_unused_port().expect("No ports free");
+        let persistence = join_all(
+            storage
+                .iter()
+                .map(<SqlDataSource as TestableSequencerDataSource>::connect),
+        )
+        .await
+        .try_into()
+        .unwrap();
+        let _network = TestNetwork::with_state(
+            SqlDataSource::options(&storage[0], options::Http { port }.into())
+                .catchup(Default::default()),
+            Default::default(),
+            persistence,
+            std::array::from_fn(|_| {
+                // Catchup using node 0 as a peer. Node 0 was running the archival state service
+                // before the restart, so it should be able to resume without catching up by loading
+                // state from storage.
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+        )
+        .await;
+        let client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+        tracing::info!(port, "server running");
+
+        // Make sure we can decide new blocks after the restart.
+        tracing::info!("waiting for decide, height {height}");
+        let new_leaf: LeafQueryData<SeqTypes> = client
+            .socket(&format!("availability/stream/leaves/{height}"))
+            .subscribe()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(new_leaf.height(), height as u64);
+        assert_eq!(
+            new_leaf.leaf().get_parent_commitment(),
+            chain[height - 1].hash()
+        );
+
+        // Ensure the new chain is consistent with the old chain.
+        let new_chain: Vec<LeafQueryData<SeqTypes>> = client
+            .socket("availability/stream/leaves/0")
+            .subscribe()
+            .await
+            .unwrap()
+            .take(height)
+            .try_collect()
+            .await
+            .unwrap();
+        assert_eq!(chain, new_chain);
     }
 }
