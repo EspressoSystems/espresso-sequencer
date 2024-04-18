@@ -67,9 +67,12 @@ impl From<SigningKey> for EthKeyPair {
 }
 
 impl EthKeyPair {
-    pub fn from_mnemonic(phrase: &str, index: impl Into<u32>) -> Result<Self, WalletError> {
+    pub fn from_mnemonic(
+        phrase: impl AsRef<str>,
+        index: impl Into<u32>,
+    ) -> Result<Self, WalletError> {
         let index: u32 = index.into();
-        let mnemonic = Mnemonic::<English>::new_from_phrase(phrase)?;
+        let mnemonic = Mnemonic::<English>::new_from_phrase(phrase.as_ref())?;
         let derivation_path = format!("m/44'/60'/0'/0/{index}");
         let derived_priv_key =
             mnemonic.derive_key(derivation_path.as_str(), /* password */ None)?;
@@ -169,8 +172,6 @@ impl BuilderSignatureKey for EthVerifyingKey {
 mod tests {
     use super::*;
     use hotshot_types::traits::signature_key::BuilderSignatureKey;
-
-    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     impl EthKeyPair {
         fn for_test() -> Self {

@@ -148,7 +148,9 @@ pub mod testing {
         },
     };
     use sequencer::{
-        catchup::StateCatchup, eth_signature_key::EthSigningKey, persistence::PersistenceOptions,
+        catchup::StateCatchup,
+        eth_signature_key::{EthKeyPair, EthVerifyingKey},
+        persistence::PersistenceOptions,
         state_signature::StateSignatureMemStorage,
     };
     use sequencer::{Event, Transaction};
@@ -525,7 +527,7 @@ pub mod testing {
 
     pub struct NonPermissionedBuilderTestConfig {
         pub config: BuilderConfig,
-        pub pub_key: EthSigningKey,
+        pub pub_key: EthVerifyingKey,
     }
 
     impl NonPermissionedBuilderTestConfig {
@@ -555,7 +557,7 @@ pub mod testing {
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let builder_keys = EthSigningKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (ver_key, key_pair) = EthVerifyingKey::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -564,7 +566,7 @@ pub mod testing {
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_config = BuilderConfig::init(
-                builder_keys.clone(),
+                key_pair,
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
@@ -576,7 +578,7 @@ pub mod testing {
 
             Self {
                 config: builder_config,
-                pub_key: builder_keys.0,
+                pub_key: ver_key,
             }
         }
     }
@@ -586,7 +588,7 @@ pub mod testing {
         Ver: StaticVersionType + 'static,
     > {
         pub builder_context: BuilderContext<network::Memory, P, Ver>,
-        pub pub_key: BLSPubKey,
+        pub pub_key: EthVerifyingKey,
     }
 
     impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -618,8 +620,7 @@ pub mod testing {
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let (builder_pub_key, builder_private_key) =
-                BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (ver_key, key_pair) = EthVerifyingKey::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -631,8 +632,8 @@ pub mod testing {
                 hotshot_handle,
                 state_signer,
                 node_id,
-                builder_pub_key,
-                builder_private_key,
+                ver_key,
+                key_pair,
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
@@ -643,7 +644,7 @@ pub mod testing {
 
             Self {
                 builder_context,
-                pub_key: builder_pub_key,
+                pub_key: ver_key,
             }
         }
     }

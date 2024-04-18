@@ -63,8 +63,11 @@ use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
 };
-use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
+use sequencer::{
+    catchup::mock::MockStateCatchup,
+    eth_signature_key::{EthKeyPair, EthVerifyingKey},
+};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -131,8 +134,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
-    pub_key: PubKey,
-    priv_key: PrivKey,
+    pub_key: EthVerifyingKey,
+    priv_key: EthKeyPair,
     bootstrapped_view: ViewNumber,
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
@@ -373,8 +376,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle: Consensus<N, P>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
-        pub_key: PubKey,
-        priv_key: PrivKey,
+        pub_key: EthVerifyingKey,
+        priv_key: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -630,7 +633,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<BLSPubKey>("block_info/builderaddress")
+            .get::<EthVerifyingKey>("block_info/builderaddress")
             .send()
             .await
         {

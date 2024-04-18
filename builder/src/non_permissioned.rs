@@ -28,7 +28,7 @@ use hotshot_types::{
     },
 };
 use sequencer::{
-    catchup::StatePeers, eth_signature_key::EthSigningKey, l1_client::L1Client, BuilderParams,
+    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
     L1Params, NetworkParams, NodeState, PrivKey, PubKey, SeqTypes,
 };
 
@@ -77,7 +77,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 
 impl BuilderConfig {
     pub async fn init(
-        builder_keys: (EthSigningKey, EthSigningKey),
+        builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -105,7 +105,7 @@ impl BuilderConfig {
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            builder_keys,
+            (builder_key_pair.verifying_key(), builder_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
@@ -207,6 +207,7 @@ mod test {
         block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::eth_signature_key::EthVerifyingKey;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::PersistenceOptions;
     use sequencer::transaction::Transaction;
@@ -358,7 +359,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<BLSPubKey>("block_info/builderaddress")
+            .get::<EthVerifyingKey>("block_info/builderaddress")
             .send()
             .await
         {
