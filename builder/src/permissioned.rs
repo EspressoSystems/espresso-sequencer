@@ -63,8 +63,8 @@ use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
 };
-use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
+use sequencer::{catchup::mock::MockStateCatchup, ChainConfig};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -137,7 +137,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
-) -> anyhow::Result<BuilderContext<network::Combined, P, Ver>> {
+) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -190,7 +190,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await
     .with_context(|| "Failed to create CDN network")?;
 
-    // Initialize the Libp2p network
+    // Initialize the Libp2p network (if enabled)
+    #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
         network_params.libp2p_bind_address,
@@ -202,17 +203,25 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await
     .with_context(|| "Failed to create libp2p network")?;
 
-    // Combine the two communication channels
-    let da_network = Arc::from(CombinedNetworks::new(
-        cdn_network.clone(),
-        p2p_network.clone(),
-        Duration::from_secs(1),
-    ));
-    let quorum_network = Arc::from(CombinedNetworks::new(
-        cdn_network,
-        p2p_network,
-        Duration::from_secs(1),
-    ));
+    // Combine the communication channels
+    #[cfg(feature = "libp2p")]
+    let (da_network, quorum_network) = {
+        (
+            Arc::from(CombinedNetworks::new(
+                cdn_network.clone(),
+                p2p_network.clone(),
+                Duration::from_secs(1),
+            )),
+            Arc::from(CombinedNetworks::new(
+                cdn_network,
+                p2p_network,
+                Duration::from_secs(1),
+            )),
+        )
+    };
+
+    #[cfg(not(feature = "libp2p"))]
+    let (da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
 
     // Convert to the sequencer-compatible type
     let networks = Networks {
@@ -243,6 +252,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
+        ChainConfig::default(),
         l1_client,
         wallet,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),

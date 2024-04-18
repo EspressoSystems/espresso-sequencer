@@ -146,7 +146,7 @@ pub mod testing {
     };
     use sequencer::{
         catchup::StateCatchup, persistence::PersistenceOptions,
-        state_signature::StateSignatureMemStorage,
+        state_signature::StateSignatureMemStorage, ChainConfig,
     };
     use sequencer::{Event, Transaction};
     use std::{num::NonZeroUsize, time::Duration};
@@ -386,6 +386,7 @@ pub mod testing {
             let wallet = Self::builder_wallet(i);
             tracing::info!("node {i} is builder {:x}", wallet.address());
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
                 wallet,
                 MockStateCatchup::default(),
@@ -447,7 +448,7 @@ pub mod testing {
 
             let mut app = App::<_, EventStreamApiError>::with_state(source);
 
-            app.register_module("hotshot_events", hotshot_events_api)
+            app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
             async_spawn(app.serve(url, STATIC_VER_0_1));
@@ -538,6 +539,7 @@ pub mod testing {
                 wallet.address()
             );
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
@@ -603,6 +605,7 @@ pub mod testing {
                 wallet.address()
             );
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),

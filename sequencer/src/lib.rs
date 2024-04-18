@@ -1,7 +1,7 @@
 pub mod api;
 pub mod block;
 pub mod catchup;
-mod chain_variables;
+mod chain_config;
 pub mod context;
 mod header;
 pub mod hotshot_commitment;
@@ -36,8 +36,8 @@ use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
         implementations::{
-            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork, MemoryNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork,
+            WrappedSignatureKey,
         },
     },
     types::SignatureKey,
@@ -74,40 +74,19 @@ use std::{
 };
 use vbs::version::StaticVersionType;
 
+#[cfg(feature = "libp2p")]
+use {
+    hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork},
+};
+
 pub use block::payload::Payload;
-pub use chain_variables::ChainVariables;
+pub use chain_config::ChainConfig;
 pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
-pub mod network {
-    use hotshot::traits::implementations::CombinedNetworks;
-    use hotshot_types::message::Message;
-
-    use super::*;
-
-    pub trait Type: 'static {
-        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
-        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
-    }
-
-    #[derive(Clone, Copy, Default)]
-    pub struct Combined;
-
-    impl Type for Combined {
-        type DAChannel = CombinedNetworks<SeqTypes>;
-        type QuorumChannel = CombinedNetworks<SeqTypes>;
-    }
-
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct Memory;
-
-    impl Type for Memory {
-        type DAChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
-        type QuorumChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
-    }
-}
+pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
 #[derive(Derivative, Serialize, Deserialize)]
@@ -181,6 +160,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
+    chain_config: ChainConfig,
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
@@ -189,11 +169,13 @@ pub struct NodeState {
 
 impl NodeState {
     pub fn new(
+        chain_config: ChainConfig,
         l1_client: L1Client,
         builder_address: Wallet<SigningKey>,
         catchup: impl StateCatchup + 'static,
     ) -> Self {
         Self {
+            chain_config,
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
@@ -204,6 +186,7 @@ impl NodeState {
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
         Self::new(
+            ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
             state::FeeAccount::test_wallet(),
             catchup::mock::MockStateCatchup::default(),
@@ -295,14 +278,17 @@ pub struct L1Params {
     pub url: Url,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     mut persistence: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
+    stake_table_capacity: usize,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Combined, P, Ver>> {
+    chain_config: ChainConfig,
+) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -364,7 +350,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await
     .with_context(|| "Failed to create CDN network")?;
 
-    // Initialize the Libp2p network
+    // Initialize the Libp2p network (if enabled)
+    #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
         network_params.libp2p_bind_address,
@@ -376,17 +363,25 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await
     .with_context(|| "Failed to create libp2p network")?;
 
-    // Combine the two communication channels
-    let da_network = Arc::from(CombinedNetworks::new(
-        cdn_network.clone(),
-        p2p_network.clone(),
-        Duration::from_secs(1),
-    ));
-    let quorum_network = Arc::from(CombinedNetworks::new(
-        cdn_network,
-        p2p_network,
-        Duration::from_secs(1),
-    ));
+    // Combine the communication channels
+    #[cfg(feature = "libp2p")]
+    let (da_network, quorum_network) = {
+        (
+            Arc::from(CombinedNetworks::new(
+                cdn_network.clone(),
+                p2p_network.clone(),
+                Duration::from_secs(1),
+            )),
+            Arc::from(CombinedNetworks::new(
+                cdn_network,
+                p2p_network,
+                Duration::from_secs(1),
+            )),
+        )
+    };
+
+    #[cfg(not(feature = "libp2p"))]
+    let (da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
 
     // Convert to the sequencer-compatible type
     let networks = Networks {
@@ -416,6 +411,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState {
+        chain_config,
         l1_client,
         builder_address: wallet,
         genesis_state,
@@ -430,6 +426,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         Some(network_params.state_relay_server_url),
         metrics,
         node_index,
+        stake_table_capacity,
         bind_version,
     )
     .await?;
@@ -461,6 +458,7 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use std::time::Duration;
+    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
     #[derive(Clone)]
     pub struct TestConfig {
@@ -549,6 +547,7 @@ pub mod testing {
                     NoStorage,
                     MockStateCatchup::default(),
                     &NoMetrics,
+                    STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
                 )
                 .await
@@ -556,6 +555,7 @@ pub mod testing {
             .await
         }
 
+        #[allow(clippy::too_many_arguments)]
         pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
             &self,
             i: usize,
@@ -563,6 +563,7 @@ pub mod testing {
             persistence: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
+            stake_table_capacity: usize,
             bind_version: Ver,
         ) -> SequencerContext<network::Memory, P, Ver> {
             let mut config = self.config.clone();
@@ -591,6 +592,7 @@ pub mod testing {
             let wallet = Self::builder_wallet(i);
             tracing::info!("node {i} is builder {:x}", wallet.address());
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
                 wallet,
                 catchup,
@@ -605,6 +607,7 @@ pub mod testing {
                 None,
                 metrics,
                 i as u64,
+                stake_table_capacity,
                 bind_version,
             )
             .await

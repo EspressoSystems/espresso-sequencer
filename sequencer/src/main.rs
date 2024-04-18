@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, L1Params, NetworkParams,
+    persistence, BuilderParams, ChainConfig, L1Params, NetworkParams,
 };
 use vbs::version::StaticVersionType;
 
@@ -49,6 +49,8 @@ where
     S: DataSourceOptions,
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
+    let stake_table_capacity = opt.stake_table_capacity;
+    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
@@ -121,7 +123,9 @@ where
                             storage,
                             builder_params,
                             l1_params,
+                            stake_table_capacity,
                             bind_version,
+                            chain_config,
                         )
                         .await
                         .unwrap()
@@ -139,7 +143,9 @@ where
                 storage_opt.create().await?,
                 builder_params,
                 l1_params,
+                stake_table_capacity,
                 bind_version,
+                chain_config,
             )
             .await?
         }

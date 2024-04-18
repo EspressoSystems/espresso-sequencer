@@ -352,6 +352,20 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
     Commitment::deserialize_uncompressed_unchecked(&*commit_bytes.to_vec())
 }
 
+/// Implement `to_fixed_bytes` for wrapped types
+#[macro_export]
+macro_rules! impl_to_fixed_bytes {
+    ($struct_name:ident, $type:ty) => {
+        impl $struct_name {
+            pub(crate) fn to_fixed_bytes(self) -> [u8; core::mem::size_of::<$type>()] {
+                let mut bytes = [0u8; core::mem::size_of::<$type>()];
+                self.0.to_little_endian(&mut bytes);
+                bytes
+            }
+        }
+    };
+}
+
 /// send a transaction and wait for confirmation before returning the tx receipt and block included.
 pub async fn contract_send<M: Middleware, T: Detokenize, E>(
     call: &ContractCall<M, T>,
