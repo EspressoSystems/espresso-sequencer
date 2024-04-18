@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Script.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
+import { LightClientMock as LCTest } from "../test/mocks/LightClientMock.sol";
 
 /// @notice deployment script for LightClientTest which is designed for testing purposes with
 /// verification key corresponding to smaller circuit, thus faster proof generation during tests.

@@ -47,14 +47,13 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
-
       - name: Test
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
+          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin"
+          ./scripts/download_srs_aztec.sh
           cargo build --locked --bin diff-test --release
           cargo test --locked --release --workspace --all-features --no-run
           cargo test --locked --release --workspace --all-features --verbose -- --test-threads 1 --nocapture

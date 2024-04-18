@@ -34,11 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-da-server:
-    target/release/web-server -p 8081
-
-dev-consensus-server:
-    target/release/web-server -p 8082
+dev-cdn:
+    RUST_LOG=info target/release/dev-cdn
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
@@ -46,8 +43,7 @@ dev-state-relay-server:
 dev-sequencer:
     target/release/sequencer \
     --orchestrator-url http://localhost:8080 \
-    --da-server-url http://localhost:8081 \
-    --consensus-server-url http://localhost:8082 \
+    --cdn-endpoint "127.0.0.1:1738" \
     --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 
@@ -61,7 +57,7 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
@@ -71,6 +67,7 @@ gen-bindings:
     # date, without needed to recompile the contracts.
     mkdir -p contract-bindings/artifacts
     jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
+    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
 
     cargo fmt --all
     cargo sort -g -w
@@ -100,3 +97,11 @@ code-coverage:
   grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
       --ignore 'contract-bindings/*' --ignore 'contracts/*'
   @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
+
+download-srs:
+    @echo "Check existence or download SRS for production"
+    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" ./scripts/download_srs_aztec.sh
+
+dev-download-srs:
+    @echo "Check existence or download SRS for dev/test"
+    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh

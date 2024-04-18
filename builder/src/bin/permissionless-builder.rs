@@ -4,7 +4,6 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
-use ethers::types::Address;
 use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_types::data::ViewNumber;
 use hotshot_types::light_client::StateSignKey;
@@ -22,15 +21,14 @@ pub struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: u16,
 
-    /// URL of the HotShot DA web server.
+    /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
+        env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
         default_value = "http://localhost:8081"
     )]
-    pub da_server_url: Url,
+    pub sequencer_url: Url,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -102,19 +100,15 @@ pub struct NonPermissionedBuilderOptions {
     pub state_peers: Vec<Url>,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_SERVER_PORT")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     pub port: u16,
 
-    /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_ADDRESS")]
-    pub address: Address,
-
     /// Bootstrapping View number
-    #[clap(short, long, env = "BUILDER_BOOTSTRAPPED_VIEW")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(short, long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 }
 
@@ -196,10 +190,13 @@ async fn main() -> anyhow::Result<()> {
         bootstrapped_view,
         opt.channel_capacity,
         instance_state,
-        opt.da_server_url,
+        opt.sequencer_url,
         builder_server_url,
     )
     .await;
+
+    // Sleep forever
+    async_std::future::pending::<()>().await;
 
     Ok(())
 }

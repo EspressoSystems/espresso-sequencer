@@ -21,9 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
         
       # See https://github.com/rustsec/audit-check for docs
       # TODO: re-enable if https://github.com/rustsec/audit-check/pull/20 is merged

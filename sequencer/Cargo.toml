@@ -7,11 +7,11 @@ edition = "2021"
 
 [features]
 testing = ["hotshot-testing"]
+libp2p = []
 
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
-portpicker = "0.1.1"
 rand = "0.8.5"
 tempfile = "3.9.0"
 
@@ -45,6 +45,7 @@ tagged-base64 = { workspace = true }
 zeroize = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
@@ -63,6 +64,7 @@ jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 lazy_static = "1.4"
 num-traits = "0.2.18"
+portpicker = "0.1.1"
 rand = "0.8.5"
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
@@ -80,6 +82,7 @@ tokio-postgres = { version = "0.7", default-features = false, features = [ # dis
 ] }
 toml = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = "0.3.18"
 trait-set = "0.3.0"
 trait-variant = { workspace = true }
 typenum = { version = "1.15.0", default-features = false, features = [
@@ -87,6 +90,10 @@ typenum = { version = "1.15.0", default-features = false, features = [
 ] }
 url = { workspace = true }
 versioned-binary-serialization = { workspace = true }
+
+# CDN imports
+cdn-broker = { workspace = true }
+cdn-marshal = { workspace = true }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]

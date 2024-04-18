@@ -76,7 +76,8 @@ jobs:
           name: ${{ env.TARGET_TRIPLET }}-services
           path: |
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/orchestrator
-            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/web-server
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cdn-broker
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cdn-marshal
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-relay-server
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-prover
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
@@ -126,11 +127,18 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
           flavor: suffix=musl
 
-      - name: Generate web-server docker metadata
+      - name: Generate cdn-broker docker metadata
         uses: docker/metadata-action@v5
-        id: web-server
+        id: cdn-broker
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/web-server
+          images: ghcr.io/espressosystems/espresso-sequencer/cdn-broker
+          flavor: suffix=musl
+
+      - name: Generate cdn-marshal docker metadata
+        uses: docker/metadata-action@v5
+        id: cdn-marshal
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal
           flavor: suffix=musl
 
       - name: Generate state-relay-server docker metadata
@@ -185,15 +193,25 @@ jobs:
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
 
-      - name: Build and push web-server docker
+      - name: Build and push cdn-broker docker
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./docker/web-server.Dockerfile
+          file: ./docker/cdn-broker.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.web-server.outputs.tags }}
-          labels: ${{ steps.web-server.outputs.labels }}
+          tags: ${{ steps.cdn-broker.outputs.tags }}
+          labels: ${{ steps.cdn-broker.outputs.labels }}
+
+      - name: Build and push cdn-marshal docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/cdn-marshal.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.cdn-marshal.outputs.tags }}
+          labels: ${{ steps.cdn-marshal.outputs.labels }}
 
       - name: Build and push state-relay-server docker
         uses: docker/build-push-action@v5

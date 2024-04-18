@@ -3,6 +3,7 @@ use clap::Parser;
 use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
+use hotshot_orchestrator::config::Libp2pConfig;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
@@ -114,6 +115,11 @@ struct Args {
     )]
     max_transactions: NonZeroUsize,
 
+    /// The number of nodes a Libp2p node should try to maintain
+    /// a connection with at one time.
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    libp2p_mesh_n: usize,
+
     /// Seed to use for generating node keys.
     ///
     /// The seed is a 32 byte integer, encoded in hex.
@@ -190,12 +196,33 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
+
+    // The Libp2p configuration
+    let libp2p_config = Libp2pConfig {
+        bootstrap_nodes: Vec::new(),
+        node_index: 0,
+        bootstrap_mesh_n_high: args.libp2p_mesh_n,
+        bootstrap_mesh_n_low: args.libp2p_mesh_n,
+        bootstrap_mesh_outbound_min: args.libp2p_mesh_n / 2,
+        bootstrap_mesh_n: args.libp2p_mesh_n,
+        mesh_n_high: args.libp2p_mesh_n,
+        mesh_n_low: args.libp2p_mesh_n,
+        mesh_outbound_min: args.libp2p_mesh_n / 2,
+        mesh_n: args.libp2p_mesh_n,
+        next_view_timeout: config.next_view_timeout,
+        propose_min_round_time: config.propose_min_round_time,
+        propose_max_round_time: config.propose_max_round_time,
+        online_time: 10,
+        num_txn_per_round: 0,
+    };
+
     config.config.num_nodes_with_stake = args.num_nodes;
     config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_nodes_without_stake = vec![];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
+    config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
