@@ -9,7 +9,7 @@ import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 library Transcript {
     struct TranscriptData {
         bytes transcript;
-        bytes32[2] state;
+        bytes32 state;
     }
 
     // ================================
@@ -60,15 +60,19 @@ library Transcript {
     }
 
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 h1 =
-            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(0)));
-        bytes32 h2 =
-            keccak256(abi.encodePacked(self.state[0], self.state[1], self.transcript, uint8(1)));
+        bytes32 hash = keccak256(abi.encodePacked(self.state, self.transcript));
 
-        self.state[0] = h1;
-        self.state[1] = h2;
+        self.state = hash;
 
-        return BN254.fromLeBytesModOrder(BytesLib.slice(abi.encodePacked(h1, h2), 0, 48));
+        // TODO Philippe create function in BN254.sol
+        // TODO Optimize
+        bytes memory beBytes = abi.encodePacked(hash);
+        uint256 ret = 0;
+        for (uint256 i = 0; i < beBytes.length; i++) {
+            ret = mulmod(ret, 256, BN254.R_MOD);
+            ret = addmod(ret, uint256(uint8(beBytes[i])), BN254.R_MOD);
+        }
+        return ret;
     }
 
     /// @dev Append the verifying key and the public inputs to the transcript.

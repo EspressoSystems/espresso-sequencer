@@ -12,4 +12,4 @@ RUN chmod +x /bin/permissionless-builder
 
 ENV BUILDER_SERVER_PORT=60003
 
-CMD [ "/bin/permisisonless-builder"]
+CMD [ "/bin/permissionless-builder"]

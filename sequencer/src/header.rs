@@ -360,7 +360,7 @@ impl BlockHeader<SeqTypes> for Header {
 
     fn builder_commitment(
         &self,
-        metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        _metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> hotshot_types::utils::BuilderCommitment {
         unimplemented!()
     }
@@ -668,7 +668,7 @@ mod test_headers {
 
         // Advance `proposal.height` to trigger validation error.
         let mut delta = Delta::default();
-        apply_proposal(&mut validated_state, &mut delta, &parent_leaf, vec![]);
+        let validated_state = apply_proposal(&validated_state, &mut delta, &parent_leaf, vec![]);
         let result = validate_proposal(&validated_state, &parent_leaf, &proposal).unwrap_err();
         assert_eq!(
             format!("{}", result.root_cause()),
@@ -749,7 +749,7 @@ mod test_headers {
         let l1_deposits = get_l1_deposits(&genesis_state, &proposal, &parent_leaf).await;
 
         let mut delta = Delta::default();
-        apply_proposal(&mut proposal_state, &mut delta, &parent_leaf, l1_deposits);
+        let proposal_state = apply_proposal(&proposal_state, &mut delta, &parent_leaf, l1_deposits);
         validate_proposal(&proposal_state, &parent_leaf, &proposal.clone()).unwrap();
         assert_eq!(
             proposal_state.block_merkle_tree.commitment(),

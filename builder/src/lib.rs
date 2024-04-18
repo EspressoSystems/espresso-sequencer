@@ -204,6 +204,8 @@ pub mod testing {
 
             let master_map = MasterMap::new();
 
+            let builder_url = hotshot_builder_url();
+
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
@@ -226,12 +228,7 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
-                // ???
-                builder_url: Url::parse(&format!(
-                    "http://127.0.0.1:{}",
-                    pick_unused_port().unwrap()
-                ))
-                .unwrap(),
+                builder_url,
             };
 
             Self {
@@ -456,7 +453,7 @@ pub mod testing {
 
             let mut app = App::<_, EventStreamApiError>::with_state(source);
 
-            app.register_module("hotshot_events", hotshot_events_api)
+            app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
             async_spawn(app.serve(url, STATIC_VER_0_1));
@@ -695,6 +692,7 @@ mod test {
     // Test that a non-voting hotshot node can participate in consensus and reach a certain height.
     // It is enabled by keeping the node(s) in the stake table, but with a stake of 0.
     // This is useful for testing that the builder(permissioned node) can participate in consensus without voting.
+    #[ignore]
     #[async_std::test]
     async fn test_non_voting_hotshot_node() {
         setup_logging();

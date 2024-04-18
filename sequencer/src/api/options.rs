@@ -205,6 +205,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<(
         SequencerContext<N, P, Ver>,
+        Arc<RwLock<StorageState<N, P, D, Ver>>>,
         App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
     )>
     where
@@ -244,9 +245,9 @@ impl Options {
 
         self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
 
-        context.spawn("query storage updater", update_loop(state, events));
+        context.spawn("query storage updater", update_loop(state.clone(), events));
 
-        Ok((context, app))
+        Ok((context, state, app))
     }
 
     async fn init_with_query_module_fs<N, P, D, Ver: StaticVersionType + 'static>(
@@ -263,7 +264,7 @@ impl Options {
     {
         let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
 
-        let (mut context, app) = self
+        let (mut context, _, app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
@@ -295,19 +296,19 @@ impl Options {
             false,
         )
         .await?;
-        let (mut context, mut app) = self
+        let (mut context, state, mut app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
-                "state/blocks",
+                "block-state",
                 endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>(bind_version)?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
-                "state/fees",
+                "fee-state",
                 endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
             )?;
         }
@@ -316,12 +317,9 @@ impl Options {
             self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
         }
 
-        let ds = sql::DataSource::create(mod_opt, provider(query_opt.peers, bind_version), false)
-            .await?;
-
         context.spawn(
             "merklized state storage update loop",
-            update_state_storage_loop(ds, context.node_state()),
+            update_state_storage_loop(state, context.node_state()),
         );
 
         context.spawn(

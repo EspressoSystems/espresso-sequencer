@@ -15,7 +15,7 @@ import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
+import { LightClientMock as LCTest } from "../test/mocks/LightClientMock.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";

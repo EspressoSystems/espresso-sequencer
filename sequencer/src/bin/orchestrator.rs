@@ -3,6 +3,7 @@ use clap::Parser;
 use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot::traits::election::static_committee::StaticElectionConfig;
+use hotshot_orchestrator::config::Libp2pConfig;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{options::parse_duration, PubKey};
 use snafu::Snafu;
@@ -10,6 +11,7 @@ use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
 use std::str::FromStr;
 use std::time::Duration;
+use url::Url;
 
 #[derive(Parser)]
 struct Args {
@@ -114,11 +116,20 @@ struct Args {
     )]
     max_transactions: NonZeroUsize,
 
+    /// The number of nodes a Libp2p node should try to maintain
+    /// a connection with at one time.
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    libp2p_mesh_n: usize,
+
     /// Seed to use for generating node keys.
     ///
     /// The seed is a 32 byte integer, encoded in hex.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
     keygen_seed: [u8; 32],
+
+    /// HotShot builder URL
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
+    builder_url: Url,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -190,12 +201,34 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
+
+    // The Libp2p configuration
+    let libp2p_config = Libp2pConfig {
+        bootstrap_nodes: Vec::new(),
+        node_index: 0,
+        bootstrap_mesh_n_high: args.libp2p_mesh_n,
+        bootstrap_mesh_n_low: args.libp2p_mesh_n,
+        bootstrap_mesh_outbound_min: args.libp2p_mesh_n / 2,
+        bootstrap_mesh_n: args.libp2p_mesh_n,
+        mesh_n_high: args.libp2p_mesh_n,
+        mesh_n_low: args.libp2p_mesh_n,
+        mesh_outbound_min: args.libp2p_mesh_n / 2,
+        mesh_n: args.libp2p_mesh_n,
+        next_view_timeout: config.next_view_timeout,
+        propose_min_round_time: config.propose_min_round_time,
+        propose_max_round_time: config.propose_max_round_time,
+        online_time: 10,
+        num_txn_per_round: 0,
+        server_mode: false,
+    };
+
     config.config.num_nodes_with_stake = args.num_nodes;
     config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_nodes_without_stake = vec![];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
+    config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
@@ -204,6 +237,7 @@ async fn main() {
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
     config.config.min_transactions = args.min_transactions;
+    config.config.builder_url = args.builder_url;
 
     run_orchestrator(
         config,

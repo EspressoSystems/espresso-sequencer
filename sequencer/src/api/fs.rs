@@ -1,8 +1,7 @@
 use super::data_source::{Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
-use hotshot_query_service::{data_source::FileSystemDataSource, merklized_state::MerklizedState};
-use jf_primitives::merkle_tree::prelude::MerklePath;
+use hotshot_query_service::data_source::FileSystemDataSource;
 use std::path::Path;
 
 pub type DataSource = FileSystemDataSource<SeqTypes, Provider>;
@@ -22,15 +21,6 @@ impl SequencerDataSource for DataSource {
         };
 
         Ok(data_source)
-    }
-
-    async fn store_state<S: MerklizedState<SeqTypes, A>, const A: usize>(
-        &mut self,
-        _path: MerklePath<S::Entry, S::Key, S::T>,
-        _traversal_path: Vec<usize>,
-        _block_number: u64,
-    ) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

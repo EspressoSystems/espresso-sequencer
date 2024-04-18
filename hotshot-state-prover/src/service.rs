@@ -21,7 +21,6 @@ use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_orchestrator::OrchestratorVersion;
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
@@ -38,10 +37,12 @@ use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::{iter, time::Duration};
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
-use time::Instant;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -68,21 +69,24 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Address of the hotshot orchestrator, used for stake table initialization.
+    /// Address off the hotshot orchestrator, used for stake table initialization.
     pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     pub port: Option<u16>,
+    /// Stake table capacity for the prover circuit.
+    pub stake_table_capacity: usize,
 }
 
 pub fn init_stake_table(
     bls_keys: &[BLSPubKey],
     state_keys: &[StateVerKey],
+    stake_table_capacity: usize,
 ) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, StakeTableError> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
     st.batch_register(
         bls_keys.iter().cloned(),
         iter::repeat(U256::one()).take(bls_keys.len()),
@@ -95,6 +99,7 @@ pub fn init_stake_table(
 
 async fn init_stake_table_from_orchestrator(
     orchestrator_url: &Url,
+    stake_table_capacity: usize,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     tracing::info!("Initializing stake table from HotShot orchestrator.");
     let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
@@ -108,8 +113,9 @@ async fn init_stake_table_from_orchestrator(
                 {
                     Ok(config) => {
                         let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
-                            STAKE_TABLE_CAPACITY,
+                            stake_table_capacity,
                         );
+                        tracing::debug!("{}", config.config.known_nodes_with_stake.len());
                         config
                             .config
                             .known_nodes_with_stake
@@ -144,8 +150,9 @@ async fn init_stake_table_from_orchestrator(
 
 pub async fn light_client_genesis(
     orchestrator_url: &Url,
+    stake_table_capacity: usize,
 ) -> anyhow::Result<ParsedLightClientState> {
-    let st = init_stake_table_from_orchestrator(orchestrator_url).await;
+    let st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).await;
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
@@ -165,22 +172,21 @@ pub async fn light_client_genesis(
     Ok(pi.into())
 }
 
-pub fn load_proving_key() -> ProvingKey {
+pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let srs = {
         let num_gates = crate::circuit::build_for_preprocessing::<
             CircuitField,
             ark_ed_on_bn254::EdwardsConfig,
-            STAKE_TABLE_CAPACITY,
-        >()
+        >(stake_table_capacity)
         .unwrap()
         .0
         .num_gates();
 
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
-        let srs = ark_srs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
         let srs_elapsed = srs_timer.elapsed();
-        std::println!("Done in {srs_elapsed:.3}");
+        std::println!("Done in {srs_elapsed:?}");
 
         // convert to Jellyfish type
         // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -194,10 +200,10 @@ pub fn load_proving_key() -> ProvingKey {
 
     std::println!("Generating proving key and verification key.");
     let key_gen_timer = Instant::now();
-    let (pk, _) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+    let (pk, _) = crate::snark::preprocess(&srs, stake_table_capacity)
         .expect("Fail to preprocess state prover circuit");
     let key_gen_elapsed = key_gen_timer.elapsed();
-    std::println!("Done in {key_gen_elapsed:.3}");
+    std::println!("Done in {key_gen_elapsed:?}");
     pk
 }
 
@@ -325,8 +331,8 @@ pub async fn sync_state<Ver: StaticVersionType>(
     // );
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let proof_gen_start = time::Instant::now();
-    let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+    let proof_gen_start = Instant::now();
+    let (proof, public_input) = generate_state_update_proof::<_, _, _, _>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
         &entries,
@@ -334,9 +340,10 @@ pub async fn sync_state<Ver: StaticVersionType>(
         signatures,
         &bundle.state,
         &threshold,
+        config.stake_table_capacity,
     )?;
     let proof_gen_elapsed = proof_gen_start.elapsed();
-    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
+    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:?}");
 
     submit_state_and_proof(proof, public_input, config).await?;
 
@@ -373,8 +380,11 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(init_stake_table_from_orchestrator(&config.orchestrator_url).await);
-    let proving_key = Arc::new(load_proving_key());
+    let st = Arc::new(
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await,
+    );
+    let proving_key = Arc::new(load_proving_key(config.stake_table_capacity));
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
     let config = Arc::new(config);
@@ -398,14 +408,17 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
                 tracing::error!("Cannot sync the light client state: {}", err);
             }
         });
+        tracing::info!("Sleeping for {:?}", update_interval);
         sleep(update_interval).await;
     }
 }
 
 /// Run light client state prover once
 pub async fn run_prover_once<Ver: StaticVersionType>(config: StateProverConfig, _: Ver) {
-    let st = init_stake_table_from_orchestrator(&config.orchestrator_url).await;
-    let proving_key = load_proving_key();
+    let st =
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await;
+    let proving_key = load_proving_key(config.stake_table_capacity);
     let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
 
     sync_state(&st, &proving_key, &relay_server_client, &config)
@@ -540,7 +553,7 @@ mod test {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -551,24 +564,24 @@ mod test {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = crate::preprocess::<STAKE_TABLE_CAPACITY_FOR_TEST>(&srs)
+        let (pk, _) = crate::preprocess(&srs, STAKE_TABLE_CAPACITY_FOR_TEST)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) =
-            crate::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY_FOR_TEST>(
-                &mut rng,
-                &pk,
-                &stake_table_entries,
-                &bit_vec,
-                &sigs,
-                &new_state.into(),
-                &old_state.threshold,
-            )
-            .expect("Fail to generate state proof");
+        let (proof, pi) = crate::generate_state_update_proof::<_, _, _, _>(
+            &mut rng,
+            &pk,
+            &stake_table_entries,
+            &bit_vec,
+            &sigs,
+            &new_state.into(),
+            &old_state.threshold,
+            STAKE_TABLE_CAPACITY_FOR_TEST,
+        )
+        .expect("Fail to generate state proof");
 
         (pi, proof)
     }
@@ -629,6 +642,7 @@ mod test {
                 eth_signing_key: SigningKey::random(&mut test_rng()),
                 orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
+                stake_table_capacity: 10,
             }
         }
     }

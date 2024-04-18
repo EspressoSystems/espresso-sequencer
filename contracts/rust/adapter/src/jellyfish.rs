@@ -94,7 +94,7 @@ pub fn open_key() -> OpenKey<Bn254> {
 #[derive(Clone, EthAbiType, EthAbiCodec)]
 pub struct ParsedTranscript {
     pub(crate) transcript: Bytes,
-    pub(crate) state: [H256; 2],
+    pub(crate) state: H256,
 }
 
 impl FromStr for ParsedTranscript {
@@ -110,10 +110,7 @@ impl From<SolidityTranscript> for ParsedTranscript {
         let (transcript, state) = t.internal();
         Self {
             transcript: transcript.into(),
-            state: [
-                H256::from_slice(&state[..32]),
-                H256::from_slice(&state[32..]),
-            ],
+            state: H256::from_slice(&state),
         }
     }
 }
@@ -121,8 +118,7 @@ impl From<SolidityTranscript> for ParsedTranscript {
 impl From<ParsedTranscript> for SolidityTranscript {
     fn from(t: ParsedTranscript) -> Self {
         let mut state = [0u8; KECCAK256_STATE_SIZE];
-        state[..32].copy_from_slice(&t.state[0].to_fixed_bytes());
-        state[32..].copy_from_slice(&t.state[1].to_fixed_bytes());
+        state.copy_from_slice(&t.state.to_fixed_bytes());
         Self::from_internal(t.transcript.to_vec(), state)
     }
 }

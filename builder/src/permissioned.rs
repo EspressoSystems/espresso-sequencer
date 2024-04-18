@@ -1,3 +1,4 @@
+use anyhow::Context;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
@@ -10,7 +11,10 @@ use futures::{
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{NetworkingMetricsValue, WebServerNetwork},
+        implementations::{
+            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
+            NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
+        },
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
@@ -133,39 +137,35 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
-) -> anyhow::Result<BuilderContext<network::Web, P, Ver>> {
+) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
+    // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        advertise_address: None,
+        advertise_address: Some(network_params.libp2p_advertise_address),
         network_config_file: None,
     };
-    // This "public" IP only applies to libp2p network configurations, so we can supply any value here
-    let _public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    // Orchestrator client
     let orchestrator_client = OrchestratorClient::new(validator_args);
-
-    let private_staking_key = network_params.private_staking_key.clone();
-    let _public_staking_key = BLSPubKey::from_private(&private_staking_key);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
-
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
         private_key: network_params.private_staking_key,
         stake_value: 1,
-        state_key_pair: state_key_pair.clone(),
+        state_key_pair,
     };
 
-    // Wait for orchestrator to start the node
-    let _wait_for_orchestrator = true;
+    // Derive our Libp2p public key from our private key
+    let libp2p_public_key =
+        derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
+            .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    // Load the network configuration from the orchestrator
-    tracing::info!("loading network config from orchestrator");
     let config = NetworkConfig::get_complete_config(
         &orchestrator_client,
         None,
         my_config.clone(),
-        None,
-        None,
+        // Register in our Libp2p advertise address and public key so other nodes
+        // can contact us on startup
+        Some(network_params.libp2p_advertise_address),
+        Some(libp2p_public_key),
     )
     .await?
     .0;
@@ -178,22 +178,54 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let node_index = config.node_index;
 
-    tracing::info!("loaded config, we are node {}", config.node_index);
+    // Initialize the push CDN network (and perform the initial connection)
+    let cdn_network = PushCdnNetwork::new(
+        network_params.cdn_endpoint,
+        vec!["Global".into(), "DA".into()],
+        KeyPair {
+            public_key: WrappedSignatureKey(my_config.public_key),
+            private_key: my_config.private_key.clone(),
+        },
+    )
+    .with_context(|| "Failed to create CDN network")?;
 
-    // Initialize networking.
+    // Initialize the Libp2p network (if enabled)
+    #[cfg(feature = "libp2p")]
+    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+        config.clone(),
+        network_params.libp2p_bind_address,
+        &my_config.public_key,
+        // We need the private key so we can derive our Libp2p keypair
+        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+        &my_config.private_key,
+    )
+    .await
+    .with_context(|| "Failed to create libp2p network")?;
+
+    // Combine the communication channels
+    #[cfg(feature = "libp2p")]
+    let (da_network, quorum_network) = {
+        (
+            Arc::from(CombinedNetworks::new(
+                cdn_network.clone(),
+                p2p_network.clone(),
+                Duration::from_secs(1),
+            )),
+            Arc::from(CombinedNetworks::new(
+                cdn_network,
+                p2p_network,
+                Duration::from_secs(1),
+            )),
+        )
+    };
+
+    #[cfg(not(feature = "libp2p"))]
+    let (da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
+
+    // Convert to the sequencer-compatible type
     let networks = Networks {
-        da_network: Arc::new(WebServerNetwork::create(
-            network_params.da_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            true,
-        )),
-        quorum_network: Arc::new(WebServerNetwork::create(
-            network_params.consensus_server_url,
-            network_params.webserver_poll_interval,
-            my_config.public_key,
-            false,
-        )),
+        da_network,
+        quorum_network,
         _pd: Default::default(),
     };
 
@@ -502,8 +534,7 @@ mod test {
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_builder_url();
-
+        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
         let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
             hotshot_config,
             hotshot_context_handle,
@@ -521,12 +552,25 @@ mod test {
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
+        let seed = [207_u8; 32];
+
+        // Hotshot client Public, Private key
+        let (hotshot_client_pub_key, hotshot_client_private_key) =
+            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+
         let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+
+        // sign the parent_commitment using the client_private_key
+        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &hotshot_client_private_key,
+            parent_commitment.as_ref(),
+        )
+        .expect("Claim block signing failed");
 
         // test getting available blocks
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}"
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -542,10 +586,6 @@ mod test {
         };
 
         let builder_commitment = available_block_info[0].block_hash.clone();
-        let seed = [207_u8; 32];
-        // Builder Public, Private key
-        let (_hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
         // sign the builder_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -557,7 +597,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -574,7 +614,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
