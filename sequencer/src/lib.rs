@@ -84,39 +84,7 @@ pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::ValidatedState;
 pub use transaction::{NamespaceId, Transaction};
-pub mod network {
-    use hotshot_types::message::Message;
-
-    use super::*;
-
-    pub trait Type: 'static {
-        type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
-        type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
-    }
-
-    #[derive(Clone, Copy, Default)]
-    pub struct Production;
-
-    #[cfg(feature = "libp2p")]
-    impl Type for Production {
-        type DAChannel = CombinedNetworks<SeqTypes>;
-        type QuorumChannel = CombinedNetworks<SeqTypes>;
-    }
-
-    #[cfg(not(feature = "libp2p"))]
-    impl Type for Production {
-        type DAChannel = PushCdnNetwork<SeqTypes>;
-        type QuorumChannel = PushCdnNetwork<SeqTypes>;
-    }
-
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct Memory;
-
-    impl Type for Memory {
-        type DAChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
-        type QuorumChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
-    }
-}
+pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
 #[derive(Derivative, Serialize, Deserialize)]
