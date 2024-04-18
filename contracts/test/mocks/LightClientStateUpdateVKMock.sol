@@ -19,7 +19,7 @@ import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
 
 /* solhint-disable no-inline-assembly */
 
-library LightClientStateUpdateVKTest {
+library LightClientStateUpdateVKMock {
     function getVk() internal pure returns (IPlonkVerifier.VerifyingKey memory vk) {
         assembly {
             // domain size

@@ -1,3 +1,5 @@
+use std::net::ToSocketAddrs;
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
@@ -7,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, L1Params, NetworkParams,
+    persistence, BuilderParams, ChainConfig, L1Params, NetworkParams,
 };
 use versioned_binary_serialization::version::StaticVersionType;
 
@@ -47,6 +49,8 @@ where
     S: DataSourceOptions,
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
+    let stake_table_capacity = opt.stake_table_capacity;
+    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
@@ -55,12 +59,29 @@ where
         prefunded_accounts: opt.prefunded_builder_accounts,
         eth_account_index: opt.eth_account_index,
     };
+
+    // Parse supplied Libp2p addresses to their socket form
+    // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
+    // Downstream in HotShot we pin the IP address to v4, but this can be fixed in the future.
+    let libp2p_advertise_address = opt
+        .libp2p_advertise_address
+        .to_socket_addrs()?
+        .find(|x| x.is_ipv4())
+        .ok_or(anyhow::anyhow!(
+            "Failed to resolve Libp2p advertise address"
+        ))?;
+    let libp2p_bind_address = opt
+        .libp2p_bind_address
+        .to_socket_addrs()?
+        .find(|x| x.is_ipv4())
+        .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
+
     let network_params = NetworkParams {
-        da_server_url: opt.da_server_url,
-        consensus_server_url: opt.consensus_server_url,
+        cdn_endpoint: opt.cdn_endpoint,
+        libp2p_advertise_address,
+        libp2p_bind_address,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
@@ -102,7 +123,9 @@ where
                             storage,
                             builder_params,
                             l1_params,
+                            stake_table_capacity,
                             bind_version,
+                            chain_config,
                         )
                         .await
                         .unwrap()
@@ -120,7 +143,9 @@ where
                 storage_opt.create().await?,
                 builder_params,
                 l1_params,
+                stake_table_capacity,
                 bind_version,
+                chain_config,
             )
             .await?
         }

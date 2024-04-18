@@ -73,16 +73,19 @@ jobs:
 
       - name: Build diff-test
         run: |
-          nix develop --accept-flake-config -c cargo build --bin diff-test --release
+          nix develop --accept-flake-config -c cargo build --locked --bin diff-test --release
 
       - name: Run tests (quick version for PR)
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           export FOUNDRY_PROFILE=quick
-          nix develop --accept-flake-config -c  forge test -vvv
+          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin"
+          ./scripts/download_srs_aztec.sh
+          nix develop --accept-flake-config -c forge test -vvv
 
       - name: Run tests (full version for main)
         if: ${{ github.event_name != 'pull_request' }}
         run: |
+          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin"
+          ./scripts/download_srs_aztec.sh
           nix develop --accept-flake-config -c forge test -vvv
-          
