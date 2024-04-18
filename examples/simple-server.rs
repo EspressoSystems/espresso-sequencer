@@ -170,7 +170,7 @@ async fn init_consensus(
     // Start the builder server
     let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
         MockTypes,
-    >>::start(Arc::new(membership))
+    >>::start(1, Default::default())
     .await;
 
     // Create the configuration
