@@ -73,8 +73,6 @@ struct Args {
     pub stake_table_capacity: usize,
 }
 
-//
-
 #[derive(Clone, Debug, Snafu)]
 pub struct ParseDurationError {
     reason: String,
