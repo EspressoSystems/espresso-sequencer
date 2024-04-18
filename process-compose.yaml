@@ -344,6 +344,7 @@ processes:
 
   permissionless-builder:
     command: permissionless-builder
+    #log_location: builder.log
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:

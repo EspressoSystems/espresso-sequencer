@@ -3,6 +3,19 @@ version = "0.1.0"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
+[patch."https://github.com/EspressoSystems/hotshot-builder-core"]
+hotshot-builder-core = { path = "../hs-builder-core" }
+
+[patch.'https://github.com/EspressoSystems/hotshot']
+hotshot = { path = "../HotShot/crates/hotshot" }
+hotshot-orchestrator = { path = "../HotShot/crates/orchestrator" }
+hotshot-stake-table = { path = "../HotShot/crates/hotshot-stake-table" }
+hotshot-task = { path = "../HotShot/crates/task" }
+hotshot-testing = { path = "../HotShot/crates/testing" }
+hotshot-types = { path = "../HotShot/crates/types" }
+hotshot-web-server = { path = "../HotShot/crates/web_server" }
+hotshot-builder-api = { path = "../HotShot/crates/builder-api" }
+
 [workspace]
 
 resolver = "2"
@@ -89,4 +102,4 @@ zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.36" }
-hotshot-builder-core = { git = "https://github.com//EspressoSystems/hotshot-builder-core", branch = "hg/testing" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.5" }

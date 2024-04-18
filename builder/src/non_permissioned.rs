@@ -111,6 +111,7 @@ impl BuilderConfig {
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
+            vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
