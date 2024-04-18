@@ -721,9 +721,9 @@ mod api_tests {
         tracing::info!(port, "server running");
 
         // Make sure we can decide new blocks after the restart.
-        tracing::info!("waiting for decide, height {}", height + 1);
+        tracing::info!("waiting for decide, height {height}");
         let new_leaf: LeafQueryData<SeqTypes> = client
-            .socket(&format!("availability/stream/leaves/{}", height + 1))
+            .socket(&format!("availability/stream/leaves/{height}"))
             .subscribe()
             .await
             .unwrap()
@@ -731,7 +731,7 @@ mod api_tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(new_leaf.height(), height as u64 + 1);
+        assert_eq!(new_leaf.height(), height as u64);
         assert_eq!(
             new_leaf.leaf().get_parent_commitment(),
             chain[height - 1].hash()
