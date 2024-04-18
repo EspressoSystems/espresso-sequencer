@@ -6,16 +6,17 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use cdn_broker::reexports::crypto::signature::KeyPair;
 use cdn_broker::{Broker, Config as BrokerConfig, ConfigBuilder as BrokerConfigBuilder};
 use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
 use clap::Parser;
 
-use hotshot::traits::implementations::{KeyPair, TestingDef, WrappedSignatureKey};
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::traits::signature_key::SignatureKey;
 use portpicker::pick_unused_port;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
+use sequencer::network::cdn::{TestingDef, WrappedSignatureKey};
 use sequencer::SeqTypes;
 
 #[derive(Parser, Debug)]
