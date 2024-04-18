@@ -28,8 +28,8 @@ use hotshot_types::{
     },
 };
 use sequencer::{
-    catchup::StatePeers, l1_client::L1Client, BuilderParams, L1Params, NetworkParams, NodeState,
-    PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, l1_client::L1Client, BuilderParams, ChainConfig, L1Params, NetworkParams,
+    NodeState, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -68,6 +68,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
+        ChainConfig::default(),
         l1_client,
         wallet,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
