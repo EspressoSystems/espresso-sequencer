@@ -745,28 +745,28 @@ where
 {
     async fn get_block_summaries(
         &self,
-        request: explorer::data_source::GetBlockSummariesRequest<Types>,
+        request: explorer::query_data::GetBlockSummariesRequest<Types>,
     ) -> Result<
-        Vec<explorer::data_source::BlockSummary<Types>>,
-        explorer::data_source::GetBlockSummariesError,
+        Vec<explorer::query_data::BlockSummary<Types>>,
+        explorer::query_data::GetBlockSummariesError,
     > {
         self.storage().await.get_block_summaries(request).await
     }
 
     async fn get_block_detail(
         &self,
-        request: explorer::data_source::BlockIdentifier<Types>,
-    ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>
+        request: explorer::query_data::BlockIdentifier<Types>,
+    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
     {
         self.storage().await.get_block_detail(request).await
     }
 
     async fn get_transaction_summaries(
         &self,
-        request: explorer::data_source::GetTransactionSummariesRequest<Types>,
+        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
     ) -> Result<
-        Vec<explorer::data_source::TransactionSummary<Types>>,
-        explorer::data_source::GetTransactionSummariesError,
+        Vec<explorer::query_data::TransactionSummary<Types>>,
+        explorer::query_data::GetTransactionSummariesError,
     > {
         self.storage()
             .await
@@ -776,10 +776,10 @@ where
 
     async fn get_transaction_detail(
         &self,
-        request: explorer::data_source::TransactionIdentifier<Types>,
+        request: explorer::query_data::TransactionIdentifier<Types>,
     ) -> Result<
-        explorer::data_source::TransactionDetailResponse<Types>,
-        explorer::data_source::GetTransactionDetailError,
+        explorer::query_data::TransactionDetailResponse<Types>,
+        explorer::query_data::GetTransactionDetailError,
     > {
         self.storage().await.get_transaction_detail(request).await
     }
@@ -787,8 +787,8 @@ where
     async fn get_explorer_summary(
         &self,
     ) -> Result<
-        explorer::data_source::ExplorerSummary<Types>,
-        explorer::data_source::GetExplorerSummaryError,
+        explorer::query_data::ExplorerSummary<Types>,
+        explorer::query_data::GetExplorerSummaryError,
     > {
         self.storage().await.get_explorer_summary().await
     }
@@ -797,8 +797,8 @@ where
         &self,
         query: String,
     ) -> Result<
-        explorer::data_source::SearchResult<Types>,
-        explorer::data_source::GetSearchResultsError,
+        explorer::query_data::SearchResult<Types>,
+        explorer::query_data::GetSearchResultsError,
     > {
         self.storage().await.get_search_results(query).await
     }

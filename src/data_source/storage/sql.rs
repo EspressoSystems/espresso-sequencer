@@ -25,7 +25,7 @@ use crate::{
     },
     explorer::{
         self,
-        data_source::{
+        query_data::{
             BalanceAmount, BlockDetail, BlockIdentifier, BlockRange, BlockSummary,
             ExplorerHistograms, ExplorerSummary, GenesisOverview, GetBlockDetailError,
             GetBlockSummariesError, GetBlockSummariesRequest, GetExplorerSummaryError,

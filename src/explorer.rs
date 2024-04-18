@@ -11,19 +11,21 @@
 // see <https://www.gnu.org/licenses/>.
 
 pub(crate) mod currency;
-pub(crate) mod data_source;
 pub(crate) mod errors;
 pub(crate) mod monetary_value;
+pub(crate) mod query_data;
 pub(crate) mod traits;
+
 use self::errors::InvalidLimit;
 use crate::availability::{QueryableHeader, QueryablePayload};
 use crate::data_source::storage::ExplorerStorage;
 use crate::{api::load_api, Header, Payload};
+
 pub use currency::*;
-pub use data_source::*;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use monetary_value::*;
+pub use query_data::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::num::NonZeroUsize;
@@ -135,13 +137,13 @@ where
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct TransactionDetailResponse<Types: NodeType> {
-    pub transaction_detail: data_source::TransactionDetailResponse<Types>,
+    pub transaction_detail: query_data::TransactionDetailResponse<Types>,
 }
 
-impl<Types: NodeType> From<data_source::TransactionDetailResponse<Types>>
+impl<Types: NodeType> From<query_data::TransactionDetailResponse<Types>>
     for TransactionDetailResponse<Types>
 {
-    fn from(transaction_detail: data_source::TransactionDetailResponse<Types>) -> Self {
+    fn from(transaction_detail: query_data::TransactionDetailResponse<Types>) -> Self {
         Self { transaction_detail }
     }
 }

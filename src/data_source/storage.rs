@@ -131,18 +131,18 @@ where
     /// [BlockIdentifier].
     async fn get_block_detail(
         &self,
-        request: explorer::data_source::BlockIdentifier<Types>,
-    ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>;
+        request: explorer::query_data::BlockIdentifier<Types>,
+    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>;
 
     /// `get_block_summaries` is a method that retrieves a list of block
     /// summaries from the blockchain.  The list is generated from the given
     /// [GetBlockSummariesRequest].
     async fn get_block_summaries(
         &self,
-        request: explorer::data_source::GetBlockSummariesRequest<Types>,
+        request: explorer::query_data::GetBlockSummariesRequest<Types>,
     ) -> Result<
-        Vec<explorer::data_source::BlockSummary<Types>>,
-        explorer::data_source::GetBlockSummariesError,
+        Vec<explorer::query_data::BlockSummary<Types>>,
+        explorer::query_data::GetBlockSummariesError,
     >;
 
     /// `get_transaction_detail` is a method that retrieves the details of a
@@ -150,10 +150,10 @@ where
     /// by the given [TransactionIdentifier].
     async fn get_transaction_detail(
         &self,
-        request: explorer::data_source::TransactionIdentifier<Types>,
+        request: explorer::query_data::TransactionIdentifier<Types>,
     ) -> Result<
-        explorer::data_source::TransactionDetailResponse<Types>,
-        explorer::data_source::GetTransactionDetailError,
+        explorer::query_data::TransactionDetailResponse<Types>,
+        explorer::query_data::GetTransactionDetailError,
     >;
 
     /// `get_transaction_summaries` is a method that retrieves a list of
@@ -161,10 +161,10 @@ where
     /// the given [GetTransactionSummariesRequest].
     async fn get_transaction_summaries(
         &self,
-        request: explorer::data_source::GetTransactionSummariesRequest<Types>,
+        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
     ) -> Result<
-        Vec<explorer::data_source::TransactionSummary<Types>>,
-        explorer::data_source::GetTransactionSummariesError,
+        Vec<explorer::query_data::TransactionSummary<Types>>,
+        explorer::query_data::GetTransactionSummariesError,
     >;
 
     /// `get_explorer_summary` is a method that retrieves a summary overview of
@@ -173,8 +173,8 @@ where
     async fn get_explorer_summary(
         &self,
     ) -> Result<
-        explorer::data_source::ExplorerSummary<Types>,
-        explorer::data_source::GetExplorerSummaryError,
+        explorer::query_data::ExplorerSummary<Types>,
+        explorer::query_data::GetExplorerSummaryError,
     >;
 
     /// `get_search_results` is a method that retrieves the results of a search
@@ -184,7 +184,7 @@ where
         &self,
         query: String,
     ) -> Result<
-        explorer::data_source::SearchResult<Types>,
-        explorer::data_source::GetSearchResultsError,
+        explorer::query_data::SearchResult<Types>,
+        explorer::query_data::GetSearchResultsError,
     >;
 }
