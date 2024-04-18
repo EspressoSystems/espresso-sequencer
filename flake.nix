@@ -228,7 +228,7 @@
             # with rustup installations.
             export CARGO_HOME=$HOME/.cargo-nix
             export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
-            ./scripts/download_srs_aztec.sh
+            source ./scripts/download_srs_aztec.sh
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
