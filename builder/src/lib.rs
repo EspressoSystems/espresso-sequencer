@@ -148,9 +148,7 @@ pub mod testing {
         },
     };
     use sequencer::{
-        catchup::StateCatchup,
-        eth_signature_key::{EthKeyPair, EthVerifyingKey},
-        persistence::PersistenceOptions,
+        catchup::StateCatchup, eth_signature_key::EthKeyPair, persistence::PersistenceOptions,
         state_signature::StateSignatureMemStorage,
     };
     use sequencer::{Event, Transaction};
@@ -168,7 +166,7 @@ pub mod testing {
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
     type ElectionConfig = StaticElectionConfig;
-    use snafu::*;
+    use snafu::{guide::feature_flags, *};
 
     #[derive(Clone)]
     pub struct HotShotTestConfig {
@@ -527,7 +525,7 @@ pub mod testing {
 
     pub struct NonPermissionedBuilderTestConfig {
         pub config: BuilderConfig,
-        pub pub_key: EthVerifyingKey,
+        pub fee_account: FeeAccount,
     }
 
     impl NonPermissionedBuilderTestConfig {
@@ -557,7 +555,7 @@ pub mod testing {
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let (ver_key, key_pair) = EthVerifyingKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -578,7 +576,7 @@ pub mod testing {
 
             Self {
                 config: builder_config,
-                pub_key: ver_key,
+                fee_account,
             }
         }
     }
@@ -588,7 +586,7 @@ pub mod testing {
         Ver: StaticVersionType + 'static,
     > {
         pub builder_context: BuilderContext<network::Memory, P, Ver>,
-        pub pub_key: EthVerifyingKey,
+        pub fee_account: FeeAccount,
     }
 
     impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -620,7 +618,7 @@ pub mod testing {
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let (ver_key, key_pair) = EthVerifyingKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -632,7 +630,6 @@ pub mod testing {
                 hotshot_handle,
                 state_signer,
                 node_id,
-                ver_key,
                 key_pair,
                 bootstrapped_view,
                 channel_capacity,
@@ -644,7 +641,7 @@ pub mod testing {
 
             Self {
                 builder_context,
-                pub_key: ver_key,
+                fee_account,
             }
         }
     }
@@ -727,7 +724,13 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+            let builder_commitment = todo!();
+            Header::genesis(
+                &genesis_state,
+                genesis_commitment,
+                builder_commitment,
+                genesis_ns_table,
+            )
         };
 
         loop {

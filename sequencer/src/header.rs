@@ -1,7 +1,7 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
     L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
@@ -15,10 +15,11 @@ use ethers::{
 use hotshot_query_service::availability::QueryableHeader;
 use hotshot_types::{
     traits::{
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload, BuilderFee},
         node_implementation::NodeType,
         ValidatedState as HotShotState,
     },
+    utils::BuilderCommitment,
     vid::VidCommitment,
 };
 use jf_primitives::merkle_tree::prelude::*;
@@ -238,7 +239,9 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
+        _builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        _builder_fee: BuilderFee<SeqTypes>,
     ) -> Self {
         let mut validated_state = parent_state.clone();
 
@@ -321,6 +324,7 @@ impl BlockHeader<SeqTypes> for Header {
     fn genesis(
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         let ValidatedState {
@@ -358,12 +362,27 @@ impl BlockHeader<SeqTypes> for Header {
         &self.ns_table
     }
 
-    fn builder_commitment(
-        &self,
-        _metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
-    ) -> hotshot_types::utils::BuilderCommitment {
-        unimplemented!()
+    /// Commit over fee_amount, payload_commitment and metadata
+    fn builder_commitment(&self) -> BuilderCommitment {
+        builder_commitment(
+            self.fee_info.amount(),
+            self.payload_commitment(),
+            self.metadata(),
+        )
     }
+}
+
+fn builder_commitment(
+    fee_amount: FeeAmount,
+    payload_commitment: VidCommitment,
+    metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+) -> BuilderCommitment {
+    let digest = RawCommitmentBuilder::<Header>::new("BuilderCommitment")
+        .fixed_size_field("fee_amount", &fee_amount.to_fixed_bytes())
+        .fixed_size_field("payload_commitment", payload_commitment.as_ref().as_ref())
+        .field("metadata", metadata.commit())
+        .finalize();
+    BuilderCommitment::from_raw_digest(digest)
 }
 
 impl QueryableHeader<SeqTypes> for Header {
@@ -725,12 +744,19 @@ mod test_headers {
 
         // TODO this currently fails because after fetching the blocks frontier
         // the element (header commitment) does not match the one in the proof.
+        let builder_fee = BuilderFee {
+            fee_amount: todo!(),
+            fee_signature: todo!(),
+        };
+        let builder_commitment = todo!();
         let proposal = Header::new(
             &forgotten_state,
             &genesis_state,
             &parent_leaf,
             parent_header.payload_commitment,
+            builder_commitment,
             genesis.ns_table,
+            builder_fee,
         )
         .await;
 

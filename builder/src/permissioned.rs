@@ -28,8 +28,8 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::election::Membership,
-    traits::metrics::Metrics,
+    traits::{election::Membership, metrics::Metrics},
+    utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -52,7 +52,9 @@ use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderProgress, BuilderState, MessageType, ResponseMessage},
+    builder_state::{
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromInfo, MessageType, ResponseMessage,
+    },
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState,
@@ -64,10 +66,7 @@ use jf_primitives::{
     signatures::bls_over_bn254::VerKey,
 };
 use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{
-    catchup::mock::MockStateCatchup,
-    eth_signature_key::{EthKeyPair, EthVerifyingKey},
-};
+use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -134,8 +133,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
-    pub_key: EthVerifyingKey,
-    priv_key: EthKeyPair,
+    eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
@@ -280,8 +278,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle,
         state_signer,
         node_index,
-        pub_key,
-        priv_key,
+        eth_key_pair,
         bootstrapped_view,
         channel_capacity,
         instance_state,
@@ -376,8 +373,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle: Consensus<N, P>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
-        pub_key: EthVerifyingKey,
-        priv_key: EthKeyPair,
+        eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -404,7 +400,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (pub_key, priv_key),
+            (eth_key_pair.fee_account(), eth_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
@@ -416,11 +412,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            (
-                bootstrapped_view,
-                vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                fake_commitment(),
-            ),
+            BuiltFromInfo {
+                view_number: bootstrapped_view,
+                vid_commitment: vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
+                leaf_commit: fake_commitment(),
+                builder_commitment: BuilderCommitment::from_bytes([]),
+            },
             tx_receiver,
             decide_receiver,
             da_receiver,
@@ -547,7 +544,7 @@ mod test {
         )
         .await;
 
-        let builder_pub_key = builder_config.pub_key;
+        let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -633,7 +630,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<EthVerifyingKey>("block_info/builderaddress")
+            .get::<FeeAccount>("block_info/builderaddress")
             .send()
             .await
         {

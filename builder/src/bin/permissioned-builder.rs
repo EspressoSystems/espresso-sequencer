@@ -249,7 +249,6 @@ async fn main() -> anyhow::Result<()> {
         builder_params,
         l1_params,
         builder_server_url.clone(),
-        builder_key_pair.verifying_key(),
         builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,

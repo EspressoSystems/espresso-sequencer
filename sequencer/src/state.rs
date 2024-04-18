@@ -30,7 +30,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
-    traits::states::StateDelta,
+    traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey, states::StateDelta},
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -242,19 +242,16 @@ fn charge_fee(
 /// Validate builder account by verifying signature
 fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     // Beware of Malice!
-    let builder_signature = proposed_header
+    let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-
-    let fee_info = proposed_header.fee_info;
+    let msg = proposed_header.builder_commitment();
     // verify signature
     anyhow::ensure!(
-        builder_signature
-            .verify(
-                RecoveryMessage::Hash(types::H256(proposed_header.commit().into())),
-                fee_info.account.address()
-            )
-            .is_ok(),
+        proposed_header
+            .fee_info
+            .account
+            .validate_builder_signature(&signature, msg.as_ref()),
         "Invalid Builder Signature"
     );
 
@@ -403,7 +400,7 @@ async fn store_state_update(
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
             storage,
-            proof.proof,
+            proof,
             path,
             block_number,
         )
@@ -424,7 +421,7 @@ async fn store_state_update(
     {
         UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
             storage,
-            proof.proof,
+            proof,
             path,
             block_number,
         )
@@ -480,10 +477,7 @@ async fn store_genesis_state(
             );
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage,
-            proof.proof,
-            path,
-            0,
+            storage, proof, path, 0,
         )
         .await
         .context("failed to store fee merkle nodes")?;
@@ -800,6 +794,19 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
     fn tree_height() -> usize {
         BLOCK_MERKLE_TREE_HEIGHT
     }
+
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
+            Self::Entry,
+            Self::Key,
+            Self::T,
+            3,
+        >,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
 }
 
 #[derive(
@@ -895,7 +902,7 @@ impl Committable for FeeInfo {
 pub struct FeeAmount(U256);
 impl FeeAmount {
     /// Return array containing underlying bytes of inner `U256` type
-    fn to_fixed_bytes(self) -> [u8; 32] {
+    pub(crate) fn to_fixed_bytes(self) -> [u8; 32] {
         let mut bytes = [0u8; core::mem::size_of::<U256>()];
         self.0.to_little_endian(&mut bytes);
         bytes
@@ -1058,6 +1065,19 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
     fn tree_height() -> usize {
         FEE_MERKLE_TREE_HEIGHT
+    }
+
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
+            Self::Entry,
+            Self::Key,
+            Self::T,
+            { Self::ARITY },
+        >,
+    ) -> anyhow::Result<()> {
+        todo!()
     }
 }
 

@@ -15,53 +15,55 @@ use std::{
     hash::Hash,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
-pub struct EthVerifyingKey {
-    verifying_key: VerifyingKey,
-    address: Address,
-}
+use crate::state::FeeAccount;
 
-impl EthVerifyingKey {
-    pub fn address(&self) -> Address {
-        self.address
-    }
-}
+// #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+// pub struct EthVerifyingKey {
+//     verifying_key: VerifyingKey,
+//     address: Address,
+// }
 
-impl Hash for EthVerifyingKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.verifying_key.to_sec1_bytes().hash(state);
-    }
-}
+// impl EthVerifyingKey {
+//     pub fn address(&self) -> Address {
+//         self.address
+//     }
+// }
 
-impl Display for EthVerifyingKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EthVerifyingKey(address={:?})", self.address())
-    }
-}
+// impl Hash for EthVerifyingKey {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.verifying_key.to_sec1_bytes().hash(state);
+//     }
+// }
 
-impl From<VerifyingKey> for EthVerifyingKey {
-    fn from(verifying_key: VerifyingKey) -> Self {
-        let address = public_key_to_address(&verifying_key);
-        EthVerifyingKey {
-            verifying_key,
-            address,
-        }
-    }
-}
+// impl Display for EthVerifyingKey {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "EthVerifyingKey(address={:?})", self.address())
+//     }
+// }
+
+// impl From<VerifyingKey> for EthVerifyingKey {
+//     fn from(verifying_key: VerifyingKey) -> Self {
+//         let address = public_key_to_address(&verifying_key);
+//         EthVerifyingKey {
+//             verifying_key,
+//             address,
+//         }
+//     }
+// }
 
 // Newtype because type doesn't implement Hash, Display, SerDe, Ord, PartialOrd
 #[derive(PartialEq, Eq, Clone)]
 pub struct EthKeyPair {
     signing_key: SigningKey,
-    verifying_key: EthVerifyingKey,
+    fee_account: FeeAccount,
 }
 
 impl From<SigningKey> for EthKeyPair {
     fn from(signing_key: SigningKey) -> Self {
-        let verifying_key = VerifyingKey::from(&signing_key).into();
+        let fee_account = public_key_to_address(&VerifyingKey::from(&signing_key)).into();
         EthKeyPair {
             signing_key,
-            verifying_key,
+            fee_account,
         }
     }
 }
@@ -80,12 +82,12 @@ impl EthKeyPair {
         Ok(signing_key.clone().into())
     }
 
-    pub fn verifying_key(&self) -> EthVerifyingKey {
-        self.verifying_key
+    pub fn fee_account(&self) -> FeeAccount {
+        self.fee_account
     }
 
     pub fn address(&self) -> Address {
-        self.verifying_key().address()
+        self.fee_account.address()
     }
 }
 
@@ -140,7 +142,7 @@ impl Ord for EthKeyPair {
 #[derive(Clone, Debug, Snafu)]
 pub struct SigningError;
 
-impl BuilderSignatureKey for EthVerifyingKey {
+impl BuilderSignatureKey for FeeAccount {
     type BuilderPrivateKey = EthKeyPair;
     type BuilderSignature = Signature;
     type SignError = SigningError;
@@ -164,7 +166,7 @@ impl BuilderSignatureKey for EthVerifyingKey {
         hasher.update(&index.to_le_bytes());
         let new_seed = *hasher.finalize().as_bytes();
         let signing_key = EthKeyPair::from(SigningKey::from_slice(&new_seed).unwrap());
-        (signing_key.verifying_key(), signing_key)
+        (signing_key.fee_account(), signing_key)
     }
 }
 
@@ -175,7 +177,7 @@ mod tests {
 
     impl EthKeyPair {
         fn for_test() -> Self {
-            EthVerifyingKey::generated_from_seed_indexed([0u8; 32], 0).1
+            FeeAccount::generated_from_seed_indexed([0u8; 32], 0).1
         }
     }
 
@@ -219,16 +221,16 @@ mod tests {
         // Recovery works
         let key = EthKeyPair::for_test();
         let msg = b"hello world";
-        let sig = EthVerifyingKey::sign_builder_message(&key, msg).unwrap();
-        assert!(key.verifying_key().validate_builder_signature(&sig, msg));
+        let sig = FeeAccount::sign_builder_message(&key, msg).unwrap();
+        assert!(key.fee_account().validate_builder_signature(&sig, msg));
 
         // Recovery fails if signed with other key
-        let other_key = EthVerifyingKey::generated_from_seed_indexed([0u8; 32], 1).1;
-        let sig = EthVerifyingKey::sign_builder_message(&other_key, msg).unwrap();
-        assert!(!key.verifying_key().validate_builder_signature(&sig, msg));
+        let other_key = FeeAccount::generated_from_seed_indexed([0u8; 32], 1).1;
+        let sig = FeeAccount::sign_builder_message(&other_key, msg).unwrap();
+        assert!(!key.fee_account().validate_builder_signature(&sig, msg));
 
         // Recovery fails if another message was signed
-        let sig = EthVerifyingKey::sign_builder_message(&key, b"hello world XYZ").unwrap();
-        assert!(!key.verifying_key().validate_builder_signature(&sig, msg));
+        let sig = FeeAccount::sign_builder_message(&key, b"hello world XYZ").unwrap();
+        assert!(!key.fee_account().validate_builder_signature(&sig, msg));
     }
 }

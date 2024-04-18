@@ -9,7 +9,6 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
-use crate::eth_signature_key::EthVerifyingKey;
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
@@ -26,6 +25,7 @@ use ethers::{
 
 use l1_client::L1Client;
 
+use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod l1_client;
@@ -64,7 +64,7 @@ use hotshot_types::{
         states::InstanceState,
         storage::Storage,
     },
-    utils::View,
+    utils::{BuilderCommitment, View},
     ValidatorConfig,
 };
 use persistence::SequencerPersistence;
@@ -221,7 +221,7 @@ impl NodeType for SeqTypes {
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
-    type BuilderSignatureKey = EthVerifyingKey;
+    type BuilderSignatureKey = FeeAccount;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -429,6 +429,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     Ok(ctx)
 }
 
+fn empty_builder_commitment() -> BuilderCommitment {
+    BuilderCommitment::from_bytes([])
+}
+
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
@@ -459,22 +463,9 @@ pub mod testing {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
-    pub async fn run_test_builder(
-        num_of_nodes_with_stake: NonZeroUsize,
-        known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
-    ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
-        let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            num_of_nodes_with_stake.get() as u64,
-            0,
-        );
-
-        let membership =
-            GeneralStaticCommittee::create_election(known_nodes_with_stake, election_config, 0);
-
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(Arc::new(
-            membership,
-        ))
-        .await
+    pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(1usize, ())
+            .await
     }
 
     #[derive(Clone)]
@@ -717,11 +708,7 @@ mod test {
         let mut config = TestConfig::default();
 
         let hotshot_config = config.hotshot_config();
-        let (builder_task, builder_url) = run_test_builder(
-            hotshot_config.num_nodes_with_stake,
-            hotshot_config.known_nodes_with_stake.clone(),
-        )
-        .await;
+        let (builder_task, builder_url) = run_test_builder().await;
 
         config.set_builder_url(builder_url);
 
@@ -762,11 +749,7 @@ mod test {
         let mut config = TestConfig::default();
 
         let hotshot_config = config.hotshot_config();
-        let (builder_task, builder_url) = run_test_builder(
-            hotshot_config.num_nodes_with_stake,
-            hotshot_config.known_nodes_with_stake.clone(),
-        )
-        .await;
+        let (builder_task, builder_url) = run_test_builder().await;
 
         config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;
@@ -796,7 +779,12 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+            Header::genesis(
+                &genesis_state,
+                genesis_commitment,
+                empty_builder_commitment(),
+                genesis_ns_table,
+            )
         };
 
         loop {

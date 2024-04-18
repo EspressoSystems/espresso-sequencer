@@ -150,11 +150,7 @@ mod test_helpers {
             let mut cfg = TestConfig::default();
 
             let hotshot_config = cfg.hotshot_config();
-            let (builder_task, builder_url) = run_test_builder(
-                hotshot_config.num_nodes_with_stake,
-                hotshot_config.known_nodes_with_stake.clone(),
-            )
-            .await;
+            let (builder_task, builder_url) = run_test_builder().await;
 
             cfg.set_builder_url(builder_url);
 
@@ -808,6 +804,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
+        empty_builder_commitment,
         persistence::no_storage::NoStorage,
         state::{FeeAccount, FeeAmount},
         testing::TestConfig,
@@ -964,8 +961,13 @@ mod test {
         state
             .block_merkle_tree
             .push(
-                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
-                    .commit(),
+                Header::genesis(
+                    &NodeState::mock(),
+                    Default::default(),
+                    empty_builder_commitment(),
+                    Default::default(),
+                )
+                .commit(),
             )
             .unwrap();
         let states = std::array::from_fn(|i| {

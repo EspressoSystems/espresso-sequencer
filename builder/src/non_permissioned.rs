@@ -15,7 +15,9 @@ use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderProgress, BuilderState, MessageType, ResponseMessage},
+    builder_state::{
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromInfo, MessageType, ResponseMessage,
+    },
     service::{run_non_permissioned_standalone_builder_service, GlobalState},
 };
 
@@ -26,6 +28,7 @@ use hotshot_types::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
+    utils::BuilderCommitment,
 };
 use sequencer::{
     catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
@@ -105,7 +108,7 @@ impl BuilderConfig {
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (builder_key_pair.verifying_key(), builder_key_pair),
+            (builder_key_pair.fee_account(), builder_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
@@ -117,11 +120,12 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            (
-                bootstrapped_view,
-                vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                fake_commitment(),
-            ),
+            BuiltFromInfo {
+                view_number: bootstrapped_view,
+                vid_commitment: vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
+                leaf_commit: fake_commitment(),
+                builder_commitment: BuilderCommitment::from_bytes([]),
+            },
             tx_receiver,
             decide_receiver,
             da_receiver,
@@ -207,9 +211,9 @@ mod test {
         block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::eth_signature_key::EthVerifyingKey;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::PersistenceOptions;
+    use sequencer::state::FeeAccount;
     use sequencer::transaction::Transaction;
     use std::time::Duration;
     use surf_disco::Client;
@@ -273,7 +277,7 @@ mod test {
         )
         .await;
 
-        let builder_pub_key = builder_config.pub_key;
+        let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -359,7 +363,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<EthVerifyingKey>("block_info/builderaddress")
+            .get::<FeeAccount>("block_info/builderaddress")
             .send()
             .await
         {
