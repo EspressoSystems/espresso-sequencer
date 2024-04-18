@@ -719,16 +719,15 @@ pub mod node_tests {
             // (since we insert more than 2 transactions total). The query service should still
             // count these as separate transactions and should include both duplicates when
             // computing the total size.
-            let payload =
-                TestBlockPayload::from_transactions([mock_transaction(vec![i as u8 % 2])])
-                    .unwrap()
-                    .0;
+            let (payload, metadata) =
+                TestBlockPayload::from_transactions([mock_transaction(vec![i as u8 % 2])]).unwrap();
             let encoded = payload.encode().unwrap().collect::<Vec<_>>();
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
                 payload_commitment,
                 timestamp: i,
+                builder_commitment: payload.builder_commitment(&metadata),
             };
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});

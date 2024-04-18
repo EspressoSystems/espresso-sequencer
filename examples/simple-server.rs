@@ -168,10 +168,8 @@ async fn init_consensus(
     };
 
     // Start the builder server
-    let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
-        MockTypes,
-    >>::start(Arc::new(membership))
-    .await;
+    let (builder_task, builder_url) =
+        <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(1, ()).await;
 
     // Create the configuration
     let config = HotShotConfig {

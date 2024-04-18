@@ -99,10 +99,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 
         // Start the builder server
         let (builder_task, builder_url) =
-            <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(Arc::new(
-                membership,
-            ))
-            .await;
+            <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(1, ())
+                .await;
 
         let nodes = join_all(
             priv_keys
