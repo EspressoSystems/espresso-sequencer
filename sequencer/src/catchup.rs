@@ -10,7 +10,7 @@ use std::{sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.

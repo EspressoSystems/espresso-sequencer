@@ -30,7 +30,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     App, Url,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use hotshot_events_service::events::Error as EventStreamingError;
 
@@ -155,7 +155,7 @@ impl Options {
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
             let mut context = init_context(ds.populate_metrics()).await;
-            let mut app = App::<_, Error, Ver>::with_state(Arc::new(RwLock::new(
+            let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, super::State::from(&context)),
             )));
 
@@ -183,8 +183,7 @@ impl Options {
             // If we have no availability API, we cannot load a saved leaf from local storage, so we
             // better have been provided the leaf ahead of time if we want it at all.
             let mut context = init_context(Box::new(NoMetrics)).await;
-            let mut app =
-                App::<_, Error, Ver>::with_state(RwLock::new(super::State::from(&context)));
+            let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
 
             self.init_hotshot_modules(&mut app)?;
 
@@ -230,7 +229,7 @@ impl Options {
         let state: endpoints::AvailState<N, P, D, Ver> = Arc::new(RwLock::new(
             ExtensibleDataSource::new(ds, (&context).into()),
         ));
-        let mut app = App::<_, Error, Ver>::with_state(state.clone());
+        let mut app = App::<_, Error>::with_state(state.clone());
 
         // Initialize status API
         if self.status.is_some() {
@@ -383,7 +382,7 @@ impl Options {
 
         let event_streamer = context.get_event_streamer();
 
-        let mut app = App::<_, EventStreamingError, Ver>::with_state(event_streamer);
+        let mut app = App::<_, EventStreamingError>::with_state(event_streamer);
 
         tracing::info!("initializing hotshot events API");
         let hotshot_events_api = hotshot_events_service::events::define_api(

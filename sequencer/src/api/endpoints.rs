@@ -15,7 +15,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
-use commit::Committable;
+use committable::Committable;
 use ethers::prelude::U256;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
@@ -33,7 +33,7 @@ use tide_disco::{
     Api, Error as _, StatusCode,
 };
 
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {

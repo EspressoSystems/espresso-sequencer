@@ -2,7 +2,7 @@ use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use commit::Committable;
+use committable::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
@@ -230,7 +230,7 @@ impl<TableWord: TableWordTraits + std::fmt::Debug> Display for Payload<TableWord
 }
 
 impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
-    fn commit(&self) -> commit::Commitment<Self> {
+    fn commit(&self) -> committable::Commitment<Self> {
         todo!()
     }
 }

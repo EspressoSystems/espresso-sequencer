@@ -19,7 +19,7 @@ use async_std::{
     task::{sleep, spawn},
 };
 use clap::Parser;
-use commit::Committable;
+use committable::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
@@ -772,7 +772,7 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         PATH = ["/metrics"]
         METHOD = "METRICS"
     };
-    let mut app = App::<_, ServerError, _>::with_state(RwLock::new(metrics));
+    let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
     app.module::<ServerError>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {

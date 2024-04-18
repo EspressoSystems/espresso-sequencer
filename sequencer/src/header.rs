@@ -6,7 +6,7 @@ use crate::{
 };
 use ark_serialize::CanonicalSerialize;
 
-use commit::{Commitment, Committable, RawCommitmentBuilder};
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{Signer as _, Wallet},

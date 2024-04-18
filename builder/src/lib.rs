@@ -63,7 +63,7 @@ use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub mod non_permissioned;
 pub mod permissioned;
@@ -101,7 +101,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use commit::Committable;
+    use committable::Committable;
     use core::num;
     use ethers::{
         types::spoof::State,
@@ -445,7 +445,7 @@ pub mod testing {
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
-            let mut app = App::<_, EventStreamApiError, Version01>::with_state(source);
+            let mut app = App::<_, EventStreamApiError>::with_state(source);
 
             app.register_module("hotshot_events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");

@@ -9,7 +9,7 @@ use data_source::{StateDataSource, SubmitDataSource};
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub mod data_source;
 pub mod endpoints;
@@ -108,7 +108,7 @@ mod test_helpers {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
-    use commit::Committable;
+    use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use ethers::prelude::Address;
     use futures::{
@@ -468,7 +468,7 @@ mod api_tests {
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use commit::Committable;
+    use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
@@ -788,7 +788,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use async_std::task::sleep;
-    use commit::{Commitment, Committable};
+    use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
     use ethers::prelude::Signer;
     use futures::stream::StreamExt;

@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
     contract::builders::ContractCall,
@@ -303,7 +303,11 @@ pub async fn wait_for_http(
     max_retries: usize,
 ) -> Result<usize, String> {
     for i in 0..(max_retries + 1) {
-        let res = surf::get(url).await;
+        let reqwest_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .build()
+            .unwrap();
+        let res = reqwest_client.get(url.clone()).send().await;
         if res.is_ok() {
             tracing::debug!("Connected to {url}");
             return Ok(i);
@@ -439,7 +443,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use commit::RawCommitmentBuilder;
+    use committable::RawCommitmentBuilder;
 
     struct TestCommittable;
 

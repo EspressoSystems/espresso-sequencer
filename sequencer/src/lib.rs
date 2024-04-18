@@ -72,7 +72,7 @@ use std::{
     collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc,
     time::Duration,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub use block::payload::Payload;
 pub use chain_variables::ChainVariables;
@@ -443,7 +443,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 pub mod testing {
     use super::*;
     use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
-    use commit::Committable;
+    use committable::Committable;
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,

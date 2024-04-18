@@ -1,4 +1,4 @@
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 
 /// Global variables for an Espresso blockchain.
@@ -32,7 +32,7 @@ impl ChainVariables {
 
 impl Committable for ChainVariables {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("ChainVariables")
+        committable::RawCommitmentBuilder::new("ChainVariables")
             .u64_field("chain_id", self.chain_id as u64)
             .finalize()
     }

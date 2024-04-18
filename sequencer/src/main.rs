@@ -11,7 +11,7 @@ use sequencer::{
     options::{Modules, Options},
     persistence, BuilderParams, L1Params, NetworkParams,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
