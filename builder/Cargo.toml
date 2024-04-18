@@ -31,7 +31,7 @@ hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 hotshot-types = { workspace = true }
 jf-primitives = { workspace = true }
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 rand = "0.8.5"
 reqwest = "0.12"
 sequencer = { path = "../sequencer", features = ["testing"] }

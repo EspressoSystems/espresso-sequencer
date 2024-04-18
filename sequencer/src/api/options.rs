@@ -12,8 +12,7 @@ use crate::{
     context::SequencerContext,
     network,
     persistence::{self, SequencerPersistence},
-    state::{BlockMerkleTree, FeeMerkleTree},
-    SeqTypes,
+    state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
@@ -21,7 +20,6 @@ use clap::Parser;
 use futures::future::BoxFuture;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
-    merklized_state::MerklizedStateDataSource,
     status::{self, UpdateStatusData},
     Error,
 };
@@ -132,7 +130,7 @@ impl Options {
         // we handle the two cases differently.
         if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module_sql::<N, P, sql::DataSource, Ver>(
+                self.init_with_query_module_sql::<N, P, Ver>(
                     query_opt,
                     opt,
                     init_context,
@@ -163,7 +161,7 @@ impl Options {
             let status_api = status::define_api(&Default::default(), bind_version)?;
             app.register_module("status", status_api)?;
 
-            self.init_hotshot_modules(&mut app)?;
+            self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
 
             if self.hotshot_events.is_some() {
                 self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
@@ -185,7 +183,7 @@ impl Options {
             let mut context = init_context(Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(super::State::from(&context)));
 
-            self.init_hotshot_modules(&mut app)?;
+            self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
 
             if self.hotshot_events.is_some() {
                 self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
@@ -207,7 +205,8 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<(
         SequencerContext<N, P, Ver>,
-        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error, Ver>,
+        Arc<RwLock<StorageState<N, P, D, Ver>>>,
+        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
     )>
     where
         N: network::Type,
@@ -244,11 +243,11 @@ impl Options {
         app.register_module("availability", endpoints::availability(bind_version)?)?;
         app.register_module("node", endpoints::node(bind_version)?)?;
 
-        self.init_hotshot_modules(&mut app)?;
+        self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
 
-        context.spawn("query storage updater", update_loop(state, events));
+        context.spawn("query storage updater", update_loop(state.clone(), events));
 
-        Ok((context, app))
+        Ok((context, state, app))
     }
 
     async fn init_with_query_module_fs<N, P, D, Ver: StaticVersionType + 'static>(
@@ -265,7 +264,7 @@ impl Options {
     {
         let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
 
-        let (mut context, app) = self
+        let (mut context, _, app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
@@ -280,44 +279,48 @@ impl Options {
         Ok(context)
     }
 
-    async fn init_with_query_module_sql<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static>(
         self,
         query_opt: Query,
-        mod_opt: D::Options,
+        mod_opt: persistence::sql::Options,
         init_context: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
         bind_version: Ver,
     ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource
-            + MerklizedStateDataSource<SeqTypes, FeeMerkleTree>
-            + MerklizedStateDataSource<SeqTypes, BlockMerkleTree>
-            + Send
-            + Sync
-            + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
-        let (mut context, mut app) = self
+        let ds = sql::DataSource::create(
+            mod_opt.clone(),
+            provider(query_opt.peers.clone(), bind_version),
+            false,
+        )
+        .await?;
+        let (mut context, state, mut app) = self
             .init_app_modules(ds, init_context, bind_version)
             .await?;
 
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
-                "state/blocks",
-                endpoints::merklized_state::<N, P, D, BlockMerkleTree, _>(bind_version)?,
+                "block-state",
+                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>(bind_version)?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
-                "state/fees",
-                endpoints::merklized_state::<N, P, D, FeeMerkleTree, _>(bind_version)?,
+                "fee-state",
+                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
             )?;
         }
 
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(&mut context, bind_version)?;
         }
+
+        context.spawn(
+            "merklized state storage update loop",
+            update_state_storage_loop(state, context.node_state()),
+        );
 
         context.spawn(
             "API server",
@@ -333,7 +336,7 @@ impl Options {
     /// source, so initialization is the same no matter what mode the service is running in.
     fn init_hotshot_modules<N, P, S, Ver: StaticVersionType + 'static>(
         &self,
-        app: &mut App<S, Error, Ver>,
+        app: &mut App<S, Error>,
     ) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
@@ -345,7 +348,7 @@ impl Options {
         let bind_version = Ver::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit()?;
+            let submit_api = endpoints::submit::<_, _, _, Ver>()?;
             app.register_module("submit", submit_api)?;
         }
 
@@ -389,7 +392,7 @@ impl Options {
             &hotshot_events_service::events::Options::default(),
         )?;
 
-        app.register_module("hotshot-events", hotshot_events_api)?;
+        app.register_module::<_, Ver>("hotshot-events", hotshot_events_api)?;
 
         context.spawn(
             "Hotshot Events Streaming API server",

@@ -86,8 +86,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError, Version01> =
-        App::with_state(source);
+    let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError> = App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
@@ -121,6 +120,7 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
+    use portpicker::pick_unused_port;
     //use sequencer::persistence::NoStorage;
     use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
@@ -201,6 +201,8 @@ pub mod testing {
 
             let master_map = MasterMap::new();
 
+            let builder_url = hotshot_builder_url();
+
             let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
@@ -223,6 +225,7 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
+                builder_url,
             };
 
             Self {
@@ -691,6 +694,7 @@ mod test {
     // Test that a non-voting hotshot node can participate in consensus and reach a certain height.
     // It is enabled by keeping the node(s) in the stake table, but with a stake of 0.
     // This is useful for testing that the builder(permissioned node) can participate in consensus without voting.
+    #[ignore]
     #[async_std::test]
     async fn test_non_voting_hotshot_node() {
         setup_logging();

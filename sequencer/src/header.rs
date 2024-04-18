@@ -279,6 +279,7 @@ impl BlockHeader<SeqTypes> for Header {
             );
 
             // Fetch missing fee state entries
+            // Unwrapping here is okay as we retry until we get the accounts or until the task is canceled.
             let missing_account_proofs = instance_state
                 .peers
                 .as_ref()
@@ -287,7 +288,8 @@ impl BlockHeader<SeqTypes> for Header {
                     parent_state.fee_merkle_tree.commitment(),
                     missing_accounts,
                 )
-                .await;
+                .await
+                .unwrap();
 
             // Insert missing fee state entries
             for account in missing_account_proofs.iter() {
@@ -308,7 +310,8 @@ impl BlockHeader<SeqTypes> for Header {
                     parent_leaf.get_view_number(),
                     &mut validated_state.block_merkle_tree,
                 )
-                .await;
+                .await
+                .expect("failed to remember proof");
         }
 
         Self::from_info(
@@ -364,6 +367,13 @@ impl BlockHeader<SeqTypes> for Header {
     fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
         &self.ns_table
     }
+
+    fn builder_commitment(
+        &self,
+        _metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+    ) -> hotshot_types::utils::BuilderCommitment {
+        unimplemented!()
+    }
 }
 
 impl QueryableHeader<SeqTypes> for Header {
@@ -380,7 +390,10 @@ mod test_headers {
     use crate::{
         catchup::mock::MockStateCatchup,
         l1_client::L1Client,
-        state::{validate_and_apply_proposal, BlockMerkleTree, Delta, FeeMerkleTree},
+        state::{
+            apply_proposal, get_l1_deposits, validate_proposal, BlockMerkleTree, Delta,
+            FeeMerkleTree,
+        },
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -663,28 +676,29 @@ mod test_headers {
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
-        let mut delta = Delta::default();
 
+        let mut delta = Delta::default();
         // Pass a different chain config to trigger a chain config validation error.
-        let result = validate_and_apply_proposal(
+        let state = apply_proposal(&validated_state, &mut delta, &parent_leaf, vec![]);
+
+        let result = validate_proposal(
+            &state,
             ChainConfig::new(U256::zero(), 0u64, U256::zero()),
-            &mut validated_state,
-            &mut delta,
             &parent_leaf,
             &proposal,
-            vec![],
         )
         .unwrap_err();
+
         assert!(format!("{}", result.root_cause()).starts_with("Invalid Chain Config:"));
 
         // Advance `proposal.height` to trigger validation error.
-        let result = validate_and_apply_proposal(
+
+        let validated_state = apply_proposal(&validated_state, &mut delta, &parent_leaf, vec![]);
+        let result = validate_proposal(
+            &validated_state,
             genesis.instance_state.chain_config,
-            &mut validated_state,
-            &mut delta,
             &parent_leaf,
             &proposal,
-            vec![],
         )
         .unwrap_err();
         assert_eq!(
@@ -694,13 +708,14 @@ mod test_headers {
 
         // proposed `Header` root should include parent + parent.commit
         proposal.height += 1;
-        let result = validate_and_apply_proposal(
+
+        let validated_state = apply_proposal(&validated_state, &mut delta, &parent_leaf, vec![]);
+
+        let result = validate_proposal(
+            &validated_state,
             genesis.instance_state.chain_config,
-            &mut validated_state,
-            &mut delta,
             &parent_leaf,
             &proposal,
-            vec![],
         )
         .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
@@ -770,16 +785,19 @@ mod test_headers {
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
 
+        let l1_deposits = get_l1_deposits(&genesis_state, &proposal, &parent_leaf).await;
+
         let mut delta = Delta::default();
-        validate_and_apply_proposal(
+
+        let proposal_state = apply_proposal(&proposal_state, &mut delta, &parent_leaf, l1_deposits);
+        validate_proposal(
+            &proposal_state,
             genesis.instance_state.chain_config,
-            &mut proposal_state,
-            &mut delta,
             &parent_leaf,
             &proposal.clone(),
-            vec![],
         )
         .unwrap();
+
         assert_eq!(
             proposal_state.block_merkle_tree.commitment(),
             proposal.block_merkle_tree_root

@@ -1,10 +1,17 @@
-use crate::{ChainConfig, Header, Leaf, NodeState, SeqTypes};
+use crate::{
+    api::endpoints::AccountQueryData, catchup::StateCatchup, ChainConfig, Header, Leaf, NodeState,
+    SeqTypes,
+};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
+use async_std::stream::StreamExt;
+use async_std::sync::RwLock;
+use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
+use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Sub};
 use ethers::{
     abi::Address,
@@ -13,13 +20,21 @@ use ethers::{
     types::{self, RecoveryMessage, U256},
 };
 use hotshot::traits::ValidatedState as HotShotState;
-use hotshot_query_service::merklized_state::MerklizedState;
+use hotshot_query_service::{
+    availability::{AvailabilityDataSource, LeafQueryData},
+    data_source::VersionedDataSource,
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
+    types::HeightIndexed,
+};
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::states::StateDelta,
 };
 use itertools::Itertools;
-use jf_primitives::merkle_tree::{ToTraversalPath, UniversalMerkleTreeScheme};
+use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
 use jf_primitives::{
     errors::PrimitivesError,
     merkle_tree::{
@@ -32,8 +47,9 @@ use jf_primitives::{
 use num_traits::CheckedSub;
 use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
-use typenum::{Unsigned, U3};
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 const FEE_MERKLE_TREE_HEIGHT: usize = 20;
@@ -138,14 +154,11 @@ impl ValidatedState {
         }
     }
 }
-
-pub fn validate_and_apply_proposal(
+pub fn validate_proposal(
+    state: &ValidatedState,
     expected_chain_config: ChainConfig,
-    state: &mut ValidatedState,
-    delta: &mut Delta,
     parent_leaf: &Leaf,
     proposal: &Header,
-    receipts: Vec<FeeInfo>,
 ) -> anyhow::Result<()> {
     let parent_header = parent_leaf.get_block_header();
 
@@ -174,8 +187,6 @@ pub fn validate_and_apply_proposal(
         fee_merkle_tree,
     } = state;
 
-    // validate proposal is descendent of parent by appending to parent
-    block_merkle_tree.push(parent_header.commit()).unwrap();
     let block_merkle_tree_root = block_merkle_tree.commitment();
     anyhow::ensure!(
         proposal.block_merkle_tree_root == block_merkle_tree_root,
@@ -185,17 +196,6 @@ pub fn validate_and_apply_proposal(
             proposal.block_merkle_tree_root
         )
     );
-
-    // Insert the fee deposits
-    for FeeInfo { account, amount } in receipts {
-        fee_merkle_tree
-            .update_with(account, |balance| {
-                Some(balance.cloned().unwrap_or_default().add(amount))
-            })
-            .expect("update_with succeeds");
-
-        delta.fees_delta.insert(account);
-    }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
     anyhow::ensure!(
@@ -219,6 +219,7 @@ enum ChargeFeeError {
 
 fn charge_fee(
     fee_merkle_tree: &mut FeeMerkleTree,
+    delta: &mut Delta,
     fee_info: FeeInfo,
 ) -> Result<(), ChargeFeeError> {
     let FeeInfo { account, amount } = fee_info;
@@ -247,16 +248,13 @@ fn charge_fee(
     if let Some(err) = err {
         Err(err)
     } else {
+        delta.fees_delta.insert(account);
         Ok(())
     }
 }
 
-/// Validate builder account by verifying signature and charging the account.
-fn validate_and_charge_builder(
-    fee_merkle_tree: &mut FeeMerkleTree,
-    delta: &mut Delta,
-    proposed_header: &Header,
-) -> anyhow::Result<()> {
+/// Validate builder account by verifying signature
+fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     // Beware of Malice!
     let builder_signature = proposed_header
         .builder_signature
@@ -274,53 +272,442 @@ fn validate_and_charge_builder(
         "Invalid Builder Signature"
     );
 
-    // charge the fee to the builder
-    if charge_fee(fee_merkle_tree, fee_info).is_err() {
-        bail!("Insufficient funds")
-    };
-
-    delta.fees_delta.insert(fee_info.account);
     Ok(())
 }
 
-/// A pure function to validate and apply a header to the state.
-///
-/// It assumes that all state required to validate and apply the header
-/// is available in the `validated_state`.
-fn validate_and_apply_header(
-    chain_config: ChainConfig,
-    validated_state: &mut ValidatedState,
-    delta: &mut Delta,
-    parent_leaf: &Leaf,
-    proposed_header: &Header,
-    l1_deposits: Vec<FeeInfo>,
-) -> Result<(), BlockError> {
-    // validate proposed header against parent
-    match validate_and_apply_proposal(
-        chain_config,
-        validated_state,
-        delta,
-        parent_leaf,
-        proposed_header,
-        l1_deposits,
-    ) {
-        // Note that currently only block state is updated.
-        Ok(validated_state) => validated_state,
-        Err(e) => {
-            tracing::warn!("Invalid Proposal: {}", e);
-            return Err(BlockError::InvalidBlockHeader);
-        }
-    };
+#[derive(Debug)]
+struct SqlStateCatchup<T> {
+    db: Arc<RwLock<T>>,
+    block_height: u64,
+}
 
-    // Validate builder by verifying signature and charging account
-    if let Err(e) =
-        validate_and_charge_builder(&mut validated_state.fee_merkle_tree, delta, proposed_header)
-    {
-        tracing::warn!("Invalid Builder: {}", e);
-        return Err(BlockError::InvalidBlockHeader);
+#[async_trait]
+impl<T> StateCatchup for SqlStateCatchup<T>
+where
+    T: SequencerStateDataSource,
+{
+    async fn fetch_accounts(
+        &self,
+        _view: ViewNumber,
+        _fee_merkle_tree_root: FeeMerkleCommitment,
+        accounts: Vec<FeeAccount>,
+    ) -> anyhow::Result<Vec<AccountQueryData>> {
+        let mut ret = vec![];
+        for account in accounts {
+            let block_height = self.block_height;
+
+            let proof = self
+                .db
+                .read()
+                .await
+                .get_path(
+                    Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
+                    account,
+                )
+                .await
+                .context(format!("fetching account {account}; height {block_height}"))?;
+
+            match proof.proof.first().context(format!(
+                "empty proof for account {account}; height {block_height}"
+            ))? {
+                MerkleNode::Leaf { pos, elem, .. } => {
+                    ret.push(AccountQueryData {
+                        balance: elem.0,
+                        proof: FeeAccountProof {
+                            account: (*pos).into(),
+                            proof: FeeMerkleProof::Presence(proof),
+                        },
+                    });
+                }
+
+                MerkleNode::Empty => {
+                    ret.push(AccountQueryData {
+                        balance: 0_u64.into(),
+                        proof: FeeAccountProof {
+                            account: account.into(),
+                            proof: FeeMerkleProof::Absence(proof),
+                        },
+                    });
+                }
+                _ => {
+                    bail!("Invalid proof");
+                }
+            }
+        }
+        Ok(ret)
+    }
+
+    async fn remember_blocks_merkle_tree(
+        &self,
+        _view: ViewNumber,
+        mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()> {
+        let bh = self.block_height;
+
+        if bh == 0 {
+            return Ok(());
+        }
+
+        let proof = self
+            .db
+            .read()
+            .await
+            .get_path(Snapshot::<SeqTypes, BlockMerkleTree, 3>::Index(bh), bh - 1)
+            .await
+            .context(format!("fetching frontier at height {bh}"))?;
+
+        match proof
+            .proof
+            .first()
+            .context(format!("empty proof for frontier at height {bh}"))?
+        {
+            MerkleNode::Leaf { pos, elem, .. } => mt
+                .remember(pos, elem, proof.clone())
+                .context("failed to remember proof"),
+            _ => bail!("invalid proof"),
+        }
+    }
+}
+
+async fn compute_state_update(
+    storage: Arc<RwLock<impl SequencerStateDataSource>>,
+    instance: &mut NodeState,
+    parent_leaf: &LeafQueryData<SeqTypes>,
+    proposed_leaf: &LeafQueryData<SeqTypes>,
+) -> anyhow::Result<(ValidatedState, Delta)> {
+    let proposed_leaf = proposed_leaf.leaf();
+    let parent_leaf = parent_leaf.leaf();
+    let header = proposed_leaf.get_block_header();
+    let validated_state = ValidatedState::from_header(parent_leaf.get_block_header());
+
+    let catchup = SqlStateCatchup {
+        db: storage,
+        block_height: parent_leaf.get_height(),
     };
+    instance.peers = Arc::new(catchup);
+
+    validated_state
+        .apply_header(instance, parent_leaf, header)
+        .await
+}
+
+async fn store_state_update(
+    storage: &mut impl SequencerStateDataSource,
+    block_number: u64,
+    state: ValidatedState,
+    delta: Delta,
+) -> anyhow::Result<()> {
+    let ValidatedState {
+        fee_merkle_tree,
+        block_merkle_tree,
+    } = state;
+    let Delta { fees_delta } = delta;
+
+    // Insert fee merkle tree nodes
+    for delta in fees_delta {
+        let (_, proof) = fee_merkle_tree
+            .universal_lookup(delta)
+            .expect_ok()
+            .context("Index not found in fee merkle tree")?;
+        let path: Vec<usize> =
+            <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
+                &delta,
+                fee_merkle_tree.height(),
+            );
+
+        UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof,
+            path,
+            block_number,
+        )
+        .await
+        .context("failed to store fee merkle nodes")?;
+    }
+
+    // Insert block merkle tree nodes
+    let (_, proof) = block_merkle_tree
+        .lookup(block_number - 1)
+        .expect_ok()
+        .context("Index not found in block merkle tree")?;
+    let path = <u64 as ToTraversalPath<3>>::to_traversal_path(
+        &(block_number - 1),
+        block_merkle_tree.height(),
+    );
+
+    {
+        UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof,
+            path,
+            block_number,
+        )
+        .await
+        .context("failed to store block merkle nodes")?;
+    }
+
+    storage.commit().await.context("committing state update")?;
+    Ok(())
+}
+
+async fn update_state_storage(
+    storage: &Arc<RwLock<impl SequencerStateDataSource>>,
+    instance: &mut NodeState,
+    parent_leaf: &LeafQueryData<SeqTypes>,
+    proposed_leaf: &LeafQueryData<SeqTypes>,
+) -> anyhow::Result<()> {
+    let (state, delta) =
+        compute_state_update(storage.clone(), instance, parent_leaf, proposed_leaf)
+            .await
+            .context("computing state update")?;
+
+    let mut storage = storage.write().await;
+    if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), state, delta).await
+    {
+        storage.revert().await;
+        return Err(err);
+    }
 
     Ok(())
+}
+
+async fn store_genesis_state(
+    storage: &mut impl SequencerStateDataSource,
+    state: &ValidatedState,
+) -> anyhow::Result<()> {
+    ensure!(
+        state.block_merkle_tree.num_leaves() == 0,
+        "genesis state with non-empty block tree is unsupported"
+    );
+
+    // Insert fee merkle tree nodes
+    for (account, _) in state.fee_merkle_tree.iter() {
+        let (_, proof) = state
+            .fee_merkle_tree
+            .universal_lookup(account)
+            .expect_ok()
+            .context("Index not found in fee merkle tree")?;
+        let path: Vec<usize> =
+            <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
+                account,
+                state.fee_merkle_tree.height(),
+            );
+
+        UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
+            storage,
+            proof,
+            path,
+            0,
+        )
+        .await
+        .context("failed to store fee merkle nodes")?;
+    }
+
+    storage.commit().await?;
+    Ok(())
+}
+
+pub async fn update_state_storage_loop(
+    storage: Arc<RwLock<impl SequencerStateDataSource>>,
+    mut instance: NodeState,
+) -> anyhow::Result<()> {
+    // get last saved merklized state
+    let (last_height, parent_leaf, mut leaves) = {
+        let state = storage.upgradable_read().await;
+
+        let last_height = state.get_last_state_height().await?;
+        tracing::info!(last_height, "updating state storage");
+
+        let parent_leaf = state.get_leaf(last_height).await;
+        let leaves = state.subscribe_leaves(last_height + 1).await;
+        (last_height, parent_leaf, leaves)
+    };
+    // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
+    // ready yet and another task needs a mutable lock on the state to produce the parent leaf.
+    let mut parent_leaf = parent_leaf.await;
+
+    if last_height == 0 {
+        // If the last height is 0, we need to insert the genesis state, since this state is
+        // never the result of a state update and thus is not inserted in the loop below.
+        tracing::info!("storing genesis merklized state");
+        let mut storage = storage.write().await;
+        if let Err(err) = store_genesis_state(&mut *storage, &instance.genesis_state).await {
+            tracing::error!("failed to store genesis state: {err:#}");
+            storage.revert().await;
+            return Err(err);
+        }
+    }
+
+    while let Some(leaf) = leaves.next().await {
+        loop {
+            match update_state_storage(&storage, &mut instance, &parent_leaf, &leaf).await {
+                Ok(()) => {
+                    parent_leaf = leaf;
+                    break;
+                }
+                Err(err) => {
+                    tracing::error!("{err:#}");
+                    // If we fail, delay for a second and retry.
+                    async_std::task::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub trait SequencerStateDataSource:
+    'static
+    + Debug
+    + AvailabilityDataSource<SeqTypes>
+    + VersionedDataSource
+    + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+    + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+    + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + MerklizedStateHeightPersistence
+{
+}
+
+impl<T> SequencerStateDataSource for T where
+    T: 'static
+        + Debug
+        + AvailabilityDataSource<SeqTypes>
+        + VersionedDataSource
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + MerklizedStateHeightPersistence
+{
+}
+
+impl ValidatedState {
+    async fn apply_header(
+        &self,
+        instance: &NodeState,
+        parent_leaf: &Leaf,
+        proposed_header: &Header,
+    ) -> anyhow::Result<(Self, Delta)> {
+        // Clone state to avoid mutation. Consumer can take update
+        // through returned value.
+
+        let l1_deposits = get_l1_deposits(instance, proposed_header, parent_leaf).await;
+
+        let mut validated_state = self.clone();
+
+        let accounts = std::iter::once(proposed_header.fee_info.account);
+
+        // Find missing state entries
+        let missing_accounts = self.forgotten_accounts(
+            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+        );
+
+        let view = parent_leaf.get_view_number();
+
+        // Ensure merkle tree has frontier
+        if self.need_to_fetch_blocks_mt_frontier() {
+            tracing::warn!("fetching block frontier from peers");
+
+            instance
+                .peers
+                .as_ref()
+                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
+                .await?;
+        }
+
+        // Fetch missing fee state entries
+        if !missing_accounts.is_empty() {
+            tracing::warn!(
+                "fetching {} missing accounts from peers",
+                missing_accounts.len()
+            );
+
+            let missing_account_proofs = instance
+                .peers
+                .as_ref()
+                .fetch_accounts(
+                    view,
+                    validated_state.fee_merkle_tree.commitment(),
+                    missing_accounts,
+                )
+                .await?;
+
+            // Remember the fee state entries
+            for account in missing_account_proofs.iter() {
+                account
+                    .proof
+                    .remember(&mut validated_state.fee_merkle_tree)
+                    .expect("proof previously verified");
+            }
+        }
+
+        let mut delta = Delta::default();
+
+        let mut validated_state =
+            apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
+
+        if charge_fee(
+            &mut validated_state.fee_merkle_tree,
+            &mut delta,
+            proposed_header.fee_info,
+        )
+        .is_err()
+        {
+            bail!("Insufficient funds")
+        };
+
+        Ok((validated_state, delta))
+    }
+}
+
+pub async fn get_l1_deposits(
+    instance: &NodeState,
+    header: &Header,
+    parent_leaf: &Leaf,
+) -> Vec<FeeInfo> {
+    if let Some(block_info) = header.l1_finalized {
+        instance
+            .l1_client
+            .get_finalized_deposits(
+                parent_leaf
+                    .get_block_header()
+                    .l1_finalized
+                    .map(|block_info| block_info.number),
+                block_info.number,
+            )
+            .await
+    } else {
+        vec![]
+    }
+}
+
+#[must_use]
+pub fn apply_proposal(
+    validated_state: &ValidatedState,
+    delta: &mut Delta,
+    parent_leaf: &Leaf,
+    l1_deposits: Vec<FeeInfo>,
+) -> ValidatedState {
+    let mut validated_state = validated_state.clone();
+    // pushing a block into merkle tree shouldn't fail
+    validated_state
+        .block_merkle_tree
+        .push(parent_leaf.get_block_header().commit())
+        .unwrap();
+
+    for FeeInfo { account, amount } in l1_deposits.iter() {
+        validated_state
+            .fee_merkle_tree
+            .update_with(account, |balance| {
+                Some(balance.cloned().unwrap_or_default().add(*amount))
+            })
+            .expect("update_with succeeds");
+        delta.fees_delta.insert(*account);
+    }
+
+    validated_state
 }
 
 impl HotShotState<SeqTypes> for ValidatedState {
@@ -343,82 +730,23 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
     ) -> Result<(Self, Self::Delta), Self::Error> {
-        // Clone state to avoid mutation. Consumer can take update
-        // through returned value.
-        let mut validated_state = self.clone();
+        //validate builder fee
+        validate_builder_fee(proposed_header).unwrap();
+        // Unwrapping here is okay as we retry in a loop
+        //so we should either get a validated state or until hotshot cancels the task
+        let (validated_state, delta) = self
+            .apply_header(instance, parent_leaf, proposed_header)
+            .await
+            .unwrap();
 
-        let accounts = std::iter::once(proposed_header.fee_info.account);
-
-        // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = if let Some(block_info) = proposed_header.l1_finalized {
-            instance
-                .l1_client
-                .get_finalized_deposits(
-                    parent_leaf
-                        .get_block_header()
-                        .l1_finalized
-                        .map(|block_info| block_info.number),
-                    block_info.number,
-                )
-                .await
-        } else {
-            vec![]
-        };
-
-        // Find missing state entries
-        let missing_accounts = self.forgotten_accounts(
-            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
-        );
-
-        let view = parent_leaf.get_view_number();
-
-        // Ensure merkle tree has frontier
-        if self.need_to_fetch_blocks_mt_frontier() {
-            tracing::warn!("fetching block frontier from peers");
-            instance
-                .peers
-                .as_ref()
-                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
-                .await;
-        }
-
-        // Fetch missing fee state entries
-        if !missing_accounts.is_empty() {
-            tracing::warn!(
-                "fetching {} missing accounts from peers",
-                missing_accounts.len()
-            );
-
-            let missing_account_proofs = instance
-                .peers
-                .as_ref()
-                .fetch_accounts(
-                    view,
-                    validated_state.fee_merkle_tree.commitment(),
-                    missing_accounts,
-                )
-                .await;
-
-            // Remember the fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
-                    .remember(&mut validated_state.fee_merkle_tree)
-                    .expect("proof previously verified");
-            }
-        }
-
-        let mut delta = Delta::default();
-
-        // Lastly validate and apply the header
-        validate_and_apply_header(
+        // validate the proposal
+        validate_proposal(
+            &validated_state,
             instance.chain_config,
-            &mut validated_state,
-            &mut delta,
             parent_leaf,
             proposed_header,
-            l1_deposits,
-        )?;
+        )
+        .unwrap();
 
         Ok((validated_state, delta))
     }
@@ -426,8 +754,20 @@ impl HotShotState<SeqTypes> for ValidatedState {
     ///
     /// This can also be used to rebuild the state for catchup.
     fn from_header(block_header: &Header) -> Self {
-        let fee_merkle_tree = FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
-        let block_merkle_tree = BlockMerkleTree::from_commitment(block_header.fee_merkle_tree_root);
+        let fee_merkle_tree = if block_header.fee_merkle_tree_root.size() == 0 {
+            // If the commitment tells us that the tree is supposed to be empty, it is convenient to
+            // just create an empty tree, rather than a commitment-only tree.
+            FeeMerkleTree::new(FEE_MERKLE_TREE_HEIGHT)
+        } else {
+            FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+        };
+        let block_merkle_tree = if block_header.block_merkle_tree_root.size() == 0 {
+            // If the commitment tells us that the tree is supposed to be empty, it is convenient to
+            // just create an empty tree, rather than a commitment-only tree.
+            BlockMerkleTree::new(BLOCK_MERKLE_TREE_HEIGHT)
+        } else {
+            BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root)
+        };
         Self {
             fee_merkle_tree,
             block_merkle_tree,
@@ -462,8 +802,7 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
 pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
-impl MerklizedState<SeqTypes> for BlockMerkleTree {
-    type Arity = U3;
+impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
     type Key = Self::Index;
     type Entry = Commitment<Header>;
     type T = Sha3Node;
@@ -557,7 +896,21 @@ impl Committable for FeeInfo {
 // New Type for `U256` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
 #[derive(
-    Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
+    Default,
+    Hash,
+    Copy,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Add,
+    Sub,
+    From,
+    Into,
 )]
 pub struct FeeAmount(U256);
 impl_to_fixed_bytes!(FeeAmount, U256);
@@ -687,7 +1040,7 @@ impl CanonicalDeserialize for FeeAccount {
     }
 }
 
-impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
+impl ToTraversalPath<256> for FeeAccount {
     fn to_traversal_path(&self, height: usize) -> Vec<usize> {
         self.0
             .to_fixed_bytes()
@@ -698,12 +1051,10 @@ impl<A: Unsigned> ToTraversalPath<A> for FeeAccount {
     }
 }
 
-pub type FeeMerkleTree =
-    UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, typenum::U256, Sha3Node>;
+pub type FeeMerkleTree = UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, 256, Sha3Node>;
 pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 
-impl MerklizedState<SeqTypes> for FeeMerkleTree {
-    type Arity = typenum::U256;
+impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
     type Key = Self::Index;
     type Entry = Self::Element;
     type T = Sha3Node;

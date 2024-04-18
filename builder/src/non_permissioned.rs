@@ -265,7 +265,7 @@ mod test {
         );
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_builder_url();
+        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
 
         let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             &hotshot_config,
@@ -282,12 +282,25 @@ mod test {
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
+        let seed = [207_u8; 32];
+
+        // Hotshot client Public, Private key
+        let (hotshot_client_pub_key, hotshot_client_private_key) =
+            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+
         let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+
+        // sign the parent_commitment using the client_private_key
+        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &hotshot_client_private_key,
+            parent_commitment.as_ref(),
+        )
+        .expect("Claim block signing failed");
 
         // test getting available blocks
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}"
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -303,10 +316,6 @@ mod test {
         };
 
         let builder_commitment = available_block_info[0].block_hash.clone();
-        let seed = [207_u8; 32];
-        // Builder Public, Private key
-        let (_hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
         // sign the builder_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -318,7 +327,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -335,7 +344,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await

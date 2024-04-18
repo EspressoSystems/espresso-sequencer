@@ -29,7 +29,7 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.2.0"
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
+async-compatibility-layer = { version = "1.1", default-features = false, features = [
   "logging-utils",
 ] }
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
@@ -79,6 +79,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.3" }
+portpicker = "0.1.1"
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.6"
@@ -93,5 +94,5 @@ rand_distr = "0.4"
 serde = { version = "1.0.195", features = ["derive"] }
 toml = "0.8"
 url = "2.3"
-vbs = "0.1.4"
+vbs = "0.1"
 zeroize = "1.7"

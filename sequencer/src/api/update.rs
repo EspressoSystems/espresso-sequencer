@@ -1,15 +1,11 @@
 //! Update loop for query API state.
 
 use super::{data_source::SequencerDataSource, StorageState};
-use crate::{network, persistence::SequencerPersistence, state::Delta, SeqTypes, ValidatedState};
+use crate::{network, persistence::SequencerPersistence, SeqTypes};
 use async_std::sync::{Arc, RwLock};
-use async_trait::async_trait;
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_query_service::{
-    data_source::{UpdateDataSource, VersionedDataSource},
-    Leaf,
-};
+use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
 use vbs::version::StaticVersionType;
 
 pub(super) async fn update_loop<N, P, D, Ver: StaticVersionType>(
@@ -53,21 +49,3 @@ where
 
     Ok(())
 }
-
-// #[async_trait]
-// impl<N, P, D, Ver: StaticVersionType> UpdateStateStorage<SeqTypes, StorageState<N, P, D, Ver>>
-//     for ValidatedState
-// where
-//     N: network::Type,
-//     P: SequencerPersistence,
-//     D: SequencerDataSource + Send + Sync,
-// {
-//     async fn update_storage(
-//         &self,
-//         storage: &mut StorageState<N, P, D, Ver>,
-//         leaf: &Leaf<SeqTypes>,
-//         delta: Arc<Delta>,
-//     ) -> anyhow::Result<()> {
-//         self.update_storage(storage.inner_mut(), leaf, delta).await
-//     }
-// }

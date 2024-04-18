@@ -1,5 +1,5 @@
 use crate::state::FeeAmount;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::U256;
 use itertools::Either;
@@ -58,7 +58,7 @@ impl Committable for ChainConfig {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new(&Self::tag())
+        committable::RawCommitmentBuilder::new(&Self::tag())
             .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
             .u64_field("max_block_size", self.max_block_size)
             .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())

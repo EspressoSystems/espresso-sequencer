@@ -60,6 +60,8 @@ pub struct SequencerContext<
     events_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
 
     detached: bool,
+
+    node_state: NodeState,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -78,7 +80,9 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         _: Ver,
     ) -> anyhow::Result<Self> {
         // Load saved consensus state from storage.
-        let initializer = persistence.load_consensus_state(instance_state).await?;
+        let initializer = persistence
+            .load_consensus_state(instance_state.clone())
+            .await?;
 
         let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
             config.num_nodes_with_stake.get() as u64,
@@ -86,14 +90,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         );
         let membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
-            election_config,
+            election_config.clone(),
             0,
         );
         let memberships = Memberships {
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
             vid_membership: membership.clone(),
-            view_sync_membership: membership,
+            view_sync_membership: membership.clone(),
         };
 
         let stake_table_commit =
@@ -132,6 +136,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             node_id,
             state_signer,
             event_streamer,
+            instance_state,
         ))
     }
 
@@ -142,6 +147,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         node_index: u64,
         state_signer: StateSigner<Ver>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
+        node_state: NodeState,
     ) -> Self {
         let events = handle.get_event_stream();
 
@@ -153,6 +159,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             detached: false,
             wait_for_orchestrator: None,
             events_streamer: event_streamer.clone(),
+            node_state,
         };
         ctx.spawn(
             "main event handler",
@@ -196,6 +203,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Return a reference to the underlying consensus handle.
     pub fn consensus(&self) -> &Consensus<N, P> {
         &self.handle
+    }
+
+    pub fn node_state(&self) -> NodeState {
+        self.node_state.clone()
     }
 
     /// Return a mutable reference to the underlying consensus handle.

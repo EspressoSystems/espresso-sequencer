@@ -75,9 +75,7 @@ use std::{
 use vbs::version::StaticVersionType;
 
 #[cfg(feature = "libp2p")]
-use {
-    hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork},
-};
+use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 
 pub use block::payload::Payload;
 pub use chain_config::ChainConfig;
@@ -225,6 +223,7 @@ impl NodeType for SeqTypes {
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
+    type BuilderSignatureKey = PubKey;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -347,7 +346,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
             private_key: my_config.private_key.clone(),
         },
     )
-    .await
     .with_context(|| "Failed to create CDN network")?;
 
     // Initialize the Libp2p network (if enabled)
@@ -451,14 +449,39 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::{EventType::Decide, Message};
+    use hotshot_testing::block_builder::{
+        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
+    };
     use hotshot_types::{
         event::LeafInfo,
         light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        traits::{block_contents::BlockHeader, election::Membership, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
-    use std::time::Duration;
+    use portpicker::pick_unused_port;
+
+    use std::{num::NonZeroUsize, time::Duration};
+
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+
+    pub async fn run_test_builder(
+        num_of_nodes_with_stake: NonZeroUsize,
+        known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
+    ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+        let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
+            num_of_nodes_with_stake.get() as u64,
+            0,
+        );
+
+        let membership =
+            GeneralStaticCommittee::create_election(known_nodes_with_stake, election_config, 0);
+
+        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+            num_of_nodes_with_stake.into(),
+            (),
+        )
+        .await
+    }
 
     #[derive(Clone)]
     pub struct TestConfig {
@@ -517,6 +540,12 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
+                //??
+                builder_url: Url::parse(&format!(
+                    "http://127.0.0.1:{}",
+                    pick_unused_port().unwrap()
+                ))
+                .unwrap(),
             };
 
             Self {
@@ -534,6 +563,14 @@ pub mod testing {
 
         pub fn num_nodes(&self) -> usize {
             self.priv_keys.len()
+        }
+
+        pub fn hotshot_config(&self) -> &HotShotConfig<PubKey, ElectionConfig> {
+            &self.config
+        }
+
+        pub fn set_builder_url(&mut self, builder_url: Url) {
+            self.config.builder_url = builder_url;
         }
 
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
@@ -662,6 +699,8 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
+    use self::testing::run_test_builder;
+
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
@@ -682,10 +721,28 @@ mod test {
         setup_backtrace();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let config = TestConfig::default();
+        let mut config = TestConfig::default();
+
+        let hotshot_config = config.hotshot_config();
+        let (builder_task, builder_url) = run_test_builder(
+            hotshot_config.num_nodes_with_stake,
+            hotshot_config.known_nodes_with_stake.clone(),
+        )
+        .await;
+
+        config.set_builder_url(builder_url);
+
         let handles = config.init_nodes(ver).await;
 
-        let mut events = handles[0].get_event_stream();
+        let handle_0 = &handles[0];
+
+        // Hook the builder up to the event stream from the first node
+        if let Some(builder_task) = builder_task {
+            builder_task.start(Box::new(handle_0.get_event_stream()));
+        }
+
+        let mut events = handle_0.get_event_stream();
+
         for handle in handles.iter() {
             handle.start_consensus().await;
         }
@@ -709,10 +766,27 @@ mod test {
         let success_height = 30;
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let config = TestConfig::default();
+        let mut config = TestConfig::default();
+
+        let hotshot_config = config.hotshot_config();
+        let (builder_task, builder_url) = run_test_builder(
+            hotshot_config.num_nodes_with_stake,
+            hotshot_config.known_nodes_with_stake.clone(),
+        )
+        .await;
+
+        config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;
 
-        let mut events = handles[0].get_event_stream();
+        let handle_0 = &handles[0];
+
+        let mut events = handle_0.get_event_stream();
+
+        // Hook the builder up to the event stream from the first node
+        if let Some(builder_task) = builder_task {
+            builder_task.start(Box::new(handle_0.get_event_stream()));
+        }
+
         for handle in handles.iter() {
             handle.start_consensus().await;
         }

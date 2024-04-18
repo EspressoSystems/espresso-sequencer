@@ -123,7 +123,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         ns_id: NamespaceId,
         vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
-        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
+        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) as usize {
             return None; // error: vid_common inconsistent with self
         }
 
@@ -142,7 +142,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         Some(NamespaceProof::Existence {
             ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.into(),
-            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
+            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common) as usize)
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
             vid_common,
@@ -270,8 +270,10 @@ impl NamespaceProof {
             } => {
                 let ns_index = ns_table.lookup(*ns_id)?;
 
-                let (ns_id, ns_payload_range) = ns_table
-                    .get_payload_range(ns_index, VidSchemeType::get_payload_byte_len(vid_common));
+                let (ns_id, ns_payload_range) = ns_table.get_payload_range(
+                    ns_index,
+                    VidSchemeType::get_payload_byte_len(vid_common) as usize,
+                );
 
                 // verify self against args
                 vid.payload_verify(
