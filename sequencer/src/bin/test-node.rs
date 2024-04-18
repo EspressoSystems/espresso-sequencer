@@ -57,3 +57,32 @@ async fn main() {
         tracing::info!("Event: {:?}", event);
     }
 }
+
+#[cfg(test)]
+mod test {
+    use escargot::CargoBuild;
+    use std::process::Command;
+
+    fn test_node() -> Command {
+        CargoBuild::new()
+            .package("sequencer")
+            .bin("test-node")
+            .features("testing")
+            .current_release()
+            .current_target()
+            .run()
+            .unwrap()
+            .command()
+    }
+
+    // this test succeeds but it is unbearably slow, so `ignore`.
+    #[test]
+    #[ignore]
+    fn test_node_sanity() -> anyhow::Result<()> {
+        let output = test_node().arg("--help").output()?;
+        dbg!(&output);
+        assert!(output.status.success());
+
+        Ok(())
+    }
+}

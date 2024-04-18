@@ -59,7 +59,6 @@ hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
-portpicker = "0.1.1" # TODO: optional?
 tempfile = "3.9.0" # TODO: optional?
 
 jf-primitives = { workspace = true }
@@ -96,6 +95,7 @@ versioned-binary-serialization = { workspace = true }
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
+escargot = "0.5.10"
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]

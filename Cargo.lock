@@ -1878,7 +1878,7 @@ dependencies = [
 [[package]]
 name = "commit"
 version = "0.2.2"
-source = "git+https://github.com/EspressoSystems/commit.git#30679718efd4ecf870b66950160077125dcb8d93"
+source = "git+https://github.com/EspressoSystems/commit#30679718efd4ecf870b66950160077125dcb8d93"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2933,6 +2933,18 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/es-version.git?branch=main#9fa034d3c1b2f9d576a78d44a9de6355e87aa559"
 dependencies = [
  "versioned-binary-serialization",
+]
+
+[[package]]
+name = "escargot"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f474c6844cbd04e783d0f25757583db4f491770ca618bedf2fb01815fc79939"
+dependencies = [
+ "log",
+ "once_cell",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8404,6 +8416,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "es-version",
+ "escargot",
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
