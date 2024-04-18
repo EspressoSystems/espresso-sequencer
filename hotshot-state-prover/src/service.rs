@@ -697,7 +697,6 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
-        print!("{:?}", _wallet.address());
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
         // sanity check on `config`

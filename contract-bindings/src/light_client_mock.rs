@@ -621,7 +621,7 @@ pub mod light_client_mock {
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("updatePermissionedProver",),
                         inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("_prover"),
+                            name: ::std::borrow::ToOwned::to_owned("prover"),
                             kind: ::ethers::core::abi::ethabi::ParamType::Address,
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("address"),

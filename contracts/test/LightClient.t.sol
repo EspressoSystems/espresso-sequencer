@@ -259,13 +259,13 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_RevertWhen_UpdateWhenPermissionedProverModeDisabled() external {
-        vm.prank(admin);
+        vm.startPrank(admin);
         lc.setPermissionedProverMode(false, address(0));
         assertEq(lc.permissionedProver(), address(0));
 
         vm.expectRevert(LC.NoChangeRequired.selector);
-        vm.prank(admin);
         lc.updatePermissionedProver(makeAddr("another prover"));
+        vm.stopPrank();
     }
 
     function test_RevertWhen_NonAdminTriesToupdatePermissionedProver() external {
@@ -469,20 +469,19 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         LC.LightClientState memory state = genesis;
         state.viewNum = 10;
-        vm.prank(permissionedProver);
+        vm.startPrank(permissionedProver);
         lc.setFinalizedState(state);
 
         // outdated view num
         vm.expectRevert(LC.OutdatedState.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(newState, proof);
 
         // outdated block height
         state.viewNum = genesis.viewNum;
         state.blockHeight = numBlockSkipped + 1;
         vm.expectRevert(LC.OutdatedState.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(newState, proof);
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when the last block of current epoch is skipped before block of the
@@ -498,7 +497,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         // first update with the first block in epoch 1, which should pass
-        vm.prank(permissionedProver);
+        vm.startPrank(permissionedProver);
         lc.newFinalizedState(states[0], proofs[0]);
         // then directly update with the first block in epoch 2, which should fail
         vm.expectRevert(
@@ -507,8 +506,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             )
         );
 
-        vm.prank(permissionedProver);
         lc.newFinalizedState(states[1], proofs[1]);
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when user inputs contain malformed field elements
@@ -528,39 +527,36 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         LC.LightClientState memory badState = newState;
 
         // invalid scalar for blockCommRoot
+        vm.startPrank(permissionedProver);
         badState.blockCommRoot = BN254.ScalarField.wrap(BN254.R_MOD);
         vm.expectRevert("Bn254: invalid scalar field");
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.blockCommRoot = newState.blockCommRoot;
 
         // invalid scalar for feeLedgerComm
         badState.feeLedgerComm = BN254.ScalarField.wrap(BN254.R_MOD + 1);
         vm.expectRevert("Bn254: invalid scalar field");
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.feeLedgerComm = newState.feeLedgerComm;
 
         // invalid scalar for stakeTableBlsKeyComm
         badState.stakeTableBlsKeyComm = BN254.ScalarField.wrap(BN254.R_MOD + 2);
         vm.expectRevert("Bn254: invalid scalar field");
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
 
         // invalid scalar for stakeTableSchnorrKeyComm
         badState.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(BN254.R_MOD + 3);
         vm.expectRevert("Bn254: invalid scalar field");
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
 
         // invalid scalar for stakeTableAmountComm
         badState.stakeTableAmountComm = BN254.ScalarField.wrap(BN254.R_MOD + 4);
         vm.expectRevert("Bn254: invalid scalar field");
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableAmountComm = newState.stakeTableAmountComm;
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when the plonk proof or the public inputs are wrong
@@ -581,51 +577,45 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         LC.LightClientState memory badState = newState;
 
         // wrong view num
+        vm.startPrank(permissionedProver);
         badState.viewNum = newState.viewNum + 2;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.viewNum = newState.viewNum;
 
         // wrong block height
         badState.blockHeight = newState.blockHeight + 1;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.blockHeight = newState.blockHeight;
 
         // wrong blockCommRoot
         badState.blockCommRoot = randScalar;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.blockCommRoot = newState.blockCommRoot;
 
         // wrong feeLedgerComm
         badState.feeLedgerComm = randScalar;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.feeLedgerComm = newState.feeLedgerComm;
 
         // wrong stakeTableBlsKeyComm
         badState.stakeTableBlsKeyComm = randScalar;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
 
         // wrong stakeTableSchnorrKeyComm
         badState.stakeTableSchnorrKeyComm = randScalar;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
 
         // wrong stakeTableAmountComm
         badState.stakeTableAmountComm = randScalar;
         vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
         lc.newFinalizedState(badState, proof);
         badState.stakeTableAmountComm = newState.stakeTableAmountComm;
 
@@ -636,9 +626,10 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         result = vm.ffi(cmds);
         (V.PlonkProof memory dummyProof) = abi.decode(result, (V.PlonkProof));
-        vm.prank(permissionedProver);
         vm.expectRevert(LC.InvalidProof.selector);
         lc.newFinalizedState(newState, dummyProof);
+
+        vm.stopPrank();
     }
 
     /// @dev Test that update on finalized state will fail if a different stake table is used
