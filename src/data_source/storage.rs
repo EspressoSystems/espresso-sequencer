@@ -110,39 +110,81 @@ where
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
 }
 
+/// An interface for querying Data and Statistics from the HotShot Blockchain.
+///
+/// This interface provides methods that allows the enabling of querying data
+/// concerning the blockchain from the stored data for use with a
+/// block explorer.  It does not provide the same guarantees as the
+/// Availability data source with data fetching.  It is not concerned with
+/// being up-to-date or having all of the data required, but rather it is
+/// concerned with providing the requested data as quickly as possible, and in
+/// a way that can be easily cached.
 #[async_trait]
-pub trait ExplorerStorage<Types>: AvailabilityStorage<Types>
+pub trait ExplorerStorage<Types>
 where
     Types: NodeType,
     Header<Types>: explorer::traits::ExplorerHeader<Types> + QueryableHeader<Types>,
     Payload<Types>: QueryablePayload,
 {
-    async fn get_block_summaries(
-        &self,
-        request: &explorer::data_source::GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::BlockSummary<Types>>>;
-
+    /// `get_block_detail` is a method that retrieves the details of a specific
+    /// block from the blockchain.  The block is identified by the given
+    /// [BlockIdentifier].
     async fn get_block_detail(
         &self,
-        request: &explorer::data_source::BlockIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::BlockDetail<Types>>;
+        request: explorer::data_source::BlockIdentifier<Types>,
+    ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>;
 
-    async fn get_transaction_summaries(
+    /// `get_block_summaries` is a method that retrieves a list of block
+    /// summaries from the blockchain.  The list is generated from the given
+    /// [GetBlockSummariesRequest].
+    async fn get_block_summaries(
         &self,
-        request: &explorer::data_source::GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<explorer::data_source::TransactionSummary<Types>>>;
+        request: explorer::data_source::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::BlockSummary<Types>>,
+        explorer::data_source::GetBlockSummariesError,
+    >;
 
+    /// `get_transaction_detail` is a method that retrieves the details of a
+    /// specific transaction from the blockchain.  The transaction is identified
+    /// by the given [TransactionIdentifier].
     async fn get_transaction_detail(
         &self,
-        request: &explorer::data_source::TransactionIdentifier<Types>,
-    ) -> QueryResult<explorer::data_source::TransactionDetailResponse<Types>>;
+        request: explorer::data_source::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::data_source::TransactionDetailResponse<Types>,
+        explorer::data_source::GetTransactionDetailError,
+    >;
 
+    /// `get_transaction_summaries` is a method that retrieves a list of
+    /// transaction summaries from the blockchain.  The list is generated from
+    /// the given [GetTransactionSummariesRequest].
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::data_source::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::data_source::TransactionSummary<Types>>,
+        explorer::data_source::GetTransactionSummariesError,
+    >;
+
+    /// `get_explorer_summary` is a method that retrieves a summary overview of
+    /// the blockchain.  This is useful for displaying information that
+    /// indicates the overall status of the block chain.
     async fn get_explorer_summary(
         &self,
-    ) -> QueryResult<explorer::data_source::ExplorerSummary<Types>>;
+    ) -> Result<
+        explorer::data_source::ExplorerSummary<Types>,
+        explorer::data_source::GetExplorerSummaryError,
+    >;
 
+    /// `get_search_results` is a method that retrieves the results of a search
+    /// query against the blockchain.  The results are generated from the given
+    /// query string.
     async fn get_search_results(
         &self,
         query: String,
-    ) -> QueryResult<explorer::data_source::SearchResult<Types>>;
+    ) -> Result<
+        explorer::data_source::SearchResult<Types>,
+        explorer::data_source::GetSearchResultsError,
+    >;
 }

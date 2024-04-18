@@ -20,7 +20,6 @@ use crate::{
     Header, Payload, QueryError, Resolvable, Transaction,
 };
 use crate::{node::BlockHash, types::HeightIndexed};
-use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -559,6 +558,12 @@ impl std::error::Error for GetBlockDetailError {
     }
 }
 
+impl From<QueryError> for GetBlockDetailError {
+    fn from(value: QueryError) -> Self {
+        GetBlockDetailError::QueryError(value)
+    }
+}
+
 /// [GetBlockSummariesError] represents an error that has occurred in response
 /// to the [GetBlockSummaries] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -619,6 +624,12 @@ impl std::error::Error for GetBlockSummariesError {
     }
 }
 
+impl From<QueryError> for GetBlockSummariesError {
+    fn from(value: QueryError) -> Self {
+        GetBlockSummariesError::QueryError(value)
+    }
+}
+
 /// [GetTransactionDetailError] represents an error that has occurred in
 /// response to the [GetTransactionDetail] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -629,6 +640,8 @@ pub enum GetTransactionDetailError {
     TransactionNotFound(String),
     #[serde(untagged)]
     QueryError(QueryError),
+    #[serde(untagged)]
+    TimestampConversionError,
 }
 
 impl GetTransactionDetailError {
@@ -637,6 +650,7 @@ impl GetTransactionDetailError {
             GetTransactionDetailError::Unimplemented(err) => err.status(),
             GetTransactionDetailError::QueryError(err) => err.status(),
             GetTransactionDetailError::TransactionNotFound(_) => StatusCode::NotFound,
+            GetTransactionDetailError::TimestampConversionError => StatusCode::InternalServerError,
         }
     }
 }
@@ -649,6 +663,9 @@ impl Display for GetTransactionDetailError {
             GetTransactionDetailError::TransactionNotFound(identifier) => {
                 write!(f, "transaction not found: {}", identifier)
             }
+            GetTransactionDetailError::TimestampConversionError => {
+                write!(f, "unable to convert a timestamp")
+            }
         }
     }
 }
@@ -659,6 +676,7 @@ impl ExplorerAPIError for GetTransactionDetailError {
             GetTransactionDetailError::Unimplemented(err) => err.code(),
             GetTransactionDetailError::QueryError(_) => "QUERY_ERROR",
             GetTransactionDetailError::TransactionNotFound(_) => "TRANSACTION_NOT_FOUND",
+            GetTransactionDetailError::TimestampConversionError => "TIMESTAMP_CONVERSION_ERROR",
         }
     }
 }
@@ -670,6 +688,20 @@ impl std::error::Error for GetTransactionDetailError {
             GetTransactionDetailError::QueryError(err) => Some(err),
             _ => None,
         }
+    }
+}
+
+// Implement implicit conversion between these errors for the branch operator.
+
+impl From<QueryError> for GetTransactionDetailError {
+    fn from(value: QueryError) -> Self {
+        GetTransactionDetailError::QueryError(value)
+    }
+}
+
+impl From<TimestampConversionError> for GetTransactionDetailError {
+    fn from(_: TimestampConversionError) -> Self {
+        GetTransactionDetailError::TimestampConversionError
     }
 }
 
@@ -733,6 +765,12 @@ impl std::error::Error for GetTransactionSummariesError {
     }
 }
 
+impl From<QueryError> for GetTransactionSummariesError {
+    fn from(value: QueryError) -> Self {
+        GetTransactionSummariesError::QueryError(value)
+    }
+}
+
 /// [GetExplorerSummaryError] represents an error that has occurred in response
 /// to the [GetExplorerSummary] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -741,6 +779,12 @@ pub enum GetExplorerSummaryError {
     Unimplemented(Unimplemented),
     #[serde(untagged)]
     QueryError(QueryError),
+    #[serde(untagged)]
+    GetBlockDetailError(GetBlockDetailError),
+    #[serde(untagged)]
+    GetBlockSummariesError(GetBlockSummariesError),
+    #[serde(untagged)]
+    GetTransactionSummariesError(GetTransactionSummariesError),
 }
 
 impl GetExplorerSummaryError {
@@ -748,6 +792,9 @@ impl GetExplorerSummaryError {
         match self {
             GetExplorerSummaryError::QueryError(err) => err.status(),
             GetExplorerSummaryError::Unimplemented(err) => err.status(),
+            GetExplorerSummaryError::GetBlockDetailError(err) => err.status(),
+            GetExplorerSummaryError::GetBlockSummariesError(err) => err.status(),
+            GetExplorerSummaryError::GetTransactionSummariesError(err) => err.status(),
         }
     }
 }
@@ -757,6 +804,9 @@ impl Display for GetExplorerSummaryError {
         match self {
             GetExplorerSummaryError::QueryError(err) => write!(f, "{err}"),
             GetExplorerSummaryError::Unimplemented(err) => write!(f, "{err}"),
+            GetExplorerSummaryError::GetBlockDetailError(err) => write!(f, "{err}"),
+            GetExplorerSummaryError::GetBlockSummariesError(err) => write!(f, "{err}"),
+            GetExplorerSummaryError::GetTransactionSummariesError(err) => write!(f, "{err}"),
         }
     }
 }
@@ -766,6 +816,9 @@ impl ExplorerAPIError for GetExplorerSummaryError {
         match self {
             GetExplorerSummaryError::QueryError(_) => "QUERY_ERROR",
             GetExplorerSummaryError::Unimplemented(err) => err.code(),
+            GetExplorerSummaryError::GetBlockDetailError(err) => err.code(),
+            GetExplorerSummaryError::GetBlockSummariesError(err) => err.code(),
+            GetExplorerSummaryError::GetTransactionSummariesError(err) => err.code(),
         }
     }
 }
@@ -775,7 +828,36 @@ impl std::error::Error for GetExplorerSummaryError {
         match self {
             GetExplorerSummaryError::Unimplemented(err) => Some(err),
             GetExplorerSummaryError::QueryError(err) => Some(err),
+            GetExplorerSummaryError::GetBlockDetailError(err) => Some(err),
+            GetExplorerSummaryError::GetBlockSummariesError(err) => Some(err),
+            GetExplorerSummaryError::GetTransactionSummariesError(err) => Some(err),
         }
+    }
+}
+
+// Implement implicit conversion between these errors for the branch operator.
+
+impl From<QueryError> for GetExplorerSummaryError {
+    fn from(value: QueryError) -> Self {
+        GetExplorerSummaryError::QueryError(value)
+    }
+}
+
+impl From<GetBlockDetailError> for GetExplorerSummaryError {
+    fn from(value: GetBlockDetailError) -> Self {
+        GetExplorerSummaryError::GetBlockDetailError(value)
+    }
+}
+
+impl From<GetBlockSummariesError> for GetExplorerSummaryError {
+    fn from(value: GetBlockSummariesError) -> Self {
+        GetExplorerSummaryError::GetBlockSummariesError(value)
+    }
+}
+
+impl From<GetTransactionSummariesError> for GetExplorerSummaryError {
+    fn from(value: GetTransactionSummariesError) -> Self {
+        GetExplorerSummaryError::GetTransactionSummariesError(value)
     }
 }
 
@@ -831,63 +913,8 @@ impl std::error::Error for GetSearchResultsError {
     }
 }
 
-/// An interface for querying Data and Statistics from the HotShot Blockchain.
-///
-/// This interface provides methods that allows the enabling of querying data
-/// concerning the blockchain from the stored data for use with a
-/// block explorer.  It does not provide the same guarantees as the
-/// Availability data source with data fetching.  It is not concerned with
-/// being up-to-date or having all of the data required, but rather it is
-/// concerned with providing the requested data as quickly as possible, and in
-/// a way that can be easily cached.
-#[async_trait]
-pub trait ExplorerDataSource<Types: NodeType>
-where
-    Header<Types>: ExplorerHeader<Types>,
-{
-    /// `get_block_detail` is a method that retrieves the details of a specific
-    /// block from the blockchain.  The block is identified by the given
-    /// [BlockIdentifier].
-    async fn get_block_detail(
-        &self,
-        request: BlockIdentifier<Types>,
-    ) -> Result<BlockDetail<Types>, GetBlockDetailError>;
-
-    /// `get_block_summaries` is a method that retrieves a list of block
-    /// summaries from the blockchain.  The list is generated from the given
-    /// [GetBlockSummariesRequest].
-    async fn get_block_summaries(
-        &self,
-        request: GetBlockSummariesRequest<Types>,
-    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError>;
-
-    /// `get_transaction_detail` is a method that retrieves the details of a
-    /// specific transaction from the blockchain.  The transaction is identified
-    /// by the given [TransactionIdentifier].
-    async fn get_transaction_detail(
-        &self,
-        request: TransactionIdentifier<Types>,
-    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError>;
-
-    /// `get_transaction_summaries` is a method that retrieves a list of
-    /// transaction summaries from the blockchain.  The list is generated from
-    /// the given [GetTransactionSummariesRequest].
-    async fn get_transaction_summaries(
-        &self,
-        request: GetTransactionSummariesRequest<Types>,
-    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError>;
-
-    /// `get_explorer_summary` is a method that retrieves a summary overview of
-    /// the blockchain.  This is useful for displaying information that
-    /// indicates the overall status of the block chain.
-    async fn get_explorer_summary(&self)
-        -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
-
-    /// `get_search_results` is a method that retrieves the results of a search
-    /// query against the blockchain.  The results are generated from the given
-    /// query string.
-    async fn get_search_results(
-        &self,
-        query: String,
-    ) -> Result<SearchResult<Types>, GetSearchResultsError>;
+impl From<QueryError> for GetSearchResultsError {
+    fn from(value: QueryError) -> Self {
+        GetSearchResultsError::QueryError(value)
+    }
 }

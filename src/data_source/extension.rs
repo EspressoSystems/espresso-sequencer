@@ -10,14 +10,14 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::VersionedDataSource;
+use super::{storage::ExplorerStorage, VersionedDataSource};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    explorer::{self, ExplorerDataSource, ExplorerHeader},
+    explorer::{self, ExplorerHeader},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
         UpdateStateData,
@@ -344,13 +344,13 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types> ExplorerDataSource<Types> for ExtensibleDataSource<D, U>
+impl<D, U, Types> ExplorerStorage<Types> for ExtensibleDataSource<D, U>
 where
-    D: ExplorerDataSource<Types> + Send + Sync,
+    D: ExplorerStorage<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
     Payload<Types>: QueryablePayload,
-    Header<Types>: ExplorerHeader<Types>,
+    Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
 {
     async fn get_block_detail(
         &self,

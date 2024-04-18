@@ -78,14 +78,13 @@ use super::{
     storage::{pruning::PruneStorage, AvailabilityStorage, ExplorerStorage},
     VersionedDataSource,
 };
-use crate::QueryError;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    explorer::{self, data_source::ExplorerDataSource},
+    explorer,
     fetching::{self, request, Provider},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
@@ -736,7 +735,7 @@ where
 }
 
 #[async_trait]
-impl<Types, S, P> ExplorerDataSource<Types> for FetchingDataSource<Types, S, P>
+impl<Types, S, P> ExplorerStorage<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
@@ -751,19 +750,7 @@ where
         Vec<explorer::data_source::BlockSummary<Types>>,
         explorer::data_source::GetBlockSummariesError,
     > {
-        self.storage()
-            .await
-            .get_block_summaries(&request)
-            .await
-            .map_err(|err| match err {
-                QueryError::NotFound => {
-                    explorer::data_source::GetBlockSummariesError::TargetNotFound(format!(
-                        "{:?}",
-                        request.0.target,
-                    ))
-                }
-                err => explorer::data_source::GetBlockSummariesError::QueryError(err),
-            })
+        self.storage().await.get_block_summaries(request).await
     }
 
     async fn get_block_detail(
@@ -771,16 +758,7 @@ where
         request: explorer::data_source::BlockIdentifier<Types>,
     ) -> Result<explorer::data_source::BlockDetail<Types>, explorer::data_source::GetBlockDetailError>
     {
-        self.storage()
-            .await
-            .get_block_detail(&request)
-            .await
-            .map_err(|err| match err {
-                QueryError::NotFound => explorer::data_source::GetBlockDetailError::BlockNotFound(
-                    format!("{:?}", request),
-                ),
-                err => explorer::data_source::GetBlockDetailError::QueryError(err),
-            })
+        self.storage().await.get_block_detail(request).await
     }
 
     async fn get_transaction_summaries(
@@ -792,17 +770,8 @@ where
     > {
         self.storage()
             .await
-            .get_transaction_summaries(&request)
+            .get_transaction_summaries(request)
             .await
-            .map_err(|err| match err {
-                QueryError::NotFound => {
-                    explorer::data_source::GetTransactionSummariesError::TargetNotFound(format!(
-                        "{:?}",
-                        request.range.target,
-                    ))
-                }
-                err => explorer::data_source::GetTransactionSummariesError::QueryError(err),
-            })
     }
 
     async fn get_transaction_detail(
@@ -812,19 +781,7 @@ where
         explorer::data_source::TransactionDetailResponse<Types>,
         explorer::data_source::GetTransactionDetailError,
     > {
-        self.storage()
-            .await
-            .get_transaction_detail(&request)
-            .await
-            .map_err(|err| match err {
-                QueryError::NotFound => {
-                    explorer::data_source::GetTransactionDetailError::TransactionNotFound(format!(
-                        "{:?}",
-                        request,
-                    ))
-                }
-                err => explorer::data_source::GetTransactionDetailError::QueryError(err),
-            })
+        self.storage().await.get_transaction_detail(request).await
     }
 
     async fn get_explorer_summary(
@@ -833,11 +790,7 @@ where
         explorer::data_source::ExplorerSummary<Types>,
         explorer::data_source::GetExplorerSummaryError,
     > {
-        self.storage()
-            .await
-            .get_explorer_summary()
-            .await
-            .map_err(explorer::data_source::GetExplorerSummaryError::QueryError)
+        self.storage().await.get_explorer_summary().await
     }
 
     async fn get_search_results(
@@ -847,11 +800,7 @@ where
         explorer::data_source::SearchResult<Types>,
         explorer::data_source::GetSearchResultsError,
     > {
-        self.storage()
-            .await
-            .get_search_results(query)
-            .await
-            .map_err(explorer::data_source::GetSearchResultsError::QueryError)
+        self.storage().await.get_search_results(query).await
     }
 }
 

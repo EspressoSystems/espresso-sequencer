@@ -16,7 +16,9 @@ pub(crate) mod errors;
 pub(crate) mod monetary_value;
 pub(crate) mod traits;
 use self::errors::InvalidLimit;
-use crate::{api::load_api, Header};
+use crate::availability::{QueryableHeader, QueryablePayload};
+use crate::data_source::storage::ExplorerStorage;
+use crate::{api::load_api, Header, Payload};
 pub use currency::*;
 pub use data_source::*;
 use futures::FutureExt;
@@ -234,8 +236,9 @@ pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    Header<Types>: ExplorerHeader<Types>,
-    <State as ReadState>::State: Send + Sync + ExplorerDataSource<Types>,
+    Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
+    Payload<Types>: QueryablePayload,
+    <State as ReadState>::State: Send + Sync + ExplorerStorage<Types>,
 {
     let mut api = load_api::<State, Error, Ver>(
         Option::<Box<Path>>::None,

@@ -27,7 +27,9 @@ use crate::{
         self,
         data_source::{
             BalanceAmount, BlockDetail, BlockIdentifier, BlockRange, BlockSummary,
-            ExplorerHistograms, ExplorerSummary, GenesisOverview, GetBlockSummariesRequest,
+            ExplorerHistograms, ExplorerSummary, GenesisOverview, GetBlockDetailError,
+            GetBlockSummariesError, GetBlockSummariesRequest, GetExplorerSummaryError,
+            GetSearchResultsError, GetTransactionDetailError, GetTransactionSummariesError,
             GetTransactionSummariesRequest, SearchResult, TransactionDetailResponse,
             TransactionIdentifier, TransactionRange, TransactionSummary, TransactionSummaryFilter,
         },
@@ -1942,8 +1944,8 @@ where
 {
     async fn get_block_summaries(
         &self,
-        request: &GetBlockSummariesRequest<Types>,
-    ) -> QueryResult<Vec<BlockSummary<Types>>> {
+        request: GetBlockSummariesRequest<Types>,
+    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
         let request = &request.0;
 
         let (query, params): (String, Vec<Box<dyn ToSql + Send + Sync>>) = match request.target {
@@ -1998,13 +2000,13 @@ where
             Ok(BlockSummary::try_from(block)?)
         });
 
-        result.try_collect().await
+        Ok(result.try_collect().await?)
     }
 
     async fn get_block_detail(
         &self,
-        request: &BlockIdentifier<Types>,
-    ) -> QueryResult<BlockDetail<Types>> {
+        request: BlockIdentifier<Types>,
+    ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
         let (query, params): (String, Vec<Box<dyn ToSql + Sync + Send>>) = match request {
             BlockIdentifier::Latest => (
                 format!(
@@ -2025,7 +2027,7 @@ where
                         ORDER BY h.height DESC 
                         LIMIT 1"
                 ),
-                vec![Box::new(*height as i64)],
+                vec![Box::new(height as i64)],
             ),
             BlockIdentifier::Hash(hash) => (
                 format!(
@@ -2050,8 +2052,8 @@ where
 
     async fn get_transaction_summaries(
         &self,
-        request: &GetTransactionSummariesRequest<Types>,
-    ) -> QueryResult<Vec<TransactionSummary<Types>>> {
+        request: GetTransactionSummariesRequest<Types>,
+    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError> {
         let range = &request.range;
         let target = &range.target;
         let filter = &request.filter;
@@ -2189,8 +2191,8 @@ where
 
     async fn get_transaction_detail(
         &self,
-        request: &TransactionIdentifier<Types>,
-    ) -> QueryResult<TransactionDetailResponse<Types>> {
+        request: TransactionIdentifier<Types>,
+    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
         let target = request;
 
         let (query, params): (String, Vec<Box<dyn ToSql + Send + Sync>>) = match target {
@@ -2222,7 +2224,7 @@ where
                             )
                             ORDER BY h.height DESC"
                 ),
-                vec![Box::new(*height as i64), Box::new(*offset as i64)],
+                vec![Box::new(height as i64), Box::new(offset as i64)],
             ),
             TransactionIdentifier::Hash(hash) => (
                 format!(
@@ -2250,19 +2252,21 @@ where
         let (offset, txn) = match target {
             TransactionIdentifier::Latest => txns.into_iter().enumerate().last().unwrap(),
             TransactionIdentifier::HeightAndOffset(_, offset) => {
-                txns.into_iter().enumerate().rev().nth(*offset).unwrap()
+                txns.into_iter().enumerate().rev().nth(offset).unwrap()
             }
             TransactionIdentifier::Hash(hash) => txns
                 .into_iter()
                 .enumerate()
-                .find(|(_, txn)| txn.commit() == *hash)
+                .find(|(_, txn)| txn.commit() == hash)
                 .unwrap(),
         };
 
         Ok(TransactionDetailResponse::try_from((&block, offset, txn))?)
     }
 
-    async fn get_explorer_summary(&self) -> QueryResult<ExplorerSummary<Types>> {
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
         let histograms= async {
             let historgram_query_result = self.query(
                 "SELECT
@@ -2377,15 +2381,15 @@ where
         .await?;
 
         let latest_block: BlockDetail<Types> =
-            self.get_block_detail(&BlockIdentifier::Latest).await?;
+            self.get_block_detail(BlockIdentifier::Latest).await?;
         let latest_blocks: Vec<BlockSummary<Types>> = self
-            .get_block_summaries(&GetBlockSummariesRequest(BlockRange {
+            .get_block_summaries(GetBlockSummariesRequest(BlockRange {
                 target: BlockIdentifier::Latest,
                 num_blocks: NonZeroUsize::new(10).unwrap(),
             }))
             .await?;
         let latest_transactions: Vec<TransactionSummary<Types>> = self
-            .get_transaction_summaries(&GetTransactionSummariesRequest {
+            .get_transaction_summaries(GetTransactionSummariesRequest {
                 range: TransactionRange {
                     target: TransactionIdentifier::Latest,
                     num_transactions: NonZeroUsize::new(10).unwrap(),
@@ -2403,7 +2407,10 @@ where
         })
     }
 
-    async fn get_search_results(&self, query: String) -> QueryResult<SearchResult<Types>> {
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<SearchResult<Types>, GetSearchResultsError> {
         let block_query = format!(
             "SELECT {BLOCK_COLUMNS}
                 FROM header AS h
