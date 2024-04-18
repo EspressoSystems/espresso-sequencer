@@ -66,12 +66,7 @@ library Transcript {
 
         // TODO Philippe create function in BN254.sol
         // TODO Optimize
-        bytes memory beBytes = abi.encodePacked(hash);
-        uint256 ret = 0;
-        for (uint256 i = 0; i < beBytes.length; i++) {
-            ret = mulmod(ret, 256, BN254.R_MOD);
-            ret = addmod(ret, uint256(uint8(beBytes[i])), BN254.R_MOD);
-        }
+        uint256 ret = uint256(hash) % BN254.R_MOD;
         return ret;
     }
 
