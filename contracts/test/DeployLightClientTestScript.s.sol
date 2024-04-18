@@ -43,14 +43,12 @@ contract DeployLightClientTestScript is Script {
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
-
+    /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
         uint32 numBlocksPerEpoch,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
-        // string memory seedPhrase = vm.envString("MNEMONIC");
-        // (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(owner);
 
         LCMock lightClientContract = new LCMock(state, numBlocksPerEpoch);

@@ -37,13 +37,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
-    /// @notice the approved prover was updated
-    event PermissionedProverUpdated(address approvedProver);
+    /// @notice the permissioned prover was updated
+    event PermissionedProverUpdated(address permissionedProver);
 
-    /// @notice an approved prover is needed to interact `newFinalizedState`
-    event PermissionedProverModeEnabled();
+    /// @notice an permissioned prover is needed to interact `newFinalizedState`
+    event PermissionedProverModeEnabled(address permissionedProver);
 
-    /// @notice an approved prover is no longer needed to interact `newFinalizedState`
+    /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
     event PermissionedProverModeDisabled();
 
     // === Constants ===
@@ -78,7 +78,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
-    /// @notice updating the finalized state is permissioned to one approved prover for this release
+    /// @notice updating the finalized state is permissioned to one permissioned prover for this
+    /// release
     address public permissionedProver;
 
     /// @notice a flag that determines when the contract is operating in permissionedProver mode
@@ -129,6 +130,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice If the contract is in permissioned mode and the permissioned prover is not set when
     /// the newFinalizedState method is called, then revert
     error PermissionedProverNotSet();
+    /// @notice If the same mode or prover is sent to the function, then no change is required
+    error NoChangeRequired();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -326,22 +329,46 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Update the address of the permissioned prover
     /// @dev this address is only considered when the `permissionedProverMode` is set to true
     function updatePermissionedProver(address _prover) public onlyOwner {
-        if (_prover == address(0)) {
-            revert InvalidAddress();
+        // permissionedProverMode enabled and only update the permissionedProver if it's not the
+        // same as the current one
+        if (permissionedProverMode && _prover != permissionedProver) {
+            if (_prover == address(0)) {
+                revert InvalidAddress();
+            }
+            permissionedProver = _prover;
+            emit PermissionedProverUpdated(_prover);
+        } else {
+            revert NoChangeRequired();
         }
-        permissionedProver = _prover;
-        emit PermissionedProverUpdated(_prover);
     }
 
     /// @notice Set the permissioned prover mode
     /// @dev when this is set to true, only the `permissionedProver` is able to execute the
     /// `newFinalizedState` method
-    function setPermissionedProverMode(bool mode) public onlyOwner {
-        permissionedProverMode = mode;
-        if (mode) {
-            emit PermissionedProverModeEnabled();
+    function setPermissionedProverMode(bool mode, address prover) public onlyOwner {
+        // only update the mode if it's different from the current mode
+        if (mode != permissionedProverMode) {
+            // if the caller is turning on permissioned mode and the permissionedProver on the
+            // contract is not set,
+            // then the prover must be a non-zero address
+            if (mode) {
+                if (prover == address(0) && permissionedProver == address(0)) {
+                    revert PermissionedProverNotSet();
+                } else if (prover != address(0)) {
+                    permissionedProver = prover;
+                }
+            }
+
+            permissionedProverMode = mode;
+            if (mode) {
+                emit PermissionedProverModeEnabled(permissionedProver);
+            } else {
+                // permissioned mode disabled so set the permissioned prover to the zero address
+                permissionedProver = address(0);
+                emit PermissionedProverModeDisabled();
+            }
         } else {
-            emit PermissionedProverModeDisabled();
+            revert NoChangeRequired();
         }
     }
 }

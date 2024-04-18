@@ -631,15 +631,9 @@ mod test {
 
         let light_client_proxy = LightClient::new(proxy.address(), l1_wallet.clone());
 
-        //set this wallet as an approved prover so that it can update the state
+        //turn on the permissionedProverMode with the l1 wallet address as the permissioned prover
         light_client_proxy
-            .update_permissioned_prover(l1_wallet.clone().address())
-            .send()
-            .await?;
-
-        //turn on the permissionedProverMode
-        light_client_proxy
-            .set_permissioned_prover_mode(true)
+            .set_permissioned_prover_mode(true, l1_wallet.clone().address())
             .send()
             .await?;
 
