@@ -63,8 +63,8 @@ use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
 };
-use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
+use sequencer::{catchup::mock::MockStateCatchup, ChainConfig};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -251,6 +251,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
+        ChainConfig::default(),
         l1_client,
         wallet,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),

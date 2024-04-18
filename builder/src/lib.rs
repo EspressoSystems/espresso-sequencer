@@ -146,7 +146,7 @@ pub mod testing {
     };
     use sequencer::{
         catchup::StateCatchup, persistence::PersistenceOptions,
-        state_signature::StateSignatureMemStorage,
+        state_signature::StateSignatureMemStorage, ChainConfig,
     };
     use sequencer::{Event, Transaction};
     use std::{num::NonZeroUsize, time::Duration};
@@ -389,6 +389,7 @@ pub mod testing {
             let wallet = Self::builder_wallet(i);
             tracing::info!("node {i} is builder {:x}", wallet.address());
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
                 wallet,
                 MockStateCatchup::default(),
@@ -541,6 +542,7 @@ pub mod testing {
                 wallet.address()
             );
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
@@ -606,6 +608,7 @@ pub mod testing {
                 wallet.address()
             );
             let node_state = NodeState::new(
+                ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),

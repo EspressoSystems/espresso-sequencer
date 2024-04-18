@@ -1,5 +1,6 @@
 use crate::{
-    api::endpoints::AccountQueryData, catchup::StateCatchup, Header, Leaf, NodeState, SeqTypes,
+    api::endpoints::AccountQueryData, catchup::StateCatchup, ChainConfig, Header, Leaf, NodeState,
+    SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -44,6 +45,7 @@ use jf_primitives::{
     },
 };
 use num_traits::CheckedSub;
+use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -154,10 +156,22 @@ impl ValidatedState {
 }
 pub fn validate_proposal(
     state: &ValidatedState,
+    expected_chain_config: ChainConfig,
     parent_leaf: &Leaf,
     proposal: &Header,
 ) -> anyhow::Result<()> {
     let parent_header = parent_leaf.get_block_header();
+
+    // validate `ChainConfig`
+    anyhow::ensure!(
+        proposal.chain_config == expected_chain_config.into(),
+        anyhow::anyhow!(
+            "Invalid Chain Config: local={:?}, proposal={:?}",
+            expected_chain_config,
+            proposal.chain_config
+        )
+    );
+
     // validate height
     anyhow::ensure!(
         proposal.height == parent_header.height + 1,
@@ -726,7 +740,13 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .unwrap();
 
         // validate the proposal
-        validate_proposal(&validated_state, parent_leaf, proposed_header).unwrap();
+        validate_proposal(
+            &validated_state,
+            instance.chain_config,
+            parent_leaf,
+            proposed_header,
+        )
+        .unwrap();
 
         Ok((validated_state, delta))
     }
@@ -893,14 +913,7 @@ impl Committable for FeeInfo {
     Into,
 )]
 pub struct FeeAmount(U256);
-impl FeeAmount {
-    /// Return array containing underlying bytes of inner `U256` type
-    fn to_fixed_bytes(self) -> [u8; 32] {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        bytes
-    }
-}
+impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
     fn from(amt: u64) -> Self {
