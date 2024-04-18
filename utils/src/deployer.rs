@@ -59,6 +59,7 @@ impl From<Contract> for OsStr {
 }
 
 /// Cache of contracts predeployed or deployed during this current run.
+#[derive(Debug, Clone, Default)]
 pub struct Contracts(HashMap<Contract, Address>);
 
 impl From<DeployedContracts> for Contracts {
@@ -205,9 +206,6 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
 
 /// Default deployment function `LightClientMock.sol` for testing
 ///
-/// - `genesis`: a dummy (but valid) genesis will be used if `None`,
-/// if you want to update with valid proof later, you should consider passing in a proper genesis
-///
 /// # NOTE
 /// unlike [`deploy_light_client_contract()`], the `LightClientMock` doesn't
 /// use upgradable contract for simplicity, thus there's no follow-up `.initialize()`
@@ -215,7 +213,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
 pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     l1: Arc<M>,
     contracts: &mut Contracts,
-    genesis: Option<LightClientState>,
+    constructor_args: Option<(LightClientState, u32)>,
 ) -> anyhow::Result<Address> {
     // Deploy library contracts.
     let plonk_verifier = contracts
@@ -262,12 +260,12 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
             .clone(),
         l1,
     );
-    let genesis = match genesis {
-        Some(g) => g,
-        None => ParsedLightClientState::dummy_genesis().into(),
+    let constructor_args = match constructor_args {
+        Some(args) => args,
+        None => (ParsedLightClientState::dummy_genesis().into(), u32::MAX),
     };
     let contract = light_client_factory
-        .deploy((genesis, u32::MAX))?
+        .deploy(constructor_args)?
         .send()
         .await?;
     Ok(contract.address())
