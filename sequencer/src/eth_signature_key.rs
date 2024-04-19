@@ -17,40 +17,6 @@ use std::{
 
 use crate::state::FeeAccount;
 
-// #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
-// pub struct EthVerifyingKey {
-//     verifying_key: VerifyingKey,
-//     address: Address,
-// }
-
-// impl EthVerifyingKey {
-//     pub fn address(&self) -> Address {
-//         self.address
-//     }
-// }
-
-// impl Hash for EthVerifyingKey {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         self.verifying_key.to_sec1_bytes().hash(state);
-//     }
-// }
-
-// impl Display for EthVerifyingKey {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "EthVerifyingKey(address={:?})", self.address())
-//     }
-// }
-
-// impl From<VerifyingKey> for EthVerifyingKey {
-//     fn from(verifying_key: VerifyingKey) -> Self {
-//         let address = public_key_to_address(&verifying_key);
-//         EthVerifyingKey {
-//             verifying_key,
-//             address,
-//         }
-//     }
-// }
-
 // Newtype because type doesn't implement Hash, Display, SerDe, Ord, PartialOrd
 #[derive(PartialEq, Eq, Clone)]
 pub struct EthKeyPair {
