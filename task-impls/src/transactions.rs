@@ -242,9 +242,14 @@ impl<
                 )
                 .await
             {
-                Ok(blocks) => blocks,
+                Ok(blocks) => {
+                    tracing::debug!("Got available blocks: {:?}", blocks);
+                    blocks
+                },
                 Err(err) => {
                     error!(%err, "Couldn't get available blocks");
+                    // pause a bit
+                    async_sleep(Duration::from_millis(100)).await;
                     continue;
                 }
             };
