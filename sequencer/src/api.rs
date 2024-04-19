@@ -149,7 +149,6 @@ mod test_helpers {
         ) -> Self {
             let mut cfg = TestConfig::default();
 
-            let hotshot_config = cfg.hotshot_config();
             let (builder_task, builder_url) = run_test_builder().await;
 
             cfg.set_builder_url(builder_url);

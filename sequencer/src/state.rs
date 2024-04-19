@@ -16,7 +16,7 @@ use ethers::{
     abi::Address,
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Wallet},
-    types::{self, RecoveryMessage, U256},
+    types::U256,
 };
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
@@ -1078,7 +1078,8 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
             { Self::ARITY },
         >,
     ) -> anyhow::Result<()> {
-        todo!()
+        // TODO: handle non-membership proof
+        Ok(self.remember(key, proof.elem().unwrap(), proof)?)
     }
 }
 

@@ -324,7 +324,7 @@ impl BlockHeader<SeqTypes> for Header {
     fn genesis(
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
-        builder_commitment: BuilderCommitment,
+        _builder_commitment: BuilderCommitment,
         ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         let ValidatedState {
@@ -398,7 +398,6 @@ mod test_headers {
     use super::*;
     use crate::{
         catchup::mock::MockStateCatchup,
-        empty_builder_commitment,
         eth_signature_key::EthKeyPair,
         l1_client::L1Client,
         state::{

@@ -454,12 +454,12 @@ pub mod testing {
     use hotshot_types::{
         event::LeafInfo,
         light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, election::Membership, metrics::NoMetrics},
+        traits::{block_contents::BlockHeader, metrics::NoMetrics},
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
 
-    use std::{num::NonZeroUsize, time::Duration};
+    use std::time::Duration;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
@@ -707,7 +707,6 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let mut config = TestConfig::default();
 
-        let hotshot_config = config.hotshot_config();
         let (builder_task, builder_url) = run_test_builder().await;
 
         config.set_builder_url(builder_url);
@@ -748,7 +747,6 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let mut config = TestConfig::default();
 
-        let hotshot_config = config.hotshot_config();
         let (builder_task, builder_url) = run_test_builder().await;
 
         config.set_builder_url(builder_url);
