@@ -151,7 +151,7 @@ pub fn validate_and_apply_proposal(
 
     // validate `ChainConfig`
     anyhow::ensure!(
-        proposal.chain_config == expected_chain_config.into(),
+        proposal.chain_config.commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
             "Invalid Chain Config: local={:?}, proposal={:?}",
             expected_chain_config,

@@ -339,7 +339,7 @@ impl BlockHeader<SeqTypes> for Header {
         Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.
-            chain_config: instance_state.chain_config.into(),
+            chain_config: instance_state.chain_config.commit().into(),
             height: 0,
             timestamp: 0,
             l1_head: 0,
