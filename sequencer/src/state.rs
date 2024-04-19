@@ -438,6 +438,10 @@ async fn store_state_update(
         .context("failed to store block merkle nodes")?;
     }
 
+    storage
+        .set_last_state_height(block_number as usize)
+        .await
+        .context("setting state height")?;
     storage.commit().await.context("committing state update")?;
     Ok(())
 }
