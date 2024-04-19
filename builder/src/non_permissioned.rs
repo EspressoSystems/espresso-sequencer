@@ -16,7 +16,8 @@ use hotshot_builder_api::builder::{
 };
 use hotshot_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromInfo, MessageType, ResponseMessage,
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
+        ResponseMessage,
     },
     service::{run_non_permissioned_standalone_builder_service, GlobalState},
 };
@@ -113,6 +114,7 @@ impl BuilderConfig {
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
+            BuilderCommitment::from_bytes([]),
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -120,7 +122,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromInfo {
+            BuiltFromProposedBlock {
                 view_number: bootstrapped_view,
                 vid_commitment: vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
                 leaf_commit: fake_commitment(),

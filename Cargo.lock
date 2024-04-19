@@ -4024,7 +4024,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.6"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=hg/update_reponses_field#28482c4fe39202c214f224fe7f6f231ead155d14"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=hg/testing#f45a5453d8d12142c288e127e13b2a527a13b151"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",

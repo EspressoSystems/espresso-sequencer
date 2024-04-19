@@ -96,4 +96,4 @@ zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.37" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "hg/update_reponses_field" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "hg/testing" }
