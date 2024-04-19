@@ -210,7 +210,7 @@ impl Header {
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
         let header = Self {
-            chain_config: chain_config.into(),
+            chain_config: chain_config.commit().into(),
             height,
             timestamp,
             l1_head: l1.head,
