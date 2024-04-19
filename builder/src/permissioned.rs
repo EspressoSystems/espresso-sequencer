@@ -48,6 +48,7 @@ use async_std::{
     sync::Arc,
     task::{spawn, JoinHandle},
 };
+use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
@@ -77,7 +78,7 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -398,6 +399,17 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
 
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+        let vid_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload")
+                .collect();
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             (eth_key_pair.fee_account(), eth_key_pair),
@@ -405,7 +417,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
-            BuilderCommitment::from_bytes([]),
+            vid_commitment,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -415,9 +427,9 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let builder_state = BuilderState::<SeqTypes>::new(
             BuiltFromProposedBlock {
                 view_number: bootstrapped_view,
-                vid_commitment: vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
+                vid_commitment,
                 leaf_commit: fake_commitment(),
-                builder_commitment: BuilderCommitment::from_bytes([]),
+                builder_commitment,
             },
             tx_receiver,
             decide_receiver,
@@ -566,8 +578,7 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent = Payload::from_txs(vec![]).unwrap();
-        let parent_commitment = parent.builder_commitment(parent.get_ns_table());
+        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
