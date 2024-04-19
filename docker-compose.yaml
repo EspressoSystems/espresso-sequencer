@@ -68,11 +68,10 @@ services:
       - cdn-marshal
       - -d
       - redis://:changemeplease!!@keydb:6379
-      - --bind-port 
+      - -b 
       - $ESPRESSO_CDN_SERVER_PORT
-      - --metrics-enabled
-      - --metrics-port
-      - $ESPRESSO_CDN_SERVER_METRICS_PORT
+      - -m
+      - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_healthy
@@ -87,13 +86,12 @@ services:
     - cdn-broker
     - -d
     - redis://:changemeplease!!@keydb:6379
-    - --public-advertise-address
+    - --public-advertise-endpoint
     - broker-0:1738
-    - --private-advertise-address
+    - --private-advertise-endpoint
     - broker-0:1739
-    - --metrics-enabled
-    - --metrics-port
-    - $ESPRESSO_CDN_SERVER_METRICS_PORT
+    - -m
+    - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_healthy
@@ -108,13 +106,12 @@ services:
     - cdn-broker
     - -d
     - redis://:changemeplease!!@keydb:6379
-    - --public-advertise-address
+    - --public-advertise-endpoint
     - broker-1:1738
-    - --private-advertise-address
+    - --private-advertise-endpoint
     - broker-1:1739
-    - --metrics-enabled
-    - --metrics-port
-    - $ESPRESSO_CDN_SERVER_METRICS_PORT
+    - -m
+    - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_healthy
