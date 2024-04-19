@@ -49,7 +49,5 @@ jobs:
       - name: Test Demo
         run: |
           export PATH="$PWD/target/release:$PATH"
-          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin"
-          ./scripts/download_srs_aztec.sh
           scripts/demo-native --tui=false &
           timeout -v 600 scripts/smoke-test-demo
