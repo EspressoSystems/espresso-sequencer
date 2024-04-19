@@ -28,7 +28,7 @@ ark-ed-on-bn254 = "0.4"
 ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
-ark-srs = "0.3.0"
+ark-srs = "0.3.1"
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
   "logging-utils",
 ] }
