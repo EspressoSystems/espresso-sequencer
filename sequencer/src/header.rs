@@ -1,23 +1,21 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
+    eth_signature_key::EthKeyPair,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
 
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{Signer as _, Wallet},
-    types,
-};
+use ethers::types;
 use hotshot_query_service::availability::QueryableHeader;
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
         node_implementation::NodeType,
+        signature_key::BuilderSignatureKey,
         ValidatedState as HotShotState,
     },
     utils::BuilderCommitment,
@@ -147,7 +145,7 @@ impl Header {
         l1_deposits: &[FeeInfo],
         mut timestamp: u64,
         parent_state: &ValidatedState,
-        builder_address: Wallet<SigningKey>,
+        builder_address: &EthKeyPair,
         chain_config: ChainConfig,
     ) -> Self {
         // Increment height.
@@ -214,7 +212,13 @@ impl Header {
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
-        let header = Self {
+        let fee_info = FeeInfo::base_fee(builder_address.address().into());
+        let builder_signature = FeeAccount::sign_builder_message(
+            builder_address,
+            &fee_message(fee_info.amount(), payload_commitment, &ns_table),
+        )
+        .unwrap();
+        Self {
             chain_config: chain_config.into(),
             height,
             timestamp,
@@ -225,20 +229,22 @@ impl Header {
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            fee_info: FeeInfo::base_fee(builder_address.address().into()),
-            builder_signature: None,
-        };
-
-        // Sign our header using its `Commitment` as a prehash.
-        let builder_signature = builder_address
-            .sign_hash(types::H256(header.commit().into()))
-            .unwrap();
-
-        // Finally store the signature on the Header
-        Self {
+            fee_info,
             builder_signature: Some(builder_signature),
-            ..header
         }
+    }
+
+    /// Message authorizing a fee payment for inclusion of a certain payload.
+    ///
+    /// This message relates the fee info in this header to the payload corresponding to the header.
+    /// The message is signed by the builder (or whoever is paying for inclusion of the block) and
+    /// validated by consensus, as authentication for charging the fee to the builder account.
+    pub fn fee_message(&self) -> Vec<u8> {
+        fee_message(
+            self.fee_info.amount(),
+            self.payload_commitment,
+            self.metadata(),
+        )
     }
 }
 
@@ -258,7 +264,7 @@ impl BlockHeader<SeqTypes> for Header {
     ) -> Self {
         let mut validated_state = parent_state.clone();
 
-        let accounts = std::iter::once(FeeAccount::from(instance_state.builder_address.address()));
+        let accounts = std::iter::once(FeeAccount::from(instance_state.builder_key.address()));
 
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
@@ -331,7 +337,7 @@ impl BlockHeader<SeqTypes> for Header {
             &l1_deposits,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             &validated_state,
-            instance_state.builder_address.clone(),
+            &instance_state.builder_key,
             instance_state.chain_config,
         )
     }
@@ -385,6 +391,18 @@ impl BlockHeader<SeqTypes> for Header {
     }
 }
 
+fn fee_message(
+    amount: FeeAmount,
+    payload_commitment: VidCommitment,
+    metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+) -> Vec<u8> {
+    let mut data = vec![];
+    data.extend(amount.to_fixed_bytes());
+    data.extend::<&[u8]>(payload_commitment.as_ref().as_ref());
+    data.extend::<&[u8]>(metadata.commit().as_ref());
+    data
+}
+
 impl QueryableHeader<SeqTypes> for Header {
     fn timestamp(&self) -> u64 {
         self.timestamp
@@ -408,7 +426,7 @@ mod test_headers {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
-        types::{Address, RecoveryMessage, U256},
+        types::{Address, U256},
         utils::Anvil,
     };
     use hotshot_types::traits::signature_key::BuilderSignatureKey;
@@ -478,7 +496,7 @@ mod test_headers {
                 &self.l1_deposits,
                 self.timestamp,
                 &validated_state,
-                genesis.instance_state.builder_address,
+                &genesis.instance_state.builder_key,
                 genesis.instance_state.chain_config,
             );
             assert_eq!(header.height, parent.height + 1);
@@ -778,9 +796,14 @@ mod test_headers {
         // the element (header commitment) does not match the one in the proof.
         let key_pair = EthKeyPair::for_test();
         let fee_amount = 0u64;
-        let fee_signature =
-            FeeAccount::sign_builder_message(&key_pair, parent_header.builder_commitment.as_ref())
-                .unwrap();
+        let payload_commitment = parent_header.payload_commitment;
+        let builder_commitment = parent_header.builder_commitment();
+        let ns_table = genesis.ns_table;
+        let fee_signature = FeeAccount::sign_builder_message(
+            &key_pair,
+            &fee_message(fee_amount.into(), payload_commitment, &ns_table),
+        )
+        .unwrap();
         let builder_fee = BuilderFee {
             fee_amount,
             fee_signature,
@@ -789,9 +812,9 @@ mod test_headers {
             &forgotten_state,
             &genesis_state,
             &parent_leaf,
-            parent_header.payload_commitment,
-            parent_header.builder_commitment,
-            genesis.ns_table,
+            payload_commitment,
+            builder_commitment,
+            ns_table,
             builder_fee,
         )
         .await;
@@ -827,35 +850,8 @@ mod test_headers {
         );
     }
 
-    // These two tests are here for reference.
-    #[test]
-    fn verify_header_signature_easy_way() {
-        use ethers::core::k256::ecdsa::{self, SigningKey};
-        use ethers::core::k256::schnorr::signature::Verifier;
-        use ethers::signers::Wallet;
-
-        // easy way to get a wallet:
-        let state = NodeState::mock();
-        let message = ";)";
-        // let address = state.builder_address.address();
-        let address: Wallet<SigningKey> = state.builder_address;
-        let signing_key: &SigningKey = address.signer();
-
-        let (signature, _): (ecdsa::Signature, ecdsa::RecoveryId) =
-            signing_key.sign_recoverable(message.as_bytes()).unwrap();
-
-        let verified = signing_key
-            .verifying_key()
-            .verify(message.as_ref(), &signature);
-        assert!(verified.is_ok());
-    }
-
     #[test]
     fn verify_header_signature() {
-        use ethers::core::k256::ecdsa::SigningKey;
-        use ethers::signers::{Signer, Wallet};
-        use ethers::types;
-
         // easy way to get a wallet:
         let state = NodeState::mock();
 
@@ -864,14 +860,11 @@ mod test_headers {
         let mut commitment = [0u8; 32];
         commitment[..message.len()].copy_from_slice(message.as_bytes());
 
-        let address: Wallet<SigningKey> = state.builder_address;
+        let key = state.builder_key;
 
-        let signature = address.sign_hash(types::H256(commitment)).unwrap();
-        assert!(signature
-            .verify(
-                RecoveryMessage::Hash(types::H256(commitment)),
-                address.address()
-            )
-            .is_ok());
+        let signature = FeeAccount::sign_builder_message(&key, &commitment).unwrap();
+        assert!(key
+            .fee_account()
+            .validate_builder_signature(&signature, &commitment));
     }
 }

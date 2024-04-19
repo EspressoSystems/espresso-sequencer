@@ -1,6 +1,6 @@
 use crate::{
-    api::endpoints::AccountQueryData, catchup::StateCatchup, ChainConfig, Header, Leaf, NodeState,
-    SeqTypes,
+    api::endpoints::AccountQueryData, catchup::StateCatchup, eth_signature_key::EthKeyPair,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -13,12 +13,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Sub};
-use ethers::{
-    abi::Address,
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
-    types::U256,
-};
+use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
@@ -31,7 +26,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
-    traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey, states::StateDelta},
+    traits::{signature_key::BuilderSignatureKey, states::StateDelta},
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -259,7 +254,7 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let msg = proposed_header.builder_commitment();
+    let msg = proposed_header.fee_message();
     // verify signature
     anyhow::ensure!(
         proposed_header
@@ -725,7 +720,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
         proposed_header: &Header,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
-        validate_builder_fee(proposed_header).unwrap();
+        if let Err(err) = validate_builder_fee(proposed_header) {
+            tracing::error!("invalid builder fee: {err:#}");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
@@ -734,13 +733,15 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .unwrap();
 
         // validate the proposal
-        validate_proposal(
+        if let Err(err) = validate_proposal(
             &validated_state,
             instance.chain_config,
             parent_leaf,
             proposed_header,
-        )
-        .unwrap();
+        ) {
+            tracing::error!("invalid proposal: {err:#}");
+            return Err(BlockError::InvalidBlockHeader);
+        }
 
         Ok((validated_state, delta))
     }
@@ -825,8 +826,11 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
             3,
         >,
     ) -> anyhow::Result<()> {
-        // TODO: what do to if this is called with non-membership proof?
-        Ok(self.remember(key, proof.elem().unwrap(), proof)?)
+        let Some(elem) = proof.elem() else {
+            bail!("BlockMerkleTree does not support non-membership proofs");
+        };
+        self.remember(key, elem, proof)?;
+        Ok(())
     }
 }
 
@@ -969,12 +973,12 @@ impl FeeAccount {
     pub fn to_fixed_bytes(self) -> [u8; 20] {
         self.0.to_fixed_bytes()
     }
-    pub fn test_wallet() -> Wallet<SigningKey> {
-        let phrase = "test test test test test test test test test test test junk";
-        MnemonicBuilder::<English>::default()
-            .phrase::<&str>(phrase)
-            .build()
-            .unwrap()
+    pub fn test_key_pair() -> EthKeyPair {
+        EthKeyPair::from_mnemonic(
+            "test test test test test test test test test test test junk",
+            0u32,
+        )
+        .unwrap()
     }
 }
 
@@ -1092,8 +1096,11 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
             { Self::ARITY },
         >,
     ) -> anyhow::Result<()> {
-        // TODO: handle non-membership proof
-        Ok(self.remember(key, proof.elem().unwrap(), proof)?)
+        match proof.elem() {
+            Some(elem) => self.remember(key, elem, proof)?,
+            None => self.non_membership_remember(key, proof)?,
+        }
+        Ok(())
     }
 }
 
