@@ -12,7 +12,7 @@
 
 [package]
 name = "hotshot-query-service"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 license = "GPL-3.0-or-later"
