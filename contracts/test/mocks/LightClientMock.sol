@@ -5,10 +5,10 @@ pragma solidity ^0.8.0;
 import { LightClient as LC } from "../../src/LightClient.sol";
 import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "../../src/libraries/PlonkVerifier.sol";
-import { LightClientStateUpdateVKTest as VkLib } from "./LightClientStateUpdateVKTest.sol";
+import { LightClientStateUpdateVKMock as VkLib } from "./LightClientStateUpdateVKMock.sol";
 
 /// @dev A helper that wraps LightClient contract for testing
-contract LightClientTest is LC {
+contract LightClientMock is LC {
     constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
         _initializeState(genesis, numBlockPerEpoch);
     }

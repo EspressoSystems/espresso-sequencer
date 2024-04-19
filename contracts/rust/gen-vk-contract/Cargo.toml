@@ -6,7 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-ark-srs = { git = "https://github.com/alxiong/ark-srs", tag = "v0.1.0" }
+ark-srs = { workspace = true }
 hotshot-contract-adapter = { path = "../adapter" }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }

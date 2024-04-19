@@ -5,6 +5,7 @@ use es_version::SEQUENCER_VERSION;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use snafu::Snafu;
 use std::{str::FromStr as _, time::Duration};
@@ -66,7 +67,13 @@ struct Args {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_PROVER_SERVICE_PORT")]
     pub port: Option<u16>,
+
+    /// Stake table capacity for the prover circuit
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    pub stake_table_capacity: usize,
 }
+
+//
 
 #[derive(Clone, Debug, Snafu)]
 pub struct ParseDurationError {
@@ -107,6 +114,7 @@ async fn main() {
             .clone(),
         orchestrator_url: args.orchestrator_url,
         port: args.port,
+        stake_table_capacity: args.stake_table_capacity,
     };
 
     if args.daemon {

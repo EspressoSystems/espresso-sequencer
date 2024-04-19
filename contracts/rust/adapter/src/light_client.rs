@@ -22,6 +22,26 @@ pub struct ParsedLightClientState {
     pub threshold: U256,
 }
 
+impl ParsedLightClientState {
+    /// Return a dummy new genesis that will pass constructor/initializer sanity checks
+    /// in the contract.
+    ///
+    /// # Warning
+    /// NEVER use this for production, this is test only.
+    pub fn dummy_genesis() -> Self {
+        Self {
+            view_num: 0,
+            block_height: 0,
+            block_comm_root: U256::from(0),
+            fee_ledger_comm: U256::from(0),
+            bls_key_comm: U256::from(123),
+            schnorr_key_comm: U256::from(123),
+            amount_comm: U256::from(20),
+            threshold: U256::from(1),
+        }
+    }
+}
+
 impl FromStr for ParsedLightClientState {
     type Err = AbiError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {

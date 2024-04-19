@@ -5,6 +5,9 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
+[features]
+libp2p = ["sequencer/libp2p"]
+
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = "0.7.0"

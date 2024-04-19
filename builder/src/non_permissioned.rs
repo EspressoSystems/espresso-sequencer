@@ -28,8 +28,8 @@ use hotshot_types::{
     },
 };
 use sequencer::{
-    catchup::StatePeers, l1_client::L1Client, BuilderParams, L1Params, NetworkParams, NodeState,
-    PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, l1_client::L1Client, BuilderParams, ChainConfig, L1Params, NetworkParams,
+    NodeState, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -68,6 +68,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
+        ChainConfig::default(),
         l1_client,
         wallet,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
@@ -136,6 +137,10 @@ impl BuilderConfig {
 
         // create a client for it
         // Start Client for the event streaming api
+        tracing::info!(
+            "Builder client connecting to hotshot events API at {}",
+            hotshot_events_api_url.to_string()
+        );
         let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
 
         assert!(client.connect(Some(Duration::from_secs(60))).await);
@@ -144,8 +149,7 @@ impl BuilderConfig {
 
         // client subscrive to hotshot events
         let subscribed_events = client
-            .socket("hotshot_events/events")
-            .header(ACCEPT, "application/octet-stream")
+            .socket("hotshot-events/events")
             .subscribe::<BuilderEvent<SeqTypes>>()
             .await
             .unwrap();

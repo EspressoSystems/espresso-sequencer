@@ -162,7 +162,7 @@
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
-              excludes = [ "contract-bindings/artifacts" ];
+              excludes = [ "contract-bindings/" ];
             };
             nixpkgs-fmt.enable = true;
           };
@@ -189,7 +189,6 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
             jq
-            capnproto
 
             # Rust tools
             cargo-audit
@@ -229,6 +228,8 @@
             # with rustup installations.
             export CARGO_HOME=$HOME/.cargo-nix
             export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
+            export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin"
+            ./scripts/download_srs_aztec.sh
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
@@ -252,7 +253,6 @@
             curl
             protobuf # to compile libp2p-autonat
             toolchain
-            capnproto
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
         };
@@ -267,7 +267,6 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
-            capnproto
             toolchain
             grcov
           ];
@@ -292,7 +291,6 @@
             openssl
             curl
             protobuf # to compile libp2p-autonat
-            capnproto
             stableToolchain
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;

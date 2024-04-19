@@ -1,4 +1,4 @@
-use crate::{Header, Leaf, NodeState, SeqTypes};
+use crate::{ChainConfig, Header, Leaf, NodeState, SeqTypes};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -30,6 +30,7 @@ use jf_primitives::{
     },
 };
 use num_traits::CheckedSub;
+use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::Add, str::FromStr};
 use typenum::{Unsigned, U3};
@@ -139,6 +140,7 @@ impl ValidatedState {
 }
 
 pub fn validate_and_apply_proposal(
+    expected_chain_config: ChainConfig,
     state: &mut ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -146,6 +148,17 @@ pub fn validate_and_apply_proposal(
     receipts: Vec<FeeInfo>,
 ) -> anyhow::Result<()> {
     let parent_header = parent_leaf.get_block_header();
+
+    // validate `ChainConfig`
+    anyhow::ensure!(
+        proposal.chain_config == expected_chain_config.into(),
+        anyhow::anyhow!(
+            "Invalid Chain Config: local={:?}, proposal={:?}",
+            expected_chain_config,
+            proposal.chain_config
+        )
+    );
+
     // validate height
     anyhow::ensure!(
         proposal.height == parent_header.height + 1,
@@ -275,6 +288,7 @@ fn validate_and_charge_builder(
 /// It assumes that all state required to validate and apply the header
 /// is available in the `validated_state`.
 fn validate_and_apply_header(
+    chain_config: ChainConfig,
     validated_state: &mut ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -283,6 +297,7 @@ fn validate_and_apply_header(
 ) -> Result<(), BlockError> {
     // validate proposed header against parent
     match validate_and_apply_proposal(
+        chain_config,
         validated_state,
         delta,
         parent_leaf,
@@ -397,6 +412,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Lastly validate and apply the header
         validate_and_apply_header(
+            instance.chain_config,
             &mut validated_state,
             &mut delta,
             parent_leaf,
@@ -544,14 +560,7 @@ impl Committable for FeeInfo {
     Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Add, Sub, From, Into,
 )]
 pub struct FeeAmount(U256);
-impl FeeAmount {
-    /// Return array containing underlying bytes of inner `U256` type
-    fn to_fixed_bytes(self) -> [u8; 32] {
-        let mut bytes = [0u8; core::mem::size_of::<U256>()];
-        self.0.to_little_endian(&mut bytes);
-        bytes
-    }
-}
+impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
     fn from(amt: u64) -> Self {
