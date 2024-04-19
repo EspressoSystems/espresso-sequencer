@@ -146,11 +146,11 @@ pub trait SequencerPersistence: Send + Sync + 'static {
             }
         };
 
-        // We start from the maximum view between `highest_voted_view` and `leaf.view_number`. This
-        // prevents double votes from starting in a view in which we had already voted before the
-        // restart, and prevents unnecessary catchup from starting in a view earlier than the anchor
-        // leaf.
-        let view = max(highest_voted_view, leaf.get_view_number());
+        // We start from the view following the maximum view between `highest_voted_view` and
+        // `leaf.view_number`. This prevents double votes from starting in a view in which we had
+        // already voted before the restart, and prevents unnecessary catchup from starting in a
+        // view earlier than the anchor leaf.
+        let view = max(highest_voted_view, leaf.get_view_number()) + 1;
 
         tracing::info!(?leaf, ?view, ?high_qc, "loaded consensus state");
         Ok(HotShotInitializer::from_reload(
