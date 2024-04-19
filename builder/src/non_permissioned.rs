@@ -199,7 +199,9 @@ mod test {
     };
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_lock::RwLock;
     use async_std::task;
+    use es_version::SequencerVersion;
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -209,24 +211,30 @@ mod test {
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service,
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::traits::{
-        block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-    };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::persistence::no_storage::{self, NoStorage};
-    use sequencer::persistence::PersistenceOptions;
-    use sequencer::state::FeeAccount;
-    use sequencer::transaction::Transaction;
-    use std::time::Duration;
-    use surf_disco::Client;
-
-    use async_lock::RwLock;
-    use es_version::SequencerVersion;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+        },
+    };
+    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::{
+        persistence::{
+            no_storage::{self, NoStorage},
+            PersistenceOptions,
+        },
+        state::FeeAccount,
+        transaction::Transaction,
+        Payload,
+    };
+    use std::time::Duration;
+    use surf_disco::Client;
+
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
@@ -294,7 +302,8 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let parent = Payload::from_txs(vec![]).unwrap();
+        let parent_commitment = parent.builder_commitment(parent.get_ns_table());
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(

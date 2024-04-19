@@ -481,10 +481,13 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 mod test {
     use super::*;
     use crate::non_permissioned;
+    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
     use crate::testing::{HotShotTestConfig, NonPermissionedBuilderTestConfig};
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_lock::RwLock;
     use async_std::task;
+    use es_version::SequencerVersion;
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -494,23 +497,27 @@ mod test {
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service,
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::traits::{
-        block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-    };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::persistence::no_storage::{self, NoStorage};
-    use sequencer::transaction::Transaction;
-    use std::time::Duration;
-    use surf_disco::Client;
-
-    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
-    use async_lock::RwLock;
-    use es_version::SequencerVersion;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::SignatureKey,
+        },
+    };
+    use sequencer::{
+        persistence::no_storage::{self, NoStorage},
+        transaction::Transaction,
+        Payload,
+    };
+    use std::time::Duration;
+    use surf_disco::Client;
+
     #[async_std::test]
     async fn test_permissioned_builder() {
         setup_logging();
@@ -561,7 +568,8 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let parent = Payload::from_txs(vec![]).unwrap();
+        let parent_commitment = parent.builder_commitment(parent.get_ns_table());
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -571,6 +579,9 @@ mod test {
         .expect("Claim block signing failed");
 
         // test getting available blocks
+        tracing::info!(
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+            );
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
