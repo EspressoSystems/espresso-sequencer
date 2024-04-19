@@ -949,6 +949,7 @@ async fn main() {
 
     let opt = Options::parse();
     let metrics = PrometheusMetrics::default();
+    let total_actions = metrics.create_counter("total_actions".into(), None);
     let failed_actions = metrics.create_counter("failed_actions".into(), None);
     let mut client = Client::new(&opt, &metrics);
     let mut rng = rand::thread_rng();
@@ -963,5 +964,6 @@ async fn main() {
             failed_actions.add(1);
             tracing::error!("action failed: {err:#}");
         }
+        total_actions.add(1);
     }
 }
