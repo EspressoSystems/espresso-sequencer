@@ -208,7 +208,13 @@ impl Header {
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
-        let header = Self {
+        let fee_info = FeeInfo::base_fee(builder_address.address().into());
+        let builder_signature = FeeAccount::sign_builder_message(
+            builder_address,
+            &fee_message(fee_info.amount(), payload_commitment, &ns_table),
+        )
+        .unwrap();
+        Self {
             chain_config: chain_config.into(),
             height,
             timestamp,
@@ -218,20 +224,22 @@ impl Header {
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            fee_info: FeeInfo::base_fee(builder_address.address().into()),
-            builder_signature: None,
-        };
-
-        // Sign our block and fee payment.
-        let builder_signature =
-            FeeAccount::sign_builder_message(builder_address, header.builder_commitment().as_ref())
-                .unwrap();
-
-        // Finally store the signature on the Header
-        Self {
+            fee_info,
             builder_signature: Some(builder_signature),
-            ..header
         }
+    }
+
+    /// Message authorizing a fee payment for inclusion of a certain payload.
+    ///
+    /// This message relates the fee info in this header to the payload corresponding to the header.
+    /// The message is signed by the builder (or whoever is paying for inclusion of the block) and
+    /// validated by consensus, as authentication for charging the fee to the builder account.
+    pub fn fee_message(&self) -> Vec<u8> {
+        fee_message(
+            self.fee_info.amount(),
+            self.payload_commitment,
+            self.metadata(),
+        )
     }
 }
 
@@ -372,25 +380,21 @@ impl BlockHeader<SeqTypes> for Header {
 
     /// Commit over fee_amount, payload_commitment and metadata
     fn builder_commitment(&self) -> BuilderCommitment {
-        builder_commitment(
-            self.fee_info.amount(),
-            self.payload_commitment(),
-            self.metadata(),
-        )
+        // TODO change this
+        BuilderCommitment::from_raw_digest(self.commit())
     }
 }
 
-fn builder_commitment(
-    fee_amount: FeeAmount,
+fn fee_message(
+    amount: FeeAmount,
     payload_commitment: VidCommitment,
     metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
-) -> BuilderCommitment {
-    let digest = RawCommitmentBuilder::<Header>::new("BuilderCommitment")
-        .fixed_size_field("fee_amount", &fee_amount.to_fixed_bytes())
-        .fixed_size_field("payload_commitment", payload_commitment.as_ref().as_ref())
-        .field("metadata", metadata.commit())
-        .finalize();
-    BuilderCommitment::from_raw_digest(digest)
+) -> Vec<u8> {
+    let mut data = vec![];
+    data.extend(amount.to_fixed_bytes());
+    data.extend::<&[u8]>(payload_commitment.as_ref().as_ref());
+    data.extend::<&[u8]>(metadata.commit().as_ref());
+    data
 }
 
 impl QueryableHeader<SeqTypes> for Header {
@@ -785,13 +789,14 @@ mod test_headers {
         // the element (header commitment) does not match the one in the proof.
         let key_pair = EthKeyPair::for_test();
         let fee_amount = 0u64;
-        let builder_commitment = builder_commitment(
-            fee_amount.into(),
-            parent_header.payload_commitment,
-            &genesis.ns_table,
-        );
-        let fee_signature =
-            FeeAccount::sign_builder_message(&key_pair, builder_commitment.as_ref()).unwrap();
+        let payload_commitment = parent_header.payload_commitment;
+        let builder_commitment = parent_header.builder_commitment();
+        let ns_table = genesis.ns_table;
+        let fee_signature = FeeAccount::sign_builder_message(
+            &key_pair,
+            &fee_message(fee_amount.into(), payload_commitment, &ns_table),
+        )
+        .unwrap();
         let builder_fee = BuilderFee {
             fee_amount,
             fee_signature,
@@ -800,9 +805,9 @@ mod test_headers {
             &forgotten_state,
             &genesis_state,
             &parent_leaf,
-            parent_header.payload_commitment,
+            payload_commitment,
             builder_commitment,
-            genesis.ns_table,
+            ns_table,
             builder_fee,
         )
         .await;

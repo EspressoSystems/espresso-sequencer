@@ -26,7 +26,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
-    traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey, states::StateDelta},
+    traits::{signature_key::BuilderSignatureKey, states::StateDelta},
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -254,7 +254,7 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let msg = proposed_header.builder_commitment();
+    let msg = proposed_header.fee_message();
     // verify signature
     anyhow::ensure!(
         proposed_header
