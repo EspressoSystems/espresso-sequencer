@@ -77,6 +77,7 @@ pub struct Header {
     pub l1_finalized: Option<L1BlockInfo>,
 
     pub payload_commitment: VidCommitment,
+    pub builder_commitment: BuilderCommitment,
     pub ns_table: NameSpaceTable<TxTableEntryWord>,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
@@ -106,6 +107,8 @@ impl Committable for Header {
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
             .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .constant_str("builder_commitment")
+            .fixed_size_bytes(self.builder_commitment.as_ref())
             .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
@@ -135,6 +138,7 @@ impl Header {
     // TODO pub or merely pub(super)?
     pub fn from_info(
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
@@ -221,6 +225,7 @@ impl Header {
             l1_head: l1.head,
             l1_finalized: l1.finalized,
             payload_commitment,
+            builder_commitment,
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
@@ -253,7 +258,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
-        _builder_commitment: BuilderCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
         _builder_fee: BuilderFee<SeqTypes>,
     ) -> Self {
@@ -325,6 +330,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Self::from_info(
             payload_commitment,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -339,7 +345,7 @@ impl BlockHeader<SeqTypes> for Header {
     fn genesis(
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
-        _builder_commitment: BuilderCommitment,
+        builder_commitment: BuilderCommitment,
         ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         let ValidatedState {
@@ -358,6 +364,7 @@ impl BlockHeader<SeqTypes> for Header {
             l1_head: 0,
             l1_finalized: None,
             payload_commitment,
+            builder_commitment,
             ns_table,
             block_merkle_tree_root,
             fee_merkle_tree_root,
@@ -380,8 +387,7 @@ impl BlockHeader<SeqTypes> for Header {
 
     /// Commit over fee_amount, payload_commitment and metadata
     fn builder_commitment(&self) -> BuilderCommitment {
-        // TODO change this
-        BuilderCommitment::from_raw_digest(self.commit())
+        self.builder_commitment.clone()
     }
 }
 
@@ -480,6 +486,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment,
+                genesis.header.builder_commitment,
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {

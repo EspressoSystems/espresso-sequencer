@@ -43,6 +43,7 @@ use std::{
 };
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
+use time::ext::InstantExt;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -185,8 +186,8 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
         let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
-        let srs_elapsed = srs_timer.elapsed();
-        std::println!("Done in {srs_elapsed:?}");
+        let srs_elapsed = Instant::now().signed_duration_since(srs_timer);
+        std::println!("Done in {srs_elapsed:.3}");
 
         // convert to Jellyfish type
         // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -202,8 +203,8 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let key_gen_timer = Instant::now();
     let (pk, _) = crate::snark::preprocess(&srs, stake_table_capacity)
         .expect("Fail to preprocess state prover circuit");
-    let key_gen_elapsed = key_gen_timer.elapsed();
-    std::println!("Done in {key_gen_elapsed:?}");
+    let key_gen_elapsed = Instant::now().signed_duration_since(key_gen_timer);
+    std::println!("Done in {key_gen_elapsed:.3}");
     pk
 }
 
@@ -342,8 +343,8 @@ pub async fn sync_state<Ver: StaticVersionType>(
         &threshold,
         config.stake_table_capacity,
     )?;
-    let proof_gen_elapsed = proof_gen_start.elapsed();
-    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:?}");
+    let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
+    tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
     submit_state_and_proof(proof, public_input, config).await?;
 
