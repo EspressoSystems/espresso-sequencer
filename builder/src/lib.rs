@@ -389,12 +389,12 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let wallet = Self::builder_wallet(i);
-            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let key = Self::builder_key(i);
+            tracing::info!("node {i} is builder {:x}", key.address());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -418,13 +418,12 @@ pub mod testing {
             handle
         }
 
-        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
-            MnemonicBuilder::<English>::default()
-                .phrase("test test test test test test test test test test test junk")
-                .index(i as u32)
-                .unwrap()
-                .build()
-                .unwrap()
+        pub fn builder_key(i: usize) -> EthKeyPair {
+            EthKeyPair::from_mnemonic(
+                "test test test test test test test test test test test junk",
+                i as u32,
+            )
+            .unwrap()
         }
 
         // url for the hotshot event streaming api
@@ -538,11 +537,11 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let wallet = HotShotTestConfig::builder_wallet(Self::SUBSCRIBED_DA_NODE_ID);
+            let key = HotShotTestConfig::builder_key(Self::SUBSCRIBED_DA_NODE_ID);
             tracing::info!(
                 "node {} is builder {:x}",
                 Self::SUBSCRIBED_DA_NODE_ID,
-                wallet.address()
+                key.address()
             );
             let node_state = NodeState::new(
                 ChainConfig::default(),
@@ -550,7 +549,7 @@ pub mod testing {
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -602,11 +601,11 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let wallet = HotShotTestConfig::builder_wallet(HotShotTestConfig::NUM_STAKED_NODES);
+            let key = HotShotTestConfig::builder_key(HotShotTestConfig::NUM_STAKED_NODES);
             tracing::info!(
                 "node {} is builder {:x}",
                 HotShotTestConfig::NUM_STAKED_NODES,
-                wallet.address()
+                key.address()
             );
             let node_state = NodeState::new(
                 ChainConfig::default(),
@@ -614,7 +613,7 @@ pub mod testing {
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());

@@ -15,16 +15,13 @@ use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
-    types::{Address, U256},
-};
+use ethers::types::{Address, U256};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
 use l1_client::L1Client;
 
+use eth_signature_key::EthKeyPair;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -164,14 +161,14 @@ pub struct NodeState {
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
-    builder_address: Wallet<SigningKey>,
+    builder_key: EthKeyPair,
 }
 
 impl NodeState {
     pub fn new(
         chain_config: ChainConfig,
         l1_client: L1Client,
-        builder_address: Wallet<SigningKey>,
+        builder_key: EthKeyPair,
         catchup: impl StateCatchup + 'static,
     ) -> Self {
         Self {
@@ -179,7 +176,7 @@ impl NodeState {
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
-            builder_address,
+            builder_key,
         }
     }
 
@@ -188,7 +185,7 @@ impl NodeState {
         Self::new(
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-            state::FeeAccount::test_wallet(),
+            state::FeeAccount::test_key_pair(),
             catchup::mock::MockStateCatchup::default(),
         )
     }
@@ -198,8 +195,8 @@ impl NodeState {
         self
     }
 
-    pub fn with_builder(mut self, wallet: Wallet<SigningKey>) -> Self {
-        self.builder_address = wallet;
+    pub fn with_builder(mut self, key: EthKeyPair) -> Self {
+        self.builder_key = key;
         self
     }
 
@@ -396,11 +393,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_params.mnemonic)
-        .index(builder_params.eth_account_index)?
-        .build()?;
-    tracing::info!("Builder account address {:?}", wallet.address());
+    let builder_key =
+        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
+    tracing::info!("Builder account address {:?}", builder_key.address());
 
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
@@ -413,7 +408,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState {
         chain_config,
         l1_client,
-        builder_address: wallet,
+        builder_key,
         genesis_state,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     };
@@ -618,12 +613,12 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let wallet = Self::builder_wallet(i);
-            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let key = Self::builder_key(i);
+            tracing::info!("node {i} is builder {:x}", key.address());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
-                wallet,
+                key,
                 catchup,
             )
             .with_genesis(state);
@@ -643,13 +638,12 @@ pub mod testing {
             .unwrap()
         }
 
-        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
-            MnemonicBuilder::<English>::default()
-                .phrase("test test test test test test test test test test test junk")
-                .index(i as u32)
-                .unwrap()
-                .build()
-                .unwrap()
+        pub fn builder_key(i: usize) -> EthKeyPair {
+            EthKeyPair::from_mnemonic(
+                "test test test test test test test test test test test junk",
+                i as u32,
+            )
+            .unwrap()
         }
     }
 

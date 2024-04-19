@@ -62,19 +62,17 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     // creating the instance state without any builder mnemonic
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_params.mnemonic)
-        .index(builder_params.eth_account_index)?
-        .build()?;
+    let builder_key =
+        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
 
-    tracing::info!("Builder account address {:?}", wallet.address());
+    tracing::info!("Builder account address {:?}", builder_key.address());
 
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
         ChainConfig::default(),
         l1_client,
-        wallet,
+        builder_key,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );
     Ok(instance_state)
