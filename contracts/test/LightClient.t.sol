@@ -174,6 +174,8 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
         //any prover can call the newFinalizedState method as the contract is not in permissioned
         // prover mode
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
         vm.prank(makeAddr("randomUser"));
         lc.newFinalizedState(newState, newProof);
     }
@@ -221,6 +223,8 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
         //confirm that the new prover works
         vm.prank(prover2);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
         newLc.newFinalizedState(newState, newProof);
     }
 
@@ -258,8 +262,12 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         lc.updatePermissionedProver(address(0));
     }
 
-    function test_RevertWhen_UpdateWhenPermissionedProverModeDisabled() external {
+    function test_RevertWhen_UpdatePermissionedProverWhenPermissionedProverModeDisabled()
+        external
+    {
         vm.startPrank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverModeDisabled();
         lc.setPermissionedProverMode(false, address(0));
         assertEq(lc.permissionedProver(), address(0));
 
@@ -498,14 +506,16 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         // first update with the first block in epoch 1, which should pass
         vm.startPrank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
         lc.newFinalizedState(states[0], proofs[0]);
+
         // then directly update with the first block in epoch 2, which should fail
         vm.expectRevert(
             abi.encodeWithSelector(
                 LC.MissingLastBlockForCurrentEpoch.selector, BLOCKS_PER_EPOCH_TEST
             )
         );
-
         lc.newFinalizedState(states[1], proofs[1]);
         vm.stopPrank();
     }
