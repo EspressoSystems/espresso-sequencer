@@ -11,6 +11,7 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
+use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
@@ -33,7 +34,7 @@ use hotshot_types::{
 };
 use sequencer::{
     catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
-    ChainConfig, L1Params, NetworkParams, NodeState, PrivKey, PubKey, SeqTypes,
+    ChainConfig, L1Params, NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -106,6 +107,17 @@ impl BuilderConfig {
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
 
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+        let vid_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload")
+                .collect();
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             (builder_key_pair.fee_account(), builder_key_pair),
@@ -113,7 +125,7 @@ impl BuilderConfig {
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
-            BuilderCommitment::from_bytes([]),
+            vid_commitment,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -123,9 +135,9 @@ impl BuilderConfig {
         let builder_state = BuilderState::<SeqTypes>::new(
             BuiltFromProposedBlock {
                 view_number: bootstrapped_view,
-                vid_commitment: vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
+                vid_commitment,
                 leaf_commit: fake_commitment(),
-                builder_commitment: BuilderCommitment::from_bytes([]),
+                builder_commitment,
             },
             tx_receiver,
             decide_receiver,
@@ -300,8 +312,7 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent = Payload::from_txs(vec![]).unwrap();
-        let parent_commitment = parent.builder_commitment(parent.get_ns_table());
+        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
