@@ -8,9 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
-        RUST_LOG: info
-        RUST_MIN_STACK: '3145728'
+      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+      RUST_LOG: info
+      RUST_MIN_STACK: "3145728"
     steps:
       - uses: actions/checkout@v4
         name: Checkout Repository
@@ -30,8 +30,6 @@ jobs:
 
       - name: Test
         run: |
-          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" # TODO remove
-          ./scripts/download_srs_aztec.sh # TODO remove
           cargo test --workspace --all-features --no-run
           cargo test --workspace --all-features --verbose -- --test-threads 2
         timeout-minutes: 60

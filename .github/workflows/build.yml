@@ -15,8 +15,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
-        RUST_LOG: info
+      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+      RUST_LOG: info
     steps:
       - uses: styfle/cancel-workflow-action@0.12.1
         name: Cancel Outdated Builds
@@ -48,8 +48,6 @@ jobs:
 
       - name: Test
         run: |
-          export AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" # TODO remove
-          ./scripts/download_srs_aztec.sh # TODO remove
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
