@@ -78,8 +78,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
-    /// @notice updating the finalized state is permissioned to one permissioned prover for this
-    /// release
+    /// @notice the address of the prover that can call the newFinalizedState function when the
+    /// contract is
+    /// in permissioned prover mode. This address is address(0) when the contract is not in the
+    /// permissioned prover mode
     address public permissionedProver;
 
     /// @notice a flag that determines when the contract is operating in permissionedProver mode
@@ -327,7 +329,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Update the address of the permissioned prover
-    /// @dev this address is only considered when the `permissionedProverMode` is set to true
+    /// @dev The `permissionedProver` address can only be updated when `permissionedProverMode` ==
+    /// true
+    /// If the new prover address is the same as the current one, the method reverts with the
+    /// `NoChangeRequired` error
     function updatePermissionedProver(address prover) public onlyOwner {
         // permissionedProverMode enabled and only update the permissionedProver if it's not the
         // same as the current one
@@ -345,6 +350,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Set the permissioned prover mode
     /// @dev when this is set to true, only the `permissionedProver` is able to execute the
     /// `newFinalizedState` method
+    /// When `mode` is false, the `permissionedProver` is set to address(0) to avoid confusion
+    /// When `mode` is true, the `permissionedProver` should be non-zero if it's not set yet or if
+    /// you plan to change it to another prover address. Otherwise, it can be address(0)
+    /// if no updates to the `permissionedProver` need to be made
+    /// If the new prover mode is the same as the current one, the method reverts with the
+    /// `NoChangeRequired` error
     function setPermissionedProverMode(bool mode, address prover) public onlyOwner {
         // only update the mode if it's different from the current mode
         if (mode != permissionedProverMode) {
