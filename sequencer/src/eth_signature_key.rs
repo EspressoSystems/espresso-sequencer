@@ -176,7 +176,7 @@ mod tests {
     use hotshot_types::traits::signature_key::BuilderSignatureKey;
 
     impl EthKeyPair {
-        fn for_test() -> Self {
+        pub fn for_test() -> Self {
             FeeAccount::generated_from_seed_indexed([0u8; 32], 0).1
         }
     }

@@ -398,6 +398,8 @@ mod test_headers {
     use super::*;
     use crate::{
         catchup::mock::MockStateCatchup,
+        empty_builder_commitment,
+        eth_signature_key::EthKeyPair,
         l1_client::L1Client,
         state::{
             apply_proposal, get_l1_deposits, validate_proposal, BlockMerkleTree, Delta,
@@ -410,6 +412,7 @@ mod test_headers {
         types::{Address, RecoveryMessage},
         utils::Anvil,
     };
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -744,11 +747,19 @@ mod test_headers {
 
         // TODO this currently fails because after fetching the blocks frontier
         // the element (header commitment) does not match the one in the proof.
+        let key_pair = EthKeyPair::for_test();
+        let fee_amount = 0u64;
+        let builder_commitment = builder_commitment(
+            fee_amount.into(),
+            parent_header.payload_commitment,
+            &genesis.ns_table,
+        );
+        let fee_signature =
+            FeeAccount::sign_builder_message(&key_pair, builder_commitment.as_ref()).unwrap();
         let builder_fee = BuilderFee {
-            fee_amount: todo!(),
-            fee_signature: todo!(),
+            fee_amount,
+            fee_signature,
         };
-        let builder_commitment = todo!();
         let proposal = Header::new(
             &forgotten_state,
             &genesis_state,

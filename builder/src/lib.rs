@@ -682,7 +682,7 @@ mod test {
     use sequencer::block::payload::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
-    use sequencer::Header;
+    use sequencer::{empty_builder_commitment, Header};
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
     use es_version::SequencerVersion;
@@ -724,7 +724,7 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            let builder_commitment = todo!();
+            let builder_commitment = empty_builder_commitment();
             Header::genesis(
                 &genesis_state,
                 genesis_commitment,

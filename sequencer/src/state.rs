@@ -805,7 +805,8 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
             3,
         >,
     ) -> anyhow::Result<()> {
-        todo!()
+        // TODO: what do to if this is called with non-membership proof?
+        Ok(self.remember(key, proof.elem().unwrap(), proof)?)
     }
 }
 

@@ -429,7 +429,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     Ok(ctx)
 }
 
-fn empty_builder_commitment() -> BuilderCommitment {
+pub fn empty_builder_commitment() -> BuilderCommitment {
     BuilderCommitment::from_bytes([])
 }
 
