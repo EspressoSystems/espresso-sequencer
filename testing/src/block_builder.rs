@@ -166,7 +166,8 @@ where
                     num_storage_nodes,
                     pub_key.clone(),
                     priv_key.clone(),
-                );
+                )
+                .await;
 
                 if let Some((hash, _)) = blocks.write().await.push(
                     metadata.block_hash.clone(),
@@ -269,7 +270,7 @@ where
         )
         .expect("Failed to construct the builder API");
     let mut app: App<RandomBuilderSource<TYPES>, Error> = App::with_state(source);
-    app.register_module::<Error, Version01>("api", builder_api)
+    app.register_module::<Error, Version01>("block_info", builder_api)
         .expect("Failed to register the builder API");
 
     async_spawn(app.serve(url, STATIC_VER_0_1));
@@ -334,7 +335,8 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
             self.num_storage_nodes,
             self.pub_key.clone(),
             self.priv_key.clone(),
-        );
+        )
+        .await;
 
         self.blocks.write().await.insert(
             metadata.block_hash.clone(),
@@ -401,7 +403,7 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
         >(&Options::default())
         .expect("Failed to construct the builder API");
         let mut app: App<SimpleBuilderSource<TYPES>, Error> = App::with_state(self);
-        app.register_module::<Error, Version01>("api", builder_api)
+        app.register_module::<Error, Version01>("block_info", builder_api)
             .expect("Failed to register the builder API");
 
         async_spawn(app.serve(url, STATIC_VER_0_1));
@@ -513,7 +515,7 @@ pub async fn make_simple_builder<TYPES: NodeType>(
 }
 
 /// Helper function to construct all builder data structures from a list of transactions
-fn build_block<TYPES: NodeType>(
+async fn build_block<TYPES: NodeType>(
     transactions: Vec<TYPES::Transaction>,
     num_storage_nodes: usize,
     pub_key: TYPES::BuilderSignatureKey,
@@ -528,10 +530,9 @@ fn build_block<TYPES: NodeType>(
 
     let commitment = block_payload.builder_commitment(&metadata);
 
-    let (vid_commitment, precompute_data) = precompute_vid_commitment(
-        &block_payload.encode().unwrap().collect(),
-        num_storage_nodes,
-    );
+    let encoded_payload = block_payload.encode().unwrap().collect();
+    let (vid_commitment, precompute_data) =
+        precompute_vid_commitment(&encoded_payload, num_storage_nodes);
 
     // Get block size from the encoded payload
     let block_size = block_payload
