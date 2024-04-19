@@ -78,6 +78,12 @@ impl ResolvableChainConfig {
             Either::Right(commitment) => commitment,
         }
     }
+    pub fn resolve(self) -> Option<ChainConfig> {
+        match self.chain_config {
+            Either::Left(config) => Some(config),
+            Either::Right(_) => None,
+        }
+    }
 }
 
 impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
@@ -111,5 +117,12 @@ mod tests {
         } = chain_config;
         let other_config = ChainConfig::new(chain_id, max_block_size, 1);
         assert!(chain_config != other_config);
+    }
+
+    #[test]
+    fn test_resolve_chain_config() {
+        let chain_config = ChainConfig::default();
+        let resolveable: ResolvableChainConfig = chain_config.into();
+        assert_eq!(chain_config, resolveable.resolve().unwrap());
     }
 }
