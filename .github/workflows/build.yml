@@ -15,8 +15,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
-        RUST_LOG: info
+      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+      RUST_LOG: info
     steps:
       - uses: styfle/cancel-workflow-action@0.12.1
         name: Cancel Outdated Builds
