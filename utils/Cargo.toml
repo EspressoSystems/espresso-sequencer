@@ -13,7 +13,7 @@ clap = { workspace = true }
 commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
-ethers = "2.0.4"
+ethers = "2.0.14"
 futures = { workspace = true }
 hotshot-contract-adapter ={ path = "../contracts/rust/adapter" }
 portpicker = "0.1.1"
