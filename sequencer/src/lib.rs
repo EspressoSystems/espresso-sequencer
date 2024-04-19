@@ -70,11 +70,11 @@ use hotshot_types::{
 use persistence::SequencerPersistence;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{
-    collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
 use vbs::version::StaticVersionType;
+
+#[cfg(feature = "libp2p")]
+use std::time::Duration;
 
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};

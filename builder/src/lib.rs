@@ -718,6 +718,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
@@ -727,7 +728,6 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            let builder_commitment = empty_builder_commitment();
             Header::genesis(
                 &genesis_state,
                 genesis_commitment,

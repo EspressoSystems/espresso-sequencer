@@ -2,7 +2,7 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use ark_serialize::CanonicalSerialize;
@@ -79,6 +79,7 @@ pub struct Header {
     pub l1_finalized: Option<L1BlockInfo>,
 
     pub payload_commitment: VidCommitment,
+    pub builder_commitment: BuilderCommitment,
     pub ns_table: NameSpaceTable<TxTableEntryWord>,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
@@ -108,6 +109,8 @@ impl Committable for Header {
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
             .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .constant_str("builder_commitment")
+            .fixed_size_bytes(self.builder_commitment.as_ref())
             .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
@@ -137,6 +140,7 @@ impl Header {
     // TODO pub or merely pub(super)?
     pub fn from_info(
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
@@ -217,6 +221,7 @@ impl Header {
             l1_head: l1.head,
             l1_finalized: l1.finalized,
             payload_commitment,
+            builder_commitment,
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
@@ -247,7 +252,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
-        _builder_commitment: BuilderCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
         _builder_fee: BuilderFee<SeqTypes>,
     ) -> Self {
@@ -319,6 +324,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Self::from_info(
             payload_commitment,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -333,7 +339,7 @@ impl BlockHeader<SeqTypes> for Header {
     fn genesis(
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
-        _builder_commitment: BuilderCommitment,
+        builder_commitment: BuilderCommitment,
         ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
     ) -> Self {
         let ValidatedState {
@@ -352,6 +358,7 @@ impl BlockHeader<SeqTypes> for Header {
             l1_head: 0,
             l1_finalized: None,
             payload_commitment,
+            builder_commitment,
             ns_table,
             block_merkle_tree_root,
             fee_merkle_tree_root,
@@ -374,25 +381,8 @@ impl BlockHeader<SeqTypes> for Header {
 
     /// Commit over fee_amount, payload_commitment and metadata
     fn builder_commitment(&self) -> BuilderCommitment {
-        builder_commitment(
-            self.fee_info.amount(),
-            self.payload_commitment(),
-            self.metadata(),
-        )
+        self.builder_commitment.clone()
     }
-}
-
-fn builder_commitment(
-    fee_amount: FeeAmount,
-    payload_commitment: VidCommitment,
-    metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
-) -> BuilderCommitment {
-    let digest = RawCommitmentBuilder::<Header>::new("BuilderCommitment")
-        .fixed_size_field("fee_amount", &fee_amount.to_fixed_bytes())
-        .fixed_size_field("payload_commitment", payload_commitment.as_ref().as_ref())
-        .field("metadata", metadata.commit())
-        .finalize();
-    BuilderCommitment::from_raw_digest(digest)
 }
 
 impl QueryableHeader<SeqTypes> for Header {
@@ -478,6 +468,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment,
+                genesis.header.builder_commitment,
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {
@@ -787,13 +778,9 @@ mod test_headers {
         // the element (header commitment) does not match the one in the proof.
         let key_pair = EthKeyPair::for_test();
         let fee_amount = 0u64;
-        let builder_commitment = builder_commitment(
-            fee_amount.into(),
-            parent_header.payload_commitment,
-            &genesis.ns_table,
-        );
         let fee_signature =
-            FeeAccount::sign_builder_message(&key_pair, builder_commitment.as_ref()).unwrap();
+            FeeAccount::sign_builder_message(&key_pair, parent_header.builder_commitment.as_ref())
+                .unwrap();
         let builder_fee = BuilderFee {
             fee_amount,
             fee_signature,
@@ -803,7 +790,7 @@ mod test_headers {
             &genesis_state,
             &parent_leaf,
             parent_header.payload_commitment,
-            builder_commitment,
+            parent_header.builder_commitment,
             genesis.ns_table,
             builder_fee,
         )
