@@ -150,6 +150,14 @@ impl BuilderConfig {
             bootstrapped_view,
         );
 
+        // spawn the builder event loop
+        async_spawn(async move {
+            builder_state.event_loop();
+        });
+
+        // start the hotshot api service
+        run_builder_api_service(hotshot_builder_apis_url.clone(), global_state.clone());
+
         // create a client for it
         // Start Client for the event streaming api
         tracing::info!(
@@ -158,7 +166,7 @@ impl BuilderConfig {
         );
         let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
 
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        assert!(client.connect(None).await);
 
         tracing::info!("Builder client connected to the hotshot events api");
 
@@ -183,14 +191,6 @@ impl BuilderConfig {
             )
             .await;
         });
-
-        // spawn the builder event loop
-        async_spawn(async move {
-            builder_state.event_loop();
-        });
-
-        // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), global_state.clone());
 
         tracing::info!("Builder init finished");
         Ok(Self {
