@@ -132,17 +132,6 @@ impl BuilderConfig {
 
         let global_state_clone = global_state.clone();
 
-        let (genesis_payload, genesis_ns_table) = Payload::genesis();
-        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
-        let vid_commitment = {
-            // TODO we should not need to collect payload bytes just to compute vid_commitment
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload")
-                .collect();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
-        };
-
         let builder_state = BuilderState::<SeqTypes>::new(
             BuiltFromProposedBlock {
                 view_number: bootstrapped_view,
