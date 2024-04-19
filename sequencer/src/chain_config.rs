@@ -50,6 +50,9 @@ impl ChainConfig {
             base_fee: base_fee.into(),
         }
     }
+    pub fn max_block_size(&self) -> u64 {
+        self.max_block_size
+    }
 }
 
 impl Committable for ChainConfig {
