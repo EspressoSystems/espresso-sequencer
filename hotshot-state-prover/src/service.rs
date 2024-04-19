@@ -477,19 +477,17 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         abi::AbiEncode,
-        providers::Middleware,
         utils::{Anvil, AnvilInstance},
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use std::process::Command;
+    use sequencer_utils::deployer;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
-    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
     /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
@@ -585,38 +583,24 @@ mod test {
         (pi, proof)
     }
 
-    /// deploy LightClient.sol on local blockchain (via `anvil`) for testing
+    /// deploy LightClientMock.sol on local blockchain (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
+        genesis: ParsedLightClientState,
     ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
-        let signer = Wallet::from(anvil.keys()[0].clone());
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        let output = Command::new("just")
-            .arg("dev-deploy")
-            .arg(anvil.endpoint())
-            .arg(TEST_MNEMONIC)
-            .arg(BLOCKS_PER_EPOCH.to_string())
-            .arg(NUM_INIT_VALIDATORS.to_string())
-            .output()
-            .expect("fail to deploy");
-
-        if !output.status.success() {
-            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
-            return Err(anyhow!("failed to deploy contract"));
-        }
-
-        let last_blk_num = provider.get_block_number().await?;
-        // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
-        let address = provider
-            .get_block_receipts(last_blk_num)
-            .await?
-            .last()
-            .unwrap()
-            .contract_address
-            .expect("fail to get LightClient address from receipt");
+        let mut contracts = deployer::Contracts::default();
+        let address = deployer::deploy_mock_light_client_contract(
+            l1_wallet.clone(),
+            &mut contracts,
+            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+        )
+        .await?;
 
         let contract = LightClient::new(address, l1_wallet.clone());
         Ok((l1_wallet, contract))
@@ -652,15 +636,13 @@ mod test {
         setup_backtrace();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
-        // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
-        assert_eq!(genesis.view_num, 0);
-        assert_eq!(genesis.block_height, 0);
-        assert_eq!(genesis.threshold, U256::from(40));
+        assert_eq!(genesis, dummy_genesis);
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -678,12 +660,10 @@ mod test {
         let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, genesis.clone()).await?;
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
-        // sanity check on `config`
 
-        // sanity check to ensure the same genesis state for LightClientTest and for our tests
         let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 
