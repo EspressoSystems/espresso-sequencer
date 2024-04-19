@@ -822,7 +822,9 @@ mod test {
     use futures::stream::{StreamExt, TryStreamExt};
     use hotshot::types::EventType;
     use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
-    use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
+    use hotshot_types::{
+        event::LeafInfo, traits::block_contents::BlockHeader, utils::BuilderCommitment,
+    };
     use jf_primitives::merkle_tree::{
         prelude::{MerkleProof, Sha3Node},
         AppendableMerkleTreeScheme,
@@ -961,11 +963,17 @@ mod test {
         // Prefund an arbitrary account so the fee state has some data to forget.
         state.prefund_account(Default::default(), 1000.into());
         // Push an arbitrary header commitment so the block state has some data to forget.
+        let builder_commitment = BuilderCommitment::from_bytes([]);
         state
             .block_merkle_tree
             .push(
-                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
-                    .commit(),
+                Header::genesis(
+                    &NodeState::mock(),
+                    Default::default(),
+                    builder_commitment,
+                    Default::default(),
+                )
+                .commit(),
             )
             .unwrap();
         let states = std::array::from_fn(|i| {

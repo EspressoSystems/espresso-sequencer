@@ -34,7 +34,10 @@ use hotshot_types::{
     traits::states::StateDelta,
 };
 use itertools::Itertools;
-use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
+use jf_primitives::merkle_tree::{
+    prelude::{MerkleNode, MerkleProof},
+    ToTraversalPath, UniversalMerkleTreeScheme,
+};
 use jf_primitives::{
     errors::PrimitivesError,
     merkle_tree::{
@@ -494,10 +497,7 @@ async fn store_genesis_state(
             );
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage,
-            proof,
-            path,
-            0,
+            storage, proof, path, 0,
         )
         .await
         .context("failed to store fee merkle nodes")?;
@@ -820,6 +820,13 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
     fn tree_height() -> usize {
         BLOCK_MERKLE_TREE_HEIGHT
     }
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, 3>,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
 }
 
 #[derive(
@@ -1071,6 +1078,13 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
     fn tree_height() -> usize {
         FEE_MERKLE_TREE_HEIGHT
+    }
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, { Self::ARITY }>,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
     }
 }
 

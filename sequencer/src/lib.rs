@@ -473,8 +473,11 @@ pub mod testing {
             0,
         );
 
-        let membership =
-            GeneralStaticCommittee::create_election(known_nodes_with_stake, election_config, 0);
+        let membership = GeneralStaticCommittee::<SeqTypes, PubKey>::create_election(
+            known_nodes_with_stake,
+            election_config,
+            0,
+        );
 
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             num_of_nodes_with_stake.into(),
@@ -794,6 +797,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
@@ -803,7 +807,12 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+            Header::genesis(
+                &genesis_state,
+                genesis_commitment,
+                builder_commitment,
+                genesis_ns_table,
+            )
         };
 
         loop {

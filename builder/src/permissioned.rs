@@ -325,7 +325,7 @@ pub async fn init_hotshot<
         }
         None => config.known_nodes_with_stake.clone(),
     };
-    let membership = GeneralStaticCommittee::create_election(
+    let membership = GeneralStaticCommittee::<SeqTypes, PubKey>::create_election(
         combined_known_nodes_with_stake,
         election_config,
         0,
