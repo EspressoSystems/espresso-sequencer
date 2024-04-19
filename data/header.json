@@ -8,7 +8,7 @@
         "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     },
     "payload_commitment": "HASH~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOfu",
-    "builder_commitment": "HASH~00000000000000000000000000000000000000000000",
+    "builder_commitment": "BUILDER_COMMITMENT~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOdZ",
     "ns_table": {
         "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     },
