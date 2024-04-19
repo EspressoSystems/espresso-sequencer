@@ -20,7 +20,6 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
-  AZTEC_SRS_PATH: "${{ github.workspace }}/.local/share/espresso-sequencer/data/aztec20/kzg10-aztec20-srs-65544.bin"
 
 jobs:
   test:
@@ -53,7 +52,6 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          ./scripts/download_srs_aztec.sh
           cargo build --bin diff-test --release
           cargo test --release --workspace --all-features --no-run
           cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
