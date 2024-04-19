@@ -403,7 +403,8 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         let proving_key = proving_key.clone();
         let relay_server_client = relay_server_client.clone();
         let config = config.clone();
-        spawn(async move {
+        // Use block_on to avoid blocking the async runtime with this computationally heavy task
+        async_std::task::block_on(async move {
             if let Err(err) = sync_state(&st, &proving_key, &relay_server_client, &config).await {
                 tracing::error!("Cannot sync the light client state: {}", err);
             }
