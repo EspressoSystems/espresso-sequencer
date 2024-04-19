@@ -293,7 +293,9 @@ where
                 .read()
                 .await
                 .get_path(
-                    Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
+                    Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(
+                        block_height,
+                    ),
                     account,
                 )
                 .await
@@ -344,7 +346,10 @@ where
             .db
             .read()
             .await
-            .get_path(Snapshot::<SeqTypes, BlockMerkleTree, 3>::Index(bh), bh - 1)
+            .get_path(
+                Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(bh),
+                bh - 1,
+            )
             .await
             .context(format!("fetching frontier at height {bh}"))?;
 
@@ -422,7 +427,7 @@ async fn store_state_update(
         .lookup(block_number - 1)
         .expect_ok()
         .context("Index not found in block merkle tree")?;
-    let path = <u64 as ToTraversalPath<3>>::to_traversal_path(
+    let path = <u64 as ToTraversalPath<{ BlockMerkleTree::ARITY }>>::to_traversal_path(
         &(block_number - 1),
         block_merkle_tree.height(),
     );
@@ -801,7 +806,7 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
 pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
-impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
+impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     type Key = Self::Index;
     type Entry = Commitment<Header>;
     type T = Sha3Node;
@@ -827,7 +832,7 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
             Self::Entry,
             Self::Key,
             Self::T,
-            3,
+            { Self::ARITY },
         >,
     ) -> anyhow::Result<()> {
         let Some(elem) = proof.elem() else {
