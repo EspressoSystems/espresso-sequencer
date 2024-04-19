@@ -4,8 +4,7 @@
 use anyhow::{Context, Result};
 use cdn_marshal::{ConfigBuilder, Marshal};
 use clap::Parser;
-use hotshot::traits::implementations::ProductionDef;
-use sequencer::SeqTypes;
+use sequencer::{network::cdn::ProductionDef, SeqTypes};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
