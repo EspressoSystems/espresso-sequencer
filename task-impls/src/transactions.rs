@@ -15,14 +15,15 @@ use hotshot_types::{
     data::Leaf,
     event::{Event, EventType},
     traits::{
-        block_contents::{BlockHeader, BuilderFee},
+        block_contents::BuilderFee,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
     },
-    utils::BuilderCommitment,
+    utils::ViewInner,
+    vid::VidCommitment,
 };
 use tracing::{debug, error, instrument};
 use vbs::version::StaticVersionType;
@@ -167,7 +168,7 @@ impl<
     }
 
     /// Get last known builder commitment from consensus.
-    async fn latest_known_builder_commitment(&self) -> BuilderCommitment {
+    async fn latest_known_vid_commitment(&self) -> VidCommitment {
         let consensus = self.consensus.read().await;
 
         let mut prev_view = TYPES::Time::new(self.cur_view.saturating_sub(1));
@@ -180,12 +181,12 @@ impl<
                     .get(&prev_view)
                     .and_then(|view| match view.view_inner {
                         // For a view for which we have a Leaf stored
-                        hotshot_types::utils::ViewInner::Leaf { leaf, .. } => consensus
+                        ViewInner::DA { payload_commitment } => Some(payload_commitment),
+                        ViewInner::Leaf { leaf, .. } => consensus
                             .saved_leaves
                             .get(&leaf)
-                            .map(Leaf::get_block_header)
-                            .map(BlockHeader::builder_commitment), // and return it's commitment
-                        _ => None,
+                            .map(Leaf::get_payload_commitment),
+                        ViewInner::Failed => None,
                     })
             {
                 return commitment;
@@ -194,10 +195,7 @@ impl<
         }
 
         // If not found, return commitment for last decided block
-        consensus
-            .get_decided_leaf()
-            .get_block_header()
-            .builder_commitment()
+        consensus.get_decided_leaf().get_payload_commitment()
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
@@ -205,7 +203,7 @@ impl<
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
-        let parent_commitment = self.latest_known_builder_commitment().await;
+        let parent_commitment = self.latest_known_vid_commitment().await;
 
         let mut latest_block: Option<BuilderResponses<TYPES>> = None;
         let mut first_iteration = true;
@@ -236,7 +234,7 @@ impl<
             let mut available_blocks = match self
                 .builder_client
                 .get_available_blocks(
-                    parent_commitment.clone(),
+                    parent_commitment,
                     self.public_key.clone(),
                     &request_signature,
                 )
@@ -245,7 +243,7 @@ impl<
                 Ok(blocks) => {
                     tracing::debug!("Got available blocks: {:?}", blocks);
                     blocks
-                },
+                }
                 Err(err) => {
                     error!(%err, "Couldn't get available blocks");
                     // pause a bit

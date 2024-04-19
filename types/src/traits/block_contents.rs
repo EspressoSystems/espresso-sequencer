@@ -12,7 +12,7 @@ use std::{
 
 use committable::{Commitment, Committable};
 use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::signature_key::BuilderSignatureKey;
 use crate::{
@@ -146,7 +146,7 @@ pub fn precompute_vid_commitment(
 /// do dispersal for the genesis block. For simplicity and performance, we use 1.
 pub const GENESIS_VID_NUM_STORAGE_NODES: usize = 1;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// Information about builder fee for proposed block
 pub struct BuilderFee<TYPES: NodeType> {
     /// Proposed fee amount
