@@ -380,7 +380,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
     let (da_network, quorum_network) = {
+        tracing::info!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
+        tracing::info!("CDN connection initialized");
         (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
     };
 
