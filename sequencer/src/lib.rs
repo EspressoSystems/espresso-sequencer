@@ -347,9 +347,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     )
     .with_context(|| "Failed to create CDN network")?;
 
-    // Wait for the CDN network to be ready
-    cdn_network.wait_for_ready().await;
-
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
@@ -380,8 +377,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         )
     };
 
+    // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
-    let (da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
+    let (da_network, quorum_network) = {
+        cdn_network.wait_for_ready().await;
+        (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
+    };
 
     // Convert to the sequencer-compatible type
     let networks = Networks {
