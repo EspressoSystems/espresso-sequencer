@@ -60,6 +60,8 @@ impl Payload {
     }
 
     /// Verify a [`NsProof`] against a payload commitment.
+    ///
+    /// TODO this could be a method of [`NsProof`] if we have a way to get `ns_index`.
     pub fn verify_namespace_proof(
         &self,
         ns_proof: &NsProof,

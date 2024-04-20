@@ -59,6 +59,8 @@ fn basic_correctness() {
 
             assert_eq!(ns_proof_ns_id, ns_id);
             assert_eq!(ns_proof_txs, txs);
+
+            TODO test tx proof verification here
         }
         assert!(
             test.nss.is_empty(),

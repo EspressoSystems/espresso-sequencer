@@ -156,7 +156,7 @@ impl QueryablePayload for Payload<TxTableEntryWord> {
                 tx_table_len: TxTableEntry::from_usize(tx_table_len),
                 tx_table_len_proof: vid
                     .payload_proof(&self.raw_payload, tx_table_len_range)
-                    .unwrap(),
+                    .unwrap(), // TODO if tx_table_len is large then this proof is invalid
                 tx_table_range_start,
                 tx_table_range_end,
                 tx_table_range_proof,
