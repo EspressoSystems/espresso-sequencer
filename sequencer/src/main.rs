@@ -87,7 +87,7 @@ where
         state_peers: opt.state_peers,
     };
 
-    // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
+    // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
     let ctx = match modules.http {

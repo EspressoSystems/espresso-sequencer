@@ -202,7 +202,7 @@ pub fn static_stake_table_commitment(
 ) -> (CircuitField, CircuitField, CircuitField) {
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(capacity);
     known_nodes_with_stakes.iter().for_each(|peer| {
-        // This `unwrap()` wont fail unless number of entries exceeds `capacity`
+        // This `unwrap()` won't fail unless number of entries exceeds `capacity`
         st.register(
             *peer.stake_table_entry.get_key(),
             peer.stake_table_entry.get_stake(),
