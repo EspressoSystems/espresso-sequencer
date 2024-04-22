@@ -225,6 +225,20 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         assertEq(newProver, lc.permissionedProver());
     }
 
+    function testFuzz_UpdatePermissionedProverWhenPermissionedProverModeEnabled(address newProver)
+        external
+    {
+        vm.assume(newProver != address(0));
+        assert(lc.permissionedProverEnabled());
+        assertEq(lc.permissionedProver(), permissionedProver);
+
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        vm.prank(admin);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
+    }
+
     function test_OldProverNoLongerWorks() public {
         //deploy a fresh light client proxy, so that we can set enabled mode to true
         (address newLcTestProxy,,) = deployer.deployContract(genesis, BLOCKS_PER_EPOCH_TEST, admin);
