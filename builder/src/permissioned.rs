@@ -28,8 +28,8 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::election::Membership,
-    traits::metrics::Metrics,
+    traits::{election::Membership, metrics::Metrics},
+    utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -48,11 +48,15 @@ use async_std::{
     sync::Arc,
     task::{spawn, JoinHandle},
 };
+use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderProgress, BuilderState, MessageType, ResponseMessage},
+    builder_state::{
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
+        ResponseMessage,
+    },
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState,
@@ -64,7 +68,7 @@ use jf_primitives::{
     signatures::bls_over_bn254::VerKey,
 };
 use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, ChainConfig};
+use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -74,7 +78,7 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -131,8 +135,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
-    pub_key: PubKey,
-    priv_key: PrivKey,
+    eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
@@ -236,11 +239,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let _ = NetworkingMetricsValue::new(metrics);
 
     // creating the instance state without any builder mnemonic
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_params.mnemonic)
-        .index(builder_params.eth_account_index)?
-        .build()?;
-    tracing::info!("Builder account address {:?}", wallet.address());
+    let builder_key =
+        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
+    tracing::info!("Builder account address {:?}", builder_key.address());
 
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
@@ -253,7 +254,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState::new(
         ChainConfig::default(),
         l1_client,
-        wallet,
+        builder_key,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
 
@@ -278,8 +279,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle,
         state_signer,
         node_index,
-        pub_key,
-        priv_key,
+        eth_key_pair,
         bootstrapped_view,
         channel_capacity,
         instance_state,
@@ -374,8 +374,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle: Consensus<N, P>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
-        pub_key: PubKey,
-        priv_key: PrivKey,
+        eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -400,13 +399,25 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
 
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+        let vid_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload")
+                .collect();
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (pub_key, priv_key),
+            (eth_key_pair.fee_account(), eth_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
+            vid_commitment,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -414,11 +425,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            (
-                bootstrapped_view,
-                vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                fake_commitment(),
-            ),
+            BuiltFromProposedBlock {
+                view_number: bootstrapped_view,
+                vid_commitment,
+                leaf_commit: fake_commitment(),
+                builder_commitment,
+            },
             tx_receiver,
             decide_receiver,
             da_receiver,
@@ -479,10 +491,13 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 mod test {
     use super::*;
     use crate::non_permissioned;
+    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
     use crate::testing::{HotShotTestConfig, NonPermissionedBuilderTestConfig};
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_lock::RwLock;
     use async_std::task;
+    use es_version::SequencerVersion;
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -492,23 +507,27 @@ mod test {
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service,
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::traits::{
-        block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-    };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::persistence::no_storage::{self, NoStorage};
-    use sequencer::transaction::Transaction;
-    use std::time::Duration;
-    use surf_disco::Client;
-
-    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
-    use async_lock::RwLock;
-    use es_version::SequencerVersion;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::SignatureKey,
+        },
+    };
+    use sequencer::{
+        persistence::no_storage::{self, NoStorage},
+        transaction::Transaction,
+        Payload,
+    };
+    use std::time::Duration;
+    use surf_disco::Client;
+
     #[async_std::test]
     async fn test_permissioned_builder() {
         setup_logging();
@@ -545,7 +564,7 @@ mod test {
         )
         .await;
 
-        let builder_pub_key = builder_config.pub_key;
+        let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -569,6 +588,9 @@ mod test {
         .expect("Claim block signing failed");
 
         // test getting available blocks
+        tracing::info!(
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+            );
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
@@ -631,7 +653,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<BLSPubKey>("block_info/builderaddress")
+            .get::<FeeAccount>("block_info/builderaddress")
             .send()
             .await
         {

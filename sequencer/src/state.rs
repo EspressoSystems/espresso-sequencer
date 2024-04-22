@@ -1,6 +1,6 @@
 use crate::{
-    api::endpoints::AccountQueryData, catchup::StateCatchup, ChainConfig, Header, Leaf, NodeState,
-    SeqTypes,
+    api::endpoints::AccountQueryData, catchup::StateCatchup, eth_signature_key::EthKeyPair,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -13,12 +13,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Sub};
-use ethers::{
-    abi::Address,
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
-    types::{self, RecoveryMessage, U256},
-};
+use ethers::{abi::Address, types::U256};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
@@ -31,7 +26,9 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
-    traits::states::StateDelta,
+    traits::{
+        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+    },
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -256,19 +253,16 @@ fn charge_fee(
 /// Validate builder account by verifying signature
 fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     // Beware of Malice!
-    let builder_signature = proposed_header
+    let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-
-    let fee_info = proposed_header.fee_info;
+    let msg = proposed_header.fee_message();
     // verify signature
     anyhow::ensure!(
-        builder_signature
-            .verify(
-                RecoveryMessage::Hash(types::H256(proposed_header.commit().into())),
-                fee_info.account.address()
-            )
-            .is_ok(),
+        proposed_header
+            .fee_info
+            .account
+            .validate_builder_signature(&signature, msg.as_ref()),
         "Invalid Builder Signature"
     );
 
@@ -301,7 +295,9 @@ where
                 .read()
                 .await
                 .get_path(
-                    Snapshot::<SeqTypes, FeeMerkleTree, 256>::Index(block_height),
+                    Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(
+                        block_height,
+                    ),
                     account,
                 )
                 .await
@@ -352,7 +348,10 @@ where
             .db
             .read()
             .await
-            .get_path(Snapshot::<SeqTypes, BlockMerkleTree, 3>::Index(bh), bh - 1)
+            .get_path(
+                Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(bh),
+                bh - 1,
+            )
             .await
             .context(format!("fetching frontier at height {bh}"))?;
 
@@ -408,7 +407,10 @@ async fn store_state_update(
         let (_, proof) = fee_merkle_tree
             .universal_lookup(delta)
             .expect_ok()
-            .context("Index not found in fee merkle tree")?;
+            .context(format!(
+                "Index not found in fee merkle tree: delta {}",
+                delta
+            ))?;
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 &delta,
@@ -417,7 +419,7 @@ async fn store_state_update(
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
             storage,
-            proof.proof,
+            proof,
             path,
             block_number,
         )
@@ -430,7 +432,7 @@ async fn store_state_update(
         .lookup(block_number - 1)
         .expect_ok()
         .context("Index not found in block merkle tree")?;
-    let path = <u64 as ToTraversalPath<3>>::to_traversal_path(
+    let path = <u64 as ToTraversalPath<{ BlockMerkleTree::ARITY }>>::to_traversal_path(
         &(block_number - 1),
         block_merkle_tree.height(),
     );
@@ -438,7 +440,7 @@ async fn store_state_update(
     {
         UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
             storage,
-            proof.proof,
+            proof,
             path,
             block_number,
         )
@@ -446,6 +448,10 @@ async fn store_state_update(
         .context("failed to store block merkle nodes")?;
     }
 
+    storage
+        .set_last_state_height(block_number as usize)
+        .await
+        .context("setting state height")?;
     storage.commit().await.context("committing state update")?;
     Ok(())
 }
@@ -486,7 +492,7 @@ async fn store_genesis_state(
             .fee_merkle_tree
             .universal_lookup(account)
             .expect_ok()
-            .context("Index not found in fee merkle tree")?;
+            .context("Index not found in fee merkle tree account: {account:?}")?;
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 account,
@@ -494,10 +500,7 @@ async fn store_genesis_state(
             );
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage,
-            proof.proof,
-            path,
-            0,
+            storage, proof, path, 0,
         )
         .await
         .context("failed to store fee merkle nodes")?;
@@ -608,7 +611,7 @@ impl ValidatedState {
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
-            tracing::warn!("fetching block frontier from peers");
+            tracing::warn!("fetching block frontier for view {view:?} from peers");
 
             instance
                 .peers
@@ -619,10 +622,7 @@ impl ValidatedState {
 
         // Fetch missing fee state entries
         if !missing_accounts.is_empty() {
-            tracing::warn!(
-                "fetching {} missing accounts from peers",
-                missing_accounts.len()
-            );
+            tracing::warn!("fetching missing accounts {missing_accounts:?} from peers");
 
             let missing_account_proofs = instance
                 .peers
@@ -731,7 +731,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
         proposed_header: &Header,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
-        validate_builder_fee(proposed_header).unwrap();
+        if let Err(err) = validate_builder_fee(proposed_header) {
+            tracing::error!("invalid builder fee: {err:#}");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
@@ -740,14 +744,21 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .unwrap();
 
         // validate the proposal
-        validate_proposal(
+        if let Err(err) = validate_proposal(
             &validated_state,
             instance.chain_config,
             parent_leaf,
             proposed_header,
-        )
-        .unwrap();
+        ) {
+            tracing::error!("invalid proposal: {err:#}");
+            return Err(BlockError::InvalidBlockHeader);
+        }
 
+        // log successful progress about once in 10 - 20 seconds,
+        // TODO: we may want to make this configurable
+        if parent_leaf.get_view_number().get_u64() % 10 == 0 {
+            tracing::info!("validated and applied new header");
+        }
         Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
@@ -802,7 +813,7 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
 pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
-impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
+impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     type Key = Self::Index;
     type Entry = Commitment<Header>;
     type T = Sha3Node;
@@ -819,6 +830,23 @@ impl MerklizedState<SeqTypes, 3> for BlockMerkleTree {
 
     fn tree_height() -> usize {
         BLOCK_MERKLE_TREE_HEIGHT
+    }
+
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
+            Self::Entry,
+            Self::Key,
+            Self::T,
+            { Self::ARITY },
+        >,
+    ) -> anyhow::Result<()> {
+        let Some(elem) = proof.elem() else {
+            bail!("BlockMerkleTree does not support non-membership proofs");
+        };
+        self.remember(key, elem, proof)?;
+        Ok(())
     }
 }
 
@@ -913,6 +941,7 @@ impl Committable for FeeInfo {
     Into,
 )]
 pub struct FeeAmount(U256);
+
 impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
@@ -960,12 +989,12 @@ impl FeeAccount {
     pub fn to_fixed_bytes(self) -> [u8; 20] {
         self.0.to_fixed_bytes()
     }
-    pub fn test_wallet() -> Wallet<SigningKey> {
-        let phrase = "test test test test test test test test test test test junk";
-        MnemonicBuilder::<English>::default()
-            .phrase::<&str>(phrase)
-            .build()
-            .unwrap()
+    pub fn test_key_pair() -> EthKeyPair {
+        EthKeyPair::from_mnemonic(
+            "test test test test test test test test test test test junk",
+            0u32,
+        )
+        .unwrap()
     }
 }
 
@@ -1071,6 +1100,23 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
     fn tree_height() -> usize {
         FEE_MERKLE_TREE_HEIGHT
+    }
+
+    fn insert_path(
+        &mut self,
+        key: Self::Key,
+        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
+            Self::Entry,
+            Self::Key,
+            Self::T,
+            { Self::ARITY },
+        >,
+    ) -> anyhow::Result<()> {
+        match proof.elem() {
+            Some(elem) => self.remember(key, elem, proof)?,
+            None => self.non_membership_remember(key, proof)?,
+        }
+        Ok(())
     }
 }
 

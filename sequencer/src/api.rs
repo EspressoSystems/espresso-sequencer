@@ -149,12 +149,7 @@ mod test_helpers {
         ) -> Self {
             let mut cfg = TestConfig::default();
 
-            let hotshot_config = cfg.hotshot_config();
-            let (builder_task, builder_url) = run_test_builder(
-                hotshot_config.num_nodes_with_stake,
-                hotshot_config.known_nodes_with_stake.clone(),
-            )
-            .await;
+            let (builder_task, builder_url) = run_test_builder().await;
 
             cfg.set_builder_url(builder_url);
 
@@ -808,6 +803,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
+        empty_builder_commitment,
         persistence::no_storage::NoStorage,
         state::{FeeAccount, FeeAmount},
         testing::TestConfig,
@@ -818,7 +814,6 @@ mod test {
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
-    use ethers::prelude::Signer;
     use futures::stream::{StreamExt, TryStreamExt};
     use hotshot::types::EventType;
     use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
@@ -889,7 +884,7 @@ mod test {
 
         let mut state = ValidatedState::default();
         for i in 0..TestConfig::NUM_NODES {
-            state.prefund_account(TestConfig::builder_wallet(i).address().into(), 1.into());
+            state.prefund_account(TestConfig::builder_key(i).fee_account(), 1.into());
         }
         let mut network = TestNetwork::with_state(
             options,
@@ -935,7 +930,7 @@ mod test {
             assert_eq!(*path.elem().unwrap(), block.hash());
 
             tracing::info!(i, "get fee state");
-            let account = FeeAccount::from(TestConfig::builder_wallet(0).address());
+            let account = TestConfig::builder_key(0).fee_account();
             let path = client
                 .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
                     "fee-state/{}/{}",
@@ -964,8 +959,13 @@ mod test {
         state
             .block_merkle_tree
             .push(
-                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
-                    .commit(),
+                Header::genesis(
+                    &NodeState::mock(),
+                    Default::default(),
+                    empty_builder_commitment(),
+                    Default::default(),
+                )
+                .commit(),
             )
             .unwrap();
         let states = std::array::from_fn(|i| {
@@ -993,9 +993,7 @@ mod test {
 
         // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
         // up.
-        let builder = TestConfig::builder_wallet(TestConfig::NUM_NODES - 1)
-            .address()
-            .into();
+        let builder = TestConfig::builder_key(TestConfig::NUM_NODES - 1).fee_account();
         'outer: loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {

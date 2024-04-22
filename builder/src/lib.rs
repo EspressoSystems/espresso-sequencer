@@ -117,7 +117,10 @@ pub mod testing {
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_types::{
         light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        traits::{
+            block_contents::BlockHeader, metrics::NoMetrics,
+            signature_key::BuilderSignatureKey as _,
+        },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
@@ -145,7 +148,7 @@ pub mod testing {
         },
     };
     use sequencer::{
-        catchup::StateCatchup, persistence::PersistenceOptions,
+        catchup::StateCatchup, eth_signature_key::EthKeyPair, persistence::PersistenceOptions,
         state_signature::StateSignatureMemStorage, ChainConfig,
     };
     use sequencer::{Event, Transaction};
@@ -163,7 +166,7 @@ pub mod testing {
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
     type ElectionConfig = StaticElectionConfig;
-    use snafu::*;
+    use snafu::{guide::feature_flags, *};
 
     #[derive(Clone)]
     pub struct HotShotTestConfig {
@@ -386,12 +389,12 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let wallet = Self::builder_wallet(i);
-            tracing::info!("node {i} is builder {:x}", wallet.address());
+            let key = Self::builder_key(i);
+            tracing::info!("node {i} is builder {:x}", key.address());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -415,13 +418,12 @@ pub mod testing {
             handle
         }
 
-        pub fn builder_wallet(i: usize) -> Wallet<SigningKey> {
-            MnemonicBuilder::<English>::default()
-                .phrase("test test test test test test test test test test test junk")
-                .index(i as u32)
-                .unwrap()
-                .build()
-                .unwrap()
+        pub fn builder_key(i: usize) -> EthKeyPair {
+            EthKeyPair::from_mnemonic(
+                "test test test test test test test test test test test junk",
+                i as u32,
+            )
+            .unwrap()
         }
 
         // url for the hotshot event streaming api
@@ -523,7 +525,7 @@ pub mod testing {
 
     pub struct NonPermissionedBuilderTestConfig {
         pub config: BuilderConfig,
-        pub pub_key: BLSPubKey,
+        pub fee_account: FeeAccount,
     }
 
     impl NonPermissionedBuilderTestConfig {
@@ -535,11 +537,11 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let wallet = HotShotTestConfig::builder_wallet(Self::SUBSCRIBED_DA_NODE_ID);
+            let key = HotShotTestConfig::builder_key(Self::SUBSCRIBED_DA_NODE_ID);
             tracing::info!(
                 "node {} is builder {:x}",
                 Self::SUBSCRIBED_DA_NODE_ID,
-                wallet.address()
+                key.address()
             );
             let node_state = NodeState::new(
                 ChainConfig::default(),
@@ -547,15 +549,14 @@ pub mod testing {
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let (builder_pub_key, builder_private_key) =
-                BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -564,8 +565,7 @@ pub mod testing {
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_config = BuilderConfig::init(
-                builder_pub_key,
-                builder_private_key,
+                key_pair,
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
@@ -577,7 +577,7 @@ pub mod testing {
 
             Self {
                 config: builder_config,
-                pub_key: builder_pub_key,
+                fee_account,
             }
         }
     }
@@ -587,7 +587,7 @@ pub mod testing {
         Ver: StaticVersionType + 'static,
     > {
         pub builder_context: BuilderContext<network::Memory, P, Ver>,
-        pub pub_key: BLSPubKey,
+        pub fee_account: FeeAccount,
     }
 
     impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -601,11 +601,11 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let wallet = HotShotTestConfig::builder_wallet(HotShotTestConfig::NUM_STAKED_NODES);
+            let key = HotShotTestConfig::builder_key(HotShotTestConfig::NUM_STAKED_NODES);
             tracing::info!(
                 "node {} is builder {:x}",
                 HotShotTestConfig::NUM_STAKED_NODES,
-                wallet.address()
+                key.address()
             );
             let node_state = NodeState::new(
                 ChainConfig::default(),
@@ -613,15 +613,14 @@ pub mod testing {
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                wallet,
+                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
             let seed = [201_u8; 32];
-            let (builder_pub_key, builder_private_key) =
-                BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+            let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
             let channel_capacity = NonZeroUsize::new(100).unwrap();
@@ -633,8 +632,7 @@ pub mod testing {
                 hotshot_handle,
                 state_signer,
                 node_id,
-                builder_pub_key,
-                builder_private_key,
+                key_pair,
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
@@ -645,7 +643,7 @@ pub mod testing {
 
             Self {
                 builder_context,
-                pub_key: builder_pub_key,
+                fee_account,
             }
         }
     }
@@ -686,7 +684,7 @@ mod test {
     use sequencer::block::payload::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
-    use sequencer::Header;
+    use sequencer::{empty_builder_commitment, Header};
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
     use es_version::SequencerVersion;
@@ -719,6 +717,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
@@ -728,7 +727,12 @@ mod test {
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
-            Header::genesis(&genesis_state, genesis_commitment, genesis_ns_table)
+            Header::genesis(
+                &genesis_state,
+                genesis_commitment,
+                builder_commitment,
+                genesis_ns_table,
+            )
         };
 
         loop {

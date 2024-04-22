@@ -17,7 +17,7 @@ ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
-blake3 = "1.5"
+blake3 = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
@@ -43,6 +43,7 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { workspace = true }
+time = { workspace = true }
 toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }

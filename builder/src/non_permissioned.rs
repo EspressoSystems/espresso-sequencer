@@ -11,11 +11,15 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
+use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderProgress, BuilderState, MessageType, ResponseMessage},
+    builder_state::{
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
+        ResponseMessage,
+    },
     service::{run_non_permissioned_standalone_builder_service, GlobalState},
 };
 
@@ -26,10 +30,11 @@ use hotshot_types::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
+    utils::BuilderCommitment,
 };
 use sequencer::{
-    catchup::StatePeers, l1_client::L1Client, BuilderParams, ChainConfig, L1Params, NetworkParams,
-    NodeState, PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
+    ChainConfig, L1Params, NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -58,19 +63,17 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     // creating the instance state without any builder mnemonic
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_params.mnemonic)
-        .index(builder_params.eth_account_index)?
-        .build()?;
+    let builder_key =
+        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
 
-    tracing::info!("Builder account address {:?}", wallet.address());
+    tracing::info!("Builder account address {:?}", builder_key.address());
 
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
         ChainConfig::default(),
         l1_client,
-        wallet,
+        builder_key,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );
     Ok(instance_state)
@@ -78,8 +81,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 
 impl BuilderConfig {
     pub async fn init(
-        pub_key: PubKey,
-        priv_key: PrivKey,
+        builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -105,13 +107,25 @@ impl BuilderConfig {
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
 
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+        let vid_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload")
+                .collect();
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (pub_key, priv_key),
+            (builder_key_pair.fee_account(), builder_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
+            vid_commitment,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -119,11 +133,12 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            (
-                bootstrapped_view,
-                vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                fake_commitment(),
-            ),
+            BuiltFromProposedBlock {
+                view_number: bootstrapped_view,
+                vid_commitment,
+                leaf_commit: fake_commitment(),
+                builder_commitment,
+            },
             tx_receiver,
             decide_receiver,
             da_receiver,
@@ -135,6 +150,14 @@ impl BuilderConfig {
             bootstrapped_view,
         );
 
+        // spawn the builder event loop
+        async_spawn(async move {
+            builder_state.event_loop();
+        });
+
+        // start the hotshot api service
+        run_builder_api_service(hotshot_builder_apis_url.clone(), global_state.clone());
+
         // create a client for it
         // Start Client for the event streaming api
         tracing::info!(
@@ -143,7 +166,7 @@ impl BuilderConfig {
         );
         let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
 
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        assert!(client.connect(None).await);
 
         tracing::info!("Builder client connected to the hotshot events api");
 
@@ -169,14 +192,6 @@ impl BuilderConfig {
             .await;
         });
 
-        // spawn the builder event loop
-        async_spawn(async move {
-            builder_state.event_loop();
-        });
-
-        // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), global_state.clone());
-
         tracing::info!("Builder init finished");
         Ok(Self {
             global_state,
@@ -194,7 +209,9 @@ mod test {
     };
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_lock::RwLock;
     use async_std::task;
+    use es_version::SequencerVersion;
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -204,23 +221,30 @@ mod test {
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service,
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::traits::{
-        block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-    };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::persistence::no_storage::{self, NoStorage};
-    use sequencer::persistence::PersistenceOptions;
-    use sequencer::transaction::Transaction;
-    use std::time::Duration;
-    use surf_disco::Client;
-
-    use async_lock::RwLock;
-    use es_version::SequencerVersion;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+        },
+    };
+    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::{
+        persistence::{
+            no_storage::{self, NoStorage},
+            PersistenceOptions,
+        },
+        state::FeeAccount,
+        transaction::Transaction,
+        Payload,
+    };
+    use std::time::Duration;
+    use surf_disco::Client;
+
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
@@ -274,7 +298,7 @@ mod test {
         )
         .await;
 
-        let builder_pub_key = builder_config.pub_key;
+        let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -360,7 +384,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<BLSPubKey>("block_info/builderaddress")
+            .get::<FeeAccount>("block_info/builderaddress")
             .send()
             .await
         {
