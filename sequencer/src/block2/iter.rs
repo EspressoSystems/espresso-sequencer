@@ -25,16 +25,29 @@ impl Ord for Index {
     }
 }
 
+/// Cartesian product of [`NsIter`], [`TxIter`].
 pub struct Iter<'a> {
     ns_iter: Peekable<NsIter<'a>>,
     tx_iter: TxIter<'a>,
+    block: &'a Payload, // TODO is there a good way to reuse ns_iter.block?
 }
 
 impl<'a> Iter<'a> {
     pub fn new(block: &'a Payload) -> Self {
+        let mut ns_iter = NsIter::new(block).peekable();
+
+        // TODO sucks that I need to:
+        // - call ns_iter.peek() in this constructor
+        // - call TxIter::new here *and* in next()
+        let tx_iter = TxIter::new(
+            ns_iter
+                .peek()
+                .map_or(&[], |ns| &block.payload[ns.ns_range.clone()]),
+        );
         Self {
-            ns_iter: NsIter::new(block).peekable(),
-            tx_iter: TxIter::new(&[]),
+            ns_iter,
+            tx_iter,
+            block,
         }
     }
 }
@@ -44,17 +57,18 @@ impl<'a> Iterator for Iter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(ns_index) = self.ns_iter.peek() {
-                if let Some(tx_index) = self.tx_iter.next() {
-                    return Some(Index {
-                        ns_index: ns_index.clone(),
-                        tx_index,
-                    });
-                }
-                self.ns_iter.next(); // tx_iter consumed for this namespace
-            } else {
+            let Some(ns_index) = self.ns_iter.peek() else {
                 return None; // ns_iter consumed
+            };
+            if let Some(tx_index) = self.tx_iter.next() {
+                return Some(Index {
+                    ns_index: ns_index.clone(),
+                    tx_index,
+                });
             }
+            // tx_iter consumed for this namespace
+            self.ns_iter.next();
+            self.tx_iter = TxIter::new(&self.block.payload[self.ns_iter.peek()?.ns_range.clone()]);
         }
     }
 }

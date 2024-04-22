@@ -23,19 +23,32 @@ fn basic_correctness() {
     let mut vid = vid_scheme(10);
 
     for mut test in valid_tests {
-        let all_txs = test.all_txs();
+        let mut all_txs = test.all_txs();
+        tracing::info!("test case {} nss {} txs", test.nss.len(), all_txs.len());
+
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
-        let disperse_data = vid.disperse(&block.payload).unwrap();
+
+        // test correct number of nss, txs
+        assert_eq!(block.num_namespaces(), test.nss.len());
+        assert_eq!(block.ns_iter().count(), test.nss.len());
+        assert_eq!(block.len(&block.ns_table), all_txs.len());
+        assert_eq!(block.iter(&block.ns_table).count(), all_txs.len());
+
+        let (vid_commit, vid_common) = {
+            let disperse_data = vid.disperse(&block.payload).unwrap();
+            (disperse_data.commit, disperse_data.common)
+        };
 
         // test iterate over all txs
-        assert_eq!(
-            block.len(&block.ns_table),
-            block.iter(&block.ns_table).count()
-        );
-        for (tx_index, test_tx) in block.iter(&block.ns_table).zip(all_txs.iter()) {
+        for tx_index in block.iter(&block.ns_table) {
             let tx = block.transaction(&tx_index).unwrap();
-            assert_eq!(&tx, test_tx);
+            let test_tx = all_txs.remove(all_txs.iter().position(|t| t == &tx).unwrap());
+            assert_eq!(tx, test_tx);
         }
+        assert!(
+            all_txs.is_empty(),
+            "not all test txs consumed by block.iter"
+        );
 
         // test iterate over all namespaces
         assert_eq!(block.num_namespaces(), test.nss.len());
@@ -48,19 +61,17 @@ fn basic_correctness() {
                 .expect("block ns_id missing from test");
 
             let ns_proof = block
-                .namespace_with_proof(ns_id, &disperse_data.common)
+                .namespace_with_proof(ns_id, &vid_common)
                 .expect("namespace_with_proof should succeed");
 
             assert!(ns_proof.is_existence());
 
             let (ns_proof_txs, ns_proof_ns_id) = block
-                .verify_namespace_proof(&ns_proof, &disperse_data.commit, &disperse_data.common)
+                .verify_namespace_proof(&ns_proof, &vid_commit, &vid_common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
             assert_eq!(ns_proof_ns_id, ns_id);
             assert_eq!(ns_proof_txs, txs);
-
-            TODO test tx proof verification here
         }
         assert!(
             test.nss.is_empty(),
