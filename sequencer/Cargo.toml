@@ -49,7 +49,6 @@ ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
 
 hotshot = { workspace = true }
-hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }

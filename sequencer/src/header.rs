@@ -219,7 +219,7 @@ impl Header {
         )
         .unwrap();
         Self {
-            chain_config: chain_config.into(),
+            chain_config: chain_config.commit().into(),
             height,
             timestamp,
             l1_head: l1.head,

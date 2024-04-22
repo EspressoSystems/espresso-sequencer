@@ -151,6 +151,13 @@ impl ValidatedState {
         }
     }
 }
+
+// TODO remove this, data will come from HotShot:
+// https://github.com/EspressoSystems/HotShot/issues/2744
+fn get_proposed_payload_size() -> u64 {
+    1
+}
+
 pub fn validate_proposal(
     state: &ValidatedState,
     expected_chain_config: ChainConfig,
@@ -161,9 +168,18 @@ pub fn validate_proposal(
 
     // validate `ChainConfig`
     anyhow::ensure!(
-        proposal.chain_config == expected_chain_config.into(),
+        proposal.chain_config.commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
             "Invalid Chain Config: local={:?}, proposal={:?}",
+            expected_chain_config,
+            proposal.chain_config
+        )
+    );
+
+    anyhow::ensure!(
+        get_proposed_payload_size() < expected_chain_config.max_block_size(),
+        anyhow::anyhow!(
+            "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
             proposal.chain_config
         )

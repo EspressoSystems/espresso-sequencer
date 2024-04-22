@@ -6,13 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-ark-serialize = { version = "0.4", features = ["derive"] }
+anyhow = { workspace = true }
+ark-serialize = { workspace = true, features = ["derive"] }
 async-std = { workspace = true }
+clap = { workspace = true }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
-ethers = "2.0.4"
+derive_more = { workspace = true }
+ethers = { workspace = true }
+futures = { workspace = true }
+hotshot-contract-adapter ={ path = "../contracts/rust/adapter" }
 portpicker = { workspace = true }
+serde_json = "^1.0.113"
 surf = "2.3.2"
 tempfile = "3.9.0"
 tracing = "0.1.37"
