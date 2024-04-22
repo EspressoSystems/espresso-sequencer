@@ -88,7 +88,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
 
     let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError> = App::with_state(source);
 
-    app.register_module("api", builder_api)
+    app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
 
     app.register_module("txn_submit", private_mempool_api)
