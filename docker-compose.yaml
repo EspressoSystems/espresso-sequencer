@@ -117,6 +117,23 @@ services:
       keydb:
         condition: service_healthy
 
+  # A service to whitelist specific public keys for the CDN
+  cdn-whitelist:
+    restart: no
+    environment:
+      - RUST_LOG
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist:main
+    command: 
+    - cdn-whitelist
+    - -d
+    - redis://:changemeplease!!@keydb:6379
+    depends_on:
+      keydb:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+
   state-relay-server:
     image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
     ports:
@@ -178,6 +195,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=10
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_BASE_FEE
+      - ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
@@ -220,6 +239,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=11
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_BASE_FEE
+      - ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
@@ -257,6 +278,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=12
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_BASE_FEE
+      - ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
@@ -293,6 +316,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=13
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_BASE_FEE
+      - ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
@@ -329,6 +354,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=14
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
+      - ESPRESSO_SEQUENCER_BASE_FEE
+      - ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
