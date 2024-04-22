@@ -5,12 +5,12 @@ use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use ethers::types::Address;
-use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_types::data::ViewNumber;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
+use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::persistence::no_storage::NoStorage;
 use sequencer::{BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
@@ -201,14 +201,13 @@ async fn main() -> anyhow::Result<()> {
         url: opt.l1_provider_url,
     };
 
+    let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
+
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: vec![],
         eth_account_index: opt.eth_account_index,
     };
-
-    // get from the private key
-    let builder_pub_key = BLSPubKey::from_private(&private_staking_key);
 
     // Parse supplied Libp2p addresses to their socket form
     // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
@@ -250,8 +249,7 @@ async fn main() -> anyhow::Result<()> {
         builder_params,
         l1_params,
         builder_server_url.clone(),
-        builder_pub_key,
-        private_staking_key,
+        builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,
         sequencer_version,

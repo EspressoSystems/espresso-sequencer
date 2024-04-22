@@ -37,6 +37,8 @@ processes:
 
   orchestrator:
     command: orchestrator
+    environment: 
+      - ESPRESSO_ORCHESTRATOR_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
       http_get:
         scheme: http
@@ -100,6 +102,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
 
     readiness_probe:
       http_get:
@@ -140,6 +144,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -172,6 +178,8 @@ processes:
       broker_1:
         condition: process_healthy
       marshal_0:
+        condition: process_healthy
+      permissionless-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
@@ -206,6 +214,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -236,6 +246,8 @@ processes:
       broker_1:
         condition: process_healthy
       marshal_0:
+        condition: process_healthy
+      permissionless-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
@@ -341,12 +353,18 @@ processes:
 
   permissionless-builder:
     command: permissionless-builder
+    ports:
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
-    depends_on:
-      sequencer0:
-        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_BUILDER_SERVER_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   nasty-client:
     command: nasty-client

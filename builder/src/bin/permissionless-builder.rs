@@ -4,11 +4,11 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
-use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_types::data::ViewNumber;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::node_implementation::ConsensusTime;
+use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::{BuilderParams, L1Params};
 use snafu::Snafu;
 use std::num::NonZeroUsize;
@@ -157,20 +157,17 @@ async fn main() -> anyhow::Result<()> {
 
     let sequencer_version = SEQUENCER_VERSION;
 
-    let (private_staking_key, _private_state_key) = opt.private_keys()?;
-
     let l1_params = L1Params {
         url: opt.l1_provider_url,
     };
+
+    let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
 
     let builder_params = BuilderParams {
         mnemonic: opt.eth_mnemonic,
         prefunded_accounts: vec![],
         eth_account_index: opt.eth_account_index,
     };
-
-    // get from the private key
-    let builder_pub_key = BLSPubKey::from_private(&private_staking_key);
 
     let bootstrapped_view = ViewNumber::new(opt.view_number);
 
@@ -185,8 +182,7 @@ async fn main() -> anyhow::Result<()> {
     .unwrap();
 
     let _builder_config = BuilderConfig::init(
-        builder_pub_key,
-        private_staking_key,
+        builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,
         instance_state,

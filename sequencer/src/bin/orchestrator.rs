@@ -11,6 +11,7 @@ use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
 use std::str::FromStr;
 use std::time::Duration;
+use url::Url;
 
 #[derive(Parser)]
 struct Args {
@@ -125,6 +126,10 @@ struct Args {
     /// The seed is a 32 byte integer, encoded in hex.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_KEYGEN_SEED", default_value = "0x0000000000000000000000000000000000000000000000000000000000000000", value_parser = parse_seed)]
     keygen_seed: [u8; 32],
+
+    /// HotShot builder URL
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
+    builder_url: Url,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -214,6 +219,7 @@ async fn main() {
         propose_max_round_time: config.propose_max_round_time,
         online_time: 10,
         num_txn_per_round: 0,
+        server_mode: false,
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;
@@ -231,6 +237,7 @@ async fn main() {
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
     config.config.min_transactions = args.min_transactions;
+    config.config.builder_url = args.builder_url;
 
     run_orchestrator(
         config,

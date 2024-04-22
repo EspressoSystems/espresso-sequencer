@@ -1,5 +1,5 @@
 use crate::{BlockBuildingSnafu, Transaction};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use hotshot_types::utils::BuilderCommitment;
@@ -90,8 +90,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self, _: &Self::Metadata) -> &Vec<Self::Transaction> {
-        unimplemented!()
+    fn get_transactions<'a>(
+        &'a self,
+        metadata: &'a Self::Metadata,
+    ) -> impl 'a + Iterator<Item = Self::Transaction> {
+        self.enumerate(metadata).map(|(_, t)| t)
     }
 }
 
@@ -182,7 +185,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~igildJMyCExvG88xSKxAn6MpHzOnnoFoeQWMsRbR07EP",
+            "BLOCK~00ISpu2jHbXD6z-BwMkwR4ijGdgUSoXLp_2jIStmqBrD",
             |header| header.commit(),
         );
     }
