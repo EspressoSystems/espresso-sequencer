@@ -42,9 +42,9 @@ contract LightClientCommonTest is Test {
 
         //set permissioned flag
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverModeEnabled(permissionedProver);
+        emit LC.PermissionedProverRequired(permissionedProver);
         vm.prank(admin);
-        lc.enablePermissionedProverMode(permissionedProver);
+        lc.setPermissionedProver(permissionedProver);
         return (lcTestProxy, admin);
     }
 
@@ -165,7 +165,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
         //set permissioned flag to false
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverModeDisabled();
+        emit LC.PermissionedProverNotRequired();
         vm.prank(admin);
         lc.disablePermissionedProverMode();
 
@@ -193,9 +193,36 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         vm.prank(admin);
         address newProver = makeAddr("completelyNewProver");
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverModeEnabled(newProver);
-        newLc.enablePermissionedProverMode(newProver);
+        emit LC.PermissionedProverRequired(newProver);
+        newLc.setPermissionedProver(newProver);
         assertEq(newLc.permissionedProver(), newProver);
+    }
+
+    function test_UpdatePermissionedProverWhenPermissionedProverModeDisabled() external {
+        vm.startPrank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverNotRequired();
+        lc.disablePermissionedProverMode();
+        assertEq(lc.permissionedProver(), address(0));
+
+        address newProver = makeAddr("another prover");
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
+        vm.stopPrank();
+    }
+
+    function test_UpdatePermissionedProverWhenPermissionedProverModeEnabled() external {
+        assert(lc.permissionedProverEnabled());
+        assertEq(lc.permissionedProver(), permissionedProver);
+
+        address newProver = makeAddr("another prover");
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        vm.prank(admin);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
     }
 
     function test_OldProverNoLongerWorks() public {
@@ -205,19 +232,19 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         //cast the proxy to be of type light client test
         LCMock newLc = LCMock(newLcTestProxy);
 
-        vm.prank(admin);
+        vm.startPrank(admin);
         address prover1 = makeAddr("prover1");
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverModeEnabled(prover1);
-        newLc.enablePermissionedProverMode(prover1);
+        emit LC.PermissionedProverRequired(prover1);
+        newLc.setPermissionedProver(prover1);
         assertEq(newLc.permissionedProver(), prover1);
 
-        vm.prank(admin);
         address prover2 = makeAddr("prover2");
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverUpdated(prover2);
-        newLc.updatePermissionedProver(prover2);
+        emit LC.PermissionedProverRequired(prover2);
+        newLc.setPermissionedProver(prover2);
         assertEq(newLc.permissionedProver(), prover2);
+        vm.stopPrank();
 
         //confirm that the old prover doesn't work
         vm.prank(prover1);
@@ -236,14 +263,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         address currentProver = lc.permissionedProver();
         vm.prank(admin);
         vm.expectRevert(LC.NoChangeRequired.selector);
-        lc.enablePermissionedProverMode(currentProver);
-    }
-
-    function test_RevertWhen_sameProverAddressSentInUpdate() public {
-        address currentProver = lc.permissionedProver();
-        vm.prank(admin);
-        vm.expectRevert(LC.NoChangeRequired.selector);
-        lc.updatePermissionedProver(currentProver);
+        lc.setPermissionedProver(currentProver);
     }
 
     function test_RevertWhen_NoPermissionedProverSetWhenTryingToEnablePermissionedMode() external {
@@ -256,33 +276,19 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         // you cannot enable permissioned mode if you don't specify the prover that gets permissions
         vm.prank(admin);
         vm.expectRevert(LC.InvalidAddress.selector);
-        newLc.enablePermissionedProverMode(address(0));
+        newLc.setPermissionedProver(address(0));
     }
 
     function test_RevertWhen_UpdatePermissionedProverToZeroAddress() external {
         vm.expectRevert(LC.InvalidAddress.selector);
         vm.prank(admin);
-        lc.updatePermissionedProver(address(0));
-    }
-
-    function test_RevertWhen_UpdatePermissionedProverWhenPermissionedProverModeDisabled()
-        external
-    {
-        vm.startPrank(admin);
-        vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverModeDisabled();
-        lc.disablePermissionedProverMode();
-        assertEq(lc.permissionedProver(), address(0));
-
-        vm.expectRevert(LC.NoChangeRequired.selector);
-        lc.updatePermissionedProver(makeAddr("another prover"));
-        vm.stopPrank();
+        lc.setPermissionedProver(address(0));
     }
 
     function test_RevertWhen_NonAdminTriesToupdatePermissionedProver() external {
         vm.expectRevert();
         vm.prank(makeAddr("not an admin"));
-        lc.updatePermissionedProver(makeAddr("new prover"));
+        lc.setPermissionedProver(makeAddr("new prover"));
     }
 
     function test_RevertWhen_ProverNotPermissioned() external {
@@ -341,9 +347,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         //update permissioned prover
         address newProver = makeAddr("newProver");
         vm.expectEmit(true, true, true, true);
-        emit LC.PermissionedProverUpdated(newProver);
+        emit LC.PermissionedProverRequired(newProver);
         vm.prank(admin);
-        lc.updatePermissionedProver(newProver);
+        lc.setPermissionedProver(newProver);
 
         //send newFinalizedState with the new prover
         vm.expectEmit(true, true, true, true);

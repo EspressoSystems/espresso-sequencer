@@ -37,14 +37,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
-    /// @notice the permissioned prover was updated
-    event PermissionedProverUpdated(address permissionedProver);
-
     /// @notice an permissioned prover is needed to interact `newFinalizedState`
-    event PermissionedProverModeEnabled(address permissionedProver);
+    event PermissionedProverRequired(address permissionedProver);
 
     /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
-    event PermissionedProverModeDisabled();
+    event PermissionedProverNotRequired();
 
     // === Constants ===
     //
@@ -328,39 +325,20 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         );
     }
 
-    /// @notice Update the address of the permissioned prover
-    /// @dev The `permissionedProver` address can only be updated when `permissionedProverMode` ==
-    /// true
-    /// If the new prover address is the same as the current one, the method reverts with the
-    /// `NoChangeRequired` error
-    function updatePermissionedProver(address prover) public onlyOwner {
-        // permissionedProverMode enabled and only update the permissionedProver if it's not the
-        // same as the current one
-        if (permissionedProverEnabled && prover != permissionedProver) {
-            if (prover == address(0)) {
-                revert InvalidAddress();
-            }
-            permissionedProver = prover;
-            emit PermissionedProverUpdated(prover);
-        } else {
-            revert NoChangeRequired();
-        }
-    }
-
     /// @notice set the permissionedProverMode to true and set the permissionedProver to the
     /// non-zero address provided
-    /// @dev if it was already enabled (permissioneProverMode == true), then revert with
-    /// NoChangeRequired
-    function enablePermissionedProverMode(address prover) public onlyOwner {
-        if (permissionedProverEnabled) {
-            revert NoChangeRequired();
-        }
+    /// @dev this function can also be used to update the permissioned prover once it's a different
+    /// address
+    function setPermissionedProver(address prover) public onlyOwner {
         if (prover == address(0)) {
             revert InvalidAddress();
         }
+        if (prover == permissionedProver) {
+            revert NoChangeRequired();
+        }
         permissionedProver = prover;
         permissionedProverEnabled = true;
-        emit PermissionedProverModeEnabled(permissionedProver);
+        emit PermissionedProverRequired(permissionedProver);
     }
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
@@ -370,7 +348,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (permissionedProverEnabled) {
             permissionedProver = address(0);
             permissionedProverEnabled = false;
-            emit PermissionedProverModeDisabled();
+            emit PermissionedProverNotRequired();
         } else {
             revert NoChangeRequired();
         }

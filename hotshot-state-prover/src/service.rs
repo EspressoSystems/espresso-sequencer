@@ -634,7 +634,7 @@ mod test {
 
         //turn on the permissionedProverMode with the l1 wallet address as the permissioned prover
         light_client_proxy
-            .enable_permissioned_prover_mode(l1_wallet.clone().address())
+            .set_permissioned_prover(l1_wallet.clone().address())
             .send()
             .await?;
 
