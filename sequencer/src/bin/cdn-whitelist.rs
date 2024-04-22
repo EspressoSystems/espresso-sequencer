@@ -50,7 +50,10 @@ async fn main() -> Result<()> {
         network_config_file: None,
     });
 
-    tracing::info!("Waiting for config from orchestrator on {}", args.orchestrator_url);
+    tracing::info!(
+        "Waiting for config from orchestrator on {}",
+        args.orchestrator_url
+    );
 
     // Attempt to get the config from the orchestrator.
     // Loops internally until the config is received.
