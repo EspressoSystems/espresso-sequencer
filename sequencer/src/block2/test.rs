@@ -42,8 +42,19 @@ fn basic_correctness() {
         // test iterate over all txs
         for tx_index in block.iter(&block.ns_table) {
             let tx = block.transaction(&tx_index).unwrap();
+
+            // warning: linear search for a tx
             let test_tx = all_txs.remove(all_txs.iter().position(|t| t == &tx).unwrap());
             assert_eq!(tx, test_tx);
+
+            let tx_proof = {
+                let (tx2, tx_proof) = block
+                    .transaction_with_proof(&tx_index, &vid_common)
+                    .unwrap();
+                assert_eq!(tx, tx2);
+                tx_proof
+            };
+            assert!(tx_proof.verify(&tx, &vid_commit, &vid_common).unwrap());
         }
         assert!(
             all_txs.is_empty(),

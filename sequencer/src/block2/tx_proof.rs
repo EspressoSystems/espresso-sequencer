@@ -198,6 +198,8 @@ impl TxProof {
                 .min(ns_range.end),
         };
 
+        tracing::info!("verify {:?}, {:?}", num_txs_range, self.payload_num_txs);
+
         // Verify proof for tx table len
         if vid
             .payload_verify(
