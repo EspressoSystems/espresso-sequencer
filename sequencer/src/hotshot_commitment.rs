@@ -15,7 +15,7 @@ use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{Header, SeqTypes};
 
@@ -278,7 +278,7 @@ mod test {
     use crate::{l1_client::L1Client, Leaf, NodeState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
-    use commit::Committable;
+    use committable::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;

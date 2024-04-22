@@ -82,7 +82,7 @@ where
             CircuitField::from(0u64)
         }
     });
-    let (circuit, public_inputs) = crate::circuit::build::<_, _, _, _, _>(
+    let (circuit, public_inputs) = crate::circuit::build(
         stake_table_entries,
         signer_bit_vec,
         signatures,

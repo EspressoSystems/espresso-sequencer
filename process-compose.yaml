@@ -37,6 +37,8 @@ processes:
 
   orchestrator:
     command: orchestrator
+    environment: 
+      - ESPRESSO_ORCHESTRATOR_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
       http_get:
         scheme: http
@@ -100,6 +102,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
 
     readiness_probe:
       http_get:
@@ -140,6 +144,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -172,6 +178,8 @@ processes:
       broker_1:
         condition: process_healthy
       marshal_0:
+        condition: process_healthy
+      permissionless-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
@@ -206,6 +214,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -237,6 +247,8 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
@@ -261,7 +273,7 @@ processes:
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
-    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT --metrics-enabled --metrics-port 9093
+    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT -m 127.0.0.1:9093
     depends_on:
       keydb:
         condition: process_healthy
@@ -276,7 +288,7 @@ processes:
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
-    command: cdn-broker -d "redis://:changeme!@localhost:6379" --metrics-enabled --metrics-port 9091
+    command: cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091
     depends_on:
       keydb:
         condition: process_healthy
@@ -292,13 +304,12 @@ processes:
   # as we're running a local demo, we need to operate on different ports
   broker_1:
     command: cdn-broker 
-      --public-bind-address 0.0.0.0:1740
-      --public-advertise-address local_ip:1740
-      --private-bind-address 0.0.0.0:1741
-      --private-advertise-address local_ip:1741
+      --public-bind-endpoint 0.0.0.0:1740
+      --public-advertise-endpoint local_ip:1740
+      --private-bind-endpoint 0.0.0.0:1741
+      --private-advertise-endpoint local_ip:1741
       -d "redis://:changeme!@localhost:6379"
-      --metrics-enabled
-      --metrics-port 9092
+      -m 127.0.0.1:9092
     depends_on:
       keydb:
         condition: process_healthy
@@ -342,12 +353,18 @@ processes:
 
   permissionless-builder:
     command: permissionless-builder
+    ports:
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
-    depends_on:
-      sequencer0:
-        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_BUILDER_SERVER_PORT
+        path: /healthcheck
+      failure_threshold: 100
 
   nasty-client:
     command: nasty-client

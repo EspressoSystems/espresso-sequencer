@@ -20,7 +20,7 @@ use tide_disco::{
     Api, App, Error as _, StatusCode,
 };
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]
@@ -237,7 +237,7 @@ pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
     let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
-    let mut app = App::<State, Error, Ver>::with_state(state);
+    let mut app = App::<State, Error>::with_state(state);
 
     app.register_module("api", api).unwrap();
 

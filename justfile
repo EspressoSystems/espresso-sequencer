@@ -34,8 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-cdn:
-    RUST_LOG=info target/release/dev-cdn
+dev-cdn *args:
+    RUST_LOG=info cargo run --release --bin dev-cdn -- {{args}}
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
@@ -83,12 +83,6 @@ sol-test:
     cargo build --bin diff-test --release
     forge test
 
-# Deploy contracts to local blockchain for development and testing
-dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk" num_blocks_per_epoch="10" num_init_validators="5":
-    MNEMONICS="{{mnemonics}}" forge script contracts/test/LightClientTest.s.sol:DeployLightClientTestScript \
-    --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
-    --fork-url {{url}} --broadcast
-
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
 code-coverage:
@@ -98,10 +92,12 @@ code-coverage:
       --ignore 'contract-bindings/*' --ignore 'contracts/*'
   @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
 
+# Download Aztec's SRS for production
 download-srs:
     @echo "Check existence or download SRS for production"
-    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-1048584.bin" ./scripts/download_srs_aztec.sh
+    @./scripts/download_srs_aztec.sh
 
+# Download Aztec's SRS for test (smaller degree usually)
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh

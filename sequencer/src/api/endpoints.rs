@@ -15,7 +15,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
-use commit::Committable;
+use committable::Committable;
 use ethers::prelude::U256;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
@@ -33,7 +33,7 @@ use tide_disco::{
     Api, Error as _, StatusCode,
 };
 
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -287,17 +287,17 @@ where
 }
 
 type MerklizedStateApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, merklized_state::Error, Ver>;
-pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static>(
+pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, const ARITY: usize>(
     _: Ver,
 ) -> Result<MerklizedStateApi<N, P, D, Ver>>
 where
     N: network::Type,
-    D: MerklizedStateDataSource<SeqTypes, S> + Send + Sync + 'static,
-    S: MerklizedState<SeqTypes>,
+    D: MerklizedStateDataSource<SeqTypes, S, ARITY> + Send + Sync + 'static,
+    S: MerklizedState<SeqTypes, ARITY>,
     P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
 {
-    let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver>(
+    let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver, ARITY>(
         &Default::default(),
     )?;
     Ok(api)
