@@ -34,8 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-cdn:
-    RUST_LOG=info target/release/dev-cdn
+dev-cdn *args:
+    RUST_LOG=info cargo run --release --bin dev-cdn -- {{args}}
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
