@@ -12,7 +12,7 @@ use hotshot_builder_api::block_info::{
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
-    data::Leaf,
+    data::{null_block, Leaf},
     event::{Event, EventType},
     traits::{
         block_contents::BuilderFee,
@@ -124,6 +124,7 @@ impl<
                     debug!("Not next leader for view {:?}", self.cur_view);
                     return None;
                 }
+                let block_view = if make_block { view } else { view + 1 };
 
                 if let Some(BuilderResponses {
                     block_data,
@@ -132,7 +133,6 @@ impl<
                 }) = self.wait_for_block().await
                 {
                     // send the sequenced transactions to VID and DA tasks
-                    let block_view = if make_block { view } else { view + 1 };
                     let encoded_transactions = match block_data.block_payload.encode() {
                         Ok(encoded) => encoded.into_iter().collect::<Vec<u8>>(),
                         Err(e) => {
@@ -154,7 +154,38 @@ impl<
                     )
                     .await;
                 } else {
-                    error!("Failed to get a block from the builder");
+                    // If we couldn't get a block, send an empty block
+                    error!(
+                        "Failed to get a block for view {:?} proposing empty block",
+                        view
+                    );
+
+                    // Calculate the builder fee for the empty block
+                    let Some(builder_fee) = null_block::builder_fee(self.membership.total_nodes())
+                    else {
+                        error!("Failed to get builder fee");
+                        return None;
+                    };
+
+                    // Create an empty block payload and metadata
+                    let Ok((_, metadata)) =
+                        <TYPES as NodeType>::BlockPayload::from_transactions(vec![])
+                    else {
+                        error!("Failed to create empty block payload");
+                        return None;
+                    };
+
+                    // Broadcast the empty block
+                    broadcast_event(
+                        Arc::new(HotShotEvent::BlockRecv(
+                            vec![],
+                            metadata,
+                            block_view,
+                            builder_fee,
+                        )),
+                        &event_stream,
+                    )
+                    .await;
                 };
 
                 return None;
@@ -231,24 +262,38 @@ impl<
                 continue;
             };
 
-            let mut available_blocks = match self
-                .builder_client
-                .get_available_blocks(
+            let mut available_blocks = match async_compatibility_layer::art::async_timeout(
+                self.api
+                    .propose_max_round_time()
+                    .saturating_sub(task_start_time.elapsed()),
+                self.builder_client.get_available_blocks(
                     parent_commitment,
                     self.public_key.clone(),
                     &request_signature,
-                )
-                .await
+                ),
+            )
+            .await
             {
-                Ok(blocks) => {
+                // We got available blocks
+                Ok(Ok(blocks)) => {
                     tracing::debug!("Got available blocks: {:?}", blocks);
                     blocks
                 }
-                Err(err) => {
+
+                // We failed to get available blocks
+                Ok(Err(err)) => {
                     error!(%err, "Couldn't get available blocks");
                     // pause a bit
                     async_sleep(Duration::from_millis(100)).await;
                     continue;
+                }
+
+                // We timed out while getting available blocks
+                Err(err) => {
+                    if latest_block.is_none() {
+                        error!(%err, "Timeout while getting available blocks");
+                    }
+                    break;
                 }
             };
 
@@ -317,7 +362,7 @@ impl<
                     block_data
                 }
                 Err(err) => {
-                    error!(%err, "Failed to claim block");
+                    error!(%err, "Failed to claim block data");
                     continue;
                 }
             };
@@ -357,7 +402,7 @@ impl<
                     header_input
                 }
                 Err(err) => {
-                    error!(%err, "Failed to claim block");
+                    error!(%err, "Failed to claim block header input");
                     continue;
                 }
             };
