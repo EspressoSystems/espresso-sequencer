@@ -1345,14 +1345,13 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
  "dashmap",
  "derivative",
- "derive_builder",
  "jf-primitives 0.4.0-pre.0",
  "lazy_static",
  "local-ip-address",
@@ -1368,12 +1367,11 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
- "derive_builder",
  "jf-primitives 0.4.0-pre.0",
  "rand 0.8.5",
  "tokio",
@@ -1384,12 +1382,11 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
- "derive_builder",
  "jf-primitives 0.4.0-pre.0",
  "tokio",
  "tracing",
@@ -1399,7 +1396,7 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -3168,7 +3165,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3213,7 +3210,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "async-trait",
  "clap",
@@ -3232,7 +3229,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3262,7 +3259,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3273,7 +3270,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3301,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -3358,7 +3355,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3371,7 +3368,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3404,7 +3401,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3443,7 +3440,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -3494,7 +3491,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4565,7 +4562,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
