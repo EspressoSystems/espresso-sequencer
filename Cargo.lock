@@ -2583,7 +2583,7 @@ dependencies = [
  "hotshot-state-prover",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-plonk",
+ "jf-plonk 0.4.4",
  "jf-primitives 0.4.3",
  "jf-relation 0.4.3",
  "jf-utils 0.4.3",
@@ -4143,7 +4143,7 @@ dependencies = [
  "diff-test-bn254",
  "ethers",
  "hotshot-types",
- "jf-plonk",
+ "jf-plonk 0.4.4",
  "jf-primitives 0.4.3",
  "jf-utils 0.4.3",
  "num-bigint",
@@ -4348,7 +4348,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-plonk",
+ "jf-plonk 0.4.4",
  "jf-primitives 0.4.3",
  "jf-relation 0.4.3",
  "jf-utils 0.4.3",
@@ -4483,7 +4483,7 @@ dependencies = [
  "ethereum-types",
  "futures",
  "generic-array",
- "jf-plonk",
+ "jf-plonk 0.4.3",
  "jf-primitives 0.4.3",
  "jf-utils 0.4.3",
  "lazy_static",
@@ -5077,6 +5077,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "jf-plonk"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "displaydoc",
+ "downcast-rs",
+ "dyn-clone 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "espresso-systems-common 0.4.0",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-primitives 0.4.4",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
+ "merlin",
+ "num-bigint",
+ "rand_chacha 0.3.1",
+ "rayon",
+ "serde",
+ "sha3",
+ "tagged-base64 0.4.0",
+]
+
+[[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.2#f85f9024ef42ab8be95b2c81bd15fd6cbadeafbf"
@@ -5165,6 +5194,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "jf-primitives"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
+dependencies = [
+ "anyhow",
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ed-on-bls12-377",
+ "ark-ed-on-bls12-381",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-pallas",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "blst",
+ "chacha20poly1305",
+ "crypto_kx",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "espresso-systems-common 0.4.0",
+ "generic-array",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
+ "merlin",
+ "num-bigint",
+ "num-traits",
+ "rand_chacha 0.3.1",
+ "rayon",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "tagged-base64 0.4.0",
+ "zeroize",
+]
+
+[[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.2#f85f9024ef42ab8be95b2c81bd15fd6cbadeafbf"
@@ -5216,6 +5289,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "jf-relation"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "displaydoc",
+ "downcast-rs",
+ "dyn-clone 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hashbrown 0.14.3",
+ "itertools 0.12.1",
+ "jf-utils 0.4.4",
+ "num-bigint",
+ "rand_chacha 0.3.1",
+ "rayon",
+]
+
+[[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.2#f85f9024ef42ab8be95b2c81bd15fd6cbadeafbf"
@@ -5234,6 +5333,22 @@ dependencies = [
 name = "jf-utils"
 version = "0.4.3"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "digest 0.10.7",
+ "rayon",
+ "serde",
+ "sha2 0.10.8",
+ "tagged-base64 0.4.0",
+]
+
+[[package]]
+name = "jf-utils"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -7492,7 +7607,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.59",
