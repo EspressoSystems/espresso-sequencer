@@ -10,13 +10,13 @@ anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-std = { workspace = true }
 clap = { workspace = true }
-commit = { git = "https://github.com/EspressoSystems/commit" }
+committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
-ethers = "2.0.4"
+ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter ={ path = "../contracts/rust/adapter" }
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 serde_json = "^1.0.113"
 surf = "2.3.2"
 tempfile = "3.9.0"

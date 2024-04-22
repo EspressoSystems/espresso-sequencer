@@ -6,10 +6,11 @@ use crate::{
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use data_source::{StateDataSource, SubmitDataSource};
+use derivative::Derivative;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub mod data_source;
 pub mod endpoints;
@@ -20,8 +21,11 @@ mod update;
 
 pub use options::Options;
 
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 struct State<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
     state_signer: Arc<StateSigner<Ver>>,
+    #[derivative(Debug = "ignore")]
     handle: SystemContextHandle<SeqTypes, Node<N, P>>,
 }
 
@@ -103,12 +107,12 @@ mod test_helpers {
         catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
-        testing::{wait_for_decide_on_handle, TestConfig},
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
         Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
-    use commit::Committable;
+    use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use ethers::prelude::Address;
     use futures::{
@@ -143,7 +147,12 @@ mod test_helpers {
             persistence: [P; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
-            let cfg = TestConfig::default();
+            let mut cfg = TestConfig::default();
+
+            let (builder_task, builder_url) = run_test_builder().await;
+
+            cfg.set_builder_url(builder_url);
+
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
@@ -187,6 +196,13 @@ mod test_helpers {
                 },
             ))
             .await;
+
+            let handle_0 = &nodes[0];
+
+            // Hook the builder up to the event stream from the first node
+            if let Some(builder_task) = builder_task {
+                builder_task.start(Box::new(handle_0.get_event_stream()));
+            }
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -325,11 +341,11 @@ mod test_helpers {
             }
         }
         // we cannot verify the signature now, because we don't know the stake table
-        assert!(client
+        client
             .get::<StateSignatureRequestBody>(&format!("state-signature/block/{}", height))
             .send()
             .await
-            .is_ok());
+            .unwrap();
     }
 
     /// Test the state API with custom options.
@@ -472,7 +488,7 @@ mod api_tests {
         Header, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use commit::Committable;
+    use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
@@ -786,21 +802,24 @@ mod test {
 
     use super::*;
     use crate::{
-        catchup::StatePeers, persistence::no_storage::NoStorage, testing::TestConfig, Header,
-        NodeState,
+        catchup::{mock::MockStateCatchup, StatePeers},
+        empty_builder_commitment,
+        persistence::no_storage::NoStorage,
+        state::{FeeAccount, FeeAmount},
+        testing::TestConfig,
+        Header, NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use async_std::task::sleep;
-    use commit::{Commitment, Committable};
+    use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
-    use ethers::prelude::Signer;
-    use futures::stream::StreamExt;
+    use futures::stream::{StreamExt, TryStreamExt};
     use hotshot::types::EventType;
-    use hotshot_query_service::availability::BlockQueryData;
+    use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
     use hotshot_types::{event::LeafInfo, traits::block_contents::BlockHeader};
     use jf_primitives::merkle_tree::{
-        prelude::{MerklePath, Sha3Node},
+        prelude::{MerkleProof, Sha3Node},
         AppendableMerkleTreeScheme,
     };
     use portpicker::pick_unused_port;
@@ -863,7 +882,17 @@ mod test {
                 .status(Default::default()),
         );
 
-        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let mut state = ValidatedState::default();
+        for i in 0..TestConfig::NUM_NODES {
+            state.prefund_account(TestConfig::builder_key(i).fee_account(), 1.into());
+        }
+        let mut network = TestNetwork::with_state(
+            options,
+            std::array::from_fn(|_| state.clone()),
+            [NoStorage; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| MockStateCatchup::default()),
+        )
+        .await;
 
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
@@ -871,28 +900,48 @@ mod test {
         client.connect(None).await;
 
         // Wait until some blocks have been decided.
-        client
+        tracing::info!("waiting for blocks");
+        let blocks = client
             .socket("availability/stream/blocks/0")
             .subscribe::<BlockQueryData<SeqTypes>>()
             .await
             .unwrap()
             .take(4)
-            .collect::<Vec<_>>()
-            .await;
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
 
         // sleep for few seconds so that state data is upserted
+        tracing::info!("waiting for state to be inserted");
         sleep(Duration::from_secs(5)).await;
         network.stop_consensus().await;
 
-        for i in 1..=3 {
-            assert!(client
-                .get::<MerklePath<Commitment<Header>, u64, Sha3Node>>(&format!(
-                    "state/blocks/{}/{i}",
+        for block in blocks {
+            let i = block.height();
+            tracing::info!(i, "get block state");
+            let path = client
+                .get::<MerkleProof<Commitment<Header>, u64, Sha3Node, 3>>(&format!(
+                    "block-state/{}/{i}",
                     i + 1
                 ))
                 .send()
                 .await
-                .is_ok())
+                .unwrap();
+            assert_eq!(*path.elem().unwrap(), block.hash());
+
+            tracing::info!(i, "get fee state");
+            let account = TestConfig::builder_key(0).fee_account();
+            let path = client
+                .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
+                    "fee-state/{}/{}",
+                    i + 1,
+                    account
+                ))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(*path.index(), account);
+            assert!(*path.elem().unwrap() > 0.into(), "{:?}", path.elem());
         }
     }
 
@@ -910,8 +959,13 @@ mod test {
         state
             .block_merkle_tree
             .push(
-                Header::genesis(&NodeState::mock(), Default::default(), Default::default())
-                    .commit(),
+                Header::genesis(
+                    &NodeState::mock(),
+                    Default::default(),
+                    empty_builder_commitment(),
+                    Default::default(),
+                )
+                .commit(),
             )
             .unwrap();
         let states = std::array::from_fn(|i| {
@@ -939,9 +993,7 @@ mod test {
 
         // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
         // up.
-        let builder = TestConfig::builder_wallet(TestConfig::NUM_NODES - 1)
-            .address()
-            .into();
+        let builder = TestConfig::builder_key(TestConfig::NUM_NODES - 1).fee_account();
         'outer: loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {

@@ -37,12 +37,15 @@ use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::{iter, time::Duration};
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
-use time::Instant;
+use time::ext::InstantExt;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 type F = ark_ed_on_bn254::Fq;
 
@@ -183,7 +186,7 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
         let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
-        let srs_elapsed = srs_timer.elapsed();
+        let srs_elapsed = Instant::now().signed_duration_since(srs_timer);
         std::println!("Done in {srs_elapsed:.3}");
 
         // convert to Jellyfish type
@@ -200,7 +203,7 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let key_gen_timer = Instant::now();
     let (pk, _) = crate::snark::preprocess(&srs, stake_table_capacity)
         .expect("Fail to preprocess state prover circuit");
-    let key_gen_elapsed = key_gen_timer.elapsed();
+    let key_gen_elapsed = Instant::now().signed_duration_since(key_gen_timer);
     std::println!("Done in {key_gen_elapsed:.3}");
     pk
 }
@@ -329,7 +332,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     // );
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let proof_gen_start = time::Instant::now();
+    let proof_gen_start = Instant::now();
     let (proof, public_input) = generate_state_update_proof::<_, _, _, _>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
@@ -340,7 +343,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
         &threshold,
         config.stake_table_capacity,
     )?;
-    let proof_gen_elapsed = proof_gen_start.elapsed();
+    let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
     submit_state_and_proof(proof, public_input, config).await?;
@@ -354,7 +357,7 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
     lightclient_address: Address,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
