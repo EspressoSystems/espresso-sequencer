@@ -35,7 +35,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    consensus::proposal::validate_proposal,
+    consensus::proposal::validate_proposal_safety_and_liveness,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task, AnyhowTracing},
 };
@@ -822,7 +822,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     return;
                 };
                 async_spawn(
-                    validate_proposal(
+                    validate_proposal_safety_and_liveness(
                         proposal.clone(),
                         parent_leaf,
                         self.consensus.clone(),

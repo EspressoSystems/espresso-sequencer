@@ -1,8 +1,23 @@
+use anyhow::Result;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
+use crate::{
+    consensus::{
+        proposal::{
+            publish_proposal_if_able, validate_proposal_safety_and_liveness,
+            validate_proposal_view_and_certs,
+        },
+        view_change::update_view,
+    },
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task},
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
+    },
+};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
@@ -44,15 +59,6 @@ use {
         data::{null_block, VidDisperseShare},
         message::GeneralConsensusMessage,
         simple_vote::QuorumData,
-    },
-};
-
-use crate::{
-    consensus::{proposal::validate_proposal, view_change::update_view},
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
     },
 };
 
@@ -333,6 +339,46 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         false
     }
 
+    #[cfg(feature = "dependency-tasks")]
+    async fn publish_proposal(
+        &mut self,
+        view: TYPES::Time,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Publishes a proposal
+    #[cfg(not(feature = "dependency-tasks"))]
+    async fn publish_proposal(
+        &mut self,
+        view: TYPES::Time,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    ) -> Result<()> {
+        let create_and_send_proposal_handle = publish_proposal_if_able(
+            self.cur_view,
+            view,
+            event_stream,
+            self.quorum_membership.clone(),
+            self.public_key.clone(),
+            self.private_key.clone(),
+            self.consensus.clone(),
+            self.round_start_delay,
+            self.formed_upgrade_certificate.clone(),
+            self.decided_upgrade_cert.clone(),
+            &mut self.payload_commitment_and_metadata,
+            &mut self.proposal_cert,
+        )
+        .await?;
+
+        self.spawned_tasks
+            .entry(view)
+            .or_default()
+            .push(create_and_send_proposal_handle);
+
+        Ok(())
+    }
+
     /// Handles a consensus event received on the event stream
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error")]
     pub async fn handle(
@@ -356,75 +402,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     ))
                     .await;
 
+                if let Err(e) = validate_proposal_view_and_certs(
+                    proposal,
+                    &sender,
+                    self.cur_view,
+                    &self.quorum_membership,
+                    &self.timeout_membership,
+                ) {
+                    warn!("Failed to validate proposal view and attached certs; error = {e:?}");
+                    return;
+                }
+
                 let view = proposal.data.get_view_number();
-                if view < self.cur_view {
-                    debug!("Proposal is from an older view {:?}", proposal.data.clone());
-                    return;
-                }
-
                 let view_leader_key = self.quorum_membership.get_leader(view);
-                if view_leader_key != sender {
-                    warn!("Leader key does not match key in proposal");
-                    return;
-                }
-
-                // Verify a timeout certificate OR a view sync certificate exists and is valid.
-                if proposal.data.justify_qc.get_view_number() != view - 1 {
-                    if let Some(received_proposal_cert) = proposal.data.proposal_certificate.clone()
-                    {
-                        match received_proposal_cert {
-                            ViewChangeEvidence::Timeout(timeout_cert) => {
-                                if timeout_cert.get_data().view != view - 1 {
-                                    warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
-                                    return;
-                                }
-
-                                if !timeout_cert.is_valid_cert(self.timeout_membership.as_ref()) {
-                                    warn!("Timeout certificate for view {} was invalid", *view);
-                                    return;
-                                }
-                            }
-                            ViewChangeEvidence::ViewSync(view_sync_cert) => {
-                                if view_sync_cert.view_number != view {
-                                    debug!(
-                                        "Cert view number {:?} does not match proposal view number {:?}",
-                                        view_sync_cert.view_number, view
-                                    );
-                                    return;
-                                }
-
-                                // View sync certs must also be valid.
-                                if !view_sync_cert.is_valid_cert(self.quorum_membership.as_ref()) {
-                                    debug!("Invalid ViewSyncFinalize cert provided");
-                                    return;
-                                }
-                            }
-                        }
-                    } else {
-                        warn!(
-                            "Quorum proposal for view {} needed a timeout or view sync certificate, but did not have one",
-                            *view);
-                        return;
-                    };
-                }
-
                 let justify_qc = proposal.data.justify_qc.clone();
 
                 if !justify_qc.is_valid_cert(self.quorum_membership.as_ref()) {
                     error!("Invalid justify_qc in proposal for view {}", *view);
                     let consensus = self.consensus.write().await;
                     consensus.metrics.invalid_qc.update(1);
-                    return;
-                }
-
-                // Validate the upgrade certificate -- this is just a signature validation.
-                // Note that we don't do anything with the certificate directly if this passes; it eventually gets stored as part of the leaf if nothing goes wrong.
-                if let Err(e) = UpgradeCertificate::validate(
-                    &proposal.data.upgrade_certificate,
-                    &self.quorum_membership,
-                ) {
-                    warn!("{:?}", e);
-
                     return;
                 }
 
@@ -569,14 +565,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             == self.public_key
                             && high_qc.view_number
                                 == self.current_proposal.clone().unwrap().view_number;
+
                         let qc = high_qc.clone();
                         if should_propose {
                             debug!(
                                 "Attempting to publish proposal after voting; now in view: {}",
                                 *new_view
                             );
-                            self.publish_proposal_if_able(qc.view_number + 1, &event_stream)
-                                .await;
+                            if let Err(e) = self
+                                .publish_proposal(qc.view_number + 1, event_stream.clone())
+                                .await
+                            {
+                                warn!("Failed to propose; error = {e:?}");
+                            };
                         }
                         if self.vote_if_able(&event_stream).await {
                             self.current_proposal = None;
@@ -591,7 +592,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .entry(proposal.data.get_view_number())
                     .or_default()
                     .push(async_spawn(
-                        validate_proposal(
+                        validate_proposal_safety_and_liveness(
                             proposal.clone(),
                             parent_leaf,
                             self.consensus.clone(),
@@ -776,8 +777,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Attempting to publish proposal after voting; now in view: {}",
                         *new_view
                     );
-                    self.publish_proposal_if_able(qc.view_number + 1, &event_stream)
-                        .await;
+                    if let Err(e) = self
+                        .publish_proposal(qc.view_number + 1, event_stream.clone())
+                        .await
+                    {
+                        warn!("Failed to propose; error = {e:?}");
+                    };
                 }
 
                 if !self.vote_if_able(&event_stream).await {
@@ -879,49 +884,57 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::QCFormed(cert) => {
-                debug!("QC Formed event happened!");
+                match cert {
+                    either::Right(qc) => {
+                        self.proposal_cert = Some(ViewChangeEvidence::Timeout(qc.clone()));
+                        // cancel poll for votes
+                        self.quorum_network
+                            .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                                *qc.view_number,
+                            ))
+                            .await;
 
-                if let either::Right(qc) = cert.clone() {
-                    self.proposal_cert = Some(ViewChangeEvidence::Timeout(qc.clone()));
-                    // cancel poll for votes
-                    self.quorum_network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                            *qc.view_number,
-                        ))
-                        .await;
+                        debug!(
+                            "Attempting to publish proposal after forming a TC for view {}",
+                            *qc.view_number
+                        );
 
-                    debug!(
-                        "Attempting to publish proposal after forming a TC for view {}",
-                        *qc.view_number
-                    );
-
-                    let view = qc.view_number + 1;
-
-                    self.publish_proposal_if_able(view, &event_stream).await;
-                }
-                if let either::Left(qc) = cert {
-                    if let Err(e) = self.storage.write().await.update_high_qc(qc.clone()).await {
-                        warn!("Failed to store High QC of QC we formed. Error: {:?}", e);
+                        if let Err(e) = self
+                            .publish_proposal(qc.view_number + 1, event_stream)
+                            .await
+                        {
+                            warn!("Failed to propose; error = {e:?}");
+                        };
                     }
+                    either::Left(qc) => {
+                        if let Err(e) = self.storage.write().await.update_high_qc(qc.clone()).await
+                        {
+                            warn!("Failed to store High QC of QC we formed. Error: {:?}", e);
+                        }
 
-                    let mut consensus = self.consensus.write().await;
-                    consensus.high_qc = qc.clone();
+                        let mut consensus = self.consensus.write().await;
+                        consensus.high_qc = qc.clone();
 
-                    // cancel poll for votes
-                    self.quorum_network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                            *qc.view_number,
-                        ))
-                        .await;
+                        // cancel poll for votes
+                        self.quorum_network
+                            .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                                *qc.view_number,
+                            ))
+                            .await;
 
-                    drop(consensus);
-                    debug!(
-                        "Attempting to publish proposal after forming a QC for view {}",
-                        *qc.view_number
-                    );
+                        drop(consensus);
+                        debug!(
+                            "Attempting to publish proposal after forming a QC for view {}",
+                            *qc.view_number
+                        );
 
-                    self.publish_proposal_if_able(qc.view_number + 1, &event_stream)
-                        .await;
+                        if let Err(e) = self
+                            .publish_proposal(qc.view_number + 1, event_stream)
+                            .await
+                        {
+                            warn!("Failed to propose; error = {e:?}");
+                        };
+                    }
                 }
             }
             HotShotEvent::UpgradeCertificateFormed(cert) => {
@@ -1145,7 +1158,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 if self.quorum_membership.get_leader(view) == self.public_key
                     && self.consensus.read().await.high_qc.get_view_number() + 1 == view
                 {
-                    self.publish_proposal_if_able(view, &event_stream).await;
+                    if let Err(e) = self.publish_proposal(view, event_stream.clone()).await {
+                        warn!("Failed to propose; error = {e:?}");
+                    };
                 }
 
                 if let Some(cert) = &self.proposal_cert {
@@ -1154,14 +1169,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             if self.quorum_membership.get_leader(tc.get_view_number() + 1)
                                 == self.public_key
                             {
-                                self.publish_proposal_if_able(view, &event_stream).await;
+                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                    warn!("Failed to propose; error = {e:?}");
+                                };
                             }
                         }
                         ViewChangeEvidence::ViewSync(vsc) => {
                             if self.quorum_membership.get_leader(vsc.get_view_number())
                                 == self.public_key
                             {
-                                self.publish_proposal_if_able(view, &event_stream).await;
+                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                    warn!("Failed to propose; error = {e:?}");
+                                };
                             }
                         }
                     }
@@ -1192,216 +1211,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Attempting to publish proposal after forming a View Sync Finalized Cert for view {}",
                         *certificate.view_number
                     );
-                    self.publish_proposal_if_able(view, &event_stream).await;
+                    if let Err(e) = self.publish_proposal(view, event_stream).await {
+                        warn!("Failed to propose; error = {e:?}");
+                    };
                 }
             }
             _ => {}
         }
-    }
-
-    /// Ignores old propose behavior and lets QuorumProposalTask take over.
-    #[cfg(feature = "dependency-tasks")]
-    pub async fn publish_proposal_if_able(
-        &mut self,
-        _view: TYPES::Time,
-        _event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
-    ) {
-    }
-
-    /// Sends a proposal if possible from the high qc we have
-    #[allow(clippy::too_many_lines)]
-    #[cfg(not(feature = "dependency-tasks"))]
-    pub async fn publish_proposal_if_able(
-        &mut self,
-        view: TYPES::Time,
-        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
-    ) {
-        use crate::consensus::proposal::create_and_send_proposal;
-
-        if self.quorum_membership.get_leader(view) != self.public_key {
-            // This is expected for view 1, so skipping the logging.
-            if view != TYPES::Time::new(1) {
-                error!(
-                    "Somehow we formed a QC but are not the leader for the next view {:?}",
-                    view
-                );
-            }
-            return;
-        }
-
-        let consensus = self.consensus.read().await;
-        let parent_view_number = &consensus.high_qc.get_view_number();
-        let mut reached_decided = false;
-
-        let Some(parent_view) = consensus.validated_state_map.get(parent_view_number) else {
-            // This should have been added by the replica?
-            error!("Couldn't find parent view in state map, waiting for replica to see proposal\n parent view number: {}", **parent_view_number);
-            return;
-        };
-        // Leaf hash in view inner does not match high qc hash - Why?
-        let Some((leaf_commitment, state)) = parent_view.get_leaf_and_state() else {
-            error!(
-                ?parent_view_number,
-                ?parent_view,
-                "Parent of high QC points to a view without a proposal"
-            );
-            return;
-        };
-        if leaf_commitment != consensus.high_qc.get_data().leaf_commit {
-            // NOTE: This happens on the genesis block
-            debug!(
-                "They don't equal: {:?}   {:?}",
-                leaf_commitment,
-                consensus.high_qc.get_data().leaf_commit
-            );
-        }
-        let Some(leaf) = consensus.saved_leaves.get(&leaf_commitment) else {
-            error!("Failed to find high QC of parent.");
-            return;
-        };
-        if leaf.get_view_number() == consensus.last_decided_view {
-            reached_decided = true;
-        }
-
-        let parent_leaf = leaf.clone();
-
-        let original_parent_hash = parent_leaf.commit();
-
-        let mut next_parent_hash = original_parent_hash;
-
-        // Walk back until we find a decide
-        if !reached_decided {
-            debug!("We have not reached decide from view {:?}", self.cur_view);
-            while let Some(next_parent_leaf) = consensus.saved_leaves.get(&next_parent_hash) {
-                if next_parent_leaf.get_view_number() <= consensus.last_decided_view {
-                    break;
-                }
-                next_parent_hash = next_parent_leaf.get_parent_commitment();
-            }
-            debug!("updated saved leaves");
-            // TODO do some sort of sanity check on the view number that it matches decided
-        }
-
-        // Special case: if we have a decided upgrade certificate AND it does not apply a version to the current view, we MUST propose with a null block.
-        if let Some(upgrade_cert) = &self.decided_upgrade_cert {
-            if upgrade_cert.in_interim(self.cur_view) {
-                let Ok((payload, metadata)) =
-                    <TYPES::BlockPayload as BlockPayload>::from_transactions(Vec::new())
-                else {
-                    error!("Failed to build null block payload and metadata");
-                    return;
-                };
-
-                let builder_commitment = payload.builder_commitment(&metadata);
-                let Some(null_block_commitment) =
-                    null_block::commitment(self.quorum_membership.total_nodes())
-                else {
-                    // This should never happen.
-                    error!("Failed to calculate null block commitment");
-                    return;
-                };
-
-                let Some(null_block_fee) =
-                    null_block::builder_fee::<TYPES>(self.quorum_membership.total_nodes())
-                else {
-                    // This should never happen.
-                    error!("Failed to calculate null block fee info");
-                    return;
-                };
-
-                let pub_key = self.public_key.clone();
-                let priv_key = self.private_key.clone();
-                let consensus = self.consensus.clone();
-                let sender = event_stream.clone();
-                let delay = self.round_start_delay;
-                let parent = parent_leaf.clone();
-                let state = state.clone();
-                let upgrade_cert = self.decided_upgrade_cert.clone();
-                self.spawned_tasks
-                    .entry(view)
-                    .or_default()
-                    .push(async_spawn(async move {
-                        create_and_send_proposal(
-                            pub_key,
-                            priv_key,
-                            consensus,
-                            sender,
-                            view,
-                            CommitmentAndMetadata {
-                                commitment: null_block_commitment,
-                                builder_commitment,
-                                metadata,
-                                fee: null_block_fee,
-                            },
-                            parent,
-                            state,
-                            upgrade_cert,
-                            None,
-                            delay,
-                        )
-                        .await;
-                    }));
-                return;
-            }
-        }
-
-        if let Some(commit_and_metadata) = &self.payload_commitment_and_metadata {
-            // In order of priority, we should try to attach:
-            //   - the parent certificate if it exists, or
-            //   - our own certificate that we formed.
-            // In either case, we need to ensure that the certificate is still relevant.
-            //
-            // Note: once we reach a point of potentially propose with our formed upgrade certificate, we will ALWAYS drop it. If we cannot immediately use it for whatever reason, we choose to discard it.
-            // It is possible that multiple nodes form separate upgrade certificates for the some upgrade if we are not careful about voting. But this shouldn't bother us: the first leader to propose is the one whose certificate will be used. And if that fails to reach a decide for whatever reason, we may lose our own certificate, but something will likely have gone wrong there anyway.
-            let formed_upgrade_certificate = self.formed_upgrade_certificate.take();
-            let mut proposal_upgrade_certificate = parent_leaf
-                .get_upgrade_certificate()
-                .or(formed_upgrade_certificate);
-
-            if !proposal_upgrade_certificate.clone().is_some_and(|cert| {
-                cert.is_relevant(view, self.decided_upgrade_cert.clone())
-                    .is_ok()
-            }) {
-                proposal_upgrade_certificate = None;
-            }
-
-            // We only want to proposal to be attached if any of them are valid.
-            let proposal_certificate = self
-                .proposal_cert
-                .as_ref()
-                .filter(|cert| cert.is_valid_for_view(&view))
-                .cloned();
-            let pub_key = self.public_key.clone();
-            let priv_key = self.private_key.clone();
-            let consensus = self.consensus.clone();
-            let sender = event_stream.clone();
-            let state = state.clone();
-            let delay = self.round_start_delay;
-            let commitment_and_metadata = commit_and_metadata.clone();
-            self.spawned_tasks
-                .entry(view)
-                .or_default()
-                .push(async_spawn(async move {
-                    create_and_send_proposal(
-                        pub_key,
-                        priv_key,
-                        consensus,
-                        sender,
-                        view,
-                        commitment_and_metadata,
-                        parent_leaf.clone(),
-                        state,
-                        proposal_upgrade_certificate,
-                        proposal_certificate,
-                        delay,
-                    )
-                    .await;
-                }));
-
-            self.proposal_cert = None;
-            self.payload_commitment_and_metadata = None;
-        }
-        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
     }
 }
 
