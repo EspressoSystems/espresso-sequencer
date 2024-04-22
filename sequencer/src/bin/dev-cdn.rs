@@ -3,12 +3,11 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_compatibility_layer::art::async_spawn;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use cdn_broker::reexports::crypto::signature::KeyPair;
-use cdn_broker::{Broker, Config as BrokerConfig, ConfigBuilder as BrokerConfigBuilder};
-use cdn_marshal::{ConfigBuilder as MarshalConfigBuilder, Marshal};
+use cdn_broker::{Broker, Config as BrokerConfig};
+use cdn_marshal::{Config as MarshalConfig, Marshal};
 use clap::Parser;
 
 use hotshot_types::traits::node_implementation::NodeType;
@@ -24,7 +23,7 @@ use sequencer::SeqTypes;
 /// A minified development version of the CDN
 struct Args {
     /// The port we should be accessible on
-    #[arg(long, default_value = "1738")]
+    #[arg(short, long, default_value = "1738")]
     port: u16,
 }
 
@@ -34,8 +33,11 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize tracing
-    setup_logging();
-    setup_backtrace();
+    if std::env::var("RUST_LOG_FORMAT") == Ok("json".to_string()) {
+        tracing_subscriber::fmt().json().init();
+    } else {
+        tracing_subscriber::fmt().init();
+    }
 
     // Generate the broker key from the supplied seed
     let (public_key, private_key) =
@@ -58,35 +60,38 @@ async fn main() -> Result<()> {
     let broker_private_port = pick_unused_port().expect("failed to find free port for broker");
 
     // Configure the broker
-    let broker_config: BrokerConfig<WrappedSignatureKey<<SeqTypes as NodeType>::SignatureKey>> =
-        BrokerConfigBuilder::default()
-            .public_advertise_address(format!("127.0.0.1:{}", broker_public_port))
-            .public_bind_address(format!("127.0.0.1:{}", broker_public_port))
-            .private_advertise_address(format!("127.0.0.1:{}", broker_private_port))
-            .private_bind_address(format!("127.0.0.1:{}", broker_private_port))
-            .metrics_enabled(false)
-            .discovery_endpoint(discovery_endpoint.clone())
-            .keypair(KeyPair {
-                public_key: WrappedSignatureKey(public_key),
-                private_key,
-            })
-            .build()
-            .with_context(|| "failed to build broker config")?;
+    let broker_config: BrokerConfig<TestingDef<SeqTypes>> = BrokerConfig {
+        public_advertise_endpoint: format!("127.0.0.1:{}", broker_public_port),
+        public_bind_endpoint: format!("127.0.0.1:{}", broker_public_port),
+        private_advertise_endpoint: format!("127.0.0.1:{}", broker_private_port),
+        private_bind_endpoint: format!("127.0.0.1:{}", broker_private_port),
+
+        metrics_bind_endpoint: None,
+        discovery_endpoint: discovery_endpoint.clone(),
+        keypair: KeyPair {
+            public_key: WrappedSignatureKey(public_key),
+            private_key,
+        },
+
+        ca_cert_path: None,
+        ca_key_path: None,
+    };
 
     // Configure the marshal
-    let marshal_config = MarshalConfigBuilder::default()
-        .bind_address(format!("127.0.0.1:{}", args.port))
-        .metrics_enabled(false)
-        .discovery_endpoint(discovery_endpoint)
-        .build()
-        .with_context(|| "failed to build Marshal config")?;
+    let marshal_config = MarshalConfig {
+        bind_endpoint: format!("127.0.0.1:{}", args.port),
+        metrics_bind_endpoint: None,
+        discovery_endpoint: discovery_endpoint.clone(),
+        ca_cert_path: None,
+        ca_key_path: None,
+    };
 
     // Create a new `Broker`
-    // Uses TCP from broker connections and Quic for user connections.
-    let broker = Broker::<TestingDef<SeqTypes>>::new(broker_config).await?;
+    // Uses TCP for broker connections and Quic for user connections.
+    let broker = Broker::new(broker_config).await?;
 
     // Create a new `Marshal`
-    // Uses TCP from broker connections and Quic for user connections.
+    // Uses TCP for broker connections and Quic for user connections.
     let marshal = Marshal::<TestingDef<SeqTypes>>::new(marshal_config).await?;
 
     // Spawn the tasks

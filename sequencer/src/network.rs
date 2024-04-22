@@ -36,9 +36,12 @@ pub mod cdn {
 
     use bincode::Options;
     use cdn_broker::reexports::{
-        connection::protocols::{Quic, Tcp},
+        connection::{
+            protocols::{Quic, Tcp},
+            NoMiddleware, TrustedMiddleware, UntrustedMiddleware,
+        },
         crypto::signature::{Serializable, SignatureScheme},
-        def::RunDef,
+        def::{ConnectionDef, RunDef},
         discovery::{Embedded, Redis},
     };
     use hotshot::types::SignatureKey;
@@ -87,37 +90,48 @@ pub mod cdn {
 
     /// The production run definition for the Push CDN.
     /// Uses the real protocols and a Redis discovery client.
-    pub struct ProductionDef<TYPES: NodeType> {
-        /// Phantom data to hold the type
-        pd: PhantomData<TYPES>,
+    pub struct ProductionDef<TYPES: NodeType>(PhantomData<TYPES>);
+    impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
+        type User = UserDef<TYPES>;
+        type Broker = BrokerDef<TYPES>;
+        type DiscoveryClientType = Redis;
     }
 
-    /// The production run definition for the Push CDN.
-    /// Uses the real protocols and a Redis discovery client.
-    impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
-        type BrokerScheme = WrappedSignatureKey<TYPES::SignatureKey>;
-        type BrokerProtocol = Tcp;
+    /// The user definition for the Push CDN.
+    /// Uses the Quic protocol and untrusted middleware.
+    pub struct UserDef<TYPES: NodeType>(PhantomData<TYPES>);
+    impl<TYPES: NodeType> ConnectionDef for UserDef<TYPES> {
+        type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+        type Protocol = Quic;
+        type Middleware = UntrustedMiddleware;
+    }
 
-        type UserScheme = WrappedSignatureKey<TYPES::SignatureKey>;
-        type UserProtocol = Quic;
+    /// The broker definition for the Push CDN.
+    /// Uses the TCP protocol and trusted middleware.
+    pub struct BrokerDef<TYPES: NodeType>(PhantomData<TYPES>);
+    impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
+        type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+        type Protocol = Tcp;
+        type Middleware = TrustedMiddleware;
+    }
 
-        type DiscoveryClientType = Redis;
+    /// The client definition for the Push CDN. Uses the Quic
+    /// protocol and no middleware. Differs from the user
+    /// definition in that is on the client-side.
+    #[derive(Clone)]
+    pub struct ClientDef<TYPES: NodeType>(PhantomData<TYPES>);
+    impl<TYPES: NodeType> ConnectionDef for ClientDef<TYPES> {
+        type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+        type Protocol = Quic;
+        type Middleware = NoMiddleware;
     }
 
     /// The testing run definition for the Push CDN.
     /// Uses the real protocols, but with an embedded discovery client.
-    pub struct TestingDef<TYPES: NodeType> {
-        /// Phantom data to hold the type
-        pd: PhantomData<TYPES>,
-    }
-
+    pub struct TestingDef<TYPES: NodeType>(PhantomData<TYPES>);
     impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
-        type BrokerScheme = WrappedSignatureKey<TYPES::SignatureKey>;
-        type BrokerProtocol = Tcp;
-
-        type UserScheme = WrappedSignatureKey<TYPES::SignatureKey>;
-        type UserProtocol = Quic;
-
+        type User = UserDef<TYPES>;
+        type Broker = BrokerDef<TYPES>;
         type DiscoveryClientType = Embedded;
     }
 }
