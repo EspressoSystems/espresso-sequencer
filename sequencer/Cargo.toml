@@ -6,13 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-testing = ["hotshot-testing"]
+testing = ["hotshot-testing", "tempfile"]
 libp2p = []
 
+[[bin]]
+name = "test-node"
+required-features = ["testing"]
+
 [dev-dependencies]
+escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
 rand = "0.8.5"
+reqwest = { version = "0.11.26", features = ["json"]}
 tempfile = "3.9.0"
 
 [dependencies]
@@ -46,9 +52,11 @@ dotenvy = { workspace = true }
 es-version = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
+tempfile = { version = "3.9.0", optional = true}
 futures = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }

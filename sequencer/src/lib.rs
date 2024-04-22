@@ -9,6 +9,9 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+#[cfg(any(test, feature = "testing"))]
+pub mod test_helpers;
+
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
@@ -446,7 +449,6 @@ pub mod testing {
     use super::*;
     use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
     use committable::Committable;
-    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -456,13 +458,17 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::{EventType::Decide, Message};
+    use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
-        light_client::StateKeyPair,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        light_client::{CircuitField, StateKeyPair, StateVerKey},
+        traits::{
+            block_contents::BlockHeader, metrics::NoMetrics, signature_key::StakeTableEntryType,
+            stake_table::StakeTableScheme,
+        },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
@@ -482,7 +488,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
-        anvil: Arc<AnvilInstance>,
+        url: Url,
     }
 
     impl Default for TestConfig {
@@ -546,7 +552,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                anvil: Arc::new(Anvil::new().spawn()),
+                url: "http://localhost:8545".parse().unwrap(),
             }
         }
     }
@@ -566,6 +572,13 @@ pub mod testing {
             self.config.builder_url = builder_url;
         }
 
+        pub fn default_with_l1(l1: Url) -> Self {
+            TestConfig {
+                url: l1,
+                ..Default::default()
+            }
+        }
+
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
@@ -583,6 +596,28 @@ pub mod testing {
                 .await
             }))
             .await
+        }
+
+        pub fn stake_table(
+            &self,
+            stake_table_capacity: usize,
+        ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+            let mut st =
+                StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
+            self.config
+                .known_nodes_with_stake
+                .iter()
+                .for_each(|config| {
+                    st.register(
+                        *config.stake_table_entry.get_key(),
+                        config.stake_table_entry.get_stake(),
+                        config.state_ver_key.clone(),
+                    )
+                    .unwrap()
+                });
+            st.advance();
+            st.advance();
+            st
         }
 
         #[allow(clippy::too_many_arguments)]
@@ -623,7 +658,7 @@ pub mod testing {
             tracing::info!("node {i} is builder {:x}", key.address());
             let node_state = NodeState::new(
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                L1Client::new(self.url.clone(), Address::default()),
                 key,
                 catchup,
             )

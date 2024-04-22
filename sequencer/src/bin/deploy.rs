@@ -1,18 +1,8 @@
-use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::sync::Arc;
 use clap::Parser;
-use contract_bindings::{
-    erc1967_proxy::ERC1967Proxy, hot_shot::HotShot, light_client::LightClient,
-};
-use ethers::prelude::{coins_bip39::English, *};
-use futures::future::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
-use sequencer_utils::deployer::{
-    deploy_light_client_contract, deploy_mock_light_client_contract, Contract, Contracts,
-    DeployedContracts,
-};
+use sequencer_utils::deployer::{deploy, Contracts, DeployedContracts};
 use std::{fs::File, io::stdout, path::PathBuf};
 use url::Url;
 
@@ -97,52 +87,19 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = Options::parse();
-    let mut contracts = Contracts::from(opt.contracts);
+    let contracts = Contracts::from(opt.contracts);
 
-    let provider = Provider::<Http>::try_from(opt.rpc_url.to_string())?;
-    let chain_id = provider.get_chainid().await?.as_u64();
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase(opt.mnemonic.as_str())
-        .index(opt.account_index)?
-        .build()?
-        .with_chain_id(chain_id);
-    let owner = wallet.address();
-    let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+    let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
 
-    contracts
-        .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
-        .await?;
-
-    if opt.use_mock_contract {
-        // LightClientMock is a non-upgradable contract, thus directly initialize
-        // it via its constructor
-        contracts
-            .deploy_fn(Contract::LightClient, |contracts| {
-                deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
-            })
-            .await?;
-    } else {
-        // LightClient is a upgradable contract, thus deploy first,
-        // then initialize it through a proxy contract
-        let lc_address = contracts
-            .deploy_fn(Contract::LightClient, |contracts| {
-                deploy_light_client_contract(l1.clone(), contracts).boxed()
-            })
-            .await?;
-        let light_client = LightClient::new(lc_address, l1.clone());
-
-        let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
-        let data = light_client
-            .initialize(genesis.into(), u32::MAX, owner)
-            .calldata()
-            .context("calldata for initialize transaction not available")?;
-        contracts
-            .deploy_tx(
-                Contract::LightClientProxy,
-                ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
-            )
-            .await?;
-    }
+    let contracts = deploy(
+        opt.rpc_url,
+        opt.mnemonic,
+        opt.account_index,
+        opt.use_mock_contract,
+        genesis,
+        contracts,
+    )
+    .await?;
 
     if let Some(out) = &opt.out {
         let file = File::options()

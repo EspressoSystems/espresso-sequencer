@@ -27,7 +27,7 @@ es-version = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
-hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
+hotshot-contract-adapter = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }

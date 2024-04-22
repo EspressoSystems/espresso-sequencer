@@ -100,387 +100,15 @@ impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> StateSig
 }
 
 #[cfg(test)]
-mod test_helpers {
-    use super::*;
-    use crate::{
-        api::endpoints::{AccountQueryData, BlocksFrontier},
-        catchup::{mock::MockStateCatchup, StateCatchup},
-        persistence::{no_storage::NoStorage, SequencerPersistence},
-        state::BlockMerkleTree,
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
-        Transaction,
-    };
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
-    use committable::Committable;
-    use es_version::{SequencerVersion, SEQUENCER_VERSION};
-    use ethers::prelude::Address;
-    use futures::{
-        future::{join_all, FutureExt},
-        stream::StreamExt,
-    };
-    use hotshot::types::{Event, EventType};
-
-    use hotshot_types::{
-        event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
-    };
-    use itertools::izip;
-    use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
-    use portpicker::pick_unused_port;
-    use std::time::Duration;
-    use surf_disco::Client;
-    use tide_disco::error::ServerError;
-
-    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
-
-    pub struct TestNetwork<P: SequencerPersistence> {
-        pub server: SequencerContext<network::Memory, P, SequencerVersion>,
-        pub peers: Vec<SequencerContext<network::Memory, P, SequencerVersion>>,
-        pub cfg: TestConfig,
-    }
-
-    impl<P: SequencerPersistence> TestNetwork<P> {
-        pub async fn with_state(
-            opt: Options,
-            state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [P; TestConfig::NUM_NODES],
-            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
-        ) -> Self {
-            let mut cfg = TestConfig::default();
-
-            let (builder_task, builder_url) = run_test_builder().await;
-
-            cfg.set_builder_url(builder_url);
-
-            let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
-                |(i, (state, persistence, catchup))| {
-                    let opt = opt.clone();
-                    let cfg = &cfg;
-                    async move {
-                        if i == 0 {
-                            opt.serve(
-                                |metrics| {
-                                    let cfg = cfg.clone();
-                                    async move {
-                                        cfg.init_node(
-                                            0,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            &*metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            SEQUENCER_VERSION,
-                                        )
-                                        .await
-                                    }
-                                    .boxed()
-                                },
-                                SEQUENCER_VERSION,
-                            )
-                            .await
-                            .unwrap()
-                        } else {
-                            cfg.init_node(
-                                i,
-                                state,
-                                persistence,
-                                catchup,
-                                &NoMetrics,
-                                STAKE_TABLE_CAPACITY_FOR_TEST,
-                                SEQUENCER_VERSION,
-                            )
-                            .await
-                        }
-                    }
-                },
-            ))
-            .await;
-
-            let handle_0 = &nodes[0];
-
-            // Hook the builder up to the event stream from the first node
-            if let Some(builder_task) = builder_task {
-                builder_task.start(Box::new(handle_0.get_event_stream()));
-            }
-
-            for ctx in &nodes {
-                ctx.start_consensus().await;
-            }
-
-            let server = nodes.remove(0);
-            let peers = nodes;
-
-            Self { server, peers, cfg }
-        }
-
-        pub async fn new(opt: Options, persistence: [P; TestConfig::NUM_NODES]) -> Self {
-            Self::with_state(
-                opt,
-                Default::default(),
-                persistence,
-                std::array::from_fn(|_| MockStateCatchup::default()),
-            )
-            .await
-        }
-
-        pub async fn stop_consensus(&mut self) {
-            self.server.consensus_mut().shut_down().await;
-            for ctx in &mut self.peers {
-                ctx.consensus_mut().shut_down().await;
-            }
-        }
-    }
-
-    /// Test the status API with custom options.
-    ///
-    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
-    /// By default, the options are the minimal required to run this test (configuring a port and
-    /// enabling the status API). `opt` may add additional functionality (e.g. adding a query module
-    /// to test a different initialization path) but should not remove or modify the existing
-    /// functionality (e.g. removing the status module or changing the port).
-    pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, SequencerVersion> = Client::new(url);
-
-        let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
-        client.connect(None).await;
-
-        // The status API is well tested in the query service repo. Here we are just smoke testing
-        // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
-        // check the success rate metrics.
-        while client
-            .get::<u64>("status/block-height")
-            .send()
-            .await
-            .unwrap()
-            <= 1
-        {
-            sleep(Duration::from_secs(1)).await;
-        }
-        let success_rate = client
-            .get::<f64>("status/success-rate")
-            .send()
-            .await
-            .unwrap();
-        // If metrics are populating correctly, we should get a finite number. If not, we might get
-        // NaN or infinity due to division by 0.
-        assert!(success_rate.is_finite(), "{success_rate}");
-        // We know at least some views have been successful, since we finalized a block.
-        assert!(success_rate > 0.0, "{success_rate}");
-    }
-
-    /// Test the submit API with custom options.
-    ///
-    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
-    /// By default, the options are the minimal required to run this test (configuring a port and
-    /// enabling the submit API). `opt` may add additional functionality (e.g. adding a query module
-    /// to test a different initialization path) but should not remove or modify the existing
-    /// functionality (e.g. removing the submit module or changing the port).
-    pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
-
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
-
-        let port = pick_unused_port().expect("No ports free");
-
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, SequencerVersion> = Client::new(url);
-
-        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
-        let mut events = network.server.get_event_stream();
-
-        client.connect(None).await;
-
-        let hash = client
-            .post("submit/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(txn.commit(), hash);
-
-        // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, &txn).await;
-    }
-
-    /// Test the state signature API.
-    pub async fn state_signature_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, SequencerVersion> = Client::new(url);
-
-        let options = opt(Options::from(options::Http { port }));
-        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
-
-        let mut height: u64;
-        // Wait for block >=2 appears
-        // It's waiting for an extra second to make sure that the signature is generated
-        loop {
-            height = network
-                .server
-                .consensus()
-                .get_decided_leaf()
-                .await
-                .get_height();
-            sleep(std::time::Duration::from_secs(1)).await;
-            if height >= 2 {
-                break;
-            }
-        }
-        // we cannot verify the signature now, because we don't know the stake table
-        client
-            .get::<StateSignatureRequestBody>(&format!("state-signature/block/{}", height))
-            .send()
-            .await
-            .unwrap();
-    }
-
-    /// Test the state API with custom options.
-    ///
-    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
-    /// By default, the options are the minimal required to run this test (configuring a port and
-    /// enabling the state API). `opt` may add additional functionality (e.g. adding a query module
-    /// to test a different initialization path) but should not remove or modify the existing
-    /// functionality (e.g. removing the state module or changing the port).
-    pub async fn state_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, SequencerVersion> = Client::new(url);
-
-        let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
-        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
-        client.connect(None).await;
-
-        // Wait for a few blocks to be decided.
-        let mut events = network.server.get_event_stream();
-        loop {
-            if let Event {
-                event: EventType::Decide { leaf_chain, .. },
-                ..
-            } = events.next().await.unwrap()
-            {
-                if leaf_chain
-                    .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.get_block_header().height > 2)
-                {
-                    break;
-                }
-            }
-        }
-
-        // Stop consensus running on the node so we freeze the decided and undecided states.
-        network.server.consensus_mut().shut_down().await;
-
-        // Decided fee state: absent account.
-        let res = client
-            .get::<AccountQueryData>(&format!("catchup/account/{:x}", Address::default()))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.balance, 0.into());
-        assert_eq!(
-            res.proof
-                .verify(
-                    &network
-                        .server
-                        .consensus()
-                        .get_decided_state()
-                        .await
-                        .fee_merkle_tree
-                        .commitment()
-                )
-                .unwrap(),
-            0.into()
-        );
-
-        // Undecided fee state: absent account.
-        let leaf = network.server.consensus().get_decided_leaf().await;
-        let view = leaf.get_view_number() + 1;
-        let res = client
-            .get::<AccountQueryData>(&format!(
-                "catchup/{}/account/{:x}",
-                view.get_u64(),
-                Address::default()
-            ))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.balance, 0.into());
-        assert_eq!(
-            res.proof
-                .verify(
-                    &network
-                        .server
-                        .consensus()
-                        .get_state(view)
-                        .await
-                        .unwrap()
-                        .fee_merkle_tree
-                        .commitment()
-                )
-                .unwrap(),
-            0.into()
-        );
-
-        // Decided block state.
-        let res = client
-            .get::<BlocksFrontier>("catchup/blocks")
-            .send()
-            .await
-            .unwrap();
-        let root = &network
-            .server
-            .consensus()
-            .get_decided_state()
-            .await
-            .block_merkle_tree
-            .commitment();
-        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
-            .unwrap()
-            .unwrap();
-
-        // Undecided block state.
-        let res = client
-            .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
-            .send()
-            .await
-            .unwrap();
-        let root = &network
-            .server
-            .consensus()
-            .get_state(view)
-            .await
-            .unwrap()
-            .block_merkle_tree
-            .commitment();
-        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
-            .unwrap()
-            .unwrap();
-    }
-}
-
-#[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
     use self::options::HotshotEvents;
 
     use super::*;
+    use crate::test_helpers::{
+        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+        TestNetwork,
+    };
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
         persistence::no_storage::NoStorage,
@@ -492,6 +120,7 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
+    use ethers::utils::Anvil;
     use futures::{
         future::join_all,
         stream::{StreamExt, TryStreamExt},
@@ -503,10 +132,6 @@ mod api_tests {
     use hotshot_types::vid::vid_scheme;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
-    use test_helpers::{
-        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
-    };
     use tide_disco::error::ServerError;
 
     #[async_std::test]
@@ -538,9 +163,12 @@ mod api_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
             [NoStorage; TestConfig::NUM_NODES],
+            l1,
         )
         .await;
         let mut events = network.server.get_event_stream();
@@ -623,11 +251,14 @@ mod api_tests {
             .try_into()
             .unwrap();
         let port = pick_unused_port().unwrap();
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let mut network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()).status(Default::default()),
             Default::default(),
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
+            l1,
         )
         .await;
 
@@ -682,6 +313,8 @@ mod api_tests {
             .await
             .try_into()
             .unwrap();
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let _network = TestNetwork::with_state(
             D::options(&storage[0], options::Http { port }.into()),
             Default::default(),
@@ -702,6 +335,7 @@ mod api_tests {
                 };
                 catchup
             }),
+            l1,
         )
         .await;
         let client: Client<ServerError, SequencerVersion> =
@@ -765,7 +399,9 @@ mod api_tests {
         })
         .hotshot_events(hotshot_events);
 
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -806,6 +442,10 @@ mod test {
         empty_builder_commitment,
         persistence::no_storage::NoStorage,
         state::{FeeAccount, FeeAmount},
+        test_helpers::{
+            state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+            TestNetwork,
+        },
         testing::TestConfig,
         Header, NodeState,
     };
@@ -814,6 +454,7 @@ mod test {
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
+    use ethers::utils::Anvil;
     use futures::stream::{StreamExt, TryStreamExt};
     use hotshot::types::EventType;
     use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed};
@@ -825,10 +466,6 @@ mod test {
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
-    use test_helpers::{
-        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
-    };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
     #[async_std::test]
@@ -840,7 +477,9 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
         let options = Options::from(options::Http { port });
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -883,6 +522,8 @@ mod test {
         );
 
         let mut state = ValidatedState::default();
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         for i in 0..TestConfig::NUM_NODES {
             state.prefund_account(TestConfig::builder_key(i).fee_account(), 1.into());
         }
@@ -891,6 +532,7 @@ mod test {
             std::array::from_fn(|_| state.clone()),
             [NoStorage; TestConfig::NUM_NODES],
             std::array::from_fn(|_| MockStateCatchup::default()),
+            l1,
         )
         .await;
 
@@ -978,6 +620,8 @@ mod test {
 
         // Start a sequencer network, using the query service for catchup.
         let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::with_state(
             Options::from(options::Http { port }).catchup(Default::default()),
             states,
@@ -987,6 +631,7 @@ mod test {
                     .parse()
                     .unwrap()])
             }),
+            l1,
         )
         .await;
         let mut events = network.server.get_event_stream();

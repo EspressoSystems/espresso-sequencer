@@ -2896,6 +2896,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "escargot"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f474c6844cbd04e783d0f25757583db4f491770ca618bedf2fb01815fc79939"
+dependencies = [
+ "log",
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "espresso-macros"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/espresso-macros.git?tag=0.1.0#9e0b0258c99757c567676c4dd92f1501db0cf580"
@@ -4699,6 +4711,19 @@ dependencies = [
  "pin-project-lite 0.2.14",
  "tokio",
  "tokio-io-timeout",
+]
+
+[[package]]
+name = "hyper-tls"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
+dependencies = [
+ "bytes 1.6.0",
+ "hyper 0.14.28",
+ "native-tls",
+ "tokio",
+ "tokio-native-tls",
 ]
 
 [[package]]
@@ -7930,10 +7955,12 @@ dependencies = [
  "http-body 0.4.6",
  "hyper 0.14.28",
  "hyper-rustls",
+ "hyper-tls 0.5.0",
  "ipnet",
  "js-sys",
  "log",
  "mime",
+ "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite 0.2.14",
@@ -7945,6 +7972,7 @@ dependencies = [
  "sync_wrapper",
  "system-configuration",
  "tokio",
+ "tokio-native-tls",
  "tokio-rustls",
  "tower-service",
  "url",
@@ -7971,7 +7999,7 @@ dependencies = [
  "http-body 1.0.0",
  "http-body-util",
  "hyper 1.3.0",
- "hyper-tls",
+ "hyper-tls 0.6.0",
  "hyper-util",
  "ipnet",
  "js-sys",
@@ -8564,11 +8592,13 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "es-version",
+ "escargot",
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
  "futures",
  "hotshot",
+ "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
@@ -8588,6 +8618,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_distr",
+ "reqwest 0.11.27",
  "sequencer-utils",
  "serde",
  "serde_json",
