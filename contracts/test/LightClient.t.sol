@@ -161,7 +161,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
     function test_NoProverPermissionsRequired() external {
         //ensure that the permissioned prover mode is set
-        assert(lc.permissionedProverMode());
+        assert(lc.permissionedProverEnabled());
 
         //set permissioned flag to false
         vm.expectEmit(true, true, true, true);
@@ -170,7 +170,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         lc.disablePermissionedProverMode();
 
         //assert that the contract is not permissioned
-        assert(lc.permissionedProverMode() == false);
+        assert(lc.permissionedProverEnabled() == false);
 
         // assert that the prover address is zero address when the contract is not permissioned
         assertEq(lc.permissionedProver(), address(0));
@@ -232,7 +232,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_RevertWhen_sameProverModeSentInUpdate() public {
-        assertEq(lc.permissionedProverMode(), true);
+        assertEq(lc.permissionedProverEnabled(), true);
         address currentProver = lc.permissionedProver();
         vm.prank(admin);
         vm.expectRevert(LC.NoChangeRequired.selector);
@@ -255,7 +255,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
         // you cannot enable permissioned mode if you don't specify the prover that gets permissions
         vm.prank(admin);
-        vm.expectRevert(LC.PermissionedProverNotSet.selector);
+        vm.expectRevert(LC.InvalidAddress.selector);
         newLc.enablePermissionedProverMode(address(0));
     }
 

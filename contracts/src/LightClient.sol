@@ -84,8 +84,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// permissioned prover mode
     address public permissionedProver;
 
-    /// @notice a flag that determines when the contract is operating in permissionedProver mode
-    bool public permissionedProverMode;
+    /// @notice a flag that indicates when a permissioned provrer is needed
+    bool public permissionedProverEnabled;
 
     // === Data Structure ===
     //
@@ -217,7 +217,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.PlonkProof memory proof
     ) external {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
-        if (permissionedProverMode == true && msg.sender != permissionedProver) {
+        if (permissionedProverEnabled && msg.sender != permissionedProver) {
             if (permissionedProver == address(0)) {
                 revert PermissionedProverNotSet();
             }
@@ -336,7 +336,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function updatePermissionedProver(address prover) public onlyOwner {
         // permissionedProverMode enabled and only update the permissionedProver if it's not the
         // same as the current one
-        if (permissionedProverMode && prover != permissionedProver) {
+        if (permissionedProverEnabled && prover != permissionedProver) {
             if (prover == address(0)) {
                 revert InvalidAddress();
             }
@@ -352,26 +352,24 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev if it was already enabled (permissioneProverMode == true), then revert with
     /// NoChangeRequired
     function enablePermissionedProverMode(address prover) public onlyOwner {
-        if (!permissionedProverMode) {
-            if (prover == address(0) && permissionedProver == address(0)) {
-                revert PermissionedProverNotSet();
-            } else if (prover != address(0)) {
-                permissionedProver = prover;
-                emit PermissionedProverModeEnabled(permissionedProver);
-            }
-            permissionedProverMode = true;
-        } else {
+        if (permissionedProverEnabled) {
             revert NoChangeRequired();
         }
+        if (prover == address(0)) {
+            revert InvalidAddress();
+        }
+        permissionedProver = prover;
+        permissionedProverEnabled = true;
+        emit PermissionedProverModeEnabled(permissionedProver);
     }
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
     /// @dev if it was already disabled (permissioneProverMode == false), then revert with
     /// NoChangeRequired
     function disablePermissionedProverMode() public onlyOwner {
-        if (permissionedProverMode) {
+        if (permissionedProverEnabled) {
             permissionedProver = address(0);
-            permissionedProverMode = false;
+            permissionedProverEnabled = false;
             emit PermissionedProverModeDisabled();
         } else {
             revert NoChangeRequired();
