@@ -26,7 +26,9 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
-    traits::{signature_key::BuilderSignatureKey, states::StateDelta},
+    traits::{
+        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+    },
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -752,6 +754,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
             return Err(BlockError::InvalidBlockHeader);
         }
 
+        // log successful progress about once in 10 - 20 seconds,
+        // TODO: we may want to make this configurable
+        if parent_leaf.get_view_number().get_u64() % 10 == 0 {
+            tracing::info!("validated and applied new header");
+        }
         Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
