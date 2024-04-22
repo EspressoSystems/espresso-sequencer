@@ -405,7 +405,10 @@ async fn store_state_update(
         let (_, proof) = fee_merkle_tree
             .universal_lookup(delta)
             .expect_ok()
-            .context("Index not found in fee merkle tree")?;
+            .context(format!(
+                "Index not found in fee merkle tree: delta {}",
+                delta
+            ))?;
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 &delta,
@@ -487,7 +490,7 @@ async fn store_genesis_state(
             .fee_merkle_tree
             .universal_lookup(account)
             .expect_ok()
-            .context("Index not found in fee merkle tree")?;
+            .context("Index not found in fee merkle tree account: {account:?}")?;
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 account,
@@ -606,7 +609,7 @@ impl ValidatedState {
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
-            tracing::warn!("fetching block frontier from peers");
+            tracing::warn!("fetching block frontier for view {view:?} from peers");
 
             instance
                 .peers
@@ -617,10 +620,7 @@ impl ValidatedState {
 
         // Fetch missing fee state entries
         if !missing_accounts.is_empty() {
-            tracing::warn!(
-                "fetching {} missing accounts from peers",
-                missing_accounts.len()
-            );
+            tracing::warn!("fetching missing accounts {missing_accounts:?} from peers");
 
             let missing_account_proofs = instance
                 .peers

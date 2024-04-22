@@ -287,10 +287,7 @@ impl BlockHeader<SeqTypes> for Header {
         let missing_accounts = parent_state
             .forgotten_accounts(accounts.chain(l1_deposits.iter().map(|info| info.account())));
         if !missing_accounts.is_empty() {
-            tracing::warn!(
-                "fetching {} missing accounts from peers",
-                missing_accounts.len()
-            );
+            tracing::warn!("fetching missing accounts {missing_accounts:?} from peers");
 
             // Fetch missing fee state entries
             // Unwrapping here is okay as we retry until we get the accounts or until the task is canceled.
@@ -316,14 +313,12 @@ impl BlockHeader<SeqTypes> for Header {
 
         // Ensure merkle tree has frontier
         if validated_state.need_to_fetch_blocks_mt_frontier() {
-            tracing::warn!("fetching block frontier from peers");
+            let view = parent_leaf.get_view_number();
+            tracing::warn!("fetching block frontier for view {view:?} from peers");
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(
-                    parent_leaf.get_view_number(),
-                    &mut validated_state.block_merkle_tree,
-                )
+                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
                 .await
                 .expect("failed to remember proof");
         }
