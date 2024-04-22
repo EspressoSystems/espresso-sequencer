@@ -744,7 +744,6 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-
     use self::{
         data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
     };
@@ -772,7 +771,9 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        traits::{
+            block_contents::BlockHeader, metrics::NoMetrics, node_implementation::ConsensusTime,
+        },
     };
     use jf_primitives::merkle_tree::{
         prelude::{MerkleProof, Sha3Node},
@@ -838,9 +839,8 @@ mod test {
                 .status(Default::default()),
         );
 
-        // Populate one account so we have something to look up later. Leave the other accounts
-        // unpopulated, which proves we can handle state updates even with missing accounts.
-        let account = TestConfig::builder_key(0).fee_account();
+        // Populate the builder account so we have something to look up later.
+        let account = TestConfig::builder_key().fee_account();
         let mut state = ValidatedState::default();
         state.prefund_account(account, 1.into());
         let mut network = TestNetwork::with_state(
@@ -947,23 +947,30 @@ mod test {
         .await;
         let mut events = network.server.get_event_stream();
 
-        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
-        // up.
-        let builder = TestConfig::builder_key(TestConfig::NUM_NODES - 1).fee_account();
-        'outer: loop {
+        // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
+        // caught up and all nodes are in sync.
+        let mut proposers = [false; TestConfig::NUM_NODES];
+        loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let height = leaf.get_block_header().height;
-                let leaf_builder = leaf.get_block_header().fee_info.account();
-                tracing::info!(
-                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
-                );
-                if height > 1 && leaf_builder == builder {
-                    break 'outer;
+                let height = leaf.get_height();
+                let leaf_builder =
+                    (leaf.get_view_number().get_u64() as usize) % TestConfig::NUM_NODES;
+                if height == 0 {
+                    continue;
                 }
+
+                tracing::info!(
+                    "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
+                );
+                proposers[leaf_builder] = true;
+            }
+
+            if proposers.iter().all(|has_proposed| *has_proposed) {
+                break;
             }
         }
     }
@@ -1037,24 +1044,30 @@ mod test {
             .await;
         let mut events = node.get_event_stream();
 
-        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
-        // up.
-        let builder = TestConfig::builder_key(1).fee_account();
-        'outer: loop {
+        // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
+        // caught up and all nodes are in sync.
+        let mut proposers = [false; TestConfig::NUM_NODES];
+        loop {
             let event = events.next().await.unwrap();
-            tracing::info!(?event, "restarted node got event");
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let height = leaf.get_height();
-                let leaf_builder = leaf.get_block_header().fee_info.account();
-                tracing::info!(
-                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
-                );
-                if height > 1 && leaf_builder == builder {
-                    break 'outer;
+                let leaf_builder =
+                    (leaf.get_view_number().get_u64() as usize) % TestConfig::NUM_NODES;
+                if height == 0 {
+                    continue;
                 }
+
+                tracing::info!(
+                    "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
+                );
+                proposers[leaf_builder] = true;
+            }
+
+            if proposers.iter().all(|has_proposed| *has_proposed) {
+                break;
             }
         }
     }

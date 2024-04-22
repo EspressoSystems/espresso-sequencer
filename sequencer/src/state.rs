@@ -2,7 +2,7 @@ use crate::{
     api::endpoints::AccountQueryData, catchup::StateCatchup, eth_signature_key::EthKeyPair,
     ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
-use anyhow::{bail, ensure, Context};
+use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
@@ -142,6 +142,36 @@ impl ValidatedState {
                 Some(balance.cloned().unwrap_or_default().add(fee_info.amount))
             })
     }
+
+    /// Charge a fee to an account.
+    pub fn charge_fee(&mut self, fee_info: FeeInfo) -> anyhow::Result<()> {
+        let FeeInfo { account, amount } = fee_info;
+        let mut err = None;
+        let res = self.fee_merkle_tree.update_with(account, |balance| {
+            let balance = balance.copied();
+            let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
+                // Return an error without updating the account.
+                err = Some(anyhow!(
+                    "insufficient funds (have {balance:?}, required {amount:?})"
+                ));
+                return balance;
+            };
+            if updated == FeeAmount::default() {
+                // Delete the account from the tree if its balance ended up at 0; this saves some
+                // space since the account is no longer carrying any information.
+                None
+            } else {
+                // Otherwise store the updated balance.
+                Some(updated)
+            }
+        })?;
+        // Check if we were unable to do the update because the required Merkle path is missing.
+        ensure!(
+            res.expect_not_in_memory().is_err(),
+            format!("missing account state for {account}")
+        );
+        Ok(())
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -226,48 +256,14 @@ pub fn validate_proposal(
     Ok(())
 }
 
-#[derive(Debug)]
-enum ChargeFeeError {
-    /// Account not in memory, needs to be fetched from peer
-    NotInMemory,
-    /// Account exists but has insufficient funds
-    InsufficientFunds,
-}
-
 fn charge_fee(
-    fee_merkle_tree: &mut FeeMerkleTree,
+    state: &mut ValidatedState,
     delta: &mut Delta,
     fee_info: FeeInfo,
-) -> Result<(), ChargeFeeError> {
-    let FeeInfo { account, amount } = fee_info;
-    let mut err = None;
-    let res = fee_merkle_tree
-        .update_with(account, |balance| {
-            let balance = balance.copied();
-            let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
-                // Return an error without updating the account.
-                err = Some(ChargeFeeError::InsufficientFunds);
-                return balance;
-            };
-            if updated == FeeAmount::default() {
-                // Delete the account from the tree if its balance ended up at 0; this saves some
-                // space since the account is no longer carrying any information.
-                None
-            } else {
-                // Otherwise store the updated balance.
-                Some(updated)
-            }
-        })
-        .expect("updated succeeds");
-    if res.expect_not_in_memory().is_ok() {
-        return Err(ChargeFeeError::NotInMemory);
-    }
-    if let Some(err) = err {
-        Err(err)
-    } else {
-        delta.fees_delta.insert(account);
-        Ok(())
-    }
+) -> anyhow::Result<()> {
+    state.charge_fee(fee_info)?;
+    delta.fees_delta.insert(fee_info.account);
+    Ok(())
 }
 
 /// Validate builder account by verifying signature
@@ -668,15 +664,7 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
-        if charge_fee(
-            &mut validated_state.fee_merkle_tree,
-            &mut delta,
-            proposed_header.fee_info,
-        )
-        .is_err()
-        {
-            bail!("Insufficient funds")
-        };
+        charge_fee(&mut validated_state, &mut delta, proposed_header.fee_info)?;
 
         Ok((validated_state, delta))
     }
@@ -968,6 +956,12 @@ impl From<u64> for FeeAmount {
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
         self.0.checked_sub(v.0).map(FeeAmount)
+    }
+}
+
+impl FeeAmount {
+    pub(crate) fn as_u64(&self) -> u64 {
+        self.0.as_u64()
     }
 }
 
