@@ -98,3 +98,20 @@ vbs = "0.1"
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
+
+[patch."https://github.com/EspressoSystems/hotshot"]
+hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "ss/fix-leaf-commit-again"}
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+hotshot-stake-table = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+hotshot-task = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+hotshot-web-server = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-leaf-commit-again"}
+
+[patch."https://github.com/EspressoSystems/hotshot-builder-core"]
+hotshot-builder-core = { git = "https://github.com/EspressoSystems//hotshot-builder-core", branch = "ss/genesis-fix" }
+
+
+[patch."https://github.com/EspressoSystems/hotshot-query-service"]
+hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", branch = "ss/hotshot-genesis-fix" }

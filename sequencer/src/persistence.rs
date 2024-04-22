@@ -139,7 +139,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         let high_qc = self
             .load_high_qc()
             .await?
-            .unwrap_or_else(QuorumCertificate::genesis);
+            .unwrap_or_else(|| QuorumCertificate::genesis(&state));
 
         Ok(HotShotInitializer::from_reload(
             leaf,

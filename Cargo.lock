@@ -1506,33 +1506,10 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
-dependencies = [
- "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
- "clap",
- "dashmap",
- "derivative",
- "derive_builder",
- "jf-primitives 0.4.0-pre.0",
- "lazy_static",
- "local-ip-address",
- "parking_lot",
- "prometheus",
- "rand 0.8.5",
- "rkyv",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.18",
-]
-
-[[package]]
-name = "cdn-broker"
-version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
+ "cdn-proto",
  "clap",
  "dashmap",
  "derivative",
@@ -1551,29 +1528,13 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
+ "cdn-proto",
  "clap",
- "derive_builder",
  "jf-primitives 0.4.0-pre.0",
  "rand 0.8.5",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.18",
-]
-
-[[package]]
-name = "cdn-marshal"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
-dependencies = [
- "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
- "clap",
- "derive_builder",
- "jf-primitives 0.4.0-pre.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -1585,44 +1546,12 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
+ "cdn-proto",
  "clap",
  "jf-primitives 0.4.0-pre.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
-]
-
-[[package]]
-name = "cdn-proto"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25#a506712f553b4800ce3a36e62341c839153aeab3"
-dependencies = [
- "anyhow",
- "ark-serialize",
- "async-trait",
- "capnp",
- "derivative",
- "jf-primitives 0.4.0-pre.0",
- "kanal",
- "lazy_static",
- "mnemonic",
- "mockall",
- "parking_lot",
- "pem 3.0.4",
- "prometheus",
- "quinn",
- "rand 0.8.5",
- "rcgen 0.12.1",
- "redis",
- "rkyv",
- "rustls 0.21.10",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "url",
- "warp",
 ]
 
 [[package]]
@@ -4039,7 +3968,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4050,9 +3979,9 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
+ "cdn-broker",
  "cdn-client",
- "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.1.25)",
+ "cdn-marshal",
  "committable",
  "custom_debug 0.5.1",
  "dashmap",
@@ -4062,7 +3991,7 @@ dependencies = [
  "futures",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again)",
  "hotshot-types",
  "hotshot-web-server",
  "jf-primitives 0.4.3",
@@ -4084,7 +4013,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "async-trait",
  "clap",
@@ -4103,7 +4032,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.7#f9a23191973e63e616e27d9a2046e4a64cec8824"
+source = "git+https://github.com/EspressoSystems//hotshot-builder-core?branch=ss/genesis-fix#3dc8ca48c227841a9982afd02937fcd7e9e872ec"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4193,7 +4122,37 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
+ "hotshot-types",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "snafu 0.8.2",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "hotshot-example-types"
+version = "0.5.40"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bitvec",
+ "committable",
+ "either",
+ "ethereum-types",
+ "futures",
+ "hotshot",
+ "hotshot-task",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again)",
  "hotshot-types",
  "rand 0.8.5",
  "serde",
@@ -4208,7 +4167,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4219,7 +4178,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4248,7 +4207,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.9"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.9#ccc81549e8ad5139bce95371cf1ad2bf20e19ed8"
+source = "git+https://github.com/EspressoSystems//hotshot-query-service?branch=ss/hotshot-genesis-fix#6a93837abb971474f51975ff2a887afe7fb3c38d"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4269,7 +4228,7 @@ dependencies = [
  "espresso-macros",
  "futures",
  "hotshot",
- "hotshot-example-types",
+ "hotshot-example-types 0.5.40 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.40)",
  "hotshot-testing",
  "hotshot-types",
  "include_dir",
@@ -4302,7 +4261,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4369,7 +4328,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4413,9 +4372,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-task-impls"
+version = "0.5.40"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "chrono",
+ "committable",
+ "either",
+ "futures",
+ "hotshot-builder-api",
+ "hotshot-task",
+ "hotshot-types",
+ "jf-primitives 0.4.3",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.2",
+ "surf-disco",
+ "tagged-base64 0.4.0",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
 name = "hotshot-testing"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4430,11 +4422,11 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-example-types",
+ "hotshot-example-types 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again)",
  "hotshot-macros",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.40 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again)",
  "hotshot-types",
  "jf-primitives 0.4.3",
  "lru 0.12.3",
@@ -4454,7 +4446,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4505,7 +4497,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -5701,7 +5693,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.40#d0be8c828520f0f517d5336aa04690a68fea71bb"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-leaf-commit-again#ed7ffdfdafd5240ba43690d9cecb69acf22f6b2c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -8554,8 +8546,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
- "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
- "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
+ "cdn-broker",
+ "cdn-marshal",
  "clap",
  "cld",
  "committable",
