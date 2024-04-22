@@ -66,7 +66,6 @@ itertools = { workspace = true }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
-k256 = { version = "0.13.3", features = [ "serde", "pem"] }
 lazy_static = "1.4"
 num-traits = "0.2.18"
 portpicker = { workspace = true }

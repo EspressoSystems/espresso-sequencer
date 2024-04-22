@@ -1,4 +1,5 @@
 use ethers::{
+    core::k256::ecdsa::{SigningKey, VerifyingKey},
     signers::{
         coins_bip39::{English, Mnemonic},
         LocalWallet, WalletError,
@@ -7,7 +8,6 @@ use ethers::{
     utils::public_key_to_address,
 };
 use hotshot_types::traits::signature_key::BuilderSignatureKey;
-use k256::ecdsa::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{
@@ -66,7 +66,7 @@ impl Hash for EthKeyPair {
 // Always display the address, not the private key
 impl Display for EthKeyPair {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EthSigningKey(address={:?})", self.address())
+        write!(f, "EthKeyPair(address={:?})", self.address())
     }
 }
 
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn test_fmt() {
         let key = EthKeyPair::for_test();
-        let expected = "EthSigningKey(address=0xb0cfa4e5893107e2995974ef032957752bb526e9)";
+        let expected = "EthKeyPair(address=0xb0cfa4e5893107e2995974ef032957752bb526e9)";
         assert_eq!(format!("{}", key), expected);
         assert_eq!(format!("{:?}", key), expected);
     }
