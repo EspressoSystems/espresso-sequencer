@@ -54,8 +54,8 @@ case $KERNEL in
   # Build in docker container
   docker run \
     -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS -e CARGO_TARGET_DIR \
-    -v $(pwd):/work \
-    -v $HOME/.cargo/registry:/root/.cargo/registry \
+    -v "$(pwd):/work" \
+    -v "$HOME/.cargo/registry:/root/.cargo/registry" \
     -it ghcr.io/espressosystems/devops-rust:stable \
     bash -c "cd /work && cargo build --release"
     ;;
@@ -63,20 +63,19 @@ esac
 
 # Copy binaries to a temporary directory.
 WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
-CONTRACTS_DIR="./contracts"
 
 trap "exit" INT TERM
 trap cleanup EXIT
 cleanup(){
-    rm -rfv ${WORKDIR}
+    rm -rfv "${WORKDIR}"
 }
 
-mkdir -p ${WORKDIR}/target/$ARCH/release
+mkdir -p "${WORKDIR}/target/$ARCH/release"
 for binary in "orchestrator" "cdn-broker" "cdn-marshal" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client"; do
-  cp -v "${CARGO_TARGET_DIR}/release/$binary" ${WORKDIR}/target/$ARCH/release
+  cp -v "${CARGO_TARGET_DIR}/release/$binary" "${WORKDIR}/target/$ARCH/release"
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
-    patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary
+    patchelf --set-interpreter "$INTERPRETER" "${WORKDIR}/target/$ARCH/release/$binary"
   fi
 done
 
