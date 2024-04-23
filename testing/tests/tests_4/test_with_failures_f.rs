@@ -1,11 +1,13 @@
-use hotshot_example_types::node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl};
-use hotshot_example_types::state_types::TestTypes;
+use hotshot_example_types::{
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl},
+    state_types::TestTypes,
+};
 use hotshot_macros::cross_tests;
-use hotshot_testing::spinning_task::ChangeNode;
-use hotshot_testing::spinning_task::SpinningTaskDescription;
-use hotshot_testing::spinning_task::UpDown;
-use hotshot_testing::test_builder::TestMetadata;
-use hotshot_testing::block_builder::SimpleBuilderImplementation;
+use hotshot_testing::{
+    block_builder::SimpleBuilderImplementation,
+    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    test_builder::TestDescription,
+};
 // Test f nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_f,
@@ -14,7 +16,7 @@ cross_tests!(
     Ignore: false,
     Metadata: {
 
-        let mut metadata = TestMetadata::default_more_nodes();
+        let mut metadata = TestDescription::default_more_nodes();
         metadata.overall_safety_properties.num_failed_views = 6;
         // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 22;
@@ -58,4 +60,3 @@ cross_tests!(
         metadata
     }
 );
-

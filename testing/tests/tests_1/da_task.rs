@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
-    block_types::TestTransaction,
+    block_types::{TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
 };
 use hotshot_task_impls::{da::DATaskState, events::HotShotEvent::*};
@@ -71,7 +71,7 @@ async fn test_da_task() {
             ViewChange(ViewNumber::new(2)),
             BlockRecv(
                 encoded_transactions,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
@@ -150,7 +150,7 @@ async fn test_da_task_storage_failure() {
             ViewChange(ViewNumber::new(2)),
             BlockRecv(
                 encoded_transactions,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),

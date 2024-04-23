@@ -1,17 +1,14 @@
-use hotshot_testing::block_builder::SimpleBuilderImplementation;
-use hotshot_testing::test_builder::TimingData;
-use hotshot_types::traits::network::AsynchronousNetwork;
-use hotshot_types::traits::network::ChaosNetwork;
-use hotshot_types::traits::network::PartiallySynchronousNetwork;
-use hotshot_types::traits::network::SynchronousNetwork;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use hotshot_example_types::node_types::{Libp2pImpl, TestTypes};
 use hotshot_testing::{
+    block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
-    test_builder::TestMetadata,
+    test_builder::{TestDescription, TimingData},
+};
+use hotshot_types::traits::network::{
+    AsynchronousNetwork, ChaosNetwork, PartiallySynchronousNetwork, SynchronousNetwork,
 };
 use tracing::instrument;
 
@@ -21,7 +18,7 @@ use tracing::instrument;
 async fn libp2p_network_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -35,7 +32,7 @@ async fn libp2p_network_sync() {
             delay_high_ms: 30,
             delay_low_ms: 4,
         })),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata
@@ -49,16 +46,17 @@ async fn libp2p_network_sync() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_sync() {
+    use std::time::Duration;
+
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        test_builder::TestMetadata,
+        test_builder::TestDescription,
     };
-    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
@@ -69,7 +67,7 @@ async fn test_memory_network_sync() {
             delay_high_ms: 30,
             delay_low_ms: 4,
         })),
-        ..TestMetadata::default()
+        ..TestDescription::default()
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -85,7 +83,7 @@ async fn test_memory_network_sync() {
 async fn libp2p_network_async() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             num_failed_views: 50,
@@ -99,7 +97,7 @@ async fn libp2p_network_async() {
         timing_data: TimingData {
             timeout_ratio: (1, 1),
             next_view_timeout: 25000,
-            ..TestMetadata::default_multiple_rounds().timing_data
+            ..TestDescription::default_multiple_rounds().timing_data
         },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 9,
@@ -107,7 +105,7 @@ async fn libp2p_network_async() {
             delay_low_ms: 4,
             delay_high_ms: 30,
         })),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata
@@ -122,17 +120,17 @@ async fn libp2p_network_async() {
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_async() {
+    use std::time::Duration;
+
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        test_builder::TestMetadata,
+        test_builder::TestDescription,
     };
-
-    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             num_failed_views: 5000,
@@ -147,7 +145,7 @@ async fn test_memory_network_async() {
         timing_data: TimingData {
             timeout_ratio: (1, 1),
             next_view_timeout: 1000,
-            ..TestMetadata::default_multiple_rounds().timing_data
+            ..TestDescription::default_multiple_rounds().timing_data
         },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 95,
@@ -155,7 +153,7 @@ async fn test_memory_network_async() {
             delay_low_ms: 4,
             delay_high_ms: 30,
         })),
-        ..TestMetadata::default()
+        ..TestDescription::default()
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -168,17 +166,17 @@ async fn test_memory_network_async() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_partially_sync() {
+    use std::time::Duration;
+
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        test_builder::TestMetadata,
+        test_builder::TestDescription,
     };
-
-    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             num_failed_views: 2,
             ..Default::default()
@@ -207,7 +205,7 @@ async fn test_memory_network_partially_sync() {
             gst: std::time::Duration::from_millis(1000),
             start: Instant::now(),
         })),
-        ..TestMetadata::default()
+        ..TestDescription::default()
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -222,7 +220,7 @@ async fn test_memory_network_partially_sync() {
 async fn libp2p_network_partially_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             num_failed_views: 2,
             ..Default::default()
@@ -246,7 +244,7 @@ async fn libp2p_network_partially_sync() {
             gst: std::time::Duration::from_millis(1000),
             start: Instant::now(),
         })),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata
@@ -261,16 +259,17 @@ async fn libp2p_network_partially_sync() {
 #[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_memory_network_chaos() {
+    use std::time::Duration;
+
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        test_builder::TestMetadata,
+        test_builder::TestDescription,
     };
-    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
@@ -285,7 +284,7 @@ async fn test_memory_network_chaos() {
             repeat_low: 1,
             repeat_high: 5,
         })),
-        ..TestMetadata::default()
+        ..TestDescription::default()
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -301,7 +300,7 @@ async fn test_memory_network_chaos() {
 async fn libp2p_network_chaos() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -319,7 +318,7 @@ async fn libp2p_network_chaos() {
             repeat_low: 1,
             repeat_high: 5,
         })),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata

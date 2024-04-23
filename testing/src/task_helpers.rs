@@ -33,7 +33,7 @@ use hotshot_types::{
 use jf_primitives::vid::VidScheme;
 use serde::Serialize;
 
-use crate::test_builder::TestMetadata;
+use crate::test_builder::TestDescription;
 
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics
@@ -45,7 +45,7 @@ pub async fn build_system_handle(
     Sender<Arc<HotShotEvent<TestTypes>>>,
     Receiver<Arc<HotShotEvent<TestTypes>>>,
 ) {
-    let builder = TestMetadata::default_multiple_rounds();
+    let builder = TestDescription::default_multiple_rounds();
 
     let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 

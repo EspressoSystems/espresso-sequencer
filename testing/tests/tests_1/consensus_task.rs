@@ -28,6 +28,7 @@ use sha2::Digest;
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::data::null_block;
 
     async_compatibility_layer::logging::setup_logging();
@@ -85,7 +86,7 @@ async fn test_consensus_task() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
@@ -259,6 +260,7 @@ async fn test_consensus_vote_with_permuted_dac() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_finalize_propose() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::data::null_block;
 
     async_compatibility_layer::logging::setup_logging();
@@ -368,7 +370,7 @@ async fn test_view_sync_finalize_propose() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                (),
+                TestMetadata,
                 ViewNumber::new(4),
                 null_block::builder_fee(4).unwrap(),
             ),

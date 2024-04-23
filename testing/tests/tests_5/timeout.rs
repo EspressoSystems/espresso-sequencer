@@ -6,15 +6,13 @@
 async fn test_timeout_web() {
     use std::time::Duration;
 
-    use hotshot_example_types::node_types::WebImpl;
-
-    use hotshot_example_types::node_types::TestTypes;
-    use hotshot_testing::block_builder::SimpleBuilderImplementation;
+    use hotshot_example_types::node_types::{TestTypes, WebImpl};
     use hotshot_testing::{
+        block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -23,7 +21,7 @@ async fn test_timeout_web() {
         ..Default::default()
     };
 
-    let mut metadata = TestMetadata {
+    let mut metadata = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
         ..Default::default()
@@ -68,17 +66,14 @@ async fn test_timeout_web() {
 async fn test_timeout_libp2p() {
     use std::time::Duration;
 
-    use hotshot_example_types::node_types::Libp2pImpl;
-
+    use hotshot_example_types::node_types::{Libp2pImpl, TestTypes};
     use hotshot_testing::{
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
-
-    use hotshot_example_types::node_types::TestTypes;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -89,7 +84,7 @@ async fn test_timeout_libp2p() {
         ..Default::default()
     };
 
-    let mut metadata = TestMetadata {
+    let mut metadata = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
         num_bootstrap_nodes: 10,

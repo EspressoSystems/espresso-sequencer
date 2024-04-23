@@ -1,11 +1,13 @@
-use hotshot_example_types::node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl};
-use hotshot_example_types::state_types::TestTypes;
+use hotshot_example_types::{
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl},
+    state_types::TestTypes,
+};
 use hotshot_macros::cross_tests;
-use hotshot_testing::spinning_task::ChangeNode;
-use hotshot_testing::spinning_task::SpinningTaskDescription;
-use hotshot_testing::spinning_task::UpDown;
-use hotshot_testing::test_builder::TestMetadata;
-use hotshot_testing::block_builder::SimpleBuilderImplementation;
+use hotshot_testing::{
+    block_builder::SimpleBuilderImplementation,
+    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    test_builder::TestDescription,
+};
 // Test f/2 nodes leaving the network.
 cross_tests!(
     TestName: test_with_failures_half_f,
@@ -13,7 +15,7 @@ cross_tests!(
     Types: [TestTypes],
     Ignore: false,
     Metadata: {
-        let mut metadata = TestMetadata::default_more_nodes();
+        let mut metadata = TestDescription::default_more_nodes();
         metadata.num_bootstrap_nodes = 17;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
@@ -45,4 +47,3 @@ cross_tests!(
         metadata
     }
 );
-

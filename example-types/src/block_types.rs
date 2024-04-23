@@ -8,7 +8,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, Leaf},
     traits::{
-        block_contents::{BlockHeader, BuilderFee, TestableBlock, Transaction},
+        block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
         node_implementation::NodeType,
         BlockPayload, ValidatedState,
     },
@@ -104,10 +104,19 @@ impl TestableBlock for TestBlockPayload {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TestMetadata;
+
+impl EncodeBytes for TestMetadata {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::new([])
+    }
+}
+
 impl BlockPayload for TestBlockPayload {
     type Error = BlockError;
     type Transaction = TestTransaction;
-    type Metadata = ();
+    type Metadata = TestMetadata;
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
@@ -117,7 +126,7 @@ impl BlockPayload for TestBlockPayload {
             Self {
                 transactions: txns_vec,
             },
-            (),
+            TestMetadata,
         ))
     }
 
@@ -143,7 +152,7 @@ impl BlockPayload for TestBlockPayload {
     }
 
     fn genesis() -> (Self, Self::Metadata) {
-        (Self::genesis(), ())
+        (Self::genesis(), TestMetadata)
     }
 
     fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
@@ -230,7 +239,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
     }
 
     fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload>::Metadata {
-        &()
+        &TestMetadata
     }
 
     fn builder_commitment(&self) -> BuilderCommitment {

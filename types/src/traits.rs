@@ -11,5 +11,5 @@ pub mod stake_table;
 pub mod states;
 pub mod storage;
 
-pub use block_contents::BlockPayload;
+pub use block_contents::{BlockPayload, EncodeBytes};
 pub use states::ValidatedState;

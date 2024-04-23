@@ -552,7 +552,7 @@ async fn build_block<TYPES: NodeType>(
             .expect("Failed to sign block vid commitment");
 
     let signature_over_fee_info =
-        TYPES::BuilderSignatureKey::sign_fee(&priv_key, 123_u64, &commitment, &vid_commitment)
+        TYPES::BuilderSignatureKey::sign_fee(&priv_key, 123_u64, &metadata, &vid_commitment)
             .expect("Failed to sign fee info");
 
     let block = AvailableBlockData {

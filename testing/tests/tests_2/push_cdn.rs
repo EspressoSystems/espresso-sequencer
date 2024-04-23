@@ -6,7 +6,7 @@ use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
-    test_builder::{TestMetadata, TimingData},
+    test_builder::{TestDescription, TimingData},
 };
 use tracing::instrument;
 
@@ -17,7 +17,7 @@ use tracing::instrument;
 async fn push_cdn_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -35,7 +35,7 @@ async fn push_cdn_network() {
                 duration: Duration::from_secs(60),
             },
         ),
-        ..TestMetadata::default()
+        ..TestDescription::default()
     };
     metadata
         .gen_launcher::<TestTypes, PushCdnImpl>(0)

@@ -6,7 +6,7 @@ use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
     spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-    test_builder::{TestMetadata, TimingData},
+    test_builder::{TestDescription, TimingData},
 };
 use tracing::instrument;
 
@@ -17,7 +17,7 @@ use tracing::instrument;
 async fn libp2p_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata {
+    let metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -31,7 +31,7 @@ async fn libp2p_network() {
             next_view_timeout: 4000,
             ..Default::default()
         },
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata
@@ -48,7 +48,7 @@ async fn libp2p_network() {
 async fn libp2p_network_failures_2() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestMetadata {
+    let mut metadata = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -62,7 +62,7 @@ async fn libp2p_network_failures_2() {
             next_view_timeout: 4000,
             ..Default::default()
         },
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     let dead_nodes = vec![ChangeNode {
@@ -96,7 +96,7 @@ async fn libp2p_network_failures_2() {
 async fn test_stress_libp2p_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata::default_stress();
+    let metadata = TestDescription::default_stress();
     metadata
         .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()

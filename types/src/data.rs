@@ -740,13 +740,13 @@ pub mod null_block {
                 [0_u8; 32], 0,
             );
 
-        let (null_block, null_block_metadata) =
+        let (_null_block, null_block_metadata) =
             <TYPES::BlockPayload as BlockPayload>::from_transactions([]).ok()?;
 
         match TYPES::BuilderSignatureKey::sign_fee(
             &priv_key,
             FEE_AMOUNT,
-            &null_block.builder_commitment(&null_block_metadata),
+            &null_block_metadata,
             &commitment(num_storage_nodes)?,
         ) {
             Ok(sig) => Some(BuilderFee {

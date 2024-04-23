@@ -10,7 +10,7 @@ async fn test_catchup() {
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -18,7 +18,7 @@ async fn test_catchup() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+    let mut metadata = TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
         updown: UpDown::Up,
@@ -68,7 +68,7 @@ async fn test_catchup_cdn() {
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -77,7 +77,7 @@ async fn test_catchup_cdn() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+    let mut metadata = TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
         updown: UpDown::Up,
@@ -122,7 +122,7 @@ async fn test_catchup_one_node() {
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -130,7 +130,7 @@ async fn test_catchup_one_node() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+    let mut metadata = TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
         updown: UpDown::Up,
@@ -177,7 +177,7 @@ async fn test_catchup_in_view_sync() {
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -185,7 +185,7 @@ async fn test_catchup_in_view_sync() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+    let mut metadata = TestDescription::default();
     let catchup_nodes = vec![
         ChangeNode {
             idx: 18,
@@ -239,7 +239,7 @@ async fn test_catchup_reload() {
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-        test_builder::{TestMetadata, TimingData},
+        test_builder::{TestDescription, TimingData},
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -248,7 +248,7 @@ async fn test_catchup_reload() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+    let mut metadata = TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
         updown: UpDown::Up,

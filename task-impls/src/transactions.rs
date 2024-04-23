@@ -314,19 +314,12 @@ impl<
 
             // Verify signature over chosen block instead of
             // verifying the signature over all the blocks received from builder
-            let combined_message_bytes = {
-                let mut combined_response_bytes: Vec<u8> = Vec::new();
-                combined_response_bytes
-                    .extend_from_slice(block_info.block_size.to_be_bytes().as_ref());
-                combined_response_bytes
-                    .extend_from_slice(block_info.offered_fee.to_be_bytes().as_ref());
-                combined_response_bytes.extend_from_slice(block_info.block_hash.as_ref());
-                combined_response_bytes
-            };
-            if !block_info
-                .sender
-                .validate_builder_signature(&block_info.signature, &combined_message_bytes)
-            {
+            if !block_info.sender.validate_block_info_signature(
+                &block_info.signature,
+                block_info.block_size,
+                block_info.offered_fee,
+                &block_info.block_hash,
+            ) {
                 error!("Failed to verify available block info response message signature");
                 continue;
             }
@@ -387,23 +380,12 @@ impl<
                         continue;
                     }
 
-                    let offered_fee = block_info.offered_fee;
-                    let builder_commitment = block_data
-                        .block_payload
-                        .builder_commitment(&block_data.metadata);
-                    let vid_commitment = header_input.vid_commitment;
-                    let combined_response_bytes = {
-                        let mut combined_response_bytes: Vec<u8> = Vec::new();
-                        combined_response_bytes
-                            .extend_from_slice(offered_fee.to_be_bytes().as_ref());
-                        combined_response_bytes.extend_from_slice(builder_commitment.as_ref());
-                        combined_response_bytes.extend_from_slice(vid_commitment.as_ref());
-                        combined_response_bytes
-                    };
                     // verify the signature over the message
-                    if !header_input.sender.validate_builder_signature(
+                    if !header_input.sender.validate_fee_signature(
                         &header_input.fee_signature,
-                        combined_response_bytes.as_ref(),
+                        block_info.offered_fee,
+                        &block_data.metadata,
+                        &header_input.vid_commitment,
                     ) {
                         error!("Failed to verify fee signature");
                         continue;

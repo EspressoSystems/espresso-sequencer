@@ -38,6 +38,7 @@ fn make_payload_commitment(
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_quorum_proposal() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::data::null_block;
 
     async_compatibility_layer::logging::setup_logging();
@@ -98,7 +99,7 @@ async fn test_quorum_proposal_task_quorum_proposal() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
@@ -119,6 +120,7 @@ async fn test_quorum_proposal_task_quorum_proposal() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_qc_timeout() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::{data::null_block, simple_vote::TimeoutData};
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -158,7 +160,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
@@ -179,6 +181,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_view_sync() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::data::null_block;
 
     async_compatibility_layer::logging::setup_logging();
@@ -223,7 +226,7 @@ async fn test_quorum_proposal_task_view_sync() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                (),
+                TestMetadata,
                 ViewNumber::new(2),
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
@@ -244,6 +247,7 @@ async fn test_quorum_proposal_task_view_sync() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_propose_now() {
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_testing::task_helpers::{build_cert, key_pair_for_id};
     use hotshot_types::{
         consensus::{CommitmentAndMetadata, ProposalDependencyData},
@@ -277,7 +281,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             builder_commitment: builder_commitment.clone(),
-            metadata: (),
+            metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:
@@ -292,7 +296,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             builder_commitment: builder_commitment.clone(),
-            metadata: (),
+            metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:
@@ -317,7 +321,7 @@ async fn test_quorum_proposal_task_propose_now() {
         commitment_and_metadata: CommitmentAndMetadata {
             commitment: payload_commitment,
             builder_commitment,
-            metadata: (),
+            metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
         },
         secondary_proposal_information:

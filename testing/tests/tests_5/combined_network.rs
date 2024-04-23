@@ -6,7 +6,7 @@ use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
     spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-    test_builder::{TestMetadata, TimingData},
+    test_builder::{TestDescription, TimingData},
 };
 use rand::Rng;
 use tracing::instrument;
@@ -21,7 +21,7 @@ async fn test_combined_network() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestMetadata = TestMetadata {
+    let metadata: TestDescription = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -39,7 +39,7 @@ async fn test_combined_network() {
                 duration: Duration::from_secs(120),
             },
         ),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     metadata
@@ -56,7 +56,7 @@ async fn test_combined_network() {
 async fn test_combined_network_cdn_crash() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata: TestMetadata = TestMetadata {
+    let mut metadata: TestDescription = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -75,7 +75,7 @@ async fn test_combined_network_cdn_crash() {
                 duration: Duration::from_secs(120),
             },
         ),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     let mut all_nodes = vec![];
@@ -105,7 +105,7 @@ async fn test_combined_network_cdn_crash() {
 async fn test_combined_network_reup() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata: TestMetadata = TestMetadata {
+    let mut metadata: TestDescription = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -124,7 +124,7 @@ async fn test_combined_network_reup() {
                 duration: Duration::from_secs(120),
             },
         ),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     let mut all_down = vec![];
@@ -158,7 +158,7 @@ async fn test_combined_network_reup() {
 async fn test_combined_network_half_dc() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata: TestMetadata = TestMetadata {
+    let mut metadata: TestDescription = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -177,7 +177,7 @@ async fn test_combined_network_half_dc() {
                 duration: Duration::from_secs(120),
             },
         ),
-        ..TestMetadata::default_multiple_rounds()
+        ..TestDescription::default_multiple_rounds()
     };
 
     let mut half = vec![];
@@ -234,7 +234,7 @@ fn generate_random_node_changes(
 async fn test_stress_combined_network_fuzzy() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestMetadata {
+    let mut metadata = TestDescription {
         num_bootstrap_nodes: 10,
         num_nodes_with_stake: 20,
         start_nodes: 20,
@@ -252,7 +252,7 @@ async fn test_stress_combined_network_fuzzy() {
                 duration: Duration::from_secs(120),
             },
         ),
-        ..TestMetadata::default_stress()
+        ..TestDescription::default_stress()
     };
 
     metadata.spinning_properties = SpinningTaskDescription {

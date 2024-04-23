@@ -23,6 +23,12 @@ use crate::{
     vid::{vid_scheme, VidCommitment, VidSchemeType},
 };
 
+/// Trait for structures that need to be unambiguously encoded as bytes.
+pub trait EncodeBytes {
+    /// Encode `&self`
+    fn encode(&self) -> Arc<[u8]>;
+}
+
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
@@ -47,7 +53,15 @@ pub trait BlockPayload:
     type Transaction: Transaction;
 
     /// Data created during block building which feeds into the block header
-    type Metadata: Clone + Debug + DeserializeOwned + Eq + Hash + Send + Sync + Serialize;
+    type Metadata: Clone
+        + Debug
+        + DeserializeOwned
+        + Eq
+        + Hash
+        + Send
+        + Sync
+        + Serialize
+        + EncodeBytes;
 
     /// Build a payload and associated metadata with the transactions.
     ///

@@ -44,7 +44,7 @@ pub struct TimingData {
 
 /// metadata describing a test
 #[derive(Clone, Debug)]
-pub struct TestMetadata {
+pub struct TestDescription {
     /// Total number of staked nodes in the test
     pub num_nodes_with_stake: usize,
     /// Total number of non-staked nodes in the test
@@ -94,7 +94,7 @@ impl Default for TimingData {
     }
 }
 
-impl TestMetadata {
+impl TestDescription {
     /// the default metadata for a stress test
     #[must_use]
     #[allow(clippy::redundant_field_names)]
@@ -102,7 +102,7 @@ impl TestMetadata {
         let num_nodes_with_stake = 100;
         let num_nodes_without_stake = 0;
 
-        TestMetadata {
+        TestDescription {
             num_bootstrap_nodes: num_nodes_with_stake,
             num_nodes_with_stake: num_nodes_with_stake,
             num_nodes_without_stake: num_nodes_without_stake,
@@ -123,17 +123,17 @@ impl TestMetadata {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestMetadata::default()
+            ..TestDescription::default()
         }
     }
 
     /// the default metadata for multiple rounds
     #[must_use]
     #[allow(clippy::redundant_field_names)]
-    pub fn default_multiple_rounds() -> TestMetadata {
+    pub fn default_multiple_rounds() -> TestDescription {
         let num_nodes_with_stake = 10;
         let num_nodes_without_stake = 0;
-        TestMetadata {
+        TestDescription {
             // TODO: remove once we have fixed the DHT timeout issue
             // https://github.com/EspressoSystems/HotShot/issues/2088
             num_bootstrap_nodes: num_nodes_with_stake,
@@ -154,17 +154,17 @@ impl TestMetadata {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestMetadata::default()
+            ..TestDescription::default()
         }
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
     #[must_use]
     #[allow(clippy::redundant_field_names)]
-    pub fn default_more_nodes() -> TestMetadata {
+    pub fn default_more_nodes() -> TestDescription {
         let num_nodes_with_stake = 20;
         let num_nodes_without_stake = 0;
-        TestMetadata {
+        TestDescription {
             num_nodes_with_stake: num_nodes_with_stake,
             num_nodes_without_stake: num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
@@ -189,12 +189,12 @@ impl TestMetadata {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestMetadata::default()
+            ..TestDescription::default()
         }
     }
 }
 
-impl Default for TestMetadata {
+impl Default for TestDescription {
     /// by default, just a single round
     #[allow(clippy::redundant_field_names)]
     fn default() -> Self {
@@ -228,8 +228,8 @@ impl Default for TestMetadata {
     }
 }
 
-impl TestMetadata {
-    /// turn a description of a test (e.g. a [`TestMetadata`]) into
+impl TestDescription {
+    /// turn a description of a test (e.g. a [`TestDescription`]) into
     /// a [`TestLauncher`] that can be used to launch the test.
     /// # Panics
     /// if some of the the configuration values are zero
@@ -244,7 +244,7 @@ impl TestMetadata {
     where
         I: NodeImplementation<TYPES>,
     {
-        let TestMetadata {
+        let TestDescription {
             num_nodes_with_stake,
             num_bootstrap_nodes,
             min_transactions,

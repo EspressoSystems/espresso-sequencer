@@ -3,7 +3,7 @@ use std::{cmp::max, marker::PhantomData, sync::Arc};
 use committable::Committable;
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_example_types::{
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
@@ -104,7 +104,7 @@ impl TestView {
 
         let da_proposal_inner = DAProposal::<TestTypes> {
             encoded_transactions: encoded_transactions.clone(),
-            metadata: (),
+            metadata: TestMetadata,
             view_number: genesis_view,
         };
 
@@ -305,7 +305,7 @@ impl TestView {
 
         let da_proposal_inner = DAProposal::<TestTypes> {
             encoded_transactions: encoded_transactions.clone(),
-            metadata: (),
+            metadata: TestMetadata,
             view_number: next_view,
         };
 

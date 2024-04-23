@@ -11,7 +11,7 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use super::{test_builder::TestMetadata, test_runner::TestRunner};
+use super::{test_builder::TestDescription, test_runner::TestRunner};
 
 /// convience type alias for the networks available
 pub type Networks<TYPES, I> = (
@@ -37,7 +37,7 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generator for resources
     pub resource_generator: ResourceGenerators<TYPES, I>,
     /// metadasta used for tasks
-    pub metadata: TestMetadata,
+    pub metadata: TestDescription,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, I> {

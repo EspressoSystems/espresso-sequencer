@@ -23,6 +23,7 @@ async fn test_random_block_builder() {
     use std::time::Instant;
 
     use hotshot_builder_api::block_info::AvailableBlockData;
+    use hotshot_example_types::block_types::TestMetadata;
     use hotshot_orchestrator::config::RandomBuilderConfig;
     use hotshot_types::traits::block_contents::vid_commitment;
 
@@ -77,7 +78,7 @@ async fn test_random_block_builder() {
     let commitment_for_non_existent_block = TestBlockPayload {
         transactions: vec![TestTransaction(vec![0; 1])],
     }
-    .builder_commitment(&());
+    .builder_commitment(&TestMetadata);
     let result = client
         .claim_block(commitment_for_non_existent_block, pub_key, &signature)
         .await;
