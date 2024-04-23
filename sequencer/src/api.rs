@@ -32,7 +32,7 @@ type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
@@ -56,7 +56,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-struct State<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ApiState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
     // The consensus state is initialized lazily so we can start the API (and healthcheck endpoints)
     // before consensus has started. Any endpoint that uses consensus state will wait for
     // initialization to finish, but endpoints that do not require a consensus handle can proceed
@@ -65,7 +65,9 @@ struct State<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> 
     consensus: BoxLazy<ConsensusState<N, P, Ver>>,
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static> State<N, P, Ver> {
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    ApiState<N, P, Ver>
+{
     fn new(init: impl Future<Output = ConsensusState<N, P, Ver>> + Send + 'static) -> Self {
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
@@ -96,11 +98,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 }
 
-type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, State<N, P, Ver>>;
+type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
 
 #[async_trait]
 impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    EventsSource<SeqTypes> for State<N, P, Ver>
+    EventsSource<SeqTypes> for ApiState<N, P, Ver>
 {
     type EventStream = BoxStream<'static, Arc<BuilderEvent<SeqTypes>>>;
 
@@ -127,7 +129,7 @@ impl<
 }
 
 impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    SubmitDataSource<N, P> for State<N, P, Ver>
+    SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.consensus().await.submit_transaction(tx).await?;
@@ -152,7 +154,7 @@ impl<
 }
 
 impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> StateDataSource
-    for State<N, P, Ver>
+    for ApiState<N, P, Ver>
 {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.consensus().await.get_decided_state().await
@@ -174,7 +176,7 @@ impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPe
 
 #[async_trait]
 impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    StateSignatureDataSource<N> for State<N, P, Ver>
+    StateSignatureDataSource<N> for ApiState<N, P, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer().await.get_state_signature(height).await

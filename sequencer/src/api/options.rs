@@ -6,7 +6,7 @@ use super::{
     },
     endpoints, fs, sql,
     update::update_loop,
-    StorageState,
+    ApiState, StorageState,
 };
 use crate::{
     context::{SequencerContext, TaskList},
@@ -133,7 +133,7 @@ impl Options {
         // allows the web server to start before initialization can complete, since initialization
         // can take a long time (and is dependent on other nodes).
         let (send_ctx, recv_ctx) = oneshot::channel();
-        let state = super::State::new(async move {
+        let state = ApiState::new(async move {
             recv_ctx
                 .await
                 .expect("context initialized and sent over channel")
@@ -237,7 +237,7 @@ impl Options {
     async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
         &self,
         ds: D,
-        state: super::State<N, P, Ver>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<(
@@ -282,7 +282,7 @@ impl Options {
         &self,
         query_opt: Query,
         mod_opt: D::Options,
-        state: super::State<N, P, Ver>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -312,7 +312,7 @@ impl Options {
         self,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: super::State<N, P, Ver>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -403,7 +403,7 @@ impl Options {
         Ver: StaticVersionType + 'static,
     >(
         &self,
-        state: super::State<N, P, Ver>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<()>
