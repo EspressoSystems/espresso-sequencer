@@ -139,8 +139,34 @@ library Transcript {
         appendGroupElement(self, comm);
     }
 
+    // @dev This function computes keccak256(bytes32 a, bytes b)
+    function computeHash(bytes32 a, bytes memory b) public pure returns (bytes32 result) {
+        assembly {
+            // Load the length of 'b'
+            let bLength := mload(b)
+
+            // Calculate total data length (32 bytes for 'a' + length of 'b')
+            let totalLength := add(32, bLength)
+
+            // Allocate memory for 'a' + 'b'
+            let data := mload(0x40) // Load free memory pointer
+
+            // Store 'a' in memory
+            mstore(data, a)
+
+            // Copy 'b' to memory after 'a'
+            let dataOffset := add(data, 32) // Start right after 'a'
+            for { let i := 0 } lt(i, bLength) { i := add(i, 0x20) } {
+                mstore(add(dataOffset, i), mload(add(add(b, i), 0x20)))
+            }
+
+            // Compute the keccak256 hash of the data
+            result := keccak256(data, totalLength)
+        }
+    }
+
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 hash = keccak256(abi.encodePacked(self.state, self.transcript));
+        bytes32 hash = computeHash(self.state, self.transcript);
 
         self.state = hash;
 
