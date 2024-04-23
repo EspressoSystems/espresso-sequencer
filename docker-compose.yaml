@@ -117,6 +117,23 @@ services:
       keydb:
         condition: service_healthy
 
+  # A service to whitelist specific public keys for the CDN
+  cdn-whitelist:
+    restart: no
+    environment:
+      - RUST_LOG
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist:main
+    command: 
+    - cdn-whitelist
+    - -d
+    - redis://:changemeplease!!@keydb:6379
+    depends_on:
+      keydb:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+
   state-relay-server:
     image: ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
     ports:

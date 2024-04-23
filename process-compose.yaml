@@ -274,7 +274,10 @@ processes:
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
-    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT -m 127.0.0.1:9093
+    command: cdn-marshal 
+      -d "redis://:changeme!@localhost:6379"
+      -b $ESPRESSO_CDN_SERVER_PORT
+      -m 127.0.0.1:9093
     depends_on:
       keydb:
         condition: process_healthy
@@ -321,6 +324,16 @@ processes:
         port: 9092
         path: /metrics
       failure_threshold: 100
+
+  cdn-whitelist:
+    command: cdn-whitelist 
+      -d redis://:changeme!@localhost:6379 
+      -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
+    depends_on:
+      orchestrator:
+        condition: process_healthy
+      keydb:
+        condition: process_healthy
 
   commitment-task:
     command: commitment-task
