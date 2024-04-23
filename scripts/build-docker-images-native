@@ -57,15 +57,17 @@ case $KERNEL in
 
   # Build in docker container:
   #   - RUSTFLAGS is needed for compilation.
-  #   - CARGO_TARGET_DIR is set to point to the location where
-  #     the hosts CARGO_TARGET_DIR is mounted.
+  #   - CARGO_TARGET_DIR is set to point to the location where the hosts
+  #     CARGO_TARGET_DIR is mounted.
   #   - PWD is mounted to /work.
-  #   - Cargo registry is mounted to avoid re-downloading dependencies.
+  #   - Cargo registry and git directory are mounted to avoid re-downloading
+  #     dependencies.
   docker run \
     -e RUSTFLAGS \
     -e CARGO_TARGET_DIR=/work/target/docker \
     -v "$(pwd):/work" \
-    -v "$HOME/.cargo/registry:/usr/local/cargo/registry" \
+    -v "$CARGO_HOME/registry:/usr/local/cargo/registry" \
+    -v "$CARGO_HOME/git:/usr/local/cargo/git" \
     -it ghcr.io/espressosystems/devops-rust:stable \
     bash -c "cd /work && cargo build --release"
     ;;
@@ -99,5 +101,5 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
