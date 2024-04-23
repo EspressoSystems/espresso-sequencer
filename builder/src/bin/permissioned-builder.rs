@@ -133,19 +133,19 @@ pub struct PermissionedBuilderOptions {
     pub state_peers: Vec<Url>,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_SERVER_PORT")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     pub port: u16,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_ADDRESS")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_ADDRESS")]
     pub address: Address,
 
     /// Bootstrapping View number
-    #[clap(short, long, env = "BUILDER_BOOTSTRAPPED_VIEW")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 
     /// Url a sequencer can use to stream hotshot events
@@ -156,7 +156,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         short,
         long,
-        env = "WEBSERVER_RESPONSE_TIMEOUT_DURATION",
+        env = "ESPRESSO_BUILDER_WEBSERVER_RESPONSE_TIMEOUT_DURATION",
         default_value = "1s",
         value_parser = parse_duration
     )]

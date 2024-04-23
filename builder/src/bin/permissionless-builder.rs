@@ -91,7 +91,7 @@ pub struct NonPermissionedBuilderOptions {
     #[clap(
         short,
         long,
-        env = "WEBSERVER_RESPONSE_TIMEOUT_DURATION",
+        env = "ESPRESSO_WEBSERVER_RESPONSE_TIMEOUT_DURATION",
         default_value = "1s",
         value_parser = parse_duration
     )]
