@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use hotshot::types::SignatureKey;
 use hotshot_example_types::{
@@ -38,7 +38,7 @@ async fn test_vid_task() {
     let transactions = vec![TestTransaction(vec![0])];
     let (payload, metadata) = TestBlockPayload::from_transactions(transactions.clone()).unwrap();
     let builder_commitment = payload.builder_commitment(&metadata);
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
@@ -83,7 +83,7 @@ async fn test_vid_task() {
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::BlockRecv(
-        encoded_transactions.clone(),
+        encoded_transactions,
         (),
         ViewNumber::new(2),
         null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),

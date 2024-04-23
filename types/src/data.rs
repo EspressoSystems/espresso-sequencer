@@ -8,6 +8,7 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
     marker::PhantomData,
+    sync::Arc,
 };
 
 use anyhow::{ensure, Result};
@@ -114,7 +115,7 @@ impl std::ops::Sub<u64> for ViewNumber {
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
     /// Encoded transactions in the block to be applied.
-    pub encoded_transactions: Vec<u8>,
+    pub encoded_transactions: Arc<[u8]>,
     /// Metadata of the block to be applied.
     pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     /// View this proposal applies to
@@ -440,10 +441,8 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
         let (payload, metadata) = TYPES::BlockPayload::genesis();
         let builder_commitment = payload.builder_commitment(&metadata);
-        let payload_bytes = payload
-            .encode()
-            .expect("unable to encode genesis payload")
-            .collect();
+        let payload_bytes = payload.encode().expect("unable to encode genesis payload");
+
         let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
         let block_header = TYPES::BlockHeader::genesis(
             instance_state,
@@ -507,11 +506,8 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         block_payload: TYPES::BlockPayload,
         num_storage_nodes: usize,
     ) -> Result<(), BlockError> {
-        let encoded_txns = match block_payload.encode() {
-            // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
-            // <https://github.com/EspressoSystems/HotShot/issues/2115>
-            Ok(encoded) => encoded.into_iter().collect(),
-            Err(_) => return Err(BlockError::InvalidTransactionLength),
+        let Ok(encoded_txns) = block_payload.encode() else {
+            return Err(BlockError::InvalidTransactionLength);
         };
         let commitment = vid_commitment(&encoded_txns, num_storage_nodes);
         if commitment != self.block_header.payload_commitment() {

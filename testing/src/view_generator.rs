@@ -1,4 +1,4 @@
-use std::{cmp::max, marker::PhantomData};
+use std::{cmp::max, marker::PhantomData, sync::Arc};
 
 use committable::Committable;
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
@@ -96,7 +96,7 @@ impl TestView {
             proposal_certificate: None,
         };
 
-        let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+        let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
@@ -298,7 +298,7 @@ impl TestView {
             _pd: PhantomData,
         };
 
-        let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+        let encoded_transactions = Arc::from(TestTransaction::encode(transactions).unwrap());
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)

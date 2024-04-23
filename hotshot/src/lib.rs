@@ -216,16 +216,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.get_block_payload() {
-            let encoded_txns: Vec<u8> = match payload.encode() {
-                // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
-                // <https://github.com/EspressoSystems/HotShot/issues/2115>
-                Ok(encoded) => encoded.into_iter().collect(),
+            let encoded_txns = match payload.encode() {
+                Ok(encoded) => encoded,
                 Err(e) => {
                     return Err(HotShotError::BlockError { source: e });
                 }
             };
 
-            saved_payloads.insert(anchored_leaf.get_view_number(), encoded_txns);
+            saved_payloads.insert(anchored_leaf.get_view_number(), Arc::clone(&encoded_txns));
         }
 
         let consensus = Consensus {

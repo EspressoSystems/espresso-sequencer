@@ -134,12 +134,13 @@ impl<
                 {
                     // send the sequenced transactions to VID and DA tasks
                     let encoded_transactions = match block_data.block_payload.encode() {
-                        Ok(encoded) => encoded.into_iter().collect::<Vec<u8>>(),
+                        Ok(encoded) => encoded,
                         Err(e) => {
                             error!("Failed to encode the block payload: {:?}.", e);
                             return None;
                         }
                     };
+
                     broadcast_event(
                         Arc::new(HotShotEvent::BlockRecv(
                             encoded_transactions,
@@ -178,7 +179,7 @@ impl<
                     // Broadcast the empty block
                     broadcast_event(
                         Arc::new(HotShotEvent::BlockRecv(
-                            vec![],
+                            vec![].into(),
                             metadata,
                             block_view,
                             builder_fee,

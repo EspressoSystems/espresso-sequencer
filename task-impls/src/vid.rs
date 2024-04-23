@@ -62,10 +62,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
             HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number, fee) => {
-                let payload = <TYPES as NodeType>::BlockPayload::from_bytes(
-                    encoded_transactions.clone().into_iter(),
-                    metadata,
-                );
+                let payload =
+                    <TYPES as NodeType>::BlockPayload::from_bytes(encoded_transactions, metadata);
                 let builder_commitment = payload.builder_commitment(metadata);
                 let vid_disperse = calculate_vid_disperse(
                     encoded_transactions.clone(),

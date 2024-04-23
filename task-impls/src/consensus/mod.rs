@@ -673,7 +673,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     consensus.saved_payloads.get(&leaf.get_view_number())
                                 {
                                     let payload = BlockPayload::from_bytes(
-                                        encoded_txns.clone().into_iter(),
+                                        encoded_txns,
                                         leaf.get_block_header().metadata(),
                                     );
 

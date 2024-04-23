@@ -44,7 +44,7 @@ pub async fn broadcast_event<E: Clone + std::fmt::Debug>(event: E, sender: &Send
 /// Panics if the VID calculation fails, this should not happen.
 #[allow(clippy::panic)]
 pub async fn calculate_vid_disperse<TYPES: NodeType>(
-    txns: Vec<u8>,
+    txns: Arc<[u8]>,
     membership: &Arc<TYPES::Membership>,
     view: TYPES::Time,
 ) -> VidDisperse<TYPES> {
@@ -66,7 +66,7 @@ pub async fn calculate_vid_disperse<TYPES: NodeType>(
 /// Panics if the VID calculation fails, this should not happen.
 #[allow(clippy::panic)]
 pub async fn calculate_vid_disperse_using_precompute_data<TYPES: NodeType>(
-    txns: Vec<u8>,
+    txns: Arc<[u8]>,
     membership: &Arc<TYPES::Membership>,
     view: TYPES::Time,
     pre_compute_data: VidPrecomputeData,

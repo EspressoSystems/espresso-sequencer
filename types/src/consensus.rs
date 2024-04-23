@@ -68,7 +68,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Saved payloads.
     ///
     /// Encoded transactions for every view if we got a payload for that view.
-    pub saved_payloads: BTreeMap<TYPES::Time, Vec<u8>>,
+    pub saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,

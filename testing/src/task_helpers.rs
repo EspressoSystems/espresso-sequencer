@@ -235,8 +235,8 @@ pub fn vid_payload_commitment(
     transactions: Vec<TestTransaction>,
 ) -> VidCommitment {
     let mut vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(encoded_transactions).unwrap();
+    let encoded_transactions = TestTransaction::encode(&transactions).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
 
     vid_disperse.commit
 }
@@ -245,7 +245,7 @@ pub fn da_payload_commitment(
     quorum_membership: &<TestTypes as NodeType>::Membership,
     transactions: Vec<TestTransaction>,
 ) -> VidCommitment {
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let encoded_transactions = TestTransaction::encode(&transactions).unwrap();
 
     vid_commitment(&encoded_transactions, quorum_membership.total_nodes())
 }
@@ -258,11 +258,11 @@ pub fn build_vid_proposal(
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
 ) -> Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>> {
     let mut vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let encoded_transactions = TestTransaction::encode(&transactions).unwrap();
 
     let vid_disperse = VidDisperse::from_membership(
         view_number,
-        vid.disperse(encoded_transactions).unwrap(),
+        vid.disperse(&encoded_transactions).unwrap(),
         quorum_membership,
     );
 
@@ -283,7 +283,7 @@ pub fn build_da_certificate(
     public_key: &<TestTypes as NodeType>::SignatureKey,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
 ) -> DACertificate<TestTypes> {
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let encoded_transactions = TestTransaction::encode(&transactions).unwrap();
 
     let da_payload_commitment =
         vid_commitment(&encoded_transactions, quorum_membership.total_nodes());

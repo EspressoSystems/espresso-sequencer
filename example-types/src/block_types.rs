@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Display},
     mem::size_of,
+    sync::Arc,
 };
 
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -29,7 +30,7 @@ impl TestTransaction {
     ///
     /// # Errors
     /// If the transaction length conversion fails.
-    pub fn encode(transactions: Vec<Self>) -> Result<Vec<u8>, BlockError> {
+    pub fn encode(transactions: &[Self]) -> Result<Vec<u8>, BlockError> {
         let mut encoded = Vec::new();
 
         for txn in transactions {
@@ -44,7 +45,7 @@ impl TestTransaction {
 
             // Concatenate the bytes of the transaction size and the transaction itself.
             encoded.extend(txn_size);
-            encoded.extend(txn.0);
+            encoded.extend(&txn.0);
         }
 
         Ok(encoded)
@@ -107,7 +108,6 @@ impl BlockPayload for TestBlockPayload {
     type Error = BlockError;
     type Transaction = TestTransaction;
     type Metadata = ();
-    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
@@ -121,24 +121,20 @@ impl BlockPayload for TestBlockPayload {
         ))
     }
 
-    fn from_bytes<E>(encoded_transactions: E, _metadata: &Self::Metadata) -> Self
-    where
-        E: Iterator<Item = u8>,
-    {
-        let encoded_vec: Vec<u8> = encoded_transactions.collect();
+    fn from_bytes(encoded_transactions: &[u8], _metadata: &Self::Metadata) -> Self {
         let mut transactions = Vec::new();
         let mut current_index = 0;
-        while current_index < encoded_vec.len() {
+        while current_index < encoded_transactions.len() {
             // Decode the transaction length.
             let txn_start_index = current_index + size_of::<u32>();
             let mut txn_len_bytes = [0; size_of::<u32>()];
-            txn_len_bytes.copy_from_slice(&encoded_vec[current_index..txn_start_index]);
+            txn_len_bytes.copy_from_slice(&encoded_transactions[current_index..txn_start_index]);
             let txn_len: usize = u32::from_le_bytes(txn_len_bytes) as usize;
 
             // Get the transaction.
             let next_index = txn_start_index + txn_len;
             transactions.push(TestTransaction(
-                encoded_vec[txn_start_index..next_index].to_vec(),
+                encoded_transactions[txn_start_index..next_index].to_vec(),
             ));
             current_index = next_index;
         }
@@ -150,8 +146,8 @@ impl BlockPayload for TestBlockPayload {
         (Self::genesis(), ())
     }
 
-    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-        Ok(TestTransaction::encode(self.transactions.clone())?.into_iter())
+    fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
+        TestTransaction::encode(&self.transactions).map(Arc::from)
     }
 
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use either::Either;
 use hotshot_types::{
     consensus::ProposalDependencyData,
@@ -115,7 +117,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     BlockRecv(
-        Vec<u8>,
+        Arc<[u8]>,
         <TYPES::BlockPayload as BlockPayload>::Metadata,
         TYPES::Time,
         BuilderFee<TYPES>,
