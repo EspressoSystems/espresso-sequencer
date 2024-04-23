@@ -607,6 +607,8 @@ mod test {
         tracing::info!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             );
+        // sleep and wait for builder service to startup
+        async_sleep(Duration::from_millis(3000)).await;
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
