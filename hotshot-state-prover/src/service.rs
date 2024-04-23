@@ -385,20 +385,23 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
             .await,
     );
-    let proving_key = Arc::new(load_proving_key(config.stake_table_capacity));
-    let relay_server_client =
-        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
-    let config = Arc::new(config);
-    let update_interval = config.update_interval;
 
     tracing::info!("Light client address: {:?}", config.light_client_address);
+    let relay_server_client =
+        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
 
+    // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
         if let Err(err) = start_http_server(port, config.light_client_address, bind_version) {
             tracing::error!("Error starting http server: {}", err);
         }
     }
 
+    let proving_key = async_std::task::block_on(async move {
+        Arc::new(load_proving_key(config.stake_table_capacity))
+    });
+
+    let update_interval = config.update_interval;
     loop {
         let st = st.clone();
         let proving_key = proving_key.clone();

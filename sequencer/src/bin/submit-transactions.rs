@@ -2,10 +2,8 @@
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
-use bytesize::ByteSize;
 use clap::Parser;
 use committable::{Commitment, Committable};
-use derive_more::From;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -16,8 +14,10 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{options::parse_duration, SeqTypes, Transaction};
-use snafu::Snafu;
+use sequencer::{
+    options::{parse_duration, parse_size},
+    SeqTypes, Transaction,
+};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -33,13 +33,13 @@ struct Options {
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MIN_SIZE", default_value = "1", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_SIZE")]
-    min_size: usize,
+    min_size: u64,
 
     /// Maximum size of transaction to submit.
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MAX_SIZE", default_value = "1kb", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_SIZE")]
-    max_size: usize,
+    max_size: u64,
 
     /// Minimum namespace ID to submit to.
     #[clap(
@@ -107,15 +107,6 @@ struct Options {
     /// URL of the query service.
     #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
     url: Url,
-}
-
-#[derive(Clone, Debug, From, Snafu)]
-struct ParseSizeError {
-    msg: String,
-}
-
-fn parse_size(s: &str) -> Result<usize, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0 as usize)
 }
 
 #[async_std::main]
@@ -278,7 +269,7 @@ fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
     let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
-    let mut payload = vec![0; len];
+    let mut payload = vec![0; len as usize];
     rng.fill_bytes(&mut payload);
 
     Transaction::new(namespace.into(), payload)
