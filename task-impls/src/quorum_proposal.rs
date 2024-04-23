@@ -35,7 +35,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    consensus::proposal::validate_proposal_safety_and_liveness,
+    consensus::proposal_helpers::validate_proposal_safety_and_liveness,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task, AnyhowTracing},
 };
