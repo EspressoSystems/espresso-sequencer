@@ -78,6 +78,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/orchestrator
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cdn-broker
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cdn-marshal
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cdn-whitelist
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-relay-server
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-prover
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
@@ -139,6 +140,13 @@ jobs:
         id: cdn-marshal
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/cdn-marshal
+          flavor: suffix=musl
+
+      - name: Generate cdn-whitelist docker metadata
+        uses: docker/metadata-action@v5
+        id: cdn-whitelist
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist
           flavor: suffix=musl
 
       - name: Generate state-relay-server docker metadata
@@ -212,6 +220,16 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-marshal.outputs.tags }}
           labels: ${{ steps.cdn-marshal.outputs.labels }}
+
+      - name: Build and push cdn-whitelist docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/cdn-whitelist.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.cdn-whitelist.outputs.tags }}
+          labels: ${{ steps.cdn-whitelist.outputs.labels }}
 
       - name: Build and push state-relay-server docker
         uses: docker/build-push-action@v5
