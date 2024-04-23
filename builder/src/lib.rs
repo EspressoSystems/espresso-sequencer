@@ -640,7 +640,7 @@ pub mod testing {
                 channel_capacity,
                 node_state,
                 hotshot_builder_api_url,
-                Duration::from_millis(100),
+                Duration::from_millis(1000),
                 15,
             )
             .await
