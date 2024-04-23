@@ -181,7 +181,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     /// Add a list of tasks to the given context.
-    pub fn with_task_list(mut self, tasks: TaskList) -> Self {
+    pub(crate) fn with_task_list(mut self, tasks: TaskList) -> Self {
         self.tasks.extend(tasks);
         self
     }
@@ -296,7 +296,7 @@ async fn handle_events<Ver: StaticVersionType>(
 }
 
 #[derive(Debug, Default)]
-pub struct TaskList(Vec<(String, JoinHandle<()>)>);
+pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
 
 impl TaskList {
     /// Spawn a background task attached to this [`TaskList`].
