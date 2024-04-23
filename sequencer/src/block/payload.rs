@@ -355,7 +355,7 @@ mod test {
 
     fn check_basic_correctness<TableWord: TableWordTraits>() {
         // play with this
-        let test_cases = vec![
+        let test_cases = [
             // 1 namespace only
             vec![vec![5, 8, 8]], // 3 non-empty txs
             vec![vec![0, 8, 8]], // 1 empty tx at the beginning

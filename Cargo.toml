@@ -32,6 +32,7 @@ ark-srs = "0.3.1"
 async-compatibility-layer = { version = "1.1", default-features = false, features = [
   "logging-utils",
 ] }
+async-once-cell = "0.5"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
 base64 = "0.22"
