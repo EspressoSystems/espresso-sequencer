@@ -254,17 +254,24 @@ library Transcript {
         );
 
         // public inputs
-        append8FieldElements(
-            self,
-            BN254.ScalarField.wrap(publicInput[0]),
-            BN254.ScalarField.wrap(publicInput[1]),
-            BN254.ScalarField.wrap(publicInput[2]),
-            BN254.ScalarField.wrap(publicInput[3]),
-            BN254.ScalarField.wrap(publicInput[4]),
-            BN254.ScalarField.wrap(publicInput[5]),
-            BN254.ScalarField.wrap(publicInput[6]),
-            BN254.ScalarField.wrap(publicInput[7])
-        );
+        // This *if* statement is to avoid having tests failures
+        if (publicInput.length == 8) {
+            append8FieldElements(
+                self,
+                BN254.ScalarField.wrap(publicInput[0]),
+                BN254.ScalarField.wrap(publicInput[1]),
+                BN254.ScalarField.wrap(publicInput[2]),
+                BN254.ScalarField.wrap(publicInput[3]),
+                BN254.ScalarField.wrap(publicInput[4]),
+                BN254.ScalarField.wrap(publicInput[5]),
+                BN254.ScalarField.wrap(publicInput[6]),
+                BN254.ScalarField.wrap(publicInput[7])
+            );
+        } else {
+            for (uint256 i = 0; i < publicInput.length; i++) {
+                appendFieldElement(self, BN254.ScalarField.wrap(publicInput[i]));
+            }
+        }
     }
 
     /// @dev Append the proof to the transcript.
