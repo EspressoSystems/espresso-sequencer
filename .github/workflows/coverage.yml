@@ -30,9 +30,10 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
-        # Separate build step for easier identification of failures and timings. Should be the same
-        # as the `run` step plus `--no-run`.
-      - build: |
+      # Separate build step for easier identification of failures and timings. Should be the same
+      # as the `run` step plus `--no-run`.
+      - name: Build tests for coverage
+        run: |
           cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
             --exclude contract-bindings \
             --exclude gen-vk-contract \
@@ -50,7 +51,8 @@ jobs:
             -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
             -Zpanic_abort_tests
 
-      - run: |
+      - name: Run tests with coverage
+        run: |
           cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
             --exclude contract-bindings \
             --exclude gen-vk-contract \
