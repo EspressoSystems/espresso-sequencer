@@ -41,7 +41,7 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_builder_core::service::GlobalState;
+use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
 use jf_primitives::{
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::bls_over_bn254::VerKey,
@@ -69,10 +69,10 @@ pub mod non_permissioned;
 pub mod permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes>>>) {
+pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<SeqTypes>>>) {
     // it is to serve hotshot
     let builder_api = hotshot_builder_api::builder::define_api::<
-        Arc<RwLock<GlobalState<SeqTypes>>>,
+        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
@@ -80,13 +80,14 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<GlobalState<SeqTypes
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-        Arc<RwLock<GlobalState<SeqTypes>>>,
+        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<GlobalState<SeqTypes>>>, BuilderApiError> = App::with_state(source);
+    let mut app: App<Arc<RwLock<ProxyGlobalState<SeqTypes>>>, BuilderApiError> =
+        App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
@@ -571,6 +572,8 @@ pub mod testing {
                 node_state,
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
+                Duration::from_millis(1000),
+                15,
             )
             .await
             .unwrap();
@@ -637,6 +640,8 @@ pub mod testing {
                 channel_capacity,
                 node_state,
                 hotshot_builder_api_url,
+                Duration::from_millis(100),
+                15,
             )
             .await
             .unwrap();
