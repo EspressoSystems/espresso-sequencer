@@ -32,7 +32,10 @@ use hotshot_types::{
     },
 };
 use itertools::Itertools;
-use jf_primitives::merkle_tree::{prelude::MerkleNode, ToTraversalPath, UniversalMerkleTreeScheme};
+use jf_primitives::merkle_tree::{
+    prelude::{MerkleNode, MerkleProof},
+    ToTraversalPath, UniversalMerkleTreeScheme,
+};
 use jf_primitives::{
     errors::PrimitivesError,
     merkle_tree::{
@@ -421,13 +424,11 @@ async fn store_state_update(
 
     // Insert fee merkle tree nodes
     for delta in fees_delta {
-        let (_, proof) = fee_merkle_tree
-            .universal_lookup(delta)
-            .expect_ok()
-            .context(format!(
-                "Index not found in fee merkle tree: delta {}",
-                delta
-            ))?;
+        let proof = match fee_merkle_tree.universal_lookup(delta) {
+            LookupResult::Ok(_, proof) => proof,
+            LookupResult::NotFound(proof) => proof,
+            LookupResult::NotInMemory => bail!("missing merkle path for fee account {delta}"),
+        };
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 &delta,
@@ -448,7 +449,7 @@ async fn store_state_update(
     let (_, proof) = block_merkle_tree
         .lookup(block_number - 1)
         .expect_ok()
-        .context("Index not found in block merkle tree")?;
+        .context("getting blocks frontier")?;
     let path = <u64 as ToTraversalPath<{ BlockMerkleTree::ARITY }>>::to_traversal_path(
         &(block_number - 1),
         block_merkle_tree.height(),
@@ -505,11 +506,11 @@ async fn store_genesis_state(
 
     // Insert fee merkle tree nodes
     for (account, _) in state.fee_merkle_tree.iter() {
-        let (_, proof) = state
-            .fee_merkle_tree
-            .universal_lookup(account)
-            .expect_ok()
-            .context("Index not found in fee merkle tree account: {account:?}")?;
+        let proof = match state.fee_merkle_tree.universal_lookup(account) {
+            LookupResult::Ok(_, proof) => proof,
+            LookupResult::NotFound(proof) => proof,
+            LookupResult::NotInMemory => bail!("missing merkle path for fee account {account}"),
+        };
         let path: Vec<usize> =
             <FeeAccount as ToTraversalPath<{ FeeMerkleTree::ARITY }>>::to_traversal_path(
                 account,
@@ -568,7 +569,7 @@ pub async fn update_state_storage_loop(
                     break;
                 }
                 Err(err) => {
-                    tracing::error!("{err:#}");
+                    tracing::error!(height = leaf.height(), "failed to updated state: {err:#}");
                     // If we fail, delay for a second and retry.
                     async_std::task::sleep(Duration::from_secs(1)).await;
                 }
@@ -854,12 +855,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     fn insert_path(
         &mut self,
         key: Self::Key,
-        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
-            Self::Entry,
-            Self::Key,
-            Self::T,
-            { Self::ARITY },
-        >,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, { Self::ARITY }>,
     ) -> anyhow::Result<()> {
         let Some(elem) = proof.elem() else {
             bail!("BlockMerkleTree does not support non-membership proofs");
@@ -1124,12 +1120,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
     fn insert_path(
         &mut self,
         key: Self::Key,
-        proof: &jf_primitives::merkle_tree::prelude::MerkleProof<
-            Self::Entry,
-            Self::Key,
-            Self::T,
-            { Self::ARITY },
-        >,
+        proof: &MerkleProof<Self::Entry, Self::Key, Self::T, { Self::ARITY }>,
     ) -> anyhow::Result<()> {
         match proof.elem() {
             Some(elem) => self.remember(key, elem, proof)?,

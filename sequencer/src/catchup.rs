@@ -4,7 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use jf_primitives::merkle_tree::ForgetableMerkleTreeScheme;
+use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
 use std::{sync::Arc, time::Duration};
 use surf_disco::Request;
@@ -107,6 +107,7 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 
 #[async_trait]
 impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
+    #[tracing::instrument(skip(self))]
     async fn fetch_accounts(
         &self,
         view: ViewNumber,
@@ -124,6 +125,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         Ok(ret)
     }
 
+    #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
     async fn remember_blocks_merkle_tree(
         &self,
         view: ViewNumber,
@@ -134,7 +136,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         }
         loop {
             for client in self.clients.iter() {
-                tracing::info!("Fetching frontier for view {view:?} from {}", client.url);
+                tracing::info!("Fetching frontier from {}", client.url);
                 match client
                     .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
                     .send()
@@ -145,7 +147,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
                             tracing::warn!("Provided frontier is missing leaf element");
                             continue;
                         };
-                        match mt.remember(view.get_u64(), *elem, &frontier) {
+                        match mt.remember(mt.num_leaves() - 1, *elem, &frontier) {
                             Ok(_) => return Ok(()),
                             Err(err) => {
                                 tracing::warn!("Error verifying block proof: {}", err);

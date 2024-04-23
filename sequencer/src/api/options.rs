@@ -341,17 +341,18 @@ impl Options {
                 "fee-state",
                 endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
             )?;
+
+            let state = state.clone();
+            let get_node_state = async move { state.node_state().await.clone() };
+            tasks.spawn(
+                "merklized state storage update loop",
+                update_state_storage_loop(ds, get_node_state),
+            );
         }
 
         if self.hotshot_events.is_some() {
-            self.init_and_spawn_hotshot_event_streaming_module(state.clone(), tasks, bind_version)?;
+            self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
         }
-
-        let get_node_state = async move { state.node_state().await.clone() };
-        tasks.spawn(
-            "merklized state storage update loop",
-            update_state_storage_loop(ds, get_node_state),
-        );
 
         tasks.spawn(
             "API server",
