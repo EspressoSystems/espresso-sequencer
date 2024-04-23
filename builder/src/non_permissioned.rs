@@ -333,6 +333,9 @@ mod test {
         )
         .expect("Claim block signing failed");
 
+        // sleep and wait for builder service to startup
+        async_sleep(Duration::from_millis(1000)).await;
+
         // test getting available blocks
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(

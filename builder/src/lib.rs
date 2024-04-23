@@ -572,7 +572,7 @@ pub mod testing {
                 node_state,
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
-                Duration::from_millis(1000),
+                Duration::from_millis(10),
                 15,
             )
             .await
@@ -640,7 +640,7 @@ pub mod testing {
                 channel_capacity,
                 node_state,
                 hotshot_builder_api_url,
-                Duration::from_millis(1000),
+                Duration::from_millis(10),
                 15,
             )
             .await
