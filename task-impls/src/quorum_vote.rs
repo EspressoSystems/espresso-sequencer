@@ -177,6 +177,9 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to consensus. The replica will require a write lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
+    /// Immutable instance state
+    pub instance_state: Arc<TYPES::InstanceState>,
+
     /// Latest view number that has been voted for.
     pub latest_voted_view: TYPES::Time,
 
@@ -465,7 +468,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 // Validate the state.
                 let Ok((validated_state, state_delta)) = parent_state
                     .validate_and_apply_header(
-                        &self.consensus.read().await.instance_state,
+                        self.instance_state.as_ref(),
                         &parent_leaf,
                         &proposal.data.block_header.clone(),
                     )

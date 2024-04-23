@@ -41,9 +41,6 @@ pub type VidShares<TYPES> = BTreeMap<
 /// This will contain the state of all rounds.
 #[derive(custom_debug::Debug)]
 pub struct Consensus<TYPES: NodeType> {
-    /// Immutable instance-level state.
-    pub instance_state: TYPES::InstanceState,
-
     /// The validated states that are currently loaded in memory.
     pub validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 

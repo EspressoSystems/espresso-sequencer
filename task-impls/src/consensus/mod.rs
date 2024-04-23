@@ -77,6 +77,8 @@ pub struct ConsensusTaskState<
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// Reference to consensus. The replica will require a write lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+    /// Immutable instance state
+    pub instance_state: Arc<TYPES::InstanceState>,
     /// View timeout from config.
     pub timeout: u64,
     /// Round start delay from config, in milliseconds.
@@ -357,6 +359,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.decided_upgrade_cert.clone(),
             &mut self.payload_commitment_and_metadata,
             &mut self.proposal_cert,
+            self.instance_state.clone(),
         )
         .await?;
 

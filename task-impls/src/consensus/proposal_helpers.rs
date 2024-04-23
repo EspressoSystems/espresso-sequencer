@@ -56,10 +56,11 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     sender: TYPES::SignatureKey,
     event_sender: Sender<Event<TYPES>>,
     storage: Arc<RwLock<impl Storage<TYPES>>>,
+    instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<()> {
     let (validated_state, state_delta) = parent_state
         .validate_and_apply_header(
-            &consensus.read().await.instance_state,
+            instance_state.as_ref(),
             &parent_leaf,
             &proposal.data.block_header.clone(),
         )
@@ -199,10 +200,11 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
     upgrade_cert: Option<UpgradeCertificate<TYPES>>,
     proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     round_start_delay: u64,
+    instance_state: Arc<TYPES::InstanceState>,
 ) {
     let block_header = TYPES::BlockHeader::new(
         state.as_ref(),
-        &consensus.read().await.instance_state,
+        instance_state.as_ref(),
         &parent_leaf,
         commitment_and_metadata.commitment,
         commitment_and_metadata.builder_commitment,
@@ -394,6 +396,7 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
     consensus: Arc<RwLock<Consensus<TYPES>>>,
     upgrade_cert: UpgradeCertificate<TYPES>,
     delay: u64,
+    instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<JoinHandle<()>> {
     let (parent_leaf, state) = get_parent_leaf_and_state(
         cur_view,
@@ -433,6 +436,7 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
             Some(upgrade_cert),
             None,
             delay,
+            instance_state.clone(),
         )
         .await;
     }))
@@ -454,6 +458,7 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
     commitment_and_metadata: &mut Option<CommitmentAndMetadata<TYPES>>,
     proposal_cert: &mut Option<ViewChangeEvidence<TYPES>>,
+    instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<JoinHandle<()>> {
     let (parent_leaf, state) = get_parent_leaf_and_state(
         cur_view,
@@ -507,6 +512,7 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
             proposal_upgrade_certificate,
             proposal_certificate,
             delay,
+            instance_state.clone(),
         )
         .await;
     });
@@ -533,6 +539,7 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
     decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
     commitment_and_metadata: &mut Option<CommitmentAndMetadata<TYPES>>,
     proposal_cert: &mut Option<ViewChangeEvidence<TYPES>>,
+    instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<JoinHandle<()>> {
     if let Some(upgrade_cert) = decided_upgrade_cert {
         publish_proposal_from_upgrade_cert(
@@ -545,6 +552,7 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
             consensus,
             upgrade_cert,
             delay,
+            instance_state,
         )
         .await
     } else {
@@ -561,6 +569,7 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
             decided_upgrade_cert,
             commitment_and_metadata,
             proposal_cert,
+            instance_state,
         )
         .await
     }
@@ -748,6 +757,7 @@ pub async fn handle_quorum_proposal_recv<
                     task_state.decided_upgrade_cert.clone(),
                     &mut task_state.payload_commitment_and_metadata,
                     &mut task_state.proposal_cert,
+                    task_state.instance_state.clone(),
                 )
                 .await?;
 
@@ -785,6 +795,7 @@ pub async fn handle_quorum_proposal_recv<
                 sender,
                 task_state.output_event_stream.clone(),
                 task_state.storage.clone(),
+                task_state.instance_state.clone(),
             )
             .map(AnyhowTracing::err_as_debug),
         ));

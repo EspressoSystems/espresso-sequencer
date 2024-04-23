@@ -113,7 +113,6 @@ pub struct Memberships<TYPES: NodeType> {
 }
 
 /// Holds the state needed to participate in `HotShot` consensus
-#[derive(Clone)]
 pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The public key of this node
     public_key: TYPES::SignatureKey,
@@ -131,10 +130,13 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub memberships: Arc<Memberships<TYPES>>,
 
     /// the metrics that the implementor is using.
-    _metrics: Arc<ConsensusMetricsValue>,
+    metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES>>>,
+
+    /// Immutable instance state
+    instance_state: Arc<TYPES::InstanceState>,
 
     /// The network version
     version: Arc<RwLock<Version>>,
@@ -158,6 +160,26 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Reference to the internal storage for consensus datum.
     pub storage: Arc<RwLock<I::Storage>>,
+}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPES, I> {
+    fn clone(&self) -> Self {
+        Self {
+            public_key: self.public_key.clone(),
+            private_key: self.private_key.clone(),
+            config: self.config.clone(),
+            networks: self.networks.clone(),
+            memberships: self.memberships.clone(),
+            metrics: self.metrics.clone(),
+            consensus: self.consensus.clone(),
+            instance_state: self.instance_state.clone(),
+            version: self.version.clone(),
+            start_view: self.start_view,
+            output_event_stream: self.output_event_stream.clone(),
+            internal_event_stream: self.internal_event_stream.clone(),
+            id: self.id,
+            storage: self.storage.clone(),
+        }
+    }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
@@ -258,7 +280,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         }
 
         let consensus = Consensus {
-            instance_state,
             validated_state_map,
             vid_shares: BTreeMap::new(),
             cur_view: anchored_leaf.get_view_number(),
@@ -282,6 +303,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let inner: Arc<SystemContext<TYPES, I>> = Arc::new(SystemContext {
             id: nonce,
             consensus,
+            instance_state: Arc::new(instance_state),
             public_key,
             private_key,
             config,
@@ -289,7 +311,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             start_view: initializer.start_view,
             networks: Arc::new(networks),
             memberships: Arc::new(memberships),
-            _metrics: consensus_metrics.clone(),
+            metrics: consensus_metrics.clone(),
             internal_event_stream: (internal_tx, internal_rx.deactivate()),
             output_event_stream: (external_tx, external_rx),
             storage: Arc::new(RwLock::new(storage)),
@@ -382,6 +404,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     #[must_use]
     pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
         self.consensus.clone()
+    }
+
+    /// Returns a copy of the instance state
+    pub fn get_instance_state(&self) -> Arc<TYPES::InstanceState> {
+        self.instance_state.clone()
     }
 
     /// Returns a copy of the last decided leaf

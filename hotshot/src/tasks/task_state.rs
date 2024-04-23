@@ -185,6 +185,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
         ConsensusTaskState {
             consensus,
+            instance_state: handle.hotshot.get_instance_state(),
             timeout: handle.hotshot.config.next_view_timeout,
             round_start_delay: handle.hotshot.config.round_start_delay,
             cur_view: handle.get_cur_view().await,
@@ -224,6 +225,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             consensus,
+            instance_state: handle.hotshot.get_instance_state(),
             latest_voted_view: handle.get_cur_view().await,
             vote_dependencies: HashMap::new(),
             quorum_network: handle.hotshot.networks.quorum_network.clone(),
@@ -252,6 +254,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             committee_network: handle.hotshot.networks.da_network.clone(),
             output_event_stream: handle.hotshot.output_event_stream.0.clone(),
             consensus,
+            instance_state: handle.hotshot.get_instance_state(),
             timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             cur_view: handle.get_cur_view().await,
