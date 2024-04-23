@@ -71,6 +71,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/test-node
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -113,6 +114,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/test-node
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -129,6 +131,7 @@ jobs:
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
+      test-node-tag: ${{ steps.test-node.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -223,6 +226,12 @@ jobs:
         id: nasty-client
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
+
+      - name: Generate test-node metadata
+        uses: docker/metadata-action@v5
+        id: test-node
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/test-node
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
@@ -333,6 +342,16 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
+
+      - name: Build and push test-node docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/nasty-client.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.test-node.outputs.tags }}
+          labels: ${{ steps.test-node.outputs.labels }}
 
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
