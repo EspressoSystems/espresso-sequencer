@@ -13,6 +13,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Do not exceed the memory limit of the public github runner during cargo build.
+  CARGO_BUILD_JOBS: "2"
+  # Remaining env vars are required for coverage.
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: >
+    -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
+    -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
+    hotshot_example
+  RUSTDOCFLAGS: >
+    -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
+    -Zpanic_abort_tests
+  CARGO_TEST_CMD: >
+    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
+    --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
+
 jobs:
   code-coverage:
     runs-on: ubuntu-latest
@@ -30,45 +46,14 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
-      # Separate build step for easier identification of failures and timings. Should be the same
-      # as the `run` step plus `--no-run`.
+      # Separate build step for easier identification of failures and timings.
       - name: Build tests for coverage
         run: |
-          cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
-            --exclude contract-bindings \
-            --exclude gen-vk-contract \
-            --exclude hotshot-contract-adapter \
-            --exclude diff-test-hotshot \
-            --no-run
-        env:
-          CARGO_BUILD_JOBS: "2" # avoid using too much memory
-          CARGO_INCREMENTAL: "0"
-          RUSTFLAGS: >
-            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-            -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
-            --cfg hotshot_example
-          RUSTDOCFLAGS: >
-            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-            -Zpanic_abort_tests
+          $CARGO_TEST_CMD --no-run
 
       - name: Run tests with coverage
         run: |
-          cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
-            --exclude contract-bindings \
-            --exclude gen-vk-contract \
-            --exclude hotshot-contract-adapter \
-            --exclude diff-test-hotshot -- \
-            --skip service::test::test_
-        env:
-          CARGO_INCREMENTAL: "0"
-          RUSTFLAGS: >
-            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-            -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
-            --cfg hotshot_example
-          RUSTDOCFLAGS: >
-            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-            -Zpanic_abort_tests
-        timeout-minutes: 30
+          $CARGO_TEST_CMD -- --skip service::test::test_
 
       - uses: alekitto/grcov@v0.2
         with:
