@@ -7,11 +7,10 @@ use crate::{
     network,
     persistence::{self, SequencerPersistence},
     state::ValidatedState,
-    Node, SeqTypes,
+    SeqTypes, Transaction,
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
@@ -80,8 +79,9 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>>;
+#[trait_variant::make(SubmitDataSource: Send)]
+pub(crate) trait LocalSubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    async fn submit(&self, tx: Transaction) -> anyhow::Result<()>;
 }
 
 #[async_trait]

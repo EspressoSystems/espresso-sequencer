@@ -14,6 +14,7 @@ use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Sub};
 use ethers::{abi::Address, types::U256};
+use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
@@ -528,8 +529,10 @@ async fn store_genesis_state(
 
 pub async fn update_state_storage_loop(
     storage: Arc<RwLock<impl SequencerStateDataSource>>,
-    mut instance: NodeState,
+    instance: impl Future<Output = NodeState>,
 ) -> anyhow::Result<()> {
+    let mut instance = instance.await;
+
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
         let state = storage.upgradable_read().await;
