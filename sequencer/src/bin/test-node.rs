@@ -13,7 +13,10 @@ use sequencer::{
     test_helpers::TestNetwork,
     testing::TestConfig,
 };
-use sequencer_utils::deployer::{deploy, Contract, Contracts};
+use sequencer_utils::{
+    deployer::{deploy, Contract, Contracts},
+    AnvilOptions,
+};
 use tide_disco::{error::ServerError, Api};
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -21,13 +24,8 @@ use vbs::version::StaticVersionType;
 #[derive(Clone, Debug, Parser)]
 struct Options {
     /// A JSON-RPC endpoint for the L1 to deploy to.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
-        default_value = "http://localhost:8545"
-    )]
-    rpc_url: Url,
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
+    rpc_url: Option<Url>,
     /// Mnemonic for an L1 wallet.
     ///
     /// This wallet is used to deploy the contracts, so the account indicated by ACCOUNT_INDEX must
@@ -75,18 +73,28 @@ async fn main() -> anyhow::Result<()> {
     .submit(Default::default())
     .query_fs(Default::default(), persistence::fs::Options { path });
 
+    let (url, _anvil) = if let Some(url) = opt.rpc_url {
+        (url, None)
+    } else {
+        tracing::warn!("L1 url is not provided. running an anvil node");
+        let instance = AnvilOptions::default().spawn().await;
+        let url = instance.url();
+        tracing::info!("l1 url: {}", url);
+        (url, Some(instance))
+    };
+
     let network = TestNetwork::new(
         options,
         [persistence::no_storage::NoStorage; TestConfig::NUM_NODES],
-        opt.rpc_url.clone(),
+        url.clone(),
     )
     .await;
 
     let contracts = Contracts::new();
 
-    println!("deploying the contracts");
+    tracing::info!("deploying the contracts");
     let contracts = deploy(
-        opt.rpc_url.clone(),
+        url.clone(),
         opt.mnemonic.clone(),
         opt.account_index,
         true,
@@ -98,12 +106,12 @@ async fn main() -> anyhow::Result<()> {
     let hotshot_address = contracts
         .get_contract_address(Contract::HotShot)
         .expect("Cannot get the hotshot contract address");
-    println!("hotshot address: {}", hotshot_address);
+    tracing::info!("hotshot address: {}", hotshot_address);
 
-    println!("starting the commitment server");
+    tracing::info!("starting the commitment server");
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
-    println!("starting the builder server");
+    tracing::info!("starting the builder server");
     let builder_address = "0x90f79bf6eb2c4f870365e785982e1f101e93b906"
         .parse()
         .unwrap();
@@ -112,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
     let sequencer_url =
         Url::parse(format!("http://localhost:{}", opt.sequencer_api_port).as_str()).unwrap();
     let commitment_task_options = CommitmentTaskOptions {
-        l1_provider: opt.rpc_url,
+        l1_provider: url,
         l1_chain_id: None,
         hotshot_address,
         sequencer_mnemonic: opt.mnemonic,
@@ -122,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
         delay: None,
     };
 
-    println!("starting hotshot commitment task");
+    tracing::info!("starting hotshot commitment task");
     run_hotshot_commitment_task::<es_version::SequencerVersion>(&commitment_task_options).await;
 
     Ok(())
