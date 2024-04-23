@@ -1,5 +1,5 @@
 use crate::state::FeeAmount;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::U256;
 use itertools::Either;
@@ -50,6 +50,9 @@ impl ChainConfig {
             base_fee: base_fee.into(),
         }
     }
+    pub fn max_block_size(&self) -> u64 {
+        self.max_block_size
+    }
 }
 
 impl Committable for ChainConfig {
@@ -58,7 +61,7 @@ impl Committable for ChainConfig {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new(&Self::tag())
+        committable::RawCommitmentBuilder::new(&Self::tag())
             .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
             .u64_field("max_block_size", self.max_block_size)
             .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
@@ -76,6 +79,12 @@ impl ResolvableChainConfig {
         match self.chain_config {
             Either::Left(config) => config.commit(),
             Either::Right(commitment) => commitment,
+        }
+    }
+    pub fn resolve(self) -> Option<ChainConfig> {
+        match self.chain_config {
+            Either::Left(config) => Some(config),
+            Either::Right(_) => None,
         }
     }
 }
@@ -111,5 +120,12 @@ mod tests {
         } = chain_config;
         let other_config = ChainConfig::new(chain_id, max_block_size, 1);
         assert!(chain_config != other_config);
+    }
+
+    #[test]
+    fn test_resolve_chain_config() {
+        let chain_config = ChainConfig::default();
+        let resolveable: ResolvableChainConfig = chain_config.into();
+        assert_eq!(chain_config, resolveable.resolve().unwrap());
     }
 }

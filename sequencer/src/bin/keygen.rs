@@ -138,7 +138,11 @@ fn main() -> anyhow::Result<()> {
         tracing::info!("generating new key set");
 
         let path = opts.out.join(format!("{index}.env"));
-        let mut file = File::options().write(true).create(true).open(&path)?;
+        let mut file = File::options()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
         opts.scheme.gen(seed, index as u64, &mut file)?;
 
         tracing::info!("private keys written to {}", path.display());

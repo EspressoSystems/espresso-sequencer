@@ -37,12 +37,15 @@ use jf_plonk::errors::PlonkError;
 use jf_primitives::constants::CS_ID_SCHNORR;
 use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::{iter, time::Duration};
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
-use time::Instant;
+use time::ext::InstantExt;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 type F = ark_ed_on_bn254::Fq;
 
@@ -183,7 +186,7 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
         let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
-        let srs_elapsed = srs_timer.elapsed();
+        let srs_elapsed = Instant::now().signed_duration_since(srs_timer);
         std::println!("Done in {srs_elapsed:.3}");
 
         // convert to Jellyfish type
@@ -200,7 +203,7 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let key_gen_timer = Instant::now();
     let (pk, _) = crate::snark::preprocess(&srs, stake_table_capacity)
         .expect("Fail to preprocess state prover circuit");
-    let key_gen_elapsed = key_gen_timer.elapsed();
+    let key_gen_elapsed = Instant::now().signed_duration_since(key_gen_timer);
     std::println!("Done in {key_gen_elapsed:.3}");
     pk
 }
@@ -329,7 +332,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     // );
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let proof_gen_start = time::Instant::now();
+    let proof_gen_start = Instant::now();
     let (proof, public_input) = generate_state_update_proof::<_, _, _, _>(
         &mut ark_std::rand::thread_rng(),
         proving_key,
@@ -340,7 +343,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
         &threshold,
         config.stake_table_capacity,
     )?;
-    let proof_gen_elapsed = proof_gen_start.elapsed();
+    let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
     submit_state_and_proof(proof, public_input, config).await?;
@@ -354,7 +357,7 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
     lightclient_address: Address,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -382,20 +385,23 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
             .await,
     );
-    let proving_key = Arc::new(load_proving_key(config.stake_table_capacity));
-    let relay_server_client =
-        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
-    let config = Arc::new(config);
-    let update_interval = config.update_interval;
 
     tracing::info!("Light client address: {:?}", config.light_client_address);
+    let relay_server_client =
+        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
 
+    // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
         if let Err(err) = start_http_server(port, config.light_client_address, bind_version) {
             tracing::error!("Error starting http server: {}", err);
         }
     }
 
+    let proving_key = async_std::task::block_on(async move {
+        Arc::new(load_proving_key(config.stake_table_capacity))
+    });
+
+    let update_interval = config.update_interval;
     loop {
         let st = st.clone();
         let proving_key = proving_key.clone();
@@ -477,19 +483,17 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         abi::AbiEncode,
-        providers::Middleware,
-        utils::{hex, Anvil, AnvilInstance},
+        utils::{Anvil, AnvilInstance},
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use std::process::Command;
+    use sequencer_utils::deployer;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
-    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
     /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
@@ -585,60 +589,28 @@ mod test {
         (pi, proof)
     }
 
-    /// deploy LightClient.sol on local blockchain (via `anvil`) for testing
+    /// deploy LightClientMock.sol on local blockchain (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
+        genesis: ParsedLightClientState,
     ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
-        let signer = Wallet::from(anvil.keys()[0].clone());
-        let client =
-            SignerMiddleware::new(provider.clone(), signer.with_chain_id(anvil.chain_id()));
-        let l1_wallet = Arc::new(client);
-        let wallet_address = format!("{:?}", l1_wallet.clone().address());
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        // Assuming `l1_wallet` is your Arc<L1Wallet> and already initialized
-        let private_key = hex::encode(anvil.keys()[0].to_bytes());
-
-        // deploy the light client contract via a proxy
-        let output = Command::new("just")
-            .arg("dev-deploy")
-            .arg(anvil.endpoint())
-            .arg(TEST_MNEMONIC)
-            .arg(BLOCKS_PER_EPOCH.to_string())
-            .arg(NUM_INIT_VALIDATORS.to_string())
-            .arg(wallet_address.clone())
-            .arg(private_key)
-            .output()
-            .expect("fail to deploy");
-
-        if !output.status.success() {
-            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
-            return Err(anyhow!("failed to deploy contract"));
-        }
-
-        let last_blk_num = provider.get_block_number().await?;
-
-        // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
-        let address = provider
-            .get_block_receipts(last_blk_num)
-            .await?
-            .last()
-            .unwrap()
-            .contract_address
-            .expect("fail to get LightClient address from receipt");
+        let mut contracts = deployer::Contracts::default();
+        let address = deployer::deploy_mock_light_client_contract(
+            l1_wallet.clone(),
+            &mut contracts,
+            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+        )
+        .await?;
 
         let proxy = LightClient::new(address, l1_wallet.clone());
 
-        let light_client_proxy = LightClient::new(proxy.address(), l1_wallet.clone());
-
-        //turn on the permissionedProverMode with the l1 wallet address as the permissioned prover
-        light_client_proxy
-            .set_permissioned_prover(l1_wallet.clone().address())
-            .send()
-            .await?;
-
-        Ok((l1_wallet, light_client_proxy))
+        Ok((l1_wallet, proxy))
     }
 
     impl StateProverConfig {
@@ -671,15 +643,13 @@ mod test {
         setup_backtrace();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
-        // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
-        assert_eq!(genesis.view_num, 0);
-        assert_eq!(genesis.block_height, 0);
-        assert_eq!(genesis.threshold, U256::from(40));
+        assert_eq!(genesis, dummy_genesis);
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -697,12 +667,10 @@ mod test {
         let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, genesis.clone()).await?;
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
-        // sanity check on `config`
 
-        // sanity check to ensure the same genesis state for LightClientTest and for our tests
         let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 

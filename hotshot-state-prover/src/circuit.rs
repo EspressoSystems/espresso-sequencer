@@ -448,7 +448,7 @@ mod tests {
             .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
         // good path
-        let (circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -461,7 +461,7 @@ mod tests {
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
-        let (circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -476,7 +476,7 @@ mod tests {
 
         // bad path: feeding non-bit vector
         let bit_vec = [F::from(2u64); 10];
-        let (circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -510,7 +510,7 @@ mod tests {
             .into_iter()
             .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bad_bit_vec,
             &bad_bit_masked_sigs,
@@ -534,7 +534,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &sig_for_bad_state,
@@ -559,7 +559,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build::<_, _, _, _, _>(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &wrong_sigs,
@@ -573,7 +573,7 @@ mod tests {
             .is_err());
 
         // bad path: overflowing stake table size
-        assert!(build::<_, _, _, _, _>(
+        assert!(build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,

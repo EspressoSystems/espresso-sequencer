@@ -50,13 +50,15 @@ orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer n
 The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
-options. Next, you must launch a `cdn` instance, which are necessary to facilitate consensus.
+options.
 
+Next, you must launch a `cdn` instance, which is necessary to facilitate consensus.
 ```bash
-target/release/dev-cdn -p 1738
+just dev-cdn -- -p 1738
 ```
+In this case, we run it on port 1738.
 
-Once you have started the orchestrator and the web servers, you must connect `$N` sequencer nodes to them, after which
+Once you have started the orchestrator and the CDN, you must connect `$N` sequencer nodes to them, after which
 the network will start up automatically. To start one node, run
 
 ```bash
