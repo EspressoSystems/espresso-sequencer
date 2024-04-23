@@ -51,11 +51,21 @@ case $KERNEL in
     cargo build --release
     ;;
   darwin)
-  # Build in docker container
+  # Use a different target directory for docker builds to avoid conflicts with
+  # native builds.
+  CARGO_TARGET_DIR=target/docker
+
+  # Build in docker container:
+  #   - RUSTFLAGS is needed for compilation.
+  #   - CARGO_TARGET_DIR is set to point to the location where
+  #     the hosts CARGO_TARGET_DIR is mounted.
+  #   - PWD is mounted to /work.
+  #   - Cargo registry is mounted to avoid re-downloading dependencies.
   docker run \
-    -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS -e CARGO_TARGET_DIR \
+    -e RUSTFLAGS \
+    -e CARGO_TARGET_DIR=/work/target/docker \
     -v "$(pwd):/work" \
-    -v "$HOME/.cargo/registry:/root/.cargo/registry" \
+    -v "$HOME/.cargo/registry:/usr/local/cargo/registry" \
     -it ghcr.io/espressosystems/devops-rust:stable \
     bash -c "cd /work && cargo build --release"
     ;;
