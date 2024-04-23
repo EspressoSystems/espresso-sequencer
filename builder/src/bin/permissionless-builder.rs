@@ -17,10 +17,6 @@ use url::Url;
 
 #[derive(Parser, Clone, Debug)]
 pub struct NonPermissionedBuilderOptions {
-    /// Unique identifier for this instance of the sequencer network.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    pub chain_id: u16,
-
     /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
@@ -28,27 +24,7 @@ pub struct NonPermissionedBuilderOptions {
         env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
         default_value = "http://localhost:8081"
     )]
-    pub sequencer_url: Url,
-
-    /// URL of the Light Client State Relay Server
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_STATE_RELAY_SERVER_URL",
-        default_value = "http://localhost:8083"
-    )]
-    pub state_relay_server_url: Url,
-
-    /// The amount of time to wait between each request to the HotShot
-    /// consensus or DA web servers during polling.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL",
-        default_value = "100ms",
-        value_parser = parse_duration
-    )]
-    pub webserver_poll_interval: Duration,
+    pub hotshot_event_streaming_url: Url,
 
     /// Path to file containing private keys.
     ///
@@ -110,6 +86,25 @@ pub struct NonPermissionedBuilderOptions {
     /// BUILDER CHANNEL CAPACITY
     #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
+
+    /// The amount of time a builder can wait before timing out a request to the API.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_WEBSERVER_RESPONSE_TIMEOUT_DURATION",
+        default_value = "1s",
+        value_parser = parse_duration
+    )]
+    pub max_api_timeout_duration: Duration,
+
+    /// The number of views to buffer before a builder garbage collects its state
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
+        default_value = "15"
+    )]
+    pub buffer_view_num_count: usize,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -181,13 +176,19 @@ async fn main() -> anyhow::Result<()> {
     )
     .unwrap();
 
+    let api_response_timeout_duration = opt.max_api_timeout_duration;
+
+    let buffer_view_num_count = opt.buffer_view_num_count;
+
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,
         instance_state,
-        opt.sequencer_url,
+        opt.hotshot_event_streaming_url,
         builder_server_url,
+        api_response_timeout_duration,
+        buffer_view_num_count,
     )
     .await;
 
