@@ -37,7 +37,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
-    /// @notice an permissioned prover is needed to interact `newFinalizedState`
+    /// @notice a permissioned prover is needed to interact `newFinalizedState`
     event PermissionedProverRequired(address permissionedProver);
 
     /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
