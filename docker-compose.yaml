@@ -440,7 +440,7 @@ services:
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
-      test: "pg_isready && sleep 1 && pg_isready"
+      test: "pg_isready -u root && sleep 1 && pg_isready -u root"
       interval: 5s
       timeout: 4s
       retries: 20
