@@ -42,7 +42,6 @@ fn version_number_at_start_of_serialization() {
         vote_commitment: data.commit(),
         view_number,
         signatures: None,
-        is_genesis: false,
         _pd: PhantomData,
     };
     let message = Message {

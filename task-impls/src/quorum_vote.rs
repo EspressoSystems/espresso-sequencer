@@ -13,7 +13,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
-    event::{Event, EventType, LeafInfo},
+    event::{Event, EventType},
     message::GeneralConsensusMessage,
     simple_vote::{QuorumData, QuorumVote},
     traits::{
@@ -84,14 +84,16 @@ impl<TYPES: NodeType, S: Storage<TYPES> + 'static> HandleDepOutput
                         payload_commitment = Some(proposal_payload_comm);
                     }
                     let parent_commitment = parent_leaf.commit();
-                    let mut proposed_leaf = Leaf::from_quorum_proposal(proposal);
-                    proposed_leaf.set_parent_commitment(parent_commitment);
+                    let proposed_leaf = Leaf::from_quorum_proposal(proposal);
+                    if proposed_leaf.get_parent_commitment() != parent_commitment {
+                        return;
+                    }
                     leaf = Some(proposed_leaf);
                 }
                 HotShotEvent::DACertificateValidated(cert) => {
                     let cert_payload_comm = cert.get_data().payload_commit;
                     if let Some(comm) = payload_commitment {
-                        if !cert.is_genesis && cert_payload_comm != comm {
+                        if cert_payload_comm != comm {
                             error!("DAC has inconsistent payload commitment with quorum proposal or VID.");
                             return;
                         }
@@ -377,31 +379,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
 
                 let consensus = self.consensus.upgradable_read().await;
                 // Get the parent leaf and state.
-                let parent = if justify_qc.is_genesis {
-                    // Send the `Decide` event for the genesis block if the justify QC is genesis.
-                    let leaf = Leaf::genesis(&consensus.instance_state);
-                    let (validated_state, state_delta) =
-                        TYPES::ValidatedState::genesis(&consensus.instance_state);
-                    let state = Arc::new(validated_state);
-                    broadcast_event(
-                        Event {
-                            view_number: TYPES::Time::genesis(),
-                            event: EventType::Decide {
-                                leaf_chain: Arc::new(vec![LeafInfo::new(
-                                    leaf.clone(),
-                                    state.clone(),
-                                    Some(Arc::new(state_delta)),
-                                    None,
-                                )]),
-                                qc: Arc::new(justify_qc.clone()),
-                                block_size: None,
-                            },
-                        },
-                        &self.output_event_stream,
-                    )
-                    .await;
-                    Some((leaf, state))
-                } else {
+                let parent = {
                     match consensus
                         .saved_leaves
                         .get(&justify_qc.get_data().leaf_commit)
@@ -500,8 +478,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 let delta = Arc::new(state_delta);
                 let parent_commitment = parent_leaf.commit();
                 let view = proposal.data.get_view_number();
-                let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
-                proposed_leaf.set_parent_commitment(parent_commitment);
+                let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+                if proposed_leaf.get_parent_commitment() != parent_commitment {
+                    return;
+                }
 
                 // Validate the signature. This should also catch if `leaf_commitment`` does not
                 // equal our calculated parent commitment.

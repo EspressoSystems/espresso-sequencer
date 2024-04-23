@@ -1,18 +1,18 @@
 use core::time::Duration;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
-use crate::{consensus::update_view, helpers::AnyhowTracing};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use committable::Committable;
 use futures::FutureExt;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus, View},
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
-    event::{Event, EventType, LeafInfo},
+    event::{Event, EventType},
     message::Proposal,
     simple_certificate::UpgradeCertificate,
     traits::{
@@ -20,7 +20,7 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::Membership,
         network::{ConnectedNetwork, ConsensusIntentEvent},
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
         storage::Storage,
@@ -29,16 +29,16 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use tracing::{debug, error, warn};
-
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-
-use crate::{events::HotShotEvent, helpers::broadcast_event};
+use tracing::{debug, error, warn};
 
 use super::ConsensusTaskState;
+use crate::{
+    consensus::update_view,
+    events::HotShotEvent,
+    helpers::{broadcast_event, AnyhowTracing},
+};
 
 /// Validate the state and safety and liveness of a proposal then emit
 /// a `QuorumProposalValidated` event.
@@ -68,11 +68,13 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
 
     let state = Arc::new(validated_state);
     let delta = Arc::new(state_delta);
-    let parent_commitment = parent_leaf.commit();
     let view = proposal.data.get_view_number();
 
-    let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
-    proposed_leaf.set_parent_commitment(parent_commitment);
+    let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+    ensure!(
+        proposed_leaf.get_parent_commitment() == parent_leaf.commit(),
+        "Proposed leaf does not extend the parent leaf."
+    );
 
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
     //
@@ -217,8 +219,10 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         upgrade_certificate: upgrade_cert,
     };
 
-    let mut proposed_leaf = Leaf::from_quorum_proposal(&proposal);
-    proposed_leaf.set_parent_commitment(parent_leaf.commit());
+    let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
+    if proposed_leaf.get_parent_commitment() != parent_leaf.commit() {
+        return;
+    }
 
     let Ok(signature) = TYPES::SignatureKey::sign(&private_key, proposed_leaf.commit().as_ref())
     else {
@@ -630,46 +634,19 @@ pub async fn handle_quorum_proposal_recv<
     let consensus_read = task_state.consensus.upgradable_read().await;
 
     // Get the parent leaf and state.
-    let parent = if justify_qc.is_genesis {
-        // Send the `Decide` event for the genesis block if the justify QC is genesis.
-        let leaf = Leaf::genesis(&consensus_read.instance_state);
-        let (validated_state, state_delta) =
-            TYPES::ValidatedState::genesis(&consensus_read.instance_state);
-        let state = Arc::new(validated_state);
-        broadcast_event(
-            Event {
-                view_number: TYPES::Time::genesis(),
-                event: EventType::Decide {
-                    leaf_chain: Arc::new(vec![LeafInfo::new(
-                        leaf.clone(),
-                        state.clone(),
-                        Some(Arc::new(state_delta)),
-                        None,
-                    )]),
-                    qc: Arc::new(justify_qc.clone()),
-                    block_size: None,
-                },
-            },
-            &task_state.output_event_stream,
-        )
-        .await;
-        Some((leaf, state))
-    } else {
-        match consensus_read
-            .saved_leaves
-            .get(&justify_qc.get_data().leaf_commit)
-            .cloned()
-        {
-            Some(leaf) => {
-                if let (Some(state), _) = consensus_read.get_state_and_delta(leaf.get_view_number())
-                {
-                    Some((leaf, state.clone()))
-                } else {
-                    bail!("Parent state not found! Consensus internally inconsistent");
-                }
+    let parent = match consensus_read
+        .saved_leaves
+        .get(&justify_qc.get_data().leaf_commit)
+        .cloned()
+    {
+        Some(leaf) => {
+            if let (Some(state), _) = consensus_read.get_state_and_delta(leaf.get_view_number()) {
+                Some((leaf, state.clone()))
+            } else {
+                bail!("Parent state not found! Consensus internally inconsistent");
             }
-            None => None,
         }
+        None => None,
     };
 
     if justify_qc.get_view_number() > consensus_read.high_qc.view_number {

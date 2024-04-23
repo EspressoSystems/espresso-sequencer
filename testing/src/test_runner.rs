@@ -219,7 +219,7 @@ where
             latest_view: None,
             changes,
             last_decided_leaf: Leaf::genesis(&TestInstanceState {}),
-            high_qc: QuorumCertificate::genesis(),
+            high_qc: QuorumCertificate::genesis(&TestInstanceState {}),
         };
         let spinning_task = TestTask::<SpinningTask<TYPES, I>, SpinningTask<TYPES, I>>::new(
             Task::new(tx.clone(), rx.clone(), reg.clone(), spinning_task_state),

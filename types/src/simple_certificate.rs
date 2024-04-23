@@ -7,12 +7,12 @@ use std::{
 };
 
 use anyhow::{ensure, Result};
-use committable::{Commitment, CommitmentBoundsArkless, Committable};
+use committable::{Commitment, Committable};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::{serialize_signature2, Leaf},
+    data::serialize_signature2,
     simple_vote::{
         DAData, QuorumData, TimeoutData, UpgradeProposalData, ViewSyncCommitData,
         ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
@@ -72,8 +72,6 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Thr
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
     pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType>,
-    /// If this QC is for the genesis block
-    pub is_genesis: bool,
     /// phantom data for `THRESHOLD` and `TYPES`
     pub _pd: PhantomData<(TYPES, THRESHOLD)>,
 }
@@ -91,7 +89,6 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + Committable, THRESHOLD: Threshold<TYP
             .field("vote_commitment", self.vote_commitment)
             .field("view number", self.view_number.commit())
             .var_size_field("signatures", &signature_bytes)
-            .fixed_size_field("is genesis", &[u8::from(self.is_genesis)])
             .finalize()
     }
 }
@@ -113,12 +110,11 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
             vote_commitment,
             view_number: view,
             signatures: Some(sig),
-            is_genesis: false,
             _pd: PhantomData,
         }
     }
     fn is_valid_cert<MEMBERSHIP: Membership<TYPES>>(&self, membership: &MEMBERSHIP) -> bool {
-        if self.is_genesis && self.view_number == TYPES::Time::genesis() {
+        if self.view_number == TYPES::Time::genesis() {
             return true;
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
@@ -151,30 +147,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
 }
 impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "view: {:?}, is_genesis: {:?}",
-            self.view_number, self.is_genesis
-        )
-    }
-}
-
-impl<TYPES: NodeType> QuorumCertificate<TYPES> {
-    #[must_use]
-    /// Creat the Genisis certificate
-    pub fn genesis() -> Self {
-        let data = QuorumData {
-            leaf_commit: Commitment::<Leaf<TYPES>>::default_commitment_no_preimage(),
-        };
-        let commit = data.commit();
-        Self {
-            data,
-            vote_commitment: commit,
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: None,
-            is_genesis: true,
-            _pd: PhantomData,
-        }
+        write!(f, "view: {:?}", self.view_number)
     }
 }
 

@@ -1,20 +1,9 @@
-use anyhow::Result;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
-use crate::{
-    consensus::{
-        proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able},
-        view_change::update_view,
-    },
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
-    },
-};
+use anyhow::Result;
 use async_broadcast::Sender;
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
@@ -43,16 +32,27 @@ use hotshot_types::{
     utils::Terminator,
     vote::{Certificate, HasViewNumber},
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
-use vbs::version::Version;
-
 #[cfg(not(feature = "dependency-tasks"))]
 use hotshot_types::{
     data::{null_block, VidDisperseShare},
     message::GeneralConsensusMessage,
     simple_vote::QuorumData,
+};
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, instrument, warn};
+use vbs::version::Version;
+
+use crate::{
+    consensus::{
+        proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able},
+        view_change::update_view,
+    },
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task},
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
+    },
 };
 
 /// Helper functions to handler proposal-related functionality.
@@ -213,14 +213,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let view = cert.view_number;
                 // TODO: do some of this logic without the vote token check, only do that when voting.
                 let justify_qc = proposal.justify_qc.clone();
-                let parent = if justify_qc.is_genesis {
-                    Some(Leaf::genesis(&consensus.instance_state))
-                } else {
-                    consensus
-                        .saved_leaves
-                        .get(&justify_qc.get_data().leaf_commit)
-                        .cloned()
-                };
+                let parent = consensus
+                    .saved_leaves
+                    .get(&justify_qc.get_data().leaf_commit)
+                    .cloned();
 
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
@@ -233,15 +229,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
                 let parent_commitment = parent.commit();
 
-                let mut proposed_leaf = Leaf::from_quorum_proposal(proposal);
-                proposed_leaf.set_parent_commitment(parent_commitment);
+                let proposed_leaf = Leaf::from_quorum_proposal(proposal);
+                if proposed_leaf.get_parent_commitment() != parent_commitment {
+                    return false;
+                }
 
                 // Validate the DAC.
                 let message = if cert.is_valid_cert(self.committee_membership.as_ref()) {
                     // Validate the block payload commitment for non-genesis DAC.
-                    if !cert.is_genesis
-                        && cert.get_data().payload_commit
-                            != proposal.block_header.payload_commitment()
+                    if cert.get_data().payload_commit != proposal.block_header.payload_commitment()
                     {
                         error!("Block payload commitment does not equal da cert payload commitment. View = {}", *view);
                         return false;
