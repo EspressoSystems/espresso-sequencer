@@ -30,6 +30,26 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
+        # Separate build step for easier identification of failures and timings. Should be the same
+        # as the `run` step plus `--no-run`.
+      - build: |
+          cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
+            --exclude contract-bindings \
+            --exclude gen-vk-contract \
+            --exclude hotshot-contract-adapter \
+            --exclude diff-test-hotshot -- \
+            --skip service::test::test_ \
+            --no-run
+        env:
+          CARGO_INCREMENTAL: "0"
+          RUSTFLAGS: >
+            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
+            -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
+            --cfg hotshot_example
+          RUSTDOCFLAGS: >
+            -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
+            -Zpanic_abort_tests
+
       - run: |
           cargo +nightly test --locked --all-features --no-fail-fast --release --workspace \
             --exclude contract-bindings \
@@ -46,7 +66,7 @@ jobs:
           RUSTDOCFLAGS: >
             -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
             -Zpanic_abort_tests
-        timeout-minutes: 60
+        timeout-minutes: 30
 
       - uses: alekitto/grcov@v0.2
         with:
