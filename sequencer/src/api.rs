@@ -1,15 +1,22 @@
 use self::data_source::StateSignatureDataSource;
 use crate::{
-    context::SequencerContext, network, persistence::SequencerPersistence, state::ValidatedState,
-    state_signature::StateSigner, Node, SeqTypes,
+    network, persistence::SequencerPersistence, state::ValidatedState,
+    state_signature::StateSigner, Node, NodeState, SeqTypes, SequencerContext, Transaction,
 };
-use async_std::sync::Arc;
+use async_once_cell::Lazy;
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use data_source::{StateDataSource, SubmitDataSource};
 use derivative::Derivative;
-use hotshot::types::SystemContextHandle;
+use futures::{
+    future::{BoxFuture, Future, FutureExt},
+    stream::{BoxStream, Stream},
+};
+use hotshot::types::{Event, SystemContextHandle};
+use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use std::pin::Pin;
 use vbs::version::StaticVersionType;
 
 pub mod data_source;
@@ -21,44 +28,121 @@ mod update;
 
 pub use options::Options;
 
+type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
+
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct State<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
     state_signer: Arc<StateSigner<Ver>>,
+    event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
+    node_state: NodeState,
+
     #[derivative(Debug = "ignore")]
     handle: SystemContextHandle<SeqTypes, Node<N, P>>,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
-    From<&SequencerContext<N, P, Ver>> for State<N, P, Ver>
+    From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver>
 {
     fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
+            event_streamer: ctx.get_event_streamer(),
+            node_state: ctx.node_state(),
             handle: ctx.consensus().clone(),
         }
     }
 }
-type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, State<N, P, Ver>>;
 
-impl<N: network::Type, D, Ver: StaticVersionType, P: SequencerPersistence> SubmitDataSource<N, P>
-    for StorageState<N, P, D, Ver>
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+struct ApiState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+    // The consensus state is initialized lazily so we can start the API (and healthcheck endpoints)
+    // before consensus has started. Any endpoint that uses consensus state will wait for
+    // initialization to finish, but endpoints that do not require a consensus handle can proceed
+    // without waiting.
+    #[derivative(Debug = "ignore")]
+    consensus: BoxLazy<ConsensusState<N, P, Ver>>,
+}
+
+impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    ApiState<N, P, Ver>
 {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
-        self.as_ref().consensus()
+    fn new(init: impl Future<Output = ConsensusState<N, P, Ver>> + Send + 'static) -> Self {
+        Self {
+            consensus: Arc::pin(Lazy::from_future(init.boxed())),
+        }
+    }
+
+    fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
+        let state = self.clone();
+        async move { state.consensus().await.get_event_stream() }
+            .boxed()
+            .flatten_stream()
+    }
+
+    async fn state_signer(&self) -> &StateSigner<Ver> {
+        &self.consensus.as_ref().get().await.get_ref().state_signer
+    }
+
+    async fn event_streamer(&self) -> &RwLock<EventsStreamer<SeqTypes>> {
+        &self.consensus.as_ref().get().await.get_ref().event_streamer
+    }
+
+    async fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
+        &self.consensus.as_ref().get().await.get_ref().handle
+    }
+
+    async fn node_state(&self) -> &NodeState {
+        &self.consensus.as_ref().get().await.get_ref().node_state
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> SubmitDataSource<N, P>
-    for State<N, P, Ver>
+type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
+
+#[async_trait]
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    EventsSource<SeqTypes> for ApiState<N, P, Ver>
 {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
-        &self.handle
+    type EventStream = BoxStream<'static, Arc<BuilderEvent<SeqTypes>>>;
+
+    async fn get_event_stream(&self) -> Self::EventStream {
+        self.event_streamer()
+            .await
+            .read()
+            .await
+            .get_event_stream()
+            .await
     }
 }
 
-impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType, P: SequencerPersistence>
-    StateDataSource for StorageState<N, P, D, Ver>
+impl<
+        N: network::Type,
+        D: Send + Sync,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+    > SubmitDataSource<N, P> for StorageState<N, P, D, Ver>
+{
+    async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
+        self.as_ref().submit(tx).await
+    }
+}
+
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    SubmitDataSource<N, P> for ApiState<N, P, Ver>
+{
+    async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
+        self.consensus().await.submit_transaction(tx).await?;
+        Ok(())
+    }
+}
+
+impl<
+        N: network::Type,
+        D: Send + Sync,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+    > StateDataSource for StorageState<N, P, D, Ver>
 {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
         self.as_ref().get_decided_state().await
@@ -69,20 +153,20 @@ impl<N: network::Type, D: Send + Sync, Ver: StaticVersionType, P: SequencerPersi
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> StateDataSource
-    for State<N, P, Ver>
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> StateDataSource
+    for ApiState<N, P, Ver>
 {
     async fn get_decided_state(&self) -> Arc<ValidatedState> {
-        self.handle.get_decided_state().await
+        self.consensus().await.get_decided_state().await
     }
 
     async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
-        self.handle.get_state(view).await
+        self.consensus().await.get_state(view).await
     }
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync, Ver: StaticVersionType, P: SequencerPersistence>
+impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
@@ -91,11 +175,11 @@ impl<N: network::Type, D: Sync, Ver: StaticVersionType, P: SequencerPersistence>
 }
 
 #[async_trait]
-impl<N: network::Type, Ver: StaticVersionType, P: SequencerPersistence> StateSignatureDataSource<N>
-    for State<N, P, Ver>
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    StateSignatureDataSource<N> for ApiState<N, P, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
-        self.state_signer.get_state_signature(height).await
+        self.state_signer().await.get_state_signature(height).await
     }
 }
 
@@ -108,7 +192,6 @@ mod test_helpers {
         persistence::{no_storage::NoStorage, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
-        Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -485,7 +568,7 @@ mod api_tests {
         catchup::{mock::MockStateCatchup, StateCatchup, StatePeers},
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header, Transaction,
+        Header,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
