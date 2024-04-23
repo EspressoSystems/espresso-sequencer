@@ -9,7 +9,7 @@ libs = ['contracts/lib']
 script = "contracts/script"
 broadcast = "contracts/broadcast"
 cache_path = "contracts/cache"
-optimizer_runs = 1_000_000 # Increasing the number of runs saves gas but increases the size of the contract
+optimizer_runs = 2300 # Increasing the number of runs saves gas but increases the size of the contract
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
 solc = "0.8.23"
