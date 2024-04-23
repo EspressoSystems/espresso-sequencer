@@ -38,8 +38,7 @@ jobs:
             --exclude contract-bindings \
             --exclude gen-vk-contract \
             --exclude hotshot-contract-adapter \
-            --exclude diff-test-hotshot -- \
-            --skip service::test::test_ \
+            --exclude diff-test-hotshot \
             --no-run
         env:
           CARGO_INCREMENTAL: "0"
