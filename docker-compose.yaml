@@ -397,19 +397,37 @@ services:
       deploy-contracts:
         condition: service_completed_successfully
 
-  submit-transactions:
+  submit-transactions-public:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
     ports:
-      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PORT:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT"
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT:8080"
     environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=$ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=8080
       - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
-      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+      - ESPRESSO_SEQUENCER_URL
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
+        condition: service_healthy
+
+  submit-transactions-private:
+    image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    ports:
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT:8080"
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=8080
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://permissionless-builder:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_SEQUENCER_URL
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+      permissionless-builder:
         condition: service_healthy
 
   permissionless-builder:
