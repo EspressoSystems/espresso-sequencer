@@ -103,6 +103,8 @@ pub struct ConsensusMetricsValue {
     pub outstanding_transactions_memory_size: Box<dyn Gauge>,
     /// Number of views that timed out
     pub number_of_timeouts: Box<dyn Counter>,
+    /// The number of empty blocks that have been proposed
+    pub number_of_empty_blocks_proposed: Box<dyn Counter>,
 }
 
 /// The wrapper with a string name for the networking metrics
@@ -239,6 +241,8 @@ impl ConsensusMetricsValue {
             outstanding_transactions_memory_size: metrics
                 .create_gauge(String::from("outstanding_transactions_memory_size"), None),
             number_of_timeouts: metrics.create_counter(String::from("number_of_timeouts"), None),
+            number_of_empty_blocks_proposed: metrics
+                .create_counter(String::from("number_of_empty_blocks_proposed"), None),
         }
     }
 }

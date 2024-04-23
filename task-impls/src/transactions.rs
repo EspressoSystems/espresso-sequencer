@@ -157,9 +157,17 @@ impl<
                 } else {
                     // If we couldn't get a block, send an empty block
                     error!(
-                        "Failed to get a block for view {:?} proposing empty block",
+                        "Failed to get a block for view {:?}, proposing empty block",
                         view
                     );
+
+                    // Increment the metric for number of empty blocks proposed
+                    self.consensus
+                        .write()
+                        .await
+                        .metrics
+                        .number_of_empty_blocks_proposed
+                        .add(1);
 
                     // Calculate the builder fee for the empty block
                     let Some(builder_fee) = null_block::builder_fee(self.membership.total_nodes())
