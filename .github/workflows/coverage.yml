@@ -41,6 +41,7 @@ jobs:
             --exclude diff-test-hotshot \
             --no-run
         env:
+          CARGO_BUILD_JOBS: "2" # avoid using too much memory
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: >
             -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
