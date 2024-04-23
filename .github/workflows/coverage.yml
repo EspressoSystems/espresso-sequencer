@@ -14,15 +14,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Do not exceed the memory limit of the public github runner during cargo build.
-  CARGO_BUILD_JOBS: "2"
-  # Remaining env vars are required for coverage.
-  CARGO_INCREMENTAL: "0"
-  RUSTFLAGS: >
+  COVERAGE_RUSTFLAGS: >
     -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
     -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
     hotshot_example
-  RUSTDOCFLAGS: >
+  COVERAGE_RUSTDOCFLAGS: >
     -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
     -Zpanic_abort_tests
   CARGO_TEST_CMD: >
@@ -50,10 +46,20 @@ jobs:
       - name: Build tests for coverage
         run: |
           $CARGO_TEST_CMD --no-run
+        env:
+          # Do not exceed the memory limit of the public github runner during cargo build.
+          CARGO_BUILD_JOBS: "2"
+          CARGO_INCREMENTAL: "0"
+          RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
+          RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
 
       - name: Run tests with coverage
         run: |
           $CARGO_TEST_CMD -- --skip service::test::test_
+        env:
+          CARGO_INCREMENTAL: "0"
+          RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
+          RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
 
       - uses: alekitto/grcov@v0.2
         with:

@@ -37,6 +37,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
+    /// @notice a permissioned prover is needed to interact `newFinalizedState`
+    event PermissionedProverRequired(address permissionedProver);
+
+    /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
+    event PermissionedProverNotRequired();
+
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
@@ -68,6 +74,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
+
+    /// @notice the address of the prover that can call the newFinalizedState function when the
+    /// contract is
+    /// in permissioned prover mode. This address is address(0) when the contract is not in the
+    /// permissioned prover mode
+    address public permissionedProver;
+
+    /// @notice a flag that indicates when a permissioned provrer is needed
+    bool public permissionedProverEnabled;
 
     // === Data Structure ===
     //
@@ -107,6 +122,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidProof();
     /// @notice Wrong stake table used, should match `finalizedState`
     error WrongStakeTableUsed();
+    /// @notice Invalid address
+    error InvalidAddress();
+    /// @notice Only a permissioned prover can perform this action
+    error ProverNotPermissioned();
+    /// @notice If the contract is in permissioned mode and the permissioned prover is not set when
+    /// the newFinalizedState method is called, then revert
+    error PermissionedProverNotSet();
+    /// @notice If the same mode or prover is sent to the function, then no change is required
+    error NoChangeRequired();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -179,7 +203,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
-    /// will call this function
+    /// can call this function
     ///
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
@@ -189,6 +213,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
     ) external {
+        //revert if we're in permissionedProver mode and the permissioned prover has not been set
+        if (permissionedProverEnabled && msg.sender != permissionedProver) {
+            if (permissionedProver == address(0)) {
+                revert PermissionedProverNotSet();
+            }
+            revert ProverNotPermissioned();
+        }
+
         if (
             newState.viewNum <= getFinalizedState().viewNum
                 || newState.blockHeight <= getFinalizedState().blockHeight
@@ -291,5 +323,34 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 state.stakeTableAmountComm
             )
         );
+    }
+
+    /// @notice set the permissionedProverMode to true and set the permissionedProver to the
+    /// non-zero address provided
+    /// @dev this function can also be used to update the permissioned prover once it's a different
+    /// address
+    function setPermissionedProver(address prover) public onlyOwner {
+        if (prover == address(0)) {
+            revert InvalidAddress();
+        }
+        if (prover == permissionedProver) {
+            revert NoChangeRequired();
+        }
+        permissionedProver = prover;
+        permissionedProverEnabled = true;
+        emit PermissionedProverRequired(permissionedProver);
+    }
+
+    /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
+    /// @dev if it was already disabled (permissioneProverMode == false), then revert with
+    /// NoChangeRequired
+    function disablePermissionedProverMode() public onlyOwner {
+        if (permissionedProverEnabled) {
+            permissionedProver = address(0);
+            permissionedProverEnabled = false;
+            emit PermissionedProverNotRequired();
+        } else {
+            revert NoChangeRequired();
+        }
     }
 }

@@ -608,8 +608,9 @@ mod test {
         )
         .await?;
 
-        let contract = LightClient::new(address, l1_wallet.clone());
-        Ok((l1_wallet, contract))
+        let proxy = LightClient::new(address, l1_wallet.clone());
+
+        Ok((l1_wallet, proxy))
     }
 
     impl StateProverConfig {
