@@ -253,7 +253,7 @@ async fn init_consensus(
     // Hook the builder up to the event stream from the first node
     if let Some(builder_task) = builder_task {
         builder_task.start(Box::new(
-            nodes[0].hotshot.output_event_stream.1.activate_cloned(),
+            nodes[0].hotshot.output_event_stream.1.clone(),
         ));
     }
 

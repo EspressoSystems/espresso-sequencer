@@ -566,7 +566,7 @@ pub mod node_tests {
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
     use hotshot_example_types::{
-        block_types::{TestBlockHeader, TestBlockPayload},
+        block_types::{TestBlockHeader, TestBlockPayload, TestMetadata},
         state_types::TestInstanceState,
     };
     use hotshot_types::{
@@ -721,7 +721,7 @@ pub mod node_tests {
             // computing the total size.
             let (payload, metadata) =
                 TestBlockPayload::from_transactions([mock_transaction(vec![i as u8 % 2])]).unwrap();
-            let encoded = payload.encode().unwrap().collect::<Vec<_>>();
+            let encoded = payload.encode().unwrap();
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
@@ -860,7 +860,7 @@ pub mod node_tests {
         // Recover payload.
         tracing::info!("recovering payload");
         let bytes = vid.recover_payload(&shares, common).unwrap();
-        let recovered = MockPayload::from_bytes(bytes.into_iter(), &());
+        let recovered = MockPayload::from_bytes(bytes.as_slice(), &TestMetadata);
         assert_eq!(recovered, *block.payload());
         assert_eq!(recovered.transactions, vec![txn]);
     }
