@@ -2,7 +2,7 @@
 # later match takes precedence, they will be requested for review when someone
 # opens a pull request.
 
-*       @nomaxg @sveitser @jbearer
+*       @nomaxg @sveitser @jbearer @imabdulbasit
 
 #  Dependabot PRs
 *.toml  @nomaxg @sveitser
