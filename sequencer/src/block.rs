@@ -194,7 +194,7 @@ mod reference {
     fn test_reference_transaction() {
         reference_test::<Transaction, _>(
             TRANSACTION.clone(),
-            "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
+            "TX~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uJ3",
             |tx| tx.commit(),
         );
     }
