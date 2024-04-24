@@ -28,6 +28,7 @@ either = { workspace = true }
 espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
+cdn-proto = { workspace = true }
 
 generic-array = { workspace = true }
 

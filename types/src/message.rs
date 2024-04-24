@@ -3,9 +3,10 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 use anyhow::{ensure, Result};
+use cdn_proto::mnemonic;
 use committable::Committable;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -30,7 +31,7 @@ use crate::{
 };
 
 /// Incoming message
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Derivative, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct Message<TYPES: NodeType> {
     /// The sender of this message
@@ -38,6 +39,15 @@ pub struct Message<TYPES: NodeType> {
 
     /// The message kind
     pub kind: MessageKind<TYPES>,
+}
+
+impl<TYPES: NodeType> fmt::Debug for Message<TYPES> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("Message")
+            .field("sender", &mnemonic(&self.sender))
+            .field("kind", &self.kind)
+            .finish()
+    }
 }
 
 impl<TYPES: NodeType> NetworkMsg for Message<TYPES> {}

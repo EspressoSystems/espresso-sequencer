@@ -101,11 +101,13 @@ impl<TYPES: NodeType> TaskState for NetworkMessageTaskState<TYPES> {
 }
 
 impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
+    #[instrument(skip_all, name = "Network message task", level = "trace")]
     /// Handle the message.
     pub async fn handle_messages(&mut self, messages: Vec<Message<TYPES>>) {
         // We will send only one event for a vector of transactions.
         let mut transactions = Vec::new();
         for message in messages {
+            tracing::trace!("Received message from network:\n\n{message:?}");
             let sender = message.sender;
             match message.kind {
                 MessageKind::Consensus(consensus_message) => {
