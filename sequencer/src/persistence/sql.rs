@@ -1,15 +1,24 @@
-use std::time::Duration;
-
-use anyhow::bail;
+use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
+use crate::{
+    options::parse_duration,
+    state::{BlockMerkleTree, FeeMerkleTree},
+    Header, Leaf, SeqTypes, ValidatedState, ViewNumber,
+};
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_query_service::data_source::{
-    storage::{
-        pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction},
+use hotshot_query_service::{
+    data_source::{
+        storage::{
+            pruning::PrunerCfg,
+            sql::{
+                include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction,
+            },
+        },
+        VersionedDataSource,
     },
-    VersionedDataSource,
+    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot},
 };
 use hotshot_types::{
     data::{DAProposal, VidDisperseShare},
@@ -19,9 +28,8 @@ use hotshot_types::{
     traits::node_implementation::ConsensusTime,
     vote::HasViewNumber,
 };
-
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{options::parse_duration, Leaf, SeqTypes, ValidatedState, ViewNumber};
+use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
+use std::time::Duration;
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Debug, Default)]
@@ -274,24 +282,47 @@ impl SequencerPersistence for Persistence {
         .await
     }
 
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(
+        &mut self,
+        leaf: &Leaf,
+        qc: &QuorumCertificate<SeqTypes>,
+    ) -> anyhow::Result<()> {
         let stmt = "
-            INSERT INTO anchor_leaf (id, height, leaf) VALUES (0, $1, $2)
-            ON CONFLICT (id) DO UPDATE SET (height, leaf) = ROW (
+            INSERT INTO anchor_leaf (id, height, view, leaf, qc) VALUES (0, $1, $2, $3, $4)
+            ON CONFLICT (id) DO UPDATE SET (height, view, leaf, qc) = ROW (
                 GREATEST(anchor_leaf.height, excluded.height),
+                CASE
+                    WHEN excluded.height > anchor_leaf.height THEN excluded.view
+                    ELSE anchor_leaf.view
+                END,
                 CASE
                     WHEN excluded.height > anchor_leaf.height THEN excluded.leaf
                     ELSE anchor_leaf.leaf
+                END,
+                CASE
+                    WHEN excluded.height > anchor_leaf.height THEN excluded.qc
+                    ELSE anchor_leaf.qc
                 END
             )
         ";
+
         let height = leaf.get_height() as i64;
+        let view = qc.view_number.get_u64() as i64;
         let leaf_bytes = bincode::serialize(leaf)?;
+        let qc_bytes = bincode::serialize(qc)?;
 
         transaction(self, |mut tx| {
             async move {
-                tx.execute_one_with_retries(stmt, [sql_param(&height), sql_param(&leaf_bytes)])
-                    .await?;
+                tx.execute_one_with_retries(
+                    stmt,
+                    [
+                        sql_param(&height),
+                        sql_param(&view),
+                        sql_param(&leaf_bytes),
+                        sql_param(&qc_bytes),
+                    ],
+                )
+                .await?;
                 Ok(())
             }
             .boxed()
@@ -309,24 +340,23 @@ impl SequencerPersistence for Persistence {
             }))
     }
 
-    async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
-        self.query_opt_static("SELECT leaf FROM anchor_leaf WHERE id = 0")
+    async fn load_anchor_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+        let Some(row) = self
+            .query_opt_static("SELECT leaf, qc FROM anchor_leaf WHERE id = 0")
             .await?
-            .map(|row| {
-                let bytes: Vec<u8> = row.get("leaf");
-                Ok(bincode::deserialize(&bytes)?)
-            })
-            .transpose()
-    }
+        else {
+            return Ok(None);
+        };
 
-    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
-        self.query_opt_static("SELECT data FROM high_qc WHERE id = 0")
-            .await?
-            .map(|row| {
-                let bytes: Vec<u8> = row.get("data");
-                Ok(bincode::deserialize(&bytes)?)
-            })
-            .transpose()
+        let leaf_bytes: Vec<u8> = row.get("leaf");
+        let leaf = bincode::deserialize(&leaf_bytes)?;
+
+        let qc_bytes: Vec<u8> = row.get("qc");
+        let qc = bincode::deserialize(&qc_bytes)?;
+
+        Ok(Some((leaf, qc)))
     }
 
     async fn load_da_proposal(
@@ -432,32 +462,41 @@ impl SequencerPersistence for Persistence {
         })
         .await
     }
-    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        let view = high_qc.view_number.get_u64();
-        let data_bytes = bincode::serialize(&high_qc).unwrap();
 
-        transaction(self, |mut tx| {
-            async move {
-                tx.execute_one_with_retries(
-                    "INSERT INTO high_qc (id, view, data) VALUES (0, $1, $2)
-                ON CONFLICT(id) DO UPDATE SET (view, data) = ROW (
-                    GREATEST(high_qc.view, excluded.view),
-                CASE
-                    WHEN excluded.view > high_qc.view THEN excluded.data
-                    ELSE high_qc.data
-                END )",
-                    [sql_param(&(view as i64)), sql_param(&data_bytes)],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
+    async fn load_validated_state(&self, header: &Header) -> anyhow::Result<ValidatedState> {
+        let height = header.height;
+        let block_merkle_tree = if height == 0 {
+            BlockMerkleTree::new(BlockMerkleTree::tree_height())
+        } else {
+            // For the block Merkle tree, we only require the frontier, which we can load from
+            // storage and remember into a sparse tree.
+            let mut tree = BlockMerkleTree::from_commitment(header.block_merkle_tree_root);
+            let snapshot =
+                Snapshot::<_, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height);
+            let frontier = self
+                .get_path(snapshot, height - 1)
+                .await
+                .context("fetching frontier")?;
+            let Some(&parent) = frontier.elem() else {
+                bail!("invalid frontier: missing element");
+            };
+            tree.remember(height - 1, parent, frontier)
+                .context("remembering frontier")?;
+            tree
+        };
+
+        // For the fee Merkle tree, we need the entire thing, since we never know which accounts we
+        // may need to access.
+        let snapshot = Snapshot::<_, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height);
+        let fee_merkle_tree = self
+            .get_snapshot(snapshot)
+            .await
+            .context("loading fee merkle tree")?;
+
+        Ok(ValidatedState {
+            block_merkle_tree,
+            fee_merkle_tree,
         })
-        .await
-    }
-
-    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
-        bail!("state persistence not implemented");
     }
 }
 

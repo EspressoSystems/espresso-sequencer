@@ -133,24 +133,43 @@ pub struct PermissionedBuilderOptions {
     pub state_peers: Vec<Url>,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_SERVER_PORT")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     pub port: u16,
 
     /// Port to run the builder server on.
-    #[clap(short, long, env = "BUILDER_ADDRESS")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_ADDRESS")]
     pub address: Address,
 
     /// Bootstrapping View number
-    #[clap(short, long, env = "BUILDER_BOOTSTRAPPED_VIEW")]
+    #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
     /// BUILDER CHANNEL CAPACITY
-    #[clap(long, env = "BUILDER_CHANNEL_CAPACITY")]
+    #[clap(long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     pub channel_capacity: NonZeroUsize,
 
-    /// Url a builder can use to stream hotshot events
+    /// Url a sequencer can use to stream hotshot events
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
     pub hotshot_events_streaming_server_url: Url,
+
+    /// The amount of time a builder can wait before timing out a request to the API.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_WEBSERVER_RESPONSE_TIMEOUT_DURATION",
+        default_value = "1s",
+        value_parser = parse_duration
+    )]
+    pub max_api_timeout_duration: Duration,
+
+    /// The number of views to buffer before a builder garbage collects its state
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
+        default_value = "15"
+    )]
+    pub buffer_view_num_count: usize,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -242,6 +261,10 @@ async fn main() -> anyhow::Result<()> {
 
     let bootstrapped_view = ViewNumber::new(opt.view_number);
 
+    let max_response_timeout = opt.max_api_timeout_duration;
+
+    let buffer_view_num_count = opt.buffer_view_num_count;
+
     // it will internally spawn the builder web server
     let ctx = init_node(
         network_params,
@@ -254,6 +277,8 @@ async fn main() -> anyhow::Result<()> {
         opt.channel_capacity,
         sequencer_version,
         NoStorage,
+        max_response_timeout,
+        buffer_view_num_count,
     )
     .await?;
 

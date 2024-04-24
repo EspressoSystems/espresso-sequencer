@@ -1,5 +1,5 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ValidatedState, ViewNumber};
+use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
@@ -69,10 +69,6 @@ impl Persistence {
     fn da_dir_path(&self) -> PathBuf {
         self.0.join("da")
     }
-
-    fn high_qc_path(&self) -> PathBuf {
-        self.0.join("high_qc")
-    }
 }
 
 #[async_trait]
@@ -132,7 +128,11 @@ impl SequencerPersistence for Persistence {
         Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
     }
 
-    async fn save_anchor_leaf(&mut self, leaf: &Leaf) -> anyhow::Result<()> {
+    async fn save_anchor_leaf(
+        &mut self,
+        leaf: &Leaf,
+        qc: &QuorumCertificate<SeqTypes>,
+    ) -> anyhow::Result<()> {
         let mut file = OpenOptions::new()
             .read(true)
             .append(true)
@@ -158,14 +158,16 @@ impl SequencerPersistence for Persistence {
         file.set_len(0).context("truncate")?;
         file.write_all(&leaf.get_height().to_le_bytes())
             .context("write height")?;
-        // Now serialize and write out the actual leaf.
-        let bytes = bincode::serialize(leaf).context("serialize leaf")?;
+        // Now serialize and write out the actual leaf and its corresponding QC.
+        let bytes = bincode::serialize(&(leaf, qc)).context("serialize leaf")?;
         file.write_all(&bytes).context("write leaf")?;
 
         Ok(())
     }
 
-    async fn load_anchor_leaf(&self) -> anyhow::Result<Option<Leaf>> {
+    async fn load_anchor_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
         let path = self.anchor_leaf_path();
         if !path.is_file() {
             return Ok(None);
@@ -173,21 +175,6 @@ impl SequencerPersistence for Persistence {
         let mut file = File::open(path)?;
 
         // The first 8 bytes just contain the height of the leaf. We can skip this.
-        file.seek(SeekFrom::Start(8)).context("seek")?;
-        let bytes = file
-            .bytes()
-            .collect::<Result<Vec<_>, _>>()
-            .context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
-    }
-
-    async fn load_high_qc(&self) -> anyhow::Result<Option<QuorumCertificate<SeqTypes>>> {
-        let path = self.high_qc_path();
-        if !path.is_file() {
-            return Ok(None);
-        }
-        let mut file = File::open(path)?;
-
         file.seek(SeekFrom::Start(8)).context("seek")?;
         let bytes = file
             .bytes()
@@ -309,33 +296,7 @@ impl SequencerPersistence for Persistence {
         Ok(())
     }
 
-    async fn update_high_qc(&mut self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .append(true)
-            .create(true)
-            .open(self.high_qc_path())?;
-
-        if file.metadata()?.len() > 0 {
-            let mut view = [0; 8];
-            file.read_exact(&mut view).context("read view")?;
-            let view = u64::from_le_bytes(view);
-            if view >= high_qc.get_view_number().get_u64() {
-                return Ok(());
-            }
-        }
-
-        file.set_len(0).context("truncate")?;
-        file.write_all(&high_qc.get_view_number().get_u64().to_le_bytes())
-            .context("write view")?;
-
-        let bytes = bincode::serialize(&high_qc).context("serialize high qc")?;
-        file.write_all(&bytes).context("write high qc ")?;
-
-        Ok(())
-    }
-
-    async fn load_validated_state(&self, _height: u64) -> anyhow::Result<ValidatedState> {
+    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
         bail!("state persistence not implemented");
     }
 }

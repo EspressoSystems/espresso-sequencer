@@ -67,6 +67,15 @@ pub struct SequencerContext<
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     SequencerContext<N, P, Ver>
 {
+    #[tracing::instrument(skip(
+        config,
+        instance_state,
+        persistence,
+        networks,
+        state_relay_server,
+        metrics,
+        stake_table_capacity
+    ))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,

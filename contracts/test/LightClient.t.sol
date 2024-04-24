@@ -217,7 +217,6 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
             // InvalidAddress()
         vm.assume(newProver != permissionedProver); //otherwise it would have reverted with
             // NoChangeRequired()
-
         assert(lc.permissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
