@@ -48,8 +48,7 @@ pub struct NameSpaceTable<TableWord: TableWordTraits> {
 
 impl<TableWord: TableWordTraits> EncodeBytes for NameSpaceTable<TableWord> {
     fn encode(&self) -> std::sync::Arc<[u8]> {
-        let boxed_slice: Box<[u8]> = self.bytes.clone().into_boxed_slice();
-        Arc::from(boxed_slice)
+        Arc::from(self.bytes.clone())
     }
 }
 
