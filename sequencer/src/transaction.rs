@@ -93,4 +93,8 @@ impl Committable for Transaction {
             .var_size_bytes(&self.payload)
             .finalize()
     }
+
+    fn tag() -> String {
+        "TX".into()
+    }
 }
