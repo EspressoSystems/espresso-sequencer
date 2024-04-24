@@ -43,7 +43,7 @@ use url::Url;
 
 type F = ark_ed_on_bn254::Fq;
 
-const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+pub(crate) const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
 pub struct TestNetwork<P: SequencerPersistence> {
     pub server: SequencerContext<network::Memory, P, SequencerVersion>,
@@ -181,9 +181,9 @@ pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-    let options = opt(Options::from(options::Http { port }).status(Default::default()));
     let anvil = Anvil::new().spawn();
     let l1 = anvil.endpoint().parse().unwrap();
+    let options = opt(Options::from(options::Http { port }).status(Default::default()));
     let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
     client.connect(None).await;
 
@@ -229,9 +229,9 @@ pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-    let options = opt(Options::from(options::Http { port }).submit(Default::default()));
     let anvil = Anvil::new().spawn();
     let l1 = anvil.endpoint().parse().unwrap();
+    let options = opt(Options::from(options::Http { port }).submit(Default::default()));
     let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
     let mut events = network.server.get_event_stream();
 
@@ -260,9 +260,9 @@ pub async fn state_signature_test_helper(opt: impl FnOnce(Options) -> Options) {
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-    let options = opt(Options::from(options::Http { port }));
     let anvil = Anvil::new().spawn();
     let l1 = anvil.endpoint().parse().unwrap();
+    let options = opt(Options::from(options::Http { port }));
     let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
 
     let mut height: u64;
@@ -281,11 +281,11 @@ pub async fn state_signature_test_helper(opt: impl FnOnce(Options) -> Options) {
         }
     }
     // we cannot verify the signature now, because we don't know the stake table
-    assert!(client
+    client
         .get::<StateSignatureRequestBody>(&format!("state-signature/block/{}", height))
         .send()
         .await
-        .is_ok());
+        .unwrap();
 }
 
 /// Test the state API with custom options.
@@ -303,9 +303,9 @@ pub async fn state_test_helper(opt: impl FnOnce(Options) -> Options) {
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-    let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
     let anvil = Anvil::new().spawn();
     let l1 = anvil.endpoint().parse().unwrap();
+    let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
     let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
     client.connect(None).await;
 

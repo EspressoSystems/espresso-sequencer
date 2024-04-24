@@ -30,6 +30,7 @@ ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
+async-once-cell = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }

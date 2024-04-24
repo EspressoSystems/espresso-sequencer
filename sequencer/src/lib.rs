@@ -145,8 +145,8 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         self.write().await.record_action(view, action).await
     }
-    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        self.write().await.update_high_qc(high_qc).await
+    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn update_undecided_state(
@@ -496,15 +496,12 @@ pub mod testing {
             let num_nodes = Self::NUM_NODES;
 
             // Generate keys for the nodes.
-            let priv_keys = (0..num_nodes)
-                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
-                .collect::<Vec<_>>();
-            let pub_keys = priv_keys
-                .iter()
-                .map(PubKey::from_private)
-                .collect::<Vec<_>>();
+            let seed = [0; 32];
+            let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
+                .map(|i| PubKey::generated_from_seed_indexed(seed, i as u64))
+                .unzip();
             let state_key_pairs = (0..num_nodes)
-                .map(|_| StateKeyPair::generate())
+                .map(|i| StateKeyPair::generate_from_seed_indexed(seed, i as u64))
                 .collect::<Vec<_>>();
             let known_nodes_with_stake = pub_keys
                 .iter()
@@ -655,7 +652,7 @@ pub mod testing {
             };
 
             let key = Self::builder_key(i);
-            tracing::info!("node {i} is builder {:x}", key.address());
+            let address = key.address();
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.url.clone(), Address::default()),
@@ -664,6 +661,13 @@ pub mod testing {
             )
             .with_genesis(state);
 
+            tracing::info!(
+                i,
+                key = %config.my_own_validator_config.public_key,
+                state_key = %config.my_own_validator_config.state_key_pair.ver_key(),
+                %address,
+                "starting node",
+            );
             SequencerContext::init(
                 config,
                 node_state,
