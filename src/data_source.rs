@@ -466,7 +466,7 @@ pub mod persistence_tests {
         let mut ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis();
+        let mut qc = QuorumCertificate::<MockTypes>::genesis(&TestInstanceState {});
         let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
@@ -509,7 +509,7 @@ pub mod persistence_tests {
         let mut ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis();
+        let mut qc = QuorumCertificate::<MockTypes>::genesis(&TestInstanceState {});
         let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.

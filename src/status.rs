@@ -194,7 +194,7 @@ mod test {
         // Check updated block height.
         // being updated and the decide event being published. Retry this a few times until it
         // succeeds.
-        while client.get::<u64>("block-height").send().await.unwrap() == 0 {
+        while client.get::<u64>("block-height").send().await.unwrap() <= 1 {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
         }
