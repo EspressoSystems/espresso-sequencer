@@ -2,11 +2,13 @@ use crate::block::entry::TxTableEntry;
 use crate::block::payload::TableWordTraits;
 use crate::{BlockBuildingSnafu, Error, NamespaceId};
 use derivative::Derivative;
+use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ops::Range;
+use std::sync::Arc;
 
 pub trait Table<TableWord: TableWordTraits> {
     // Read TxTableEntry::byte_len() bytes from `table_bytes` starting at `offset`.
@@ -42,6 +44,13 @@ pub struct NameSpaceTable<TableWord: TableWordTraits> {
     pub(super) bytes: Vec<u8>,
     #[serde(skip)]
     pub(super) phantom: PhantomData<TableWord>,
+}
+
+impl<TableWord: TableWordTraits> EncodeBytes for NameSpaceTable<TableWord> {
+    fn encode(&self) -> std::sync::Arc<[u8]> {
+        let boxed_slice: Box<[u8]> = self.bytes.clone().into_boxed_slice();
+        Arc::from(boxed_slice)
+    }
 }
 
 impl<TableWord: TableWordTraits> NameSpaceTable<TableWord> {

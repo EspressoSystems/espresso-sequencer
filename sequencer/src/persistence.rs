@@ -140,7 +140,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&state),
-                    QuorumCertificate::genesis(),
+                    QuorumCertificate::genesis(&state),
                     Some(Arc::new(ValidatedState::genesis(&state).0)),
                 )
             }
@@ -248,7 +248,7 @@ mod persistence_tests {
 
         // Store a leaf.
         let leaf1 = Leaf::genesis(&NodeState::mock());
-        let qc1 = QuorumCertificate::genesis();
+        let qc1 = QuorumCertificate::genesis(&NodeState::mock());
         storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -335,7 +335,7 @@ mod persistence_tests {
 
         let leaf = Leaf::genesis(&NodeState::mock());
         let payload = leaf.get_block_payload().unwrap();
-        let bytes = payload.encode().unwrap().collect::<Vec<_>>();
+        let bytes = payload.encode().unwrap().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let mut vid = VidDisperseShare::<SeqTypes> {
@@ -380,12 +380,12 @@ mod persistence_tests {
         rng.fill_bytes(&mut seed);
 
         let tx = Transaction::random(&mut rng);
-        let tx_hash = Sha256::digest(tx.payload());
+        let tx_hash = Sha256::digest(tx.payload()).to_vec();
         let block_payload_signature =
             BLSPubKey::sign(&privkey, &tx_hash).expect("Failed to sign tx hash");
 
         let da_proposal_inner = DAProposal::<SeqTypes> {
-            encoded_transactions: tx_hash.to_vec(),
+            encoded_transactions: Arc::from(tx_hash),
             metadata: Default::default(),
             view_number: ViewNumber::new(1),
         };
