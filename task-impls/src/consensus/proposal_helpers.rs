@@ -281,7 +281,7 @@ pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
     if proposal.data.justify_qc.get_view_number() != view - 1 {
         let received_proposal_cert =
             proposal.data.proposal_certificate.clone().context(format!(
-"Quorum proposal for view {} needed a timeout or view sync certificate, but did not have one",
+                "Quorum proposal for view {} needed a timeout or view sync certificate, but did not have one",
                 *view
         ))?;
 
@@ -429,6 +429,7 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
                 builder_commitment,
                 metadata,
                 fee: null_block_fee,
+                block_view: view,
             },
             parent_leaf,
             state,
@@ -495,8 +496,13 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     // FIXME - This is not great, and will be fixed later.
     // If it's > July, 2024 and this is still here, something has gone horribly wrong.
     let cnm = commitment_and_metadata
-        .clone()
+        .take()
         .context("Cannot propose because we don't have the VID payload commitment and metadata")?;
+
+    ensure!(
+        cnm.block_view == view,
+        "Cannot propose because our VID payload commitment and metadata is for an older view."
+    );
 
     let create_and_send_proposal_handle = async_spawn(async move {
         create_and_send_proposal(

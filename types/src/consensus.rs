@@ -407,6 +407,8 @@ pub struct CommitmentAndMetadata<TYPES: NodeType> {
     pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     /// Builder fee data
     pub fee: BuilderFee<TYPES>,
+    /// View number this block is for
+    pub block_view: TYPES::Time,
 }
 
 /// Helper type to hold the optional secondary information required to propose.

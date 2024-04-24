@@ -283,6 +283,7 @@ async fn test_quorum_proposal_task_propose_now() {
             builder_commitment: builder_commitment.clone(),
             metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::QuorumProposalAndCertificate(
@@ -298,6 +299,7 @@ async fn test_quorum_proposal_task_propose_now() {
             builder_commitment: builder_commitment.clone(),
             metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::Timeout(build_cert::<
@@ -323,6 +325,7 @@ async fn test_quorum_proposal_task_propose_now() {
             builder_commitment,
             metadata: TestMetadata,
             fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:
             hotshot_types::consensus::SecondaryProposalInformation::ViewSync(build_cert::<
