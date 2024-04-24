@@ -77,11 +77,7 @@ contract PlonkVerifierCommonTest is Test {
     /// @dev helper function to generate some dummy but format-valid arguments for
     /// `prepareOpeningProof` step. The verifyingKey should be fixed/loaded from library,
     /// proof should be generated via `dummyProof()`, other inputs are from fuzzers.
-    function dummyArgsForOpeningProof(
-        uint64 seed,
-        uint256[] memory publicInput,
-        bytes memory extraTranscriptInitMsg
-    )
+    function dummyArgsForOpeningProof(uint64 seed, uint256[] memory publicInput)
         public
         returns (
             IPlonkVerifier.VerifyingKey memory,
@@ -92,8 +88,7 @@ contract PlonkVerifierCommonTest is Test {
     {
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        V.Challenges memory chal =
-            V._computeChallenges(vk, publicInput, proof, extraTranscriptInitMsg);
+        V.Challenges memory chal = V._computeChallenges(vk, publicInput, proof);
 
         Poly.EvalDomain memory domain = Poly.newEvalDomain(vk.domainSize);
         // pre-compute evaluation data
@@ -150,14 +145,13 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
             IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
         vm.resumeGasMetering();
-        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
     }
 
     /// @dev Test when bad verifying key is supplied, the verification should fail
@@ -172,7 +166,6 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             uint256[][] memory publicInputs,
             IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
@@ -200,7 +193,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             mstore(badPointRef, badPoint)
         }
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
     }
 
     /// @dev Test when bad public input is supplied, the verification should fail
@@ -222,13 +215,12 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
             ,
             IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
         ) = abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], badPublicInput, proofs[0], extraTranscriptInitMsgs[0]));
+        assert(!V.verify(verifyingKeys[0], badPublicInput, proofs[0]));
     }
 
     /// @dev Test when bad proof is supplied, the verification should fail
@@ -251,185 +243,7 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof, extraTranscriptInitMsgs[0]));
-    }
-
-    /// @dev Test when bad extraTranscriptInitMsg is supplied, the verification should fail
-    function testFuzz_badExtraTranscriptInitMsg_fails(bytes calldata badMsg) external {
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-batch-verify";
-        cmds[2] = vm.toString(uint32(1));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            IPlonkVerifier.PlonkProof[] memory proofs,
-        ) = abi.decode(
-            result,
-            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-        );
-
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], badMsg));
-    }
-}
-
-contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
-    /// @dev Test if some of the user inputs are invalid
-    function testFuzz_revertWhenInvalidArgs(
-        IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-        uint256[][] memory publicInputs,
-        IPlonkVerifier.PlonkProof[] memory proofs,
-        bytes[] memory extraTranscriptInitMsgs
-    ) external {
-        vm.assume(
-            verifyingKeys.length != proofs.length || publicInputs.length != proofs.length
-                || extraTranscriptInitMsgs.length != proofs.length || proofs.length == 0
-        );
-        vm.expectRevert(V.InvalidPlonkArgs.selector);
-        V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs);
-    }
-
-    /// @dev Test happy path of `batchVerify`.
-    function test_batchVerify_succeeds() external {
-        for (uint32 i = 1; i < 6; i++) {
-            string[] memory cmds = new string[](3);
-            cmds[0] = "diff-test";
-            cmds[1] = "plonk-batch-verify";
-            cmds[2] = vm.toString(i);
-
-            bytes memory result = vm.ffi(cmds);
-            (
-                IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-                uint256[][] memory publicInputs,
-                IPlonkVerifier.PlonkProof[] memory proofs,
-                bytes[] memory extraTranscriptInitMsgs
-            ) = abi.decode(
-                result,
-                (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-            );
-
-            assert(V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
-        }
-    }
-
-    /// @dev Test when bad verifying key are supplied, the verification should fail
-    function testFuzz_badVerifyingKey_fails(uint256 nthPoint) external {
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-batch-verify";
-        cmds[2] = vm.toString(uint32(1));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
-        ) = abi.decode(
-            result,
-            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-        );
-
-        // there are 18 points in verifying key
-        // randomly choose one to mutate
-        nthPoint = bound(nthPoint, 0, 17);
-
-        BN254.G1Point memory badPoint;
-        assembly {
-            // the first 32 bytes is array length
-            let firstVkRef := add(verifyingKeys, 0x20)
-            // the first point offset is 0x40
-            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
-            badPoint := mload(badPointRef)
-        }
-
-        // modify the point to be invalid
-        badPoint = BN254.add(badPoint, BN254.P1());
-
-        assembly {
-            let firstVkRef := add(verifyingKeys, 0x20)
-            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
-            mstore(badPointRef, badPoint)
-        }
-
-        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
-    }
-
-    /// @dev Test when bad public inputs are supplied, the verification should fail
-    /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
-    function testFuzz_badPublicInputs_fails(uint256[3] calldata randPublicInput) external {
-        uint256[] memory badPublicInput = new uint256[](3);
-        badPublicInput[0] = randPublicInput[0];
-        badPublicInput[1] = randPublicInput[1];
-        badPublicInput[2] = randPublicInput[2];
-        badPublicInput = sanitizeScalarFields(badPublicInput);
-
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-batch-verify";
-        cmds[2] = vm.toString(uint32(1));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
-        ) = abi.decode(
-            result,
-            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-        );
-
-        publicInputs[0] = badPublicInput;
-        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
-    }
-
-    /// @dev Test when bad proofs are supplied, the verification should fail
-    function testFuzz_badProofs_fails(uint64 seed) external {
-        IPlonkVerifier.PlonkProof memory badProof = dummyProof(seed);
-
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-batch-verify";
-        cmds[2] = vm.toString(uint32(1));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
-        ) = abi.decode(
-            result,
-            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-        );
-
-        proofs[0] = badProof;
-        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
-    }
-
-    /// @dev Test when bad extraTranscriptInitMsgs are supplied, the verification should fail
-    function testFuzz_badExtraTranscriptInitMsgs_fails(bytes calldata badMsg) external {
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-batch-verify";
-        cmds[2] = vm.toString(uint32(1));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            IPlonkVerifier.PlonkProof[] memory proofs,
-            bytes[] memory extraTranscriptInitMsgs
-        ) = abi.decode(
-            result,
-            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
-        );
-
-        extraTranscriptInitMsgs[0] = badMsg;
-        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
+        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof));
     }
 }
 
@@ -493,16 +307,12 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
 
 contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
     /// @dev Test `preparePcsInfo` matches that of Jellyfish
-    function testFuzz_preparePcsInfo_matches(
-        uint64 seed,
-        uint256[] memory publicInput,
-        bytes memory extraTranscriptInitMsg
-    ) external {
+    function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[] memory publicInput) external {
         publicInput = sanitizeScalarFields(publicInput);
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
 
-        V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof, extraTranscriptInitMsg);
+        V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof);
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -510,7 +320,7 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         cmds[2] = vm.toString(abi.encode(vk));
         cmds[3] = vm.toString(abi.encode(publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
-        cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
+        cmds[5] = vm.toString(abi.encode(""));
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -547,11 +357,9 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
 
 contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     /// @dev Test `computeChallenges` matches that of Jellyfish
-    function testFuzz_computeChallenges_matches(
-        uint64 seed,
-        uint256[] memory publicInput,
-        bytes memory extraTranscriptInitMsg
-    ) external {
+    function testFuzz_computeChallenges_matches(uint64 seed, uint256[] memory publicInput)
+        external
+    {
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
         publicInput = sanitizeScalarFields(publicInput);
@@ -562,12 +370,12 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
         cmds[2] = vm.toString(abi.encode(vk));
         cmds[3] = vm.toString(abi.encode(publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
-        cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
+        cmds[5] = vm.toString(abi.encode(""));
 
         bytes memory result = vm.ffi(cmds);
         (V.Challenges memory chal) = abi.decode(result, (V.Challenges));
 
-        V.Challenges memory c = V._computeChallenges(vk, publicInput, proof, extraTranscriptInitMsg);
+        V.Challenges memory c = V._computeChallenges(vk, publicInput, proof);
         assertEq(chal.alpha, c.alpha);
         assertEq(chal.alpha2, c.alpha2);
         assertEq(chal.alpha3, c.alpha3);

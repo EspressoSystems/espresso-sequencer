@@ -87,57 +87,32 @@ library PlonkVerifier {
     /// @param verifyingKey The Plonk verification key
     /// @param publicInput The public input fields
     /// @param proof The TurboPlonk proof
-    /// @param extraTranscriptInitMsg Optional bytes for transcript init message
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
         uint256[] memory publicInput,
-        IPlonkVerifier.PlonkProof memory proof,
-        bytes memory extraTranscriptInitMsg
+        IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (bool) {
         _validateProof(proof);
-        for (uint256 i = 0; i < publicInput.length; i++) {
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
-        }
-        PcsInfo[] memory pcsInfos = new PcsInfo[](1);
-        pcsInfos[0] = _preparePcsInfo(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
-        return _batchVerifyOpeningProofs(pcsInfos);
-    }
 
-    /// @dev Batch verify multiple TurboPlonk proofs.
-    /// @param verifyingKeys An array of verifier keys
-    /// @param publicInputs A two-dimensional array of public inputs.
-    /// @param proofs An array of Plonk proofs
-    /// @param extraTranscriptInitMsgs An array of bytes from
-    /// transcript initialization messages
-    function batchVerify(
-        IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-        uint256[][] memory publicInputs,
-        IPlonkVerifier.PlonkProof[] memory proofs,
-        bytes[] memory extraTranscriptInitMsgs
-    ) internal view returns (bool) {
-        if (
-            verifyingKeys.length != proofs.length || publicInputs.length != proofs.length
-                || extraTranscriptInitMsgs.length != proofs.length || proofs.length == 0
-        ) {
-            revert InvalidPlonkArgs();
-        }
-
-        PcsInfo[] memory pcsInfos = new PcsInfo[](proofs.length);
-        for (uint256 i = 0; i < proofs.length; i++) {
-            // validate proofs are proper group/field elements
-            _validateProof(proofs[i]);
-            // validate public input are all proper scalar fields
-            for (uint256 j = 0; j < publicInputs[i].length; j++) {
-                BN254.validateScalarField(BN254.ScalarField.wrap(publicInputs[i][j]));
+        // This *if* statement is needed in order for some tests to pass.
+        if (publicInput.length == 8) {
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[0]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[1]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[2]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[3]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[4]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[5]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[6]));
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[7]));
+        } else {
+            for (uint256 i = 0; i < publicInput.length; i++) {
+                BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
             }
-            // prepare pcs info
-            pcsInfos[i] = _preparePcsInfo(
-                verifyingKeys[i], publicInputs[i], proofs[i], extraTranscriptInitMsgs[i]
-            );
         }
 
-        return _batchVerifyOpeningProofs(pcsInfos);
+        PcsInfo memory pcsInfo = _preparePcsInfo(verifyingKey, publicInput, proof);
+        return _verifyOpeningProofs(pcsInfo);
     }
 
     /// @dev Validate all group points and scalar fields. Revert if
@@ -172,13 +147,11 @@ library PlonkVerifier {
     function _preparePcsInfo(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
         uint256[] memory publicInput,
-        IPlonkVerifier.PlonkProof memory proof,
-        bytes memory extraTranscriptInitMsg
+        IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (PcsInfo memory res) {
         if (publicInput.length != verifyingKey.numInputs) revert WrongPlonkVK();
 
-        Challenges memory chal =
-            _computeChallenges(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
+        Challenges memory chal = _computeChallenges(verifyingKey, publicInput, proof);
 
         Poly.EvalDomain memory domain = Poly.newEvalDomain(verifyingKey.domainSize);
         // pre-compute evaluation data
@@ -207,19 +180,15 @@ library PlonkVerifier {
     function _computeChallenges(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
         uint256[] memory publicInput,
-        IPlonkVerifier.PlonkProof memory proof,
-        bytes memory extraTranscriptInitMsg
+        IPlonkVerifier.PlonkProof memory proof
     ) internal pure returns (Challenges memory res) {
         Transcript.TranscriptData memory transcript;
         uint256 p = BN254.R_MOD;
 
-        transcript.appendMessage(extraTranscriptInitMsg);
         transcript.appendVkAndPubInput(verifyingKey, publicInput);
-        transcript.appendGroupElement(proof.wire0);
-        transcript.appendGroupElement(proof.wire1);
-        transcript.appendGroupElement(proof.wire2);
-        transcript.appendGroupElement(proof.wire3);
-        transcript.appendGroupElement(proof.wire4);
+        transcript.append5GroupElements(
+            proof.wire0, proof.wire1, proof.wire2, proof.wire3, proof.wire4
+        );
 
         // have to compute tau, but not really used anywhere
         // slither-disable-next-line unused-return
@@ -231,19 +200,16 @@ library PlonkVerifier {
 
         res.alpha = transcript.getAndAppendChallenge();
 
-        transcript.appendGroupElement(proof.split0);
-        transcript.appendGroupElement(proof.split1);
-        transcript.appendGroupElement(proof.split2);
-        transcript.appendGroupElement(proof.split3);
-        transcript.appendGroupElement(proof.split4);
+        transcript.append5GroupElements(
+            proof.split0, proof.split1, proof.split2, proof.split3, proof.split4
+        );
 
         res.zeta = transcript.getAndAppendChallenge();
 
         transcript.appendProofEvaluations(proof);
         res.v = transcript.getAndAppendChallenge();
 
-        transcript.appendGroupElement(proof.zeta);
-        transcript.appendGroupElement(proof.zetaOmega);
+        transcript.append2GroupElements(proof.zeta, proof.zetaOmega);
         res.u = transcript.getAndAppendChallenge();
 
         assembly {
@@ -450,6 +416,95 @@ library PlonkVerifier {
                 eval := addmod(eval, mulmod(combiner, termEval, p), p)
             }
         }
+    }
+
+    /// @dev Verify opening proof
+    /// `open_key` has been assembled from BN254.P1(), BN254.P2() and contract variable _betaH
+    /// @param pcsInfo A single PcsInfo
+    /// @dev Returns true if the pc opening verifies
+    function _verifyOpeningProofs(PcsInfo memory pcsInfo) internal view returns (bool) {
+        uint256 p = BN254.R_MOD;
+        // Compute a pseudorandom challenge from the instances
+
+        BN254.G1Point memory a1;
+        BN254.G1Point memory b1;
+
+        // Compute A
+        {
+            BN254.ScalarField[] memory scalars = new BN254.ScalarField[](2);
+            BN254.G1Point[] memory bases = new BN254.G1Point[](2);
+            uint256 rBase = 1;
+
+            scalars[0] = BN254.ScalarField.wrap(rBase);
+            bases[0] = pcsInfo.openingProof;
+
+            scalars[1] = BN254.ScalarField.wrap(pcsInfo.u);
+
+            bases[1] = pcsInfo.shiftedOpeningProof;
+
+            a1 = BN254.multiScalarMul(bases, scalars);
+        }
+
+        // Compute B
+        {
+            BN254.ScalarField[] memory scalars;
+            BN254.G1Point[] memory bases;
+            {
+                // variable scoping to avoid "Stack too deep"
+                uint256 scalarsLenPerInfo = pcsInfo.commScalars.length;
+                uint256 totalScalarsLen = (2 + scalarsLenPerInfo) + 1;
+                scalars = new BN254.ScalarField[](totalScalarsLen);
+                bases = new BN254.G1Point[](totalScalarsLen);
+            }
+            uint256 sumEvals = 0;
+            uint256 idx = 0;
+
+            for (uint256 j = 0; j < pcsInfo.commScalars.length; j++) {
+                scalars[idx] = BN254.ScalarField.wrap(pcsInfo.commScalars[j]);
+
+                bases[idx] = pcsInfo.commBases[j];
+                idx += 1;
+            }
+
+            scalars[idx] = BN254.ScalarField.wrap(pcsInfo.evalPoint);
+
+            bases[idx] = pcsInfo.openingProof;
+            idx += 1;
+
+            {
+                uint256 u = pcsInfo.u;
+                uint256 nextEvalPoint = pcsInfo.nextEvalPoint;
+                uint256 tmp;
+                assembly {
+                    // slither-disable-next-line variable-scope
+                    tmp := mulmod(u, nextEvalPoint, p)
+                }
+                scalars[idx] = BN254.ScalarField.wrap(tmp);
+            }
+            bases[idx] = pcsInfo.shiftedOpeningProof;
+            idx += 1;
+
+            {
+                uint256 eval = pcsInfo.eval;
+                assembly {
+                    sumEvals := addmod(sumEvals, eval, p)
+                }
+            }
+
+            scalars[idx] = BN254.negate(BN254.ScalarField.wrap(sumEvals));
+            bases[idx] = BN254.P1();
+            b1 = BN254.negate(BN254.multiScalarMul(bases, scalars));
+        }
+
+        // Check e(A, [x]2) ?= e(B, [1]2)
+        BN254.G2Point memory betaH = BN254.G2Point({
+            x0: BN254.BaseField.wrap(BETA_H_X1),
+            x1: BN254.BaseField.wrap(BETA_H_X0),
+            y0: BN254.BaseField.wrap(BETA_H_Y1),
+            y1: BN254.BaseField.wrap(BETA_H_Y0)
+        });
+
+        return BN254.pairingProd2(a1, betaH, b1, BN254.P2());
     }
 
     /// @dev Batchly verify multiple PCS opening proofs.
