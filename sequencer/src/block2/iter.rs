@@ -1,5 +1,5 @@
 use super::{
-    ns_iter::NsIter,
+    ns_iter::{NsIndex, NsIter},
     tx_iter::{TxIndex, TxIter},
     Payload,
 };
@@ -8,7 +8,7 @@ use std::iter::Peekable;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
-    pub(super) ns_index: usize, // TODO something serializable like u32?
+    pub(super) ns_index: NsIndex,
     pub(super) tx_index: TxIndex,
 }
 
@@ -42,7 +42,7 @@ impl<'a> Iter<'a> {
         let tx_iter = TxIter::new(ns_iter.peek().map_or(&[], |ns_index| {
             &block.payload[block
                 .ns_table
-                .ns_payload_range(*ns_index, block.payload.len())]
+                .ns_payload_range(ns_index, block.payload.len())]
         }));
         Self {
             ns_iter,
@@ -62,7 +62,7 @@ impl<'a> Iterator for Iter<'a> {
             };
             if let Some(tx_index) = self.tx_iter.next() {
                 return Some(Index {
-                    ns_index: *ns_index,
+                    ns_index: ns_index.clone(),
                     tx_index,
                 });
             }
@@ -74,7 +74,7 @@ impl<'a> Iterator for Iter<'a> {
                 &self.block.payload[self.ns_iter.peek().map(|ns_index| {
                     self.block
                         .ns_table
-                        .ns_payload_range(*ns_index, self.block.payload.len())
+                        .ns_payload_range(ns_index, self.block.payload.len())
                 })?],
             );
         }

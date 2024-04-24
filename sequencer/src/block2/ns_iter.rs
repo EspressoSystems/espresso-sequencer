@@ -9,6 +9,9 @@ use std::{collections::HashSet, ops::Range};
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable(pub(super) Vec<u8>); // TODO remove pub(super)
 
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct NsIndex(u32);
+
 impl NsTable {
     /// The number of bytes used to encode the number of entries in the
     /// namespace table.
@@ -41,22 +44,23 @@ impl NsTable {
     /// Read the namespace id from the `index`th entry from the namespace table.
     ///
     /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_id(&self, index: usize) -> NamespaceId {
-        let start = index * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
+    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
+        let start = (index.0 as usize) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
         ns_id_from_bytes(&self.0[start..start + NS_ID_BYTE_LEN])
     }
 
     /// Search the namespace table for the ns_index belonging to `ns_id`.
-    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<usize> {
-        self.iter().find(|index| self.read_ns_id(*index) == *ns_id)
+    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
+        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
     }
 
     /// Read the namespace offset from the `index`th entry from the namespace table.
     ///
     /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_offset(&self, index: usize) -> usize {
-        let start =
-            index * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
+    pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
+        let start = (index.0 as usize) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
+            + NUM_NSS_BYTE_LEN
+            + NS_ID_BYTE_LEN;
         ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
 
@@ -68,12 +72,12 @@ impl NsTable {
     /// TODO remove `payload_byte_len` arg and do not check `end`?
     ///
     /// Panics if `index >= self.num_nss()`.
-    pub fn ns_payload_range(&self, index: usize, payload_byte_len: usize) -> Range<usize> {
+    pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> Range<usize> {
         let end = self.read_ns_offset(index).min(payload_byte_len);
-        let start = if index == 0 {
+        let start = if index.0 == 0 {
             0
         } else {
-            self.read_ns_offset(index - 1).min(end)
+            self.read_ns_offset(&NsIndex(index.0 - 1)).min(end)
         };
         start..end
     }
@@ -92,7 +96,7 @@ impl NsTable {
 
 /// Return type for [`Payload::ns_iter`].
 pub struct NsIter<'a> {
-    ns_index: usize,
+    index: NsIndex,
     repeat_nss: HashSet<NamespaceId>,
     ns_table: &'a NsTable,
 }
@@ -100,7 +104,7 @@ pub struct NsIter<'a> {
 impl<'a> NsIter<'a> {
     pub fn new(ns_table: &'a NsTable) -> Self {
         Self {
-            ns_index: 0,
+            index: NsIndex(0),
             repeat_nss: HashSet::new(),
             ns_table,
         }
@@ -108,13 +112,13 @@ impl<'a> NsIter<'a> {
 }
 
 impl<'a> Iterator for NsIter<'a> {
-    type Item = usize; // TODO something serializable like u32?
+    type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.ns_index < self.ns_table.num_nss() {
-            let ns_id = self.ns_table.read_ns_id(self.ns_index);
-            let result = self.ns_index;
-            self.ns_index += 1;
+        while (self.index.0 as usize) < self.ns_table.num_nss() {
+            let ns_id = self.ns_table.read_ns_id(&self.index);
+            let result = self.index.clone();
+            self.index.0 += 1;
 
             // skip duplicate namespace IDs
             if !self.repeat_nss.insert(ns_id) {

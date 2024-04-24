@@ -40,12 +40,12 @@ impl Payload {
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(Transaction::new(
-            self.ns_table.read_ns_id(index.ns_index),
+            self.ns_table.read_ns_id(&index.ns_index),
             // TODO ugly
             self.payload
                 .get(
                     self.ns_table
-                        .ns_payload_range(index.ns_index, self.payload.len()),
+                        .ns_payload_range(&index.ns_index, self.payload.len()),
                 )?
                 .get(index.tx_index.range.clone())?
                 .to_vec(),
@@ -134,7 +134,7 @@ impl Payload {
         // TODO check index.ns_index in bounds
         let ns_range = self
             .ns_table
-            .ns_payload_range(index.ns_index, self.payload.len());
+            .ns_payload_range(&index.ns_index, self.payload.len());
 
         let num_txs_range = Range {
             start: ns_range.start,

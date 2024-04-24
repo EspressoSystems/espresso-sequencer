@@ -45,7 +45,9 @@ impl Payload {
                 existence: None,
             });
         };
-        let ns_range = self.ns_table.ns_payload_range(ns_index, self.payload.len());
+        let ns_range = self
+            .ns_table
+            .ns_payload_range(&ns_index, self.payload.len());
 
         Some(NsProof {
             ns_id,
@@ -77,7 +79,7 @@ impl NsProof {
                         Statement {
                             payload_subslice: &pf.ns_payload_flat,
                             range: ns_table.ns_payload_range(
-                                ns_index,
+                                &ns_index,
                                 VidSchemeType::get_payload_byte_len(common),
                             ),
                             commit,

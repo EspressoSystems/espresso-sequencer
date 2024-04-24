@@ -63,7 +63,7 @@ fn basic_correctness() {
 
         // test iterate over all namespaces
         assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
-        for ns_id in block.ns_table.iter().map(|i| block.ns_table.read_ns_id(i)) {
+        for ns_id in block.ns_table.iter().map(|i| block.ns_table.read_ns_id(&i)) {
             tracing::info!("test ns_id {ns_id}");
 
             let txs = test
