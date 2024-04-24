@@ -22,7 +22,7 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Parser)]
-struct Options {
+struct Args {
     /// A JSON-RPC endpoint for the L1 to deploy to.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     rpc_url: Option<Url>,
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    let opt = Options::parse();
+    let opt = Args::parse();
     let options = options::Options::from(options::Http {
         port: opt.sequencer_api_port,
     })
@@ -124,7 +124,7 @@ async fn main() -> anyhow::Result<()> {
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
     tracing::info!("starting the builder server");
-    let builder_address = "0x90f79bf6eb2c4f870365e785982e1f101e93b906"
+    let builder_address = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
         .parse()
         .unwrap();
     start_builder_server(opt.builder_port, builder_address, SEQUENCER_VERSION).unwrap();
@@ -210,7 +210,7 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
 mod tests {
     use std::{process::Stdio, time::Duration};
 
-    use async_std::task::sleep;
+    use async_std::{process::Command, task::sleep};
     use escargot::CargoBuild;
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
@@ -223,6 +223,16 @@ mod tests {
         let builder_port = pick_unused_port().unwrap();
         let commitment_task_port = pick_unused_port().unwrap();
         let sequencer_port = pick_unused_port().unwrap();
+        let postgres_port = pick_unused_port().unwrap();
+
+        let _ = Command::new("docker")
+            .arg("compose")
+            .arg("up")
+            .arg("-d")
+            .arg("sequencer-db")
+            .env("ESPRESSO_SEQUENCER_DB_PORT", postgres_port.to_string())
+            .spawn()
+            .unwrap();
 
         let mut child_process = CargoBuild::new()
             .bin("test-node")
@@ -238,6 +248,13 @@ mod tests {
                 commitment_task_port.to_string(),
             )
             .env("ESPRESSO_SEQUENCER_API_PORT", sequencer_port.to_string())
+            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
+            .env(
+                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
+                postgres_port.to_string(),
+            )
+            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "root")
+            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
             .stdout(Stdio::null())
             .spawn()
             .unwrap();
