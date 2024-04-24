@@ -899,12 +899,9 @@ where
 
         // The header and payload tables should already have been initialized when we inserted the
         // corresponding leaf. All we have to do is add the payload itself and its size.
-        let payload = block
-            .payload
-            .encode()
-            .map_err(|err| QueryError::Error {
-                message: format!("failed to serialize block: {err}"),
-            })?;
+        let payload = block.payload.encode().map_err(|err| QueryError::Error {
+            message: format!("failed to serialize block: {err}"),
+        })?;
         tx.upsert(
             "payload",
             ["height", "data", "size"],
