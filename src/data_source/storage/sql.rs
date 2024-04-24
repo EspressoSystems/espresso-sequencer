@@ -899,20 +899,16 @@ where
 
         // The header and payload tables should already have been initialized when we inserted the
         // corresponding leaf. All we have to do is add the payload itself and its size.
-        let payload = block
-            .payload
-            .encode()
-            .map_err(|err| QueryError::Error {
-                message: format!("failed to serialize block: {err}"),
-            })?
-            .collect::<Vec<_>>();
+        let payload = block.payload.encode().map_err(|err| QueryError::Error {
+            message: format!("failed to serialize block: {err}"),
+        })?;
         tx.upsert(
             "payload",
             ["height", "data", "size"],
             ["height"],
             [[
                 sql_param(&(block.height() as i64)),
-                sql_param(&payload),
+                sql_param(&payload.as_ref()),
                 sql_param(&(block.size() as i32)),
             ]],
         )
@@ -2306,7 +2302,7 @@ where
         })?;
 
     // Reconstruct the full block payload.
-    let payload = Payload::<Types>::from_bytes(payload_data.into_iter(), header.metadata());
+    let payload = Payload::<Types>::from_bytes(&payload_data, header.metadata());
 
     // Reconstruct the query data by adding metadata.
     let hash: String = row.try_get("hash").map_err(|err| QueryError::Error {

@@ -70,7 +70,7 @@ where
                 let num_storage_nodes =
                     VidSchemeType::get_num_storage_nodes(common.common()) as usize;
                 let bytes = match payload.data().encode() {
-                    Ok(bytes) => bytes.collect::<Vec<_>>(),
+                    Ok(bytes) => bytes,
                     Err(err) => {
                         tracing::error!(
                             %err,
