@@ -1,6 +1,8 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, NamespaceId, NodeState, Transaction};
+use crate::block::tables::NameSpaceTable;
+use crate::block::tables::TxTable;
+use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
@@ -15,13 +17,8 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::sync::Arc;
 use std::{collections::HashMap, fmt::Display};
-
-use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
-
-use crate::block::tables::TxTable;
 
 trait_set! {
 
@@ -155,13 +152,19 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     pub fn from_txs(
         txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as BlockPayload>::Transaction>,
+        chain_config: &ChainConfig,
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
             raw_payload: vec![],
             ns_table: NameSpaceTable::default(),
         };
+        let mut block_size = 0u64;
         for tx in txs.into_iter() {
+            block_size += tx.payload().len() as u64;
+            if block_size >= chain_config.max_block_size() {
+                break;
+            }
             Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
         }
 
@@ -309,7 +312,7 @@ impl hotshot_types::traits::block_contents::TestableBlock
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
-        BlockPayload::from_transactions([], Arc::new(NodeState::mock()))
+        BlockPayload::from_transactions([], &Default::default())
             .unwrap()
             .0
     }
@@ -332,7 +335,7 @@ mod test {
             tx_iterator::TxIndex,
         },
         transaction::NamespaceId,
-        Transaction,
+        NodeState, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -343,6 +346,62 @@ mod test {
     use std::{collections::HashMap, marker::PhantomData, ops::Range, sync::Arc};
 
     const NUM_STORAGE_NODES: usize = 10;
+
+    #[test]
+    fn enforce_max_block_size() {
+        let mut rng = jf_utils::test_rng();
+        let max_block_size = 1000u64;
+        let payload_size = 10;
+
+        let len = max_block_size;
+        // let mut txs: Vec<Transaction> = vec![];
+        let mut txs = (0..max_block_size / payload_size)
+            .map(|_| Transaction::of_size(&mut rng, payload_size))
+            .collect::<Vec<Transaction>>();
+
+        // should panic b/c txs size > max_block_size
+        txns.push(Transaction::of_size(&mut rng, payload_size));
+        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+
+        // should panic b/c txs size = max_block_size
+        txns.pop(Transaction::of_size(&mut rng, payload_size));
+        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+
+        // should succeed b/c txs size < max_block_size
+        txns.pop(Transaction::of_size(&mut rng, payload_size));
+        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+
+        // let mut block_size = 0u64;
+        // loop {
+        //     if block_size < max_block_size {
+        //         let tx = Transaction::of_size(&mut rng, max_block_size / 100);
+        //         block_size += tx.payload().len() as u64;
+        //         txs.push(tx);
+        //     } else {
+        //         break;
+        //     }
+        // }
+        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+    }
+
+    #[test]
+    fn basic_correctness() {
+        check_basic_correctness::<TxTableEntryWord>()
+    }
+
+    fn check_basic_correctness<TableWord: TableWordTraits>() {
+        // let mut block_size = 0u64;
+        // loop {
+        //     if block_size < max_block_size {
+        //         let tx = Transaction::of_size(&mut rng, max_block_size / 100);
+        //         block_size += tx.payload().len() as u64;
+        //         txs.push(tx);
+        //     } else {
+        //         break;
+        //     }
+        // }
+        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+    }
 
     #[test]
     fn basic_correctness() {
@@ -464,8 +523,7 @@ mod test {
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
             let (block, actual_ns_table) =
-                Payload::from_transactions(all_txs_iter, Arc::new(crate::NodeState::mock()))
-                    .unwrap();
+                Payload::from_transactions(all_txs_iter, Arc::new(NodeState::mock())).unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF

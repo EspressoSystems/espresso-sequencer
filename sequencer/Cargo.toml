@@ -60,7 +60,6 @@ hotshot-task = { workspace = true }
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
-hotshot-web-server = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
 

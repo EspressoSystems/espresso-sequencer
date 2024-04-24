@@ -202,6 +202,20 @@ impl NodeState {
     }
 }
 
+// This allows us to turn on `Default` on InstanceState trait
+// which is used in `HotShot` by `TestBuilderImplementation`.
+#[cfg(any(test, feature = "testing"))]
+impl Default for NodeState {
+    fn default() -> Self {
+        Self::new(
+            1u64,
+            ChainConfig::default(),
+            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            catchup::mock::MockStateCatchup::default(),
+        )
+    }
+}
+
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
