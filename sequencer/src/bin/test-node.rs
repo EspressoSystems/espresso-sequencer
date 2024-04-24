@@ -217,12 +217,17 @@ mod tests {
     use sequencer::{Header, Transaction};
     use sequencer_utils::AnvilOptions;
 
+    // If this test failed and you are doing changes on the following stuff, please
+    // sync your changes to [`espresso-sequencer-go`](https://github.com/EspressoSystems/espresso-sequencer-go)
+    // and open a PR.
+    // - APIs update
+    // - Types (like `Header`) update
     #[async_std::test]
     async fn test_node_test() {
         let anvil = AnvilOptions::default().spawn().await;
         let builder_port = pick_unused_port().unwrap();
         let commitment_task_port = pick_unused_port().unwrap();
-        let sequencer_port = pick_unused_port().unwrap();
+        let api_port = pick_unused_port().unwrap();
         let postgres_port = pick_unused_port().unwrap();
 
         let _ = Command::new("docker")
@@ -247,7 +252,7 @@ mod tests {
                 "ESPRESSO_COMMITMENT_TASK_PORT",
                 commitment_task_port.to_string(),
             )
-            .env("ESPRESSO_SEQUENCER_API_PORT", sequencer_port.to_string())
+            .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
             .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env(
                 "ESPRESSO_SEQUENCER_POSTGRES_PORT",
@@ -272,7 +277,7 @@ mod tests {
         println!("commitment task url: {}", commitment_task_url);
 
         let sequencer_get_header_url =
-            format!("http://localhost:{}/availability/header/3", sequencer_port);
+            format!("http://localhost:{}/availability/header/3", api_port);
         println!("sequencer url: {}", sequencer_get_header_url);
 
         // Waiting for the test node running completely
@@ -313,7 +318,7 @@ mod tests {
             .unwrap();
         assert!(!hotshot_contract.is_empty());
 
-        let sequencer_submit_url = format!("http://localhost:{}/submit", sequencer_port);
+        let sequencer_submit_url = format!("http://localhost:{}/submit", api_port);
         let tx = Transaction::new(100.into(), vec![1, 2, 3]);
 
         let resp = client
@@ -325,11 +330,28 @@ mod tests {
             .status();
         assert_eq!(resp, StatusCode::OK);
 
-        api_get_test(
-            &client,
-            format!("http://localhost:{}/status/block-height", sequencer_port),
-        )
-        .await;
+        // These endpoints are currently used in `espresso-sequencer-go`. These checks
+        // serve as reminders of syncing the API updates to go client repo when they change.
+        {
+            api_get_test(
+                &client,
+                format!("http://localhost:{}/status/block-height", api_port),
+            )
+            .await;
+            api_get_test(
+                &client,
+                format!("http://localhost:{}/availability/header/1/3", api_port),
+            )
+            .await;
+            api_get_test(
+                &client,
+                format!(
+                    "http://localhost:{}/availability/block/3/namespace/100",
+                    api_port
+                ),
+            )
+            .await
+        }
 
         child_process.kill().unwrap();
     }
