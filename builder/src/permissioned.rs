@@ -423,6 +423,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             instance_state.clone(),
             vid_commitment,
             bootstrapped_view,
+            bootstrapped_view,
+            buffered_view_num_count,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));

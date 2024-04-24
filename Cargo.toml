@@ -17,7 +17,6 @@ members = [
   "sequencer",
   "utils",
 ]
-
 [workspace.dependencies]
 anyhow = "^1.0"
 ark-std = "0.4"
@@ -49,7 +48,7 @@ futures = "0.3"
 # Hotshot imports
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.43" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.12" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "demo_testing_after_staging" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.12" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
