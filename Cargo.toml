@@ -132,7 +132,7 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 generic-array = "0.14"
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.41" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.42" }
 portpicker = "0.1"
 rand = "0.8"
 reqwest = "0.12.3"
