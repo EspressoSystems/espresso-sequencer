@@ -210,7 +210,8 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
 mod tests {
     use std::{process::Stdio, time::Duration};
 
-    use async_std::{process::Command, task::sleep};
+    use async_compatibility_layer::art::async_sleep;
+    use async_std::process::Command;
     use escargot::CargoBuild;
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
@@ -230,12 +231,13 @@ mod tests {
         let api_port = pick_unused_port().unwrap();
         let postgres_port = pick_unused_port().unwrap();
 
-        let _ = Command::new("docker")
+        let mut db = Command::new("docker")
             .arg("compose")
             .arg("up")
             .arg("-d")
             .arg("sequencer-db")
             .env("ESPRESSO_SEQUENCER_DB_PORT", postgres_port.to_string())
+            .stdout(Stdio::null())
             .spawn()
             .unwrap();
 
@@ -281,7 +283,7 @@ mod tests {
         println!("sequencer url: {}", sequencer_get_header_url);
 
         // Waiting for the test node running completely
-        sleep(Duration::from_secs(100)).await;
+        async_sleep(Duration::from_secs(50)).await;
 
         let client = reqwest::Client::new();
 
@@ -354,6 +356,7 @@ mod tests {
         }
 
         child_process.kill().unwrap();
+        db.kill().unwrap();
     }
 
     async fn api_get_test(client: &reqwest::Client, url: String) {
