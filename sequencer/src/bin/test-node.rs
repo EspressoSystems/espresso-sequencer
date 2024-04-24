@@ -45,17 +45,27 @@ struct Options {
         default_value = "0"
     )]
     account_index: u32,
+    /// Port that the HTTP API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT", default_value = "8770")]
+    sequencer_api_port: u16,
     /// Port to run the builder server on.
-    #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_SERVER_PORT",
+        default_value = "8771"
+    )]
     builder_port: u16,
     /// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
-    #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_COMMITMENT_TASK_PORT",
+        default_value = "8772"
+    )]
     commitment_task_port: u16,
-    /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    sequencer_api_port: u16,
 }
 
 #[async_std::main]
