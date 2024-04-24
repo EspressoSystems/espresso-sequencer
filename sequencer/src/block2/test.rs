@@ -29,10 +29,10 @@ fn basic_correctness() {
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
 
         // test correct number of nss, txs
-        assert_eq!(block.num_namespaces(), test.nss.len());
-        assert_eq!(block.ns_iter().count(), test.nss.len());
-        assert_eq!(block.len(&block.ns_table), all_txs.len());
-        assert_eq!(block.iter(&block.ns_table).count(), all_txs.len());
+        assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
+        assert_eq!(block.ns_table.iter().count(), test.nss.len());
+        assert_eq!(block.len(&block.ns_table.0), all_txs.len());
+        assert_eq!(block.iter(&block.ns_table.0).count(), all_txs.len());
 
         let (vid_commit, vid_common) = {
             let disperse_data = vid.disperse(&block.payload).unwrap();
@@ -40,7 +40,7 @@ fn basic_correctness() {
         };
 
         // test iterate over all txs
-        for tx_index in block.iter(&block.ns_table) {
+        for tx_index in block.iter(&block.ns_table.0) {
             let tx = block.transaction(&tx_index).unwrap();
 
             // warning: linear search for a tx
@@ -62,9 +62,9 @@ fn basic_correctness() {
         );
 
         // test iterate over all namespaces
-        assert_eq!(block.num_namespaces(), test.nss.len());
-        for ns_id in block.ns_iter().map(|i| i.ns_id) {
-            // tracing::info!("test ns_id {}", ns.ns_id);
+        assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
+        for ns_id in block.ns_table.iter().map(|i| block.ns_table.read_ns_id(i)) {
+            tracing::info!("test ns_id {ns_id}");
 
             let txs = test
                 .nss
@@ -77,8 +77,8 @@ fn basic_correctness() {
 
             assert!(ns_proof.is_existence());
 
-            let (ns_proof_txs, ns_proof_ns_id) = block
-                .verify_namespace_proof(&ns_proof, &vid_commit, &vid_common)
+            let (ns_proof_txs, ns_proof_ns_id) = ns_proof
+                .verify_namespace_proof(&block.ns_table, &vid_commit, &vid_common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
             assert_eq!(ns_proof_ns_id, ns_id);

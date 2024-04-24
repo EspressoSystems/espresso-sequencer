@@ -1,5 +1,5 @@
 use super::{
-    ns_iter::{NsIndex, NsIter},
+    ns_iter::NsIter,
     tx_iter::{TxIndex, TxIter},
     Payload,
 };
@@ -8,7 +8,7 @@ use std::iter::Peekable;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
-    pub(super) ns_index: NsIndex,
+    pub(super) ns_index: usize, // TODO something serializable like u32?
     pub(super) tx_index: TxIndex,
 }
 
@@ -34,16 +34,16 @@ pub struct Iter<'a> {
 
 impl<'a> Iter<'a> {
     pub fn new(block: &'a Payload) -> Self {
-        let mut ns_iter = NsIter::new(block).peekable();
+        let mut ns_iter = NsIter::new(&block.ns_table).peekable();
 
         // TODO sucks that I need to:
         // - call ns_iter.peek() in this constructor
         // - call TxIter::new here *and* in next()
-        let tx_iter = TxIter::new(
-            ns_iter
-                .peek()
-                .map_or(&[], |ns| &block.payload[ns.ns_range.clone()]),
-        );
+        let tx_iter = TxIter::new(ns_iter.peek().map_or(&[], |ns_index| {
+            &block.payload[block
+                .ns_table
+                .ns_payload_range(*ns_index, block.payload.len())]
+        }));
         Self {
             ns_iter,
             tx_iter,
@@ -62,13 +62,21 @@ impl<'a> Iterator for Iter<'a> {
             };
             if let Some(tx_index) = self.tx_iter.next() {
                 return Some(Index {
-                    ns_index: ns_index.clone(),
+                    ns_index: *ns_index,
                     tx_index,
                 });
             }
             // tx_iter consumed for this namespace
             self.ns_iter.next();
-            self.tx_iter = TxIter::new(&self.block.payload[self.ns_iter.peek()?.ns_range.clone()]);
+
+            // TODO ugly as sin, fix this
+            self.tx_iter = TxIter::new(
+                &self.block.payload[self.ns_iter.peek().map(|ns_index| {
+                    self.block
+                        .ns_table
+                        .ns_payload_range(*ns_index, self.block.payload.len())
+                })?],
+            );
         }
     }
 }

@@ -40,9 +40,13 @@ impl Payload {
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(Transaction::new(
-            index.ns_index.ns_id,
+            self.ns_table.read_ns_id(index.ns_index),
+            // TODO ugly
             self.payload
-                .get(index.ns_index.ns_range.clone())?
+                .get(
+                    self.ns_table
+                        .ns_payload_range(index.ns_index, self.payload.len()),
+                )?
                 .get(index.tx_index.range.clone())?
                 .to_vec(),
         ))
@@ -127,24 +131,24 @@ impl Payload {
         // payload byte index range for the `num_txs` header in this namespaces
         // tx table
         //
-        // TODO we trust index.ns_index.ns_range to be in bounds for
-        // self.payload. instead we should recompute it ourselves from ns_table
-        // and payload. Thus, we should remove ns_range from the ns iterator
+        // TODO check index.ns_index in bounds
+        let ns_range = self
+            .ns_table
+            .ns_payload_range(index.ns_index, self.payload.len());
+
         let num_txs_range = Range {
-            start: index.ns_index.ns_range.start,
-            end: index
-                .ns_index
-                .ns_range
+            start: ns_range.start,
+            end: ns_range
                 .start
                 .saturating_add(NUM_TXS_BYTE_LEN)
-                .min(index.ns_index.ns_range.end),
+                .min(ns_range.end),
         };
 
         Some((
             self.transaction(index)?,
             TxProof {
-                ns_range_start: ns_offset_as_bytes(index.ns_index.ns_range.start),
-                ns_range_end: ns_offset_as_bytes(index.ns_index.ns_range.end),
+                ns_range_start: ns_offset_as_bytes(ns_range.start),
+                ns_range_end: ns_offset_as_bytes(ns_range.end),
                 payload_num_txs: self.payload.get(num_txs_range.clone())?.try_into().unwrap(), // panic is impossible [TODO after we fix ns iterator]
                 payload_proof_num_txs: vid.payload_proof(&self.payload, num_txs_range).ok()?,
                 //     payload_tx_range_start,

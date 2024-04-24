@@ -105,7 +105,7 @@ pub fn num_nss_as_bytes(num_nss: usize) -> [u8; NUM_NSS_BYTE_LEN] {
 ///
 /// # Panics
 /// If `bytes.len()` differs from [`NUM_NSS_BYTE_LEN`].
-pub fn _num_nss_from_bytes(bytes: &[u8]) -> usize {
+pub fn num_nss_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<NUM_NSS_BYTE_LEN>(bytes)
 }
 

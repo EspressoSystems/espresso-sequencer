@@ -1,4 +1,4 @@
-use super::{tx_iter::parse_ns_payload, Payload};
+use super::{ns_iter::NsTable, tx_iter::parse_ns_payload, Payload};
 use crate::{NamespaceId, Transaction};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
@@ -38,15 +38,14 @@ impl Payload {
         if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
         }
-
-        let ns_range = if let Some(ns_index) = self.ns_iter().find(|i| ns_id == i.ns_id) {
-            ns_index.ns_range
-        } else {
+        let Some(ns_index) = self.ns_table.find_ns_id(&ns_id) else {
+            // ns_id does not exist
             return Some(NsProof {
                 ns_id,
                 existence: None,
             });
         };
+        let ns_range = self.ns_table.ns_payload_range(ns_index, self.payload.len());
 
         Some(NsProof {
             ns_id,
@@ -58,27 +57,29 @@ impl Payload {
             }),
         })
     }
-
+}
+impl NsProof {
     /// Verify a [`NsProof`] against a payload commitment.
-    ///
-    /// TODO this could be a method of [`NsProof`] if we have a way to get `ns_index`.
     pub fn verify_namespace_proof(
         &self,
-        ns_proof: &NsProof,
+        ns_table: &NsTable,
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
         VidSchemeType::is_consistent(commit, common).ok()?;
 
-        let ns_index = self.ns_iter().find(|i| ns_proof.ns_id == i.ns_id);
+        let ns_index = ns_table.find_ns_id(&self.ns_id);
 
-        match (ns_index, &ns_proof.existence) {
+        match (ns_index, &self.existence) {
             (Some(ns_index), Some(pf)) => {
                 vid_scheme(VidSchemeType::get_num_storage_nodes(common))
                     .payload_verify(
                         Statement {
                             payload_subslice: &pf.ns_payload_flat,
-                            range: ns_index.ns_range,
+                            range: ns_table.ns_payload_range(
+                                ns_index,
+                                VidSchemeType::get_payload_byte_len(common),
+                            ),
                             commit,
                             common,
                         },
@@ -90,11 +91,11 @@ impl Payload {
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
                 Some((
-                    parse_ns_payload(&pf.ns_payload_flat, ns_proof.ns_id),
-                    ns_proof.ns_id,
+                    parse_ns_payload(&pf.ns_payload_flat, self.ns_id),
+                    self.ns_id,
                 ))
             }
-            (None, None) => Some((Vec::new(), ns_proof.ns_id)), // successful verification of nonexistence
+            (None, None) => Some((Vec::new(), self.ns_id)), // successful verification of nonexistence
             (None, Some(_)) | (Some(_), None) => None, // error: expect [non]existence but found the opposite
         }
     }

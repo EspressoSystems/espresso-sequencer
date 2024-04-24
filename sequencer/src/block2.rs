@@ -1,3 +1,4 @@
+use self::ns_iter::NsTable;
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
@@ -24,8 +25,7 @@ pub struct Payload {
     #[serde(with = "base64_bytes")]
     payload: Vec<u8>,
 
-    // namespace table bytes
-    ns_table: Vec<u8>,
+    ns_table: NsTable,
     // TODO Revisit caching of frequently used items
     //
     // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`.
@@ -57,6 +57,7 @@ impl BlockPayload for Payload {
         }
 
         // build block payload and namespace table
+        // TODO building the ns_table here breaks abstraction
         let mut payload = Vec::new();
         let mut ns_table = Vec::from(num_nss_as_bytes(namespaces.len()));
         for (ns_id, namespace) in namespaces {
@@ -67,7 +68,7 @@ impl BlockPayload for Payload {
         Ok((
             Self {
                 payload,
-                ns_table: ns_table.clone(),
+                ns_table: NsTable(ns_table.clone()),
             },
             ns_table,
         ))
@@ -79,7 +80,7 @@ impl BlockPayload for Payload {
     {
         Self {
             payload: encoded_transactions.into_iter().collect(),
-            ns_table: ns_table.clone(), // TODO don't clone ns_table
+            ns_table: NsTable(ns_table.clone()), // TODO don't clone ns_table
         }
     }
 
@@ -106,9 +107,9 @@ impl BlockPayload for Payload {
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         let mut digest = sha2::Sha256::new();
         digest.update((self.payload.len() as u64).to_le_bytes());
-        digest.update((self.ns_table.len() as u64).to_le_bytes());
+        digest.update((self.ns_table.0.len() as u64).to_le_bytes());
         digest.update(&self.payload);
-        digest.update(&self.ns_table);
+        digest.update(&self.ns_table.0);
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
