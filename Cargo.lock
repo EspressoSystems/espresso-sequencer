@@ -3326,7 +3326,7 @@ dependencies = [
  "hotshot-types",
  "include_dir",
  "itertools 0.12.1",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "native-tls",
  "portpicker",
  "postgres-native-tls",
@@ -4060,50 +4060,6 @@ dependencies = [
 
 [[package]]
 name = "jf-primitives"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
-dependencies = [
- "anyhow",
- "ark-bls12-377",
- "ark-bls12-381",
- "ark-bn254",
- "ark-bw6-761",
- "ark-crypto-primitives",
- "ark-ec",
- "ark-ed-on-bls12-377",
- "ark-ed-on-bls12-381",
- "ark-ed-on-bn254",
- "ark-ff",
- "ark-pallas",
- "ark-poly",
- "ark-serialize",
- "ark-std",
- "blst",
- "chacha20poly1305",
- "crypto_kx",
- "derivative",
- "digest 0.10.7",
- "displaydoc",
- "espresso-systems-common 0.4.0",
- "generic-array",
- "hashbrown 0.14.3",
- "itertools 0.12.1",
- "jf-relation 0.4.3",
- "jf-utils 0.4.3",
- "merlin",
- "num-bigint",
- "num-traits",
- "rand_chacha 0.3.1",
- "rayon",
- "serde",
- "sha2 0.10.8",
- "sha3",
- "tagged-base64 0.4.0",
- "zeroize",
-]
-
-[[package]]
-name = "jf-primitives"
 version = "0.4.4"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
@@ -4173,32 +4129,6 @@ dependencies = [
 
 [[package]]
 name = "jf-relation"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
-dependencies = [
- "ark-bls12-377",
- "ark-bls12-381",
- "ark-bn254",
- "ark-bw6-761",
- "ark-ec",
- "ark-ff",
- "ark-poly",
- "ark-serialize",
- "ark-std",
- "derivative",
- "displaydoc",
- "downcast-rs",
- "dyn-clone 1.0.16",
- "hashbrown 0.14.3",
- "itertools 0.12.1",
- "jf-utils 0.4.3",
- "num-bigint",
- "rand_chacha 0.3.1",
- "rayon",
-]
-
-[[package]]
-name = "jf-relation"
 version = "0.4.4"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
@@ -4236,22 +4166,6 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "tagged-base64 0.3.4",
-]
-
-[[package]]
-name = "jf-utils"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
-dependencies = [
- "ark-ec",
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "digest 0.10.7",
- "rayon",
- "serde",
- "sha2 0.10.8",
- "tagged-base64 0.4.0",
 ]
 
 [[package]]
