@@ -66,6 +66,9 @@ struct Options {
         default_value = "8772"
     )]
     commitment_task_port: u16,
+
+    #[clap(flatten)]
+    sql: persistence::sql::Options,
 }
 
 #[async_std::main]
@@ -74,14 +77,13 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = Options::parse();
-    let path = tempfile::tempdir().unwrap().path().into();
     let options = options::Options::from(options::Http {
         port: opt.sequencer_api_port,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_fs(Default::default(), persistence::fs::Options { path });
+    .query_sql(Default::default(), opt.sql);
 
     let (url, _anvil) = if let Some(url) = opt.rpc_url {
         (url, None)

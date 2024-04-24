@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-testing = ["hotshot-testing", "tempfile"]
+testing = ["hotshot-testing"]
 libp2p = []
 
 [[bin]]
@@ -53,7 +53,6 @@ es-version = { workspace = true }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
-tempfile = { version = "3.9.0", optional = true }
 
 hotshot = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
