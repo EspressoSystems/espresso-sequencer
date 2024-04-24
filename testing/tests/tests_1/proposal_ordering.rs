@@ -1,4 +1,4 @@
-use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
+use hotshot::{tasks::task_state::CreateTaskState};
 use hotshot_example_types::{
     block_types::TestMetadata,
     node_types::{MemoryImpl, TestTypes},
@@ -106,7 +106,6 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 

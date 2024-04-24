@@ -141,12 +141,8 @@ pub async fn add_network_event_task<
 }
 
 /// Setup polls for the given `consensus_state`
-pub async fn inject_consensus_polls<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    API: ConsensusApi<TYPES, I>,
->(
-    consensus_state: &ConsensusTaskState<TYPES, I, API>,
+pub async fn inject_consensus_polls<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    consensus_state: &ConsensusTaskState<TYPES, I>,
 ) {
     // Poll (forever) for the latest quorum proposal
     consensus_state

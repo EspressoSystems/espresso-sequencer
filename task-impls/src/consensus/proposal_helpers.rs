@@ -17,7 +17,6 @@ use hotshot_types::{
     simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader,
-        consensus_api::ConsensusApi,
         election::Membership,
         network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{NodeImplementation, NodeType},
@@ -580,15 +579,11 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
 ///
 /// Returns the proposal that should be used to set the `cur_proposal` for other tasks.
 #[allow(clippy::too_many_lines)]
-pub async fn handle_quorum_proposal_recv<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    A: ConsensusApi<TYPES, I>,
->(
+pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     sender: &TYPES::SignatureKey,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut ConsensusTaskState<TYPES, I, A>,
+    task_state: &mut ConsensusTaskState<TYPES, I>,
 ) -> Result<Option<QuorumProposal<TYPES>>> {
     let sender = sender.clone();
     debug!(

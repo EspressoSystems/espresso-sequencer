@@ -176,11 +176,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for ConsensusTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for ConsensusTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> ConsensusTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> ConsensusTaskState<TYPES, I> {
         let consensus = handle.hotshot.get_consensus();
 
         ConsensusTaskState {
@@ -190,7 +188,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             round_start_delay: handle.hotshot.config.round_start_delay,
             cur_view: handle.get_cur_view().await,
             payload_commitment_and_metadata: None,
-            api: handle.clone(),
             vote_collector: None.into(),
             timeout_vote_collector: None.into(),
             timeout_task: None,

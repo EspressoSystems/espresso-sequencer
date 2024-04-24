@@ -1,6 +1,5 @@
 use hotshot::{
     tasks::{inject_consensus_polls, task_state::CreateTaskState},
-    types::SystemContextHandle,
 };
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
@@ -102,7 +101,6 @@ async fn test_consensus_task() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -163,7 +161,6 @@ async fn test_consensus_vote() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -233,7 +230,6 @@ async fn test_vote_with_specific_order(input_permutation: Vec<usize>) {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -386,7 +382,6 @@ async fn test_view_sync_finalize_propose() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -486,7 +481,6 @@ async fn test_view_sync_finalize_vote() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -596,7 +590,6 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -651,7 +644,6 @@ async fn test_vid_disperse_storage_failure() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 

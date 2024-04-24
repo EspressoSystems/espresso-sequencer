@@ -151,7 +151,6 @@ async fn test_consensus_task_upgrade() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
 
@@ -225,7 +224,6 @@ async fn test_upgrade_and_consensus_task() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
     let mut upgrade_state = UpgradeTaskState::<
@@ -417,7 +415,6 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     let consensus_state = ConsensusTaskState::<
         TestTypes,
         MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
     >::create_from(&handle)
     .await;
     let mut upgrade_state = UpgradeTaskState::<

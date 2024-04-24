@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hotshot::types::SystemContextHandle;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::consensus::ConsensusTaskState;
 use hotshot_types::simple_certificate::UpgradeCertificate;
 
 use crate::predicates::{Predicate, PredicateResult};
 
-type ConsensusTaskTestState =
-    ConsensusTaskState<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>;
+type ConsensusTaskTestState = ConsensusTaskState<TestTypes, MemoryImpl>;
 
 type UpgradeCertCallback =
     Arc<dyn Fn(Arc<Option<UpgradeCertificate<TestTypes>>>) -> bool + Send + Sync>;
