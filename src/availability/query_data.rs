@@ -441,7 +441,7 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
     pub fn genesis(instance_state: &Types::InstanceState) -> Self {
         let leaf = Leaf::<Types>::genesis(instance_state);
         let payload = leaf.get_block_payload().unwrap();
-        let bytes = payload.encode().unwrap().collect::<Vec<_>>();
+        let bytes = payload.encode().unwrap();
         let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
             .disperse(bytes)
             .unwrap();
@@ -504,7 +504,7 @@ where
 
 pub(crate) fn payload_size<Types: NodeType>(payload: &Payload<Types>) -> u64 {
     match payload.encode() {
-        Ok(iter) => iter.count() as u64,
+        Ok(arc) => arc.len() as u64,
         Err(_) => 0,
     }
 }

@@ -138,7 +138,7 @@ async fn store_genesis_vid<Types: NodeType>(
 ) {
     let payload = Payload::<Types>::genesis().0;
     let bytes = match payload.encode() {
-        Ok(bytes) => bytes.collect::<Vec<_>>(),
+        Ok(bytes) => bytes,
         Err(err) => {
             tracing::error!(%err, "unable to encode genesis payload");
             return;
