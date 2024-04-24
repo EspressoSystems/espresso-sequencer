@@ -860,7 +860,7 @@ pub mod node_tests {
         // Recover payload.
         tracing::info!("recovering payload");
         let bytes = vid.recover_payload(&shares, common).unwrap();
-        let recovered = MockPayload::from_bytes(bytes.as_slice(), &TestMetadata);
+        let recovered = MockPayload::from_bytes(&bytes, &TestMetadata);
         assert_eq!(recovered, *block.payload());
         assert_eq!(recovered.transactions, vec![txn]);
     }
