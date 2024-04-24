@@ -213,7 +213,11 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     function testFuzz_UpdatePermissionedProverWhenPermissionedProverModeEnabled(address newProver)
         external
     {
-        vm.assume(newProver != address(0));
+        vm.assume(newProver != address(0)); //otherwise it would have reverted with
+            // InvalidAddress()
+        vm.assume(newProver != permissionedProver); //otherwise it would have reverted with
+            // NoChangeRequired()
+
         assert(lc.permissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
