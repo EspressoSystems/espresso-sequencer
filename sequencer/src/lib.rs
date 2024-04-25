@@ -744,6 +744,7 @@ mod test {
             vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
+    use sequencer_utils::AnvilOptions;
     use testing::{wait_for_decide_on_handle, TestConfig};
 
     #[async_std::test]
@@ -752,7 +753,9 @@ mod test {
         setup_backtrace();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 
@@ -792,7 +795,9 @@ mod test {
         let success_height = 30;
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 
