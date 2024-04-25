@@ -683,10 +683,7 @@ mod test {
             );
 
             // TODO don't initialize Payload with empty namespace table
-            let block = Payload::from_bytes(
-                test_case.payload.iter().cloned(),
-                &NameSpaceTable::default(),
-            );
+            let block = Payload::from_bytes(&test_case.payload, &NameSpaceTable::default());
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
 
@@ -729,10 +726,7 @@ mod test {
         let test_case = TestCase::<TableWord>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
 
         // TODO don't initialize Payload with empty namespace table
-        let block = Payload::from_bytes(
-            test_case.payload.iter().cloned(),
-            &NameSpaceTable::default(),
-        );
+        let block = Payload::from_bytes(&test_case.payload, &NameSpaceTable::default());
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
@@ -836,7 +830,7 @@ mod test {
             let actual_payload_bytes = &test_case[1];
 
             let block = Payload::from_bytes(
-                actual_payload_bytes.iter().cloned(),
+                actual_payload_bytes,
                 &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
             );
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
@@ -980,7 +974,7 @@ mod test {
             let actual_payload_bytes = &test_case[1];
 
             let block = Payload::from_bytes(
-                actual_payload_bytes.iter().cloned(),
+                actual_payload_bytes,
                 &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
             );
             let ns_table = block.get_ns_table();
