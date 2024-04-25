@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     env, fs,
     net::SocketAddr,
     num::NonZeroUsize,
@@ -281,11 +282,14 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     }
 
     /// Get a temporary node index for generating a validator config
-    pub async fn generate_init_validator_config(client: &OrchestratorClient) -> ValidatorConfig<K> {
+    pub async fn generate_init_validator_config(
+        client: &OrchestratorClient,
+        is_da: bool,
+    ) -> ValidatorConfig<K> {
         // This cur_node_index is only used for key pair generation, it's not bound with the node,
         // lather the node with the generated key pair will get a new node_index from orchestrator.
         let cur_node_index = client.get_node_index_for_init_validator_config().await;
-        ValidatorConfig::generated_from_seed_indexed([0u8; 32], cur_node_index.into(), 1)
+        ValidatorConfig::generated_from_seed_indexed([0u8; 32], cur_node_index.into(), 1, is_da)
     }
 
     /// Asynchronously retrieves a `NetworkConfig` from an orchestrator.
@@ -299,6 +303,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         my_own_validator_config: ValidatorConfig<K>,
         libp2p_address: Option<SocketAddr>,
         libp2p_public_key: Option<PeerId>,
+        // If true, we will use the node index to determine if we are a DA node
+        indexed_da: bool,
     ) -> anyhow::Result<(NetworkConfig<K, E>, NetworkConfigSource)> {
         let (mut run_config, source) =
             Self::from_file_or_orchestrator(client, file, libp2p_address, libp2p_public_key)
@@ -308,11 +314,17 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         // Assign my_own_validator_config to the run_config if not loading from file
         match source {
             NetworkConfigSource::Orchestrator => {
-                run_config.config.my_own_validator_config = my_own_validator_config;
+                run_config.config.my_own_validator_config = my_own_validator_config.clone();
             }
             NetworkConfigSource::File => {
                 // do nothing, my_own_validator_config has already been loaded from file
             }
+        }
+
+        // If we've chosen to be DA based on the index, do so
+        if indexed_da {
+            run_config.config.my_own_validator_config.is_da =
+                run_config.node_index < run_config.config.da_staked_committee_size as u64;
         }
 
         // one more round of orchestrator here to get peer's public key/config
@@ -323,9 +335,11 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
                     .config
                     .my_own_validator_config
                     .get_public_config(),
+                run_config.config.my_own_validator_config.is_da,
             )
             .await;
         run_config.config.known_nodes_with_stake = updated_config.config.known_nodes_with_stake;
+        run_config.config.known_da_nodes = updated_config.config.known_da_nodes;
 
         info!("Retrieved config; our node index is {node_index}.");
         Ok((run_config, source))
@@ -570,6 +584,9 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// The known nodes' public key and stake value
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     #[serde(skip)]
+    /// The known DA nodes' public key and stake values
+    pub known_da_nodes: HashSet<PeerConfig<KEY>>,
+    #[serde(skip)]
     /// The known non-staking nodes'
     pub known_nodes_without_stake: Vec<KEY>,
     /// Number of staking committee nodes
@@ -615,6 +632,8 @@ pub struct ValidatorConfigFile {
     pub node_id: u64,
     // The validator's stake, commented for now
     // pub stake_value: u64,
+    /// Whether or not we are DA
+    pub is_da: bool,
 }
 
 impl ValidatorConfigFile {
@@ -663,6 +682,7 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
             execution_type: ExecutionType::Continuous,
             num_nodes_with_stake: val.num_nodes_with_stake,
             num_nodes_without_stake: val.num_nodes_without_stake,
+            known_da_nodes: val.known_da_nodes,
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
             known_nodes_with_stake: val.known_nodes_with_stake,
@@ -697,7 +717,7 @@ pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS: u64 = 60;
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {
         // here stake_value is set to 1, since we don't input stake_value from ValidatorConfigFile for now
-        ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1)
+        ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1, val.is_da)
     }
 }
 impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile> for HotShotConfig<KEY, E> {
@@ -710,20 +730,35 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile> for HotShot
 
 impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
     fn default() -> Self {
+        // The default number of nodes is 5
+        let staked_committee_nodes: usize = 5;
+
+        // Aggregate the DA nodes
+        let mut known_da_nodes = HashSet::new();
+
         let gen_known_nodes_with_stake = (0..10)
             .map(|node_id| {
-                let cur_validator_config: ValidatorConfig<KEY> =
-                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+                let mut cur_validator_config: ValidatorConfig<KEY> =
+                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, false);
+
+                // Add to DA nodes based on index
+                if node_id < staked_committee_nodes as u64 {
+                    known_da_nodes.insert(cur_validator_config.get_public_config());
+                    cur_validator_config.is_da = true;
+                }
+
                 cur_validator_config.get_public_config()
             })
             .collect();
+
         Self {
             num_nodes_with_stake: NonZeroUsize::new(10).unwrap(),
             num_nodes_without_stake: 0,
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,
             known_nodes_without_stake: vec![],
-            staked_committee_nodes: 5,
+            staked_committee_nodes,
+            known_da_nodes,
             non_staked_committee_nodes: 0,
             fixed_leader_for_gpuvid: 0,
             max_transactions: NonZeroUsize::new(100).unwrap(),

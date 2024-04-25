@@ -359,7 +359,8 @@ where
                 da_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     committee_election_config(
-                        config.da_staked_committee_size as u64,
+                        // Use the _actual_ number of DA nodes instead of expected
+                        config.known_da_nodes.len() as u64,
                         config.num_nodes_without_stake as u64,
                     ),
                     config.fixed_leader_for_gpuvid,
@@ -391,9 +392,13 @@ where
             } else {
                 let initializer =
                     HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {}).unwrap();
+
+                // See whether or not we should be DA
+                let is_da = node_id < config.da_staked_committee_size as u64;
+
                 // We assign node's public key and stake value rather than read from config file since it's a test
                 let validator_config =
-                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
                 let hotshot = Self::add_node_with_config(
                     node_id,
                     networks.clone(),

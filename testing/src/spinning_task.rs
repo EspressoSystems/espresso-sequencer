@@ -137,7 +137,11 @@ where
                                         // We assign node's public key and stake value rather than read from config file since it's a test
                                         let validator_config =
                                             ValidatorConfig::generated_from_seed_indexed(
-                                                [0u8; 32], node_id, 1,
+                                                [0u8; 32],
+                                                node_id,
+                                                1,
+                                                // For tests, make the node DA based on its index
+                                                node_id < config.da_staked_committee_size as u64,
                                             );
                                         TestRunner::add_node_with_config(
                                             node_id,

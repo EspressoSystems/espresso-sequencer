@@ -70,7 +70,8 @@ pub async fn build_system_handle(
 
     let committee_election_config = config.election_config.clone().unwrap_or_else(|| {
         <TestTypes as NodeType>::Membership::default_election_config(
-            config.num_nodes_with_stake.get() as u64,
+            // Use the _actual_ number of known DA nodes instead of the expected number of DA nodes
+            config.known_da_nodes.len() as u64,
             config.num_nodes_without_stake as u64,
         )
     });

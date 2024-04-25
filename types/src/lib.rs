@@ -1,5 +1,7 @@
 //! Types and Traits for the `HotShot` consensus module
-use std::{fmt::Debug, future::Future, num::NonZeroUsize, pin::Pin, time::Duration};
+use std::{
+    collections::HashSet, fmt::Debug, future::Future, num::NonZeroUsize, pin::Pin, time::Duration,
+};
 
 use bincode::Options;
 use displaydoc::Display;
@@ -68,12 +70,19 @@ pub struct ValidatorConfig<KEY: SignatureKey> {
     pub stake_value: u64,
     /// the validator's key pairs for state signing/verification
     pub state_key_pair: light_client::StateKeyPair,
+    /// Whether or not this validator is DA
+    pub is_da: bool,
 }
 
 impl<KEY: SignatureKey> ValidatorConfig<KEY> {
-    /// generate validator config from input seed, index and stake value
+    /// generate validator config from input seed, index, stake value, and whether it's DA
     #[must_use]
-    pub fn generated_from_seed_indexed(seed: [u8; 32], index: u64, stake_value: u64) -> Self {
+    pub fn generated_from_seed_indexed(
+        seed: [u8; 32],
+        index: u64,
+        stake_value: u64,
+        is_da: bool,
+    ) -> Self {
         let (public_key, private_key) = KEY::generated_from_seed_indexed(seed, index);
         let state_key_pairs = light_client::StateKeyPair::generate_from_seed_indexed(seed, index);
         Self {
@@ -81,6 +90,7 @@ impl<KEY: SignatureKey> ValidatorConfig<KEY> {
             private_key,
             stake_value,
             state_key_pair: state_key_pairs,
+            is_da,
         }
     }
 
@@ -95,11 +105,11 @@ impl<KEY: SignatureKey> ValidatorConfig<KEY> {
 
 impl<KEY: SignatureKey> Default for ValidatorConfig<KEY> {
     fn default() -> Self {
-        Self::generated_from_seed_indexed([0u8; 32], 0, 1)
+        Self::generated_from_seed_indexed([0u8; 32], 0, 1, true)
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Display)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Display, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// structure of peers' config, including public key, stake value, and state key.
 pub struct PeerConfig<KEY: SignatureKey> {
@@ -161,6 +171,8 @@ pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub max_transactions: NonZeroUsize,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
+    /// All public keys known to be DA nodes
+    pub known_da_nodes: HashSet<PeerConfig<KEY>>,
     /// List of known non-staking nodes' public keys
     pub known_nodes_without_stake: Vec<KEY>,
     /// My own validator config, including my public key, private key, stake value, serving as private parameter

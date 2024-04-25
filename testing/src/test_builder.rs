@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
@@ -137,8 +137,8 @@ impl TestDescription {
             // TODO: remove once we have fixed the DHT timeout issue
             // https://github.com/EspressoSystems/HotShot/issues/2088
             num_bootstrap_nodes: num_nodes_with_stake,
-            num_nodes_with_stake: num_nodes_with_stake,
-            num_nodes_without_stake: num_nodes_without_stake,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 20,
@@ -203,8 +203,8 @@ impl Default for TestDescription {
         Self {
             timing_data: TimingData::default(),
             min_transactions: 0,
-            num_nodes_with_stake: num_nodes_with_stake,
-            num_nodes_without_stake: num_nodes_without_stake,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             skip_late: false,
             num_bootstrap_nodes: num_nodes_with_stake,
@@ -255,17 +255,35 @@ impl TestDescription {
             ..
         } = self.clone();
 
+        let mut known_da_nodes = HashSet::new();
+
         // We assign known_nodes' public key and stake value here rather than read from config file since it's a test.
         let known_nodes_with_stake = (0..num_nodes_with_stake)
             .map(|node_id_| {
                 let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> =
-                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id_ as u64, 1);
+                    ValidatorConfig::generated_from_seed_indexed(
+                        [0u8; 32],
+                        node_id_ as u64,
+                        1,
+                        node_id_ < da_staked_committee_size,
+                    );
+
+                // Add the node to the known DA nodes based on the index (for tests)
+                if node_id_ < da_staked_committee_size {
+                    known_da_nodes.insert(cur_validator_config.get_public_config());
+                }
+
                 cur_validator_config.get_public_config()
             })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
-        let mut my_own_validator_config =
-            ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+        let mut my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
+            [0u8; 32],
+            node_id,
+            1,
+            // This is the config for node 0
+            0 < da_staked_committee_size,
+        );
         if node_id == 0 {
             my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file(
                 "config/ValidatorConfigFile.toml",
@@ -277,6 +295,7 @@ impl TestDescription {
             execution_type: ExecutionType::Incremental,
             num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
             // Currently making this zero for simplicity
+            known_da_nodes,
             num_nodes_without_stake: 0,
             num_bootstrap: num_bootstrap_nodes,
             min_transactions,

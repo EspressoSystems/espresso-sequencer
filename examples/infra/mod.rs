@@ -296,7 +296,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
     // but its type is too complex to load so we'll generate it from seed now.
     // Also this function is only used for orchestrator initialization now, so this value doesn't matter
     config.config.my_own_validator_config =
-        ValidatorConfig::generated_from_seed_indexed(config.seed, config.node_index, 1);
+        ValidatorConfig::generated_from_seed_indexed(config.seed, config.node_index, 1, true);
     // initialize it with size for better assignment of peers' config
     config.config.known_nodes_with_stake =
         vec![PeerConfig::default(); config.config.num_nodes_with_stake.get() as usize];
@@ -403,7 +403,8 @@ pub trait RunDA<
         });
 
         let committee_election_config = TYPES::Membership::default_election_config(
-            config.config.da_staked_committee_size.try_into().unwrap(),
+            // Use the number of _actual_ DA nodes connected for the committee size
+            config.config.known_da_nodes.len() as u64,
             config.config.num_nodes_without_stake as u64,
         );
         let networks_bundle = Networks {
@@ -751,9 +752,9 @@ where
             private_key: key.private_key,
         };
 
-        // See if we should be DA
+        // See if we should be DA, subscribe to the DA topic if so
         let mut topics = vec![Topic::Global];
-        if config.node_index < config.config.da_staked_committee_size as u64 {
+        if config.config.my_own_validator_config.is_da {
             topics.push(Topic::DA);
         }
 
@@ -767,6 +768,9 @@ where
             keypair,
         )
         .expect("failed to create network");
+
+        // Wait for the network to be ready
+        network.wait_for_ready().await;
 
         PushCdnDaRun {
             config,
@@ -1018,6 +1022,8 @@ pub async fn main_entry_point<
     // We assume one node will not call this twice to generate two validator_config-s with same identity.
     let my_own_validator_config = NetworkConfig::<TYPES::SignatureKey, TYPES::ElectionConfigType>::generate_init_validator_config(
         &orchestrator_client,
+        // This is false for now, we only use it to generate the keypair
+        false
     ).await;
 
     // Derives our Libp2p private key from our private key, and then returns the public key of that key
@@ -1038,6 +1044,8 @@ pub async fn main_entry_point<
             my_own_validator_config,
             args.advertise_address,
             Some(libp2p_public_key),
+            // If `indexed_da` is true: use the node index to determine if we are a DA node.
+            true,
         )
         .await
         .expect("failed to get config");

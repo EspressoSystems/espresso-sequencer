@@ -32,11 +32,13 @@ Get the latest temporary node index only for generating validator's key pair for
 
 # POST the node's node index to generate public key for pubkey collection
 [route.post_pubkey]
-PATH = ["pubkey/:node_index"]
+PATH = ["pubkey/:node_index/:is_da"]
 METHOD = "POST"
 ":node_index" = "Integer"
+":is_da" = "Boolean"
 DOC = """
-Post a node's node_index so that its public key could be posted and collected by the orchestrator.
+Post a node's node_index so that its public key could be posted and collected by the orchestrator. 
+Supply whether or not we are DA.
 """
 
 # GET whether or not the config with all peers' public keys / configs are ready

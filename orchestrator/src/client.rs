@@ -298,11 +298,12 @@ impl OrchestratorClient {
         &self,
         node_index: u64,
         my_pub_key: PeerConfig<K>,
+        is_da: bool,
     ) -> NetworkConfig<K, E> {
         // send my public key
         let _send_pubkey_ready_f: Result<(), ClientError> = self
             .client
-            .post(&format!("api/pubkey/{node_index}"))
+            .post(&format!("api/pubkey/{node_index}/{is_da}"))
             .body_binary(&PeerConfig::<K>::to_bytes(&my_pub_key))
             .unwrap()
             .send()

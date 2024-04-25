@@ -168,6 +168,7 @@ pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
         &mut self,
         node_index: u64,
         pubkey: &mut Vec<u8>,
+        is_da: bool,
     ) -> Result<(), ServerError>;
     /// post endpoint for whether or not all peers public keys are ready
     /// # Errors
@@ -262,6 +263,7 @@ where
         &mut self,
         node_index: u64,
         pubkey: &mut Vec<u8>,
+        is_da: bool,
     ) -> Result<(), ServerError> {
         if self.pub_posted.contains(&node_index) {
             return Err(ServerError {
@@ -275,7 +277,16 @@ where
         pubkey.drain(..12);
         let register_pub_key_with_stake = PeerConfig::<KEY>::from_bytes(pubkey).unwrap();
         self.config.config.known_nodes_with_stake[node_index as usize] =
-            register_pub_key_with_stake;
+            register_pub_key_with_stake.clone();
+
+        // If the node wants to be DA, add it to the list of known DAs
+        if is_da {
+            self.config
+                .config
+                .known_da_nodes
+                .insert(register_pub_key_with_stake);
+        };
+
         self.nodes_with_pubkey += 1;
         println!(
             "Node {:?} posted public key, now total num posted public key: {:?}",
@@ -427,8 +438,9 @@ where
     .post("post_pubkey", |req, state| {
         async move {
             let node_index = req.integer_param("node_index")?;
+            let is_da = req.boolean_param("is_da")?;
             let mut pubkey = req.body_bytes();
-            state.register_public_key(node_index, &mut pubkey)
+            state.register_public_key(node_index, &mut pubkey, is_da)
         }
         .boxed()
     })?
