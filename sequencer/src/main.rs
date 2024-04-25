@@ -18,10 +18,10 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    tracing::info!("sequencer starting up");
+    tracing::warn!("sequencer starting up");
     let opt = Options::parse();
     let mut modules = opt.modules();
-    tracing::info!("modules: {:?}", modules);
+    tracing::warn!("modules: {:?}", modules);
 
     if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
