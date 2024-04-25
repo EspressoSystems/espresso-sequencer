@@ -170,7 +170,12 @@ impl ValidatedState {
             res.expect_not_in_memory().is_err(),
             format!("missing account state for {account}")
         );
-        Ok(())
+        // Fail if there was an error during `update_with`, otherwise succeed.
+        if let Some(err) = err {
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 }
 
