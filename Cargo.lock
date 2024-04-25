@@ -1352,7 +1352,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-types",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
@@ -2519,9 +2519,9 @@ dependencies = [
  "hotshot-types",
  "itertools 0.12.1",
  "jf-plonk",
- "jf-primitives 0.4.3",
- "jf-relation 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
  "sha3",
 ]
 
@@ -3592,7 +3592,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
 ]
 
 [[package]]
@@ -3973,8 +3973,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4000,7 +4000,7 @@ dependencies = [
  "hotshot-task-impls",
  "hotshot-types",
  "hotshot-web-server",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "libp2p-identity",
  "libp2p-networking",
  "lru 0.12.3",
@@ -4019,7 +4019,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "async-trait",
  "clap",
@@ -4037,8 +4037,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.9"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.9#fbe38808f8a97f968abce839cc1a4afaab29b067"
+version = "0.1.12"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.12#46aedadca91d96554e9ad0a1c78a39047cb427c5"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4079,16 +4079,16 @@ dependencies = [
  "ethers",
  "hotshot-types",
  "jf-plonk",
- "jf-primitives 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-utils 0.4.4",
  "num-bigint",
  "num-traits",
 ]
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.9"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.10#ecd750f36c8955871def4dfb66785585f59f1898"
+version = "0.1.12"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.12#72da9ebce0184979208dcd53eb7e8a12d8508af2"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4112,8 +4112,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4142,8 +4142,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4153,8 +4153,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4182,8 +4182,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.9"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.10#2eb1faa7f9a200a0dbb5635be79971bda110c5fc"
+version = "0.1.12"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.12#46e494d59533efbcbd11d7faaeae94223a748ab1"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4209,7 +4209,7 @@ dependencies = [
  "hotshot-types",
  "include_dir",
  "itertools 0.12.1",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "native-tls",
  "portpicker",
  "postgres-native-tls",
@@ -4236,8 +4236,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4247,8 +4247,8 @@ dependencies = [
  "digest 0.10.7",
  "ethereum-types",
  "hotshot-types",
- "jf-primitives 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-utils 0.4.4",
  "serde",
  "tagged-base64 0.4.0",
 ]
@@ -4284,9 +4284,9 @@ dependencies = [
  "hotshot-types",
  "itertools 0.12.1",
  "jf-plonk",
- "jf-primitives 0.4.3",
- "jf-relation 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
  "rand_chacha 0.3.1",
  "sequencer-utils",
  "serde",
@@ -4303,8 +4303,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4316,8 +4316,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4334,7 +4334,7 @@ dependencies = [
  "hotshot-builder-api",
  "hotshot-task",
  "hotshot-types",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
@@ -4349,8 +4349,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4371,7 +4371,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
- "jf-primitives 0.4.3",
+ "jf-primitives 0.4.4",
  "lru 0.12.3",
  "portpicker",
  "rand 0.8.5",
@@ -4389,7 +4389,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4419,8 +4419,8 @@ dependencies = [
  "futures",
  "generic-array",
  "jf-plonk",
- "jf-primitives 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-utils 0.4.4",
  "lazy_static",
  "memoize",
  "rand 0.8.5",
@@ -4439,8 +4439,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-web-server"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -4984,8 +4984,8 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jf-plonk"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -4999,9 +4999,9 @@ dependencies = [
  "espresso-systems-common 0.4.0",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-primitives 0.4.3",
- "jf-relation 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
  "merlin",
  "num-bigint",
  "rand_chacha 0.3.1",
@@ -5057,8 +5057,8 @@ dependencies = [
 
 [[package]]
 name = "jf-primitives"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
@@ -5085,8 +5085,8 @@ dependencies = [
  "generic-array",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-relation 0.4.3",
- "jf-utils 0.4.3",
+ "jf-relation 0.4.4",
+ "jf-utils 0.4.4",
  "merlin",
  "num-bigint",
  "num-traits",
@@ -5126,8 +5126,8 @@ dependencies = [
 
 [[package]]
 name = "jf-relation"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -5144,7 +5144,7 @@ dependencies = [
  "dyn-clone 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "hashbrown 0.14.3",
  "itertools 0.12.1",
- "jf-utils 0.4.3",
+ "jf-utils 0.4.4",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
@@ -5167,8 +5167,8 @@ dependencies = [
 
 [[package]]
 name = "jf-utils"
-version = "0.4.3"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.3#4a2e7b7c3f8f10b352262869133a17e30ae94981"
+version = "0.4.4"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.4#8f48813ca52d964090dbf0de62f07f5e0c7e22c6"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -5635,8 +5635,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.40"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.41#4f9c275421936c65c6943a305406aa4280f35a1c"
+version = "0.5.43"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.43#4df356e3955a83a9187c84ebc1054dc2e4034f24"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -8516,8 +8516,8 @@ dependencies = [
  "hotshot-web-server",
  "include_dir",
  "itertools 0.12.1",
- "jf-primitives 0.4.3",
- "jf-utils 0.4.3",
+ "jf-primitives 0.4.4",
+ "jf-utils 0.4.4",
  "lazy_static",
  "num-traits",
  "portpicker",
