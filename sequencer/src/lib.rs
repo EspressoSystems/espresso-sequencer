@@ -206,6 +206,11 @@ impl NodeState {
         self
     }
 
+    pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
+        self.chain_config = cfg;
+        self
+    }
+
     fn l1_client(&self) -> &L1Client {
         &self.l1_client
     }

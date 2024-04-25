@@ -11,7 +11,7 @@ use async_std::sync::RwLock;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
-use derive_more::{Add, Display, From, Into, Sub};
+use derive_more::{Add, Display, From, Into, Mul, Sub};
 use ethers::{abi::Address, types::U256};
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
@@ -202,13 +202,22 @@ pub fn validate_proposal(
         )
     );
 
+    // validate block size and fee
+    let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     anyhow::ensure!(
-        (VidSchemeType::get_payload_byte_len(vid_common) as u64)
-            < expected_chain_config.max_block_size(),
+        block_size < expected_chain_config.max_block_size(),
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
             proposal.chain_config
+        )
+    );
+    anyhow::ensure!(
+        proposal.fee_info.amount() >= expected_chain_config.base_fee() * block_size,
+        format!(
+            "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
+            expected_chain_config.base_fee(),
+            proposal.fee_info.amount()
         )
     );
 
@@ -871,6 +880,7 @@ impl Committable for FeeInfo {
     Ord,
     Add,
     Sub,
+    Mul,
     From,
     Into,
 )]
@@ -1163,6 +1173,8 @@ impl FeeAccountProof {
 mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use hotshot_types::vid::vid_scheme;
+    use jf_primitives::vid::VidScheme;
 
     #[test]
     fn test_fee_proofs() {
@@ -1201,5 +1213,50 @@ mod test {
         proof2.remember(&mut tree).unwrap();
         FeeAccountProof::prove(&tree, account1).unwrap();
         FeeAccountProof::prove(&tree, account2).unwrap();
+    }
+
+    #[test]
+    fn test_validation_max_block_size() {
+        setup_logging();
+        setup_backtrace();
+
+        const MAX_BLOCK_SIZE: usize = 10;
+        let payload = [0; 2 * MAX_BLOCK_SIZE];
+        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+
+        let state = ValidatedState::default();
+        let instance =
+            NodeState::mock().with_chain_config(ChainConfig::new(0, MAX_BLOCK_SIZE as u64, 0));
+        let parent = Leaf::genesis(&instance);
+        let header = parent.get_block_header();
+
+        // Validation fails because the proposed block exceeds the maximum block size.
+        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+    }
+
+    #[test]
+    fn test_validation_base_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+        let payload = [0; 1];
+        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+
+        let state = ValidatedState::default();
+        let instance = NodeState::mock().with_chain_config(ChainConfig::new(
+            0,
+            max_block_size,
+            1000, // High base fee
+        ));
+        let parent = Leaf::genesis(&instance);
+        let header = parent.get_block_header();
+
+        // Validation fails because the genesis fee (0) is too low.
+        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
     }
 }

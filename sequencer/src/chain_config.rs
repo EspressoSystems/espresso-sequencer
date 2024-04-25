@@ -50,8 +50,17 @@ impl ChainConfig {
             base_fee: base_fee.into(),
         }
     }
+
+    pub fn chain_id(&self) -> ChainId {
+        self.chain_id
+    }
+
     pub fn max_block_size(&self) -> u64 {
         self.max_block_size
+    }
+
+    pub fn base_fee(&self) -> FeeAmount {
+        self.base_fee
     }
 }
 
