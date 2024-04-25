@@ -169,7 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
-                        membership: self.quorum_membership.clone(),
+                        membership: Arc::clone(&self.quorum_membership),
                         view: vote.get_view_number(),
                         id: self.id,
                     };
@@ -183,7 +183,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(event.clone(), &tx)
+                        .handle_event(Arc::clone(&event), &tx)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {

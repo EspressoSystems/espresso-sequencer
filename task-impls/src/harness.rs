@@ -66,10 +66,15 @@ pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(
     let test_task = Task::new(
         to_test.clone(),
         from_task.clone(),
-        registry.clone(),
+        Arc::clone(&registry),
         test_state,
     );
-    let task = Task::new(to_test.clone(), from_test.clone(), registry.clone(), state);
+    let task = Task::new(
+        to_test.clone(),
+        from_test.clone(),
+        Arc::clone(&registry),
+        state,
+    );
 
     tasks.push(test_task.run());
     tasks.push(task.run());

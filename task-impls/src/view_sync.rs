@@ -236,7 +236,9 @@ impl<
         if let Some(replica_task) = task_map.get_mut(&view) {
             // Forward event then return
             debug!("Forwarding message");
-            let result = replica_task.handle(event.clone(), sender.clone()).await;
+            let result = replica_task
+                .handle(Arc::clone(&event), sender.clone())
+                .await;
 
             if result == Some(HotShotTaskCompleted) {
                 // The protocol has finished
@@ -255,8 +257,8 @@ impl<
             finalized: false,
             sent_view_change_event: false,
             timeout_task: None,
-            membership: self.membership.clone(),
-            network: self.network.clone(),
+            membership: Arc::clone(&self.membership),
+            network: Arc::clone(&self.network),
             public_key: self.public_key.clone(),
             private_key: self.private_key.clone(),
             api: self.api.clone(),
@@ -264,7 +266,9 @@ impl<
             id: self.id,
         };
 
-        let result = replica_state.handle(event.clone(), sender.clone()).await;
+        let result = replica_state
+            .handle(Arc::clone(&event), sender.clone())
+            .await;
 
         if result == Some(HotShotTaskCompleted) {
             // The protocol has finished
@@ -315,7 +319,9 @@ impl<
                 let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
                 if let Some(relay_task) = relay_map.get_mut(&relay) {
                     debug!("Forwarding message");
-                    let result = relay_task.handle_event(event.clone(), &event_stream).await;
+                    let result = relay_task
+                        .handle_event(Arc::clone(&event), &event_stream)
+                        .await;
 
                     if result == Some(HotShotTaskCompleted) {
                         // The protocol has finished
@@ -333,7 +339,7 @@ impl<
 
                 let info = AccumulatorInfo {
                     public_key: self.public_key.clone(),
-                    membership: self.membership.clone(),
+                    membership: Arc::clone(&self.membership),
                     view: vote_view,
                     id: self.id,
                 };
@@ -351,7 +357,9 @@ impl<
                 let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
                 if let Some(relay_task) = relay_map.get_mut(&relay) {
                     debug!("Forwarding message");
-                    let result = relay_task.handle_event(event.clone(), &event_stream).await;
+                    let result = relay_task
+                        .handle_event(Arc::clone(&event), &event_stream)
+                        .await;
 
                     if result == Some(HotShotTaskCompleted) {
                         // The protocol has finished
@@ -369,7 +377,7 @@ impl<
 
                 let info = AccumulatorInfo {
                     public_key: self.public_key.clone(),
-                    membership: self.membership.clone(),
+                    membership: Arc::clone(&self.membership),
                     view: vote_view,
                     id: self.id,
                 };
@@ -387,7 +395,9 @@ impl<
                 let relay_map = map.entry(vote_view).or_insert(BTreeMap::new());
                 if let Some(relay_task) = relay_map.get_mut(&relay) {
                     debug!("Forwarding message");
-                    let result = relay_task.handle_event(event.clone(), &event_stream).await;
+                    let result = relay_task
+                        .handle_event(Arc::clone(&event), &event_stream)
+                        .await;
 
                     if result == Some(HotShotTaskCompleted) {
                         // The protocol has finished
@@ -405,7 +415,7 @@ impl<
 
                 let info = AccumulatorInfo {
                     public_key: self.public_key.clone(),
-                    membership: self.membership.clone(),
+                    membership: Arc::clone(&self.membership),
                     view: vote_view,
                     id: self.id,
                 };

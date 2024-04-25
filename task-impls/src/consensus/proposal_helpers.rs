@@ -160,8 +160,8 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
         View {
             view_inner: ViewInner::Leaf {
                 leaf: proposed_leaf.commit(),
-                state: state.clone(),
-                delta: Some(delta.clone()),
+                state: Arc::clone(&state),
+                delta: Some(Arc::clone(&delta)),
             },
         },
     );
@@ -378,7 +378,7 @@ pub async fn get_parent_leaf_and_state<TYPES: NodeType>(
         // TODO do some sort of sanity check on the view number that it matches decided
     }
 
-    Ok((parent_leaf, state.clone()))
+    Ok((parent_leaf, Arc::clone(state)))
 }
 
 /// Send a proposal for the view `view` from the latest high_qc given an upgrade cert. This is a special
@@ -400,9 +400,9 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
     let (parent_leaf, state) = get_parent_leaf_and_state(
         cur_view,
         view,
-        quorum_membership.clone(),
+        Arc::clone(&quorum_membership),
         public_key.clone(),
-        consensus.clone(),
+        Arc::clone(&consensus),
     )
     .await?;
 
@@ -436,7 +436,7 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
             Some(upgrade_cert),
             None,
             delay,
-            instance_state.clone(),
+            Arc::clone(&instance_state),
         )
         .await;
     }))
@@ -465,7 +465,7 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
         view,
         quorum_membership,
         public_key.clone(),
-        consensus.clone(),
+        Arc::clone(&consensus),
     )
     .await?;
 
@@ -517,7 +517,7 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
             proposal_upgrade_certificate,
             proposal_certificate,
             delay,
-            instance_state.clone(),
+            Arc::clone(&instance_state),
         )
         .await;
     });
@@ -629,10 +629,10 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
         task_state.public_key.clone(),
         view,
         &event_stream,
-        task_state.quorum_membership.clone(),
-        task_state.quorum_network.clone(),
+        Arc::clone(&task_state.quorum_membership),
+        Arc::clone(&task_state.quorum_network),
         task_state.timeout,
-        task_state.consensus.clone(),
+        Arc::clone(&task_state.consensus),
         &mut task_state.cur_view,
         &mut task_state.timeout_task,
     )
@@ -651,7 +651,7 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
     {
         Some(leaf) => {
             if let (Some(state), _) = consensus_read.get_state_and_delta(leaf.get_view_number()) {
-                Some((leaf, state.clone()))
+                Some((leaf, Arc::clone(&state)))
             } else {
                 bail!("Parent state not found! Consensus internally inconsistent");
             }
@@ -749,16 +749,16 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
                     task_state.cur_view,
                     qc.view_number + 1,
                     event_stream,
-                    task_state.quorum_membership.clone(),
+                    Arc::clone(&task_state.quorum_membership),
                     task_state.public_key.clone(),
                     task_state.private_key.clone(),
-                    task_state.consensus.clone(),
+                    Arc::clone(&task_state.consensus),
                     task_state.round_start_delay,
                     task_state.formed_upgrade_certificate.clone(),
                     task_state.decided_upgrade_cert.clone(),
                     &mut task_state.payload_commitment_and_metadata,
                     &mut task_state.proposal_cert,
-                    task_state.instance_state.clone(),
+                    Arc::clone(&task_state.instance_state),
                 )
                 .await?;
 
@@ -787,16 +787,16 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
             validate_proposal_safety_and_liveness(
                 proposal.clone(),
                 parent_leaf,
-                task_state.consensus.clone(),
+                Arc::clone(&task_state.consensus),
                 task_state.decided_upgrade_cert.clone(),
-                task_state.quorum_membership.clone(),
-                parent_state.clone(),
+                Arc::clone(&task_state.quorum_membership),
+                Arc::clone(&parent_state),
                 view_leader_key,
                 event_stream.clone(),
                 sender,
                 task_state.output_event_stream.clone(),
-                task_state.storage.clone(),
-                task_state.instance_state.clone(),
+                Arc::clone(&task_state.storage),
+                Arc::clone(&task_state.instance_state),
             )
             .map(AnyhowTracing::err_as_debug),
         ));

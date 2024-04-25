@@ -160,8 +160,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         // and so we don't implicitly rely on the same replica all the time.
         recipients.shuffle(&mut thread_rng());
         let requester = DelayedRequester::<TYPES, I> {
-            network: self.network.clone(),
-            state: self.state.clone(),
+            network: Arc::clone(&self.network),
+            state: Arc::clone(&self.state),
             sender,
             delay: self.delay,
             recipients,

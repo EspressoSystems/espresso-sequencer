@@ -362,7 +362,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
                         is_paused: Arc::from(AtomicBool::new(false)),
                     });
 
-                    (client.clone(), client)
+                    (Arc::clone(&client), client)
                 })
             }
         })

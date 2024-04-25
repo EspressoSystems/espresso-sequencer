@@ -178,7 +178,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
                     return None;
                 }
-                let txns = proposal.data.encoded_transactions.clone();
+                let txns = Arc::clone(&proposal.data.encoded_transactions);
                 let num_nodes = self.quorum_membership.total_nodes();
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
@@ -231,7 +231,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
-                        membership: self.da_membership.clone(),
+                        membership: Arc::clone(&self.da_membership),
                         view: vote.get_view_number(),
                         id: self.id,
                     };
@@ -245,7 +245,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(event.clone(), &event_stream)
+                        .handle_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -320,7 +320,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 let data: DAProposal<TYPES> = DAProposal {
-                    encoded_transactions: encoded_transactions.clone(),
+                    encoded_transactions: Arc::clone(encoded_transactions),
                     metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number: view,

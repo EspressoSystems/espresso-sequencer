@@ -315,7 +315,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
             self.view_number,
             &self.sender,
             commit_and_metadata.unwrap(),
-            self.instance_state.clone(),
+            Arc::clone(&self.instance_state),
         )
         .await;
     }
@@ -506,9 +506,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         );
 
         match event.as_ref() {
-            HotShotEvent::ProposeNow(..) => propose_now_dependency.mark_as_completed(event.clone()),
+            HotShotEvent::ProposeNow(..) => {
+                propose_now_dependency.mark_as_completed(Arc::clone(&event));
+            }
             HotShotEvent::SendPayloadCommitmentAndMetadata(..) => {
-                payload_commitment_dependency.mark_as_completed(event.clone());
+                payload_commitment_dependency.mark_as_completed(Arc::clone(&event));
             }
             HotShotEvent::QuorumProposalValidated(..) => {
                 proposal_dependency.mark_as_completed(event);
@@ -583,16 +585,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             ProposalDependencyHandle {
                 view_number,
                 sender: event_sender,
-                consensus: self.consensus.clone(),
+                consensus: Arc::clone(&self.consensus),
                 output_event_stream: self.output_event_stream.clone(),
-                timeout_membership: self.timeout_membership.clone(),
-                quorum_membership: self.quorum_membership.clone(),
+                timeout_membership: Arc::clone(&self.timeout_membership),
+                quorum_membership: Arc::clone(&self.quorum_membership),
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
                 timeout: self.timeout,
                 round_start_delay: self.round_start_delay,
                 id: self.id,
-                instance_state: self.instance_state.clone(),
+                instance_state: Arc::clone(&self.instance_state),
             },
         );
         self.propose_dependencies
@@ -637,7 +639,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     *view,
                     event_receiver,
                     event_sender,
-                    event.clone(),
+                    Arc::clone(&event),
                 );
             }
             HotShotEvent::QCFormed(cert) => {
@@ -657,7 +659,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                             view,
                             event_receiver,
                             event_sender,
-                            event.clone(),
+                            Arc::clone(&event),
                         );
                     }
                     either::Left(qc) => {
@@ -686,7 +688,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                             view,
                             event_receiver,
                             event_sender,
-                            event.clone(),
+                            Arc::clone(&event),
                         );
                     }
                 }
@@ -708,7 +710,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     view,
                     event_receiver,
                     event_sender,
-                    event.clone(),
+                    Arc::clone(&event),
                 );
             }
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
@@ -798,7 +800,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                         if let (Some(state), _) =
                             consensus.get_state_and_delta(leaf.get_view_number())
                         {
-                            Some((leaf, state.clone()))
+                            Some((leaf, Arc::clone(&state)))
                         } else {
                             error!("Parent state not found! Consensus internally inconsistent");
                             return;
@@ -839,16 +841,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     validate_proposal_safety_and_liveness(
                         proposal.clone(),
                         parent_leaf,
-                        self.consensus.clone(),
+                        Arc::clone(&self.consensus),
                         None,
-                        self.quorum_membership.clone(),
-                        parent_state.clone(),
+                        Arc::clone(&self.quorum_membership),
+                        Arc::clone(&parent_state),
                         view_leader_key,
                         event_sender.clone(),
                         sender,
                         self.output_event_stream.clone(),
-                        self.storage.clone(),
-                        self.instance_state.clone(),
+                        Arc::clone(&self.storage),
+                        Arc::clone(&self.instance_state),
                     )
                     .map(AnyhowTracing::err_as_debug),
                 );
@@ -866,7 +868,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     new_view,
                     event_receiver,
                     event_sender,
-                    event.clone(),
+                    Arc::clone(&event),
                 );
             }
             HotShotEvent::QuorumProposalSend(proposal, _) => {

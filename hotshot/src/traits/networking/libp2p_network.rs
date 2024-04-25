@@ -268,7 +268,7 @@ where
                         .build()
                         .unwrap()
                 };
-                let bootstrap_addrs_ref = bootstrap_addrs.clone();
+                let bootstrap_addrs_ref = Arc::clone(&bootstrap_addrs);
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
                 let reliability_config_dup = reliability_config.clone();
@@ -294,7 +294,7 @@ where
                             }
                         },
                     );
-                    (net.clone(), net)
+                    (Arc::clone(&net), net)
                 })
             }
         })
@@ -538,9 +538,9 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
         node_lookup_recv: UnboundedReceiver<Option<(ViewNumber, K)>>,
         _: Ver,
     ) {
-        let handle = self.inner.handle.clone();
+        let handle = Arc::clone(&self.inner.handle);
         let dht_timeout = self.inner.dht_timeout;
-        let latest_seen_view = self.inner.latest_seen_view.clone();
+        let latest_seen_view = Arc::clone(&self.inner.latest_seen_view);
 
         // deals with handling lookup queue. should be infallible
         async_spawn(async move {
@@ -569,15 +569,15 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
     /// Initiates connection to the outside world
     fn spawn_connect<VER: 'static + StaticVersionType>(&mut self, id: usize, bind_version: VER) {
         let pk = self.inner.pk.clone();
-        let bootstrap_ref = self.inner.bootstrap_addrs.clone();
-        let handle = self.inner.handle.clone();
-        let is_bootstrapped = self.inner.is_bootstrapped.clone();
+        let bootstrap_ref = Arc::clone(&self.inner.bootstrap_addrs);
+        let handle = Arc::clone(&self.inner.handle);
+        let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
         let node_type = self.inner.handle.config().node_type;
-        let metrics_connected_peers = self.inner.clone();
+        let metrics_connected_peers = Arc::clone(&self.inner);
         let is_da = self.inner.is_da;
 
         async_spawn({
-            let is_ready = self.inner.is_ready.clone();
+            let is_ready = Arc::clone(&self.inner.is_ready);
             async move {
                 let bs_addrs = bootstrap_ref.read().await.clone();
 
@@ -719,7 +719,7 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
         mut network_rx: NetworkNodeReceiver,
     ) {
         let handle = self.clone();
-        let is_bootstrapped = self.inner.is_bootstrapped.clone();
+        let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
         async_spawn(async move {
             let Some(mut kill_switch) = network_rx.take_kill_switch() else {
                 tracing::error!(
@@ -843,7 +843,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         bind_version: VER,
     ) -> Option<mpsc::Receiver<(M, network::ResponseChannel<M>)>> {
         let mut internal_rx = self.inner.requests_rx.lock().await.take()?;
-        let handle = self.inner.handle.clone();
+        let handle = Arc::clone(&self.inner.handle);
         let (mut tx, rx) = mpsc::channel(100);
         async_spawn(async move {
             while let Some((request, chan)) = internal_rx.next().await {
@@ -928,7 +928,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         {
             let metrics = self.inner.metrics.clone();
             if let Some(ref config) = &self.inner.reliability_config {
-                let handle = self.inner.handle.clone();
+                let handle = Arc::clone(&self.inner.handle);
 
                 let serialized_msg =
                     Serializer::<VER>::serialize(&message).context(FailedToSerializeSnafu)?;
@@ -936,7 +936,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                     serialized_msg,
                     Arc::new(move |msg: Vec<u8>| {
                         let topic_2 = topic.clone();
-                        let handle_2 = handle.clone();
+                        let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
                             match handle_2.gossip_no_serialize(topic_2, msg).await {
@@ -1043,14 +1043,14 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         {
             let metrics = self.inner.metrics.clone();
             if let Some(ref config) = &self.inner.reliability_config {
-                let handle = self.inner.handle.clone();
+                let handle = Arc::clone(&self.inner.handle);
 
                 let serialized_msg =
                     Serializer::<VER>::serialize(&message).context(FailedToSerializeSnafu)?;
                 let fut = config.clone().chaos_send_msg(
                     serialized_msg,
                     Arc::new(move |msg: Vec<u8>| {
-                        let handle_2 = handle.clone();
+                        let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
                             match handle_2.direct_request_no_serialize(pid, msg).await {

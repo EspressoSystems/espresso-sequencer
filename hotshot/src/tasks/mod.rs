@@ -55,7 +55,7 @@ pub async fn add_request_network_task<TYPES: NodeType, I: NodeImplementation<TYP
 ) {
     let state = NetworkRequestState::<TYPES, I, Version01>::create_from(handle).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), state);
     task_reg.run_task(task).await;
 }
 
@@ -86,12 +86,12 @@ pub async fn add_network_message_task<
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     channel: Arc<NET>,
 ) {
-    let net = channel.clone();
+    let net = Arc::clone(&channel);
     let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
         event_stream: event_stream.clone(),
     };
 
-    let network = net.clone();
+    let network = Arc::clone(&net);
     let mut state = network_state.clone();
     let handle = async_spawn(async move {
         loop {
@@ -136,7 +136,7 @@ pub async fn add_network_event_task<
         filter,
         storage,
     };
-    let task = Task::new(tx, rx, task_reg.clone(), network_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), network_state);
     task_reg.run_task(task).await;
 }
 
@@ -245,7 +245,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 
     inject_consensus_polls(&consensus_state).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), consensus_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), consensus_state);
     task_reg.run_task(task).await;
 }
 
@@ -257,7 +257,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &SystemContextHandle<TYPES, I>,
 ) {
     let vid_state = VIDTaskState::create_from(handle).await;
-    let task = Task::new(tx, rx, task_reg.clone(), vid_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), vid_state);
     task_reg.run_task(task).await;
 }
 
@@ -270,7 +270,7 @@ pub async fn add_upgrade_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 ) {
     let upgrade_state = UpgradeTaskState::create_from(handle).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), upgrade_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), upgrade_state);
     task_reg.run_task(task).await;
 }
 /// add the Data Availability task
@@ -283,7 +283,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     // build the da task
     let da_state = DATaskState::create_from(handle).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), da_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), da_state);
     task_reg.run_task(task).await;
 }
 
@@ -296,7 +296,7 @@ pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>
 ) {
     let transactions_state = TransactionTaskState::<_, _, _, Version01>::create_from(handle).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), transactions_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), transactions_state);
     task_reg.run_task(task).await;
 }
 
@@ -309,7 +309,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 ) {
     let view_sync_state = ViewSyncTaskState::create_from(handle).await;
 
-    let task = Task::new(tx, rx, task_reg.clone(), view_sync_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), view_sync_state);
     task_reg.run_task(task).await;
 }
 
@@ -322,7 +322,7 @@ pub async fn add_quorum_proposal_task<TYPES: NodeType, I: NodeImplementation<TYP
 ) {
     let quorum_proposal_task_state = QuorumProposalTaskState::create_from(handle).await;
     inject_quorum_proposal_polls(&quorum_proposal_task_state).await;
-    let task = Task::new(tx, rx, task_reg.clone(), quorum_proposal_task_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), quorum_proposal_task_state);
     task_reg.run_task(task).await;
 }
 
@@ -334,6 +334,6 @@ pub async fn add_quorum_vote_task<TYPES: NodeType, I: NodeImplementation<TYPES>>
     handle: &SystemContextHandle<TYPES, I>,
 ) {
     let quorum_vote_state = QuorumVoteTaskState::create_from(handle).await;
-    let task = Task::new(tx, rx, task_reg.clone(), quorum_vote_state);
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), quorum_vote_state);
     task_reg.run_task(task).await;
 }

@@ -423,8 +423,8 @@ impl<
         };
         let view = message.kind.get_view_number();
         let committee = membership.get_whole_committee(view);
-        let net = self.channel.clone();
-        let storage = self.storage.clone();
+        let net = Arc::clone(&self.channel);
+        let storage = Arc::clone(&self.storage);
         let version = self.version;
         async_spawn(async move {
             if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
@@ -491,8 +491,8 @@ impl<
             })
             .collect();
 
-        let net = self.channel.clone();
-        let storage = self.storage.clone();
+        let net = Arc::clone(&self.channel);
+        let storage = Arc::clone(&self.storage);
         async_spawn(async move {
             if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
                 Some(HotShotAction::VidDisperse),

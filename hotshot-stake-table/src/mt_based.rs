@@ -196,8 +196,8 @@ impl<K: Key> StakeTable<K> {
 
     /// Update the stake table when the epoch number advances, should be manually called.
     pub fn advance(&mut self) {
-        self.last_epoch_start = self.epoch_start.clone();
-        self.epoch_start = self.head.clone();
+        self.last_epoch_start = Arc::clone(&self.epoch_start);
+        self.epoch_start = Arc::clone(&self.head);
     }
 
     /// Set the stake withheld by `key` to be `value`.

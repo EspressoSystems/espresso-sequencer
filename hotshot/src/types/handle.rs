@@ -180,6 +180,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// historical data
     #[must_use]
     pub fn get_storage(&self) -> Arc<RwLock<I::Storage>> {
-        self.storage.clone()
+        Arc::clone(&self.storage)
     }
 }

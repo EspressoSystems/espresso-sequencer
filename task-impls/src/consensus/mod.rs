@@ -340,16 +340,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             self.cur_view,
             view,
             event_stream,
-            self.quorum_membership.clone(),
+            Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             self.private_key.clone(),
-            self.consensus.clone(),
+            Arc::clone(&self.consensus),
             self.round_start_delay,
             self.formed_upgrade_certificate.clone(),
             self.decided_upgrade_cert.clone(),
             &mut self.payload_commitment_and_metadata,
             &mut self.proposal_cert,
-            self.instance_state.clone(),
+            Arc::clone(&self.instance_state),
         )
         .await?;
 
@@ -465,7 +465,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                                         .get(&self.public_key).cloned().map(|prop| prop.data);
 
                                 // Add our data into a new `LeafInfo`
-                                leaf_views.push(LeafInfo::new(leaf.clone(), state.clone(), delta.clone(), vid_share));
+                                leaf_views.push(LeafInfo::new(leaf.clone(), Arc::clone(&state), delta.clone(), vid_share));
                                 leafs_decided.push(leaf.clone());
                                 if let Some(ref payload) = leaf.get_block_payload() {
                                     for txn in payload
@@ -589,7 +589,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
-                        membership: self.quorum_membership.clone(),
+                        membership: Arc::clone(&self.quorum_membership),
                         view: vote.get_view_number(),
                         id: self.id,
                     };
@@ -603,7 +603,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(event.clone(), &event_stream)
+                        .handle_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -635,7 +635,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     debug!("Starting vote handle for view {:?}", vote.get_view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
-                        membership: self.quorum_membership.clone(),
+                        membership: Arc::clone(&self.quorum_membership),
                         view: vote.get_view_number(),
                         id: self.id,
                     };
@@ -649,7 +649,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(event.clone(), &event_stream)
+                        .handle_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -839,10 +839,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     self.public_key.clone(),
                     new_view,
                     &event_stream,
-                    self.quorum_membership.clone(),
-                    self.quorum_network.clone(),
+                    Arc::clone(&self.quorum_membership),
+                    Arc::clone(&self.quorum_network),
                     self.timeout,
-                    self.consensus.clone(),
+                    Arc::clone(&self.consensus),
                     &mut self.cur_view,
                     &mut self.timeout_task,
                 )

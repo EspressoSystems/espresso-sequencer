@@ -153,7 +153,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
             inner: Arc::new(MemoryNetworkInner {
                 input: RwLock::new(Some(input)),
                 output: Mutex::new(output),
-                master_map: master_map.clone(),
+                master_map: Arc::clone(&master_map),
                 in_flight_message_count,
                 metrics,
                 reliability_config,
@@ -200,7 +200,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
             let net = MemoryNetwork::new(
                 pubkey,
                 NetworkingMetricsValue::default(),
-                master.clone(),
+                Arc::clone(&master),
                 reliability_config.clone(),
             );
             Box::pin(async move { (net.clone().into(), net.into()) })

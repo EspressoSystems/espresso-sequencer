@@ -450,7 +450,7 @@ async fn run_request_response_increment_all(
 
     for _ in 0..futs.len() {
         let fut = futs.pop().unwrap();
-        let results = results.clone();
+        let results = Arc::clone(&results);
         async_spawn(async move {
             let res = fut.await;
             results.write().await.push(res);

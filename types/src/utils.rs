@@ -54,7 +54,7 @@ impl<TYPES: NodeType> Clone for ViewInner<TYPES> {
             },
             Self::Leaf { leaf, state, delta } => Self::Leaf {
                 leaf: *leaf,
-                state: state.clone(),
+                state: Arc::clone(state),
                 delta: delta.clone(),
             },
             Self::Failed => Self::Failed,
@@ -107,7 +107,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     #[must_use]
     pub fn get_state_and_delta(&self) -> StateAndDelta<TYPES> {
         if let Self::Leaf { state, delta, .. } = self {
-            (Some(state.clone()), delta.clone())
+            (Some(Arc::clone(state)), delta.clone())
         } else {
             (None, None)
         }

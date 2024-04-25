@@ -185,7 +185,7 @@ impl<S: TaskState + Send + 'static> Task<S> {
         let task = Task {
             event_sender: self.clone_sender(),
             event_receiver: self.subscribe(),
-            registry: self.registry.clone(),
+            registry: Arc::clone(&self.registry),
             state,
         };
         // Note: await here is only awaiting the task to be added to the
@@ -400,7 +400,7 @@ mod tests {
         let task1 = Task::<DummyHandle> {
             event_sender: tx.clone(),
             event_receiver: rx.clone(),
-            registry: reg.clone(),
+            registry: Arc::clone(&reg),
             state: DummyHandle::default(),
         };
         tx.broadcast(1).await.unwrap();
@@ -429,7 +429,7 @@ mod tests {
         let task1 = Task::<DummyHandle> {
             event_sender: tx.clone(),
             event_receiver: rx.clone(),
-            registry: reg.clone(),
+            registry: Arc::clone(&reg),
             state: DummyHandle::default(),
         };
         tx.broadcast(1).await.unwrap();

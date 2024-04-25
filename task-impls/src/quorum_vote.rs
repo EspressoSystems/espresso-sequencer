@@ -311,7 +311,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             VoteDependencyHandle {
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
-                storage: self.storage.clone(),
+                storage: Arc::clone(&self.storage),
                 view_number,
                 sender: event_sender.clone(),
             },
@@ -392,7 +392,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                             if let (Some(state), _) =
                                 consensus.get_state_and_delta(leaf.get_view_number())
                             {
-                                Some((leaf, state.clone()))
+                                Some((leaf, Arc::clone(&state)))
                             } else {
                                 error!("Parent state not found! Consensus internally inconsistent");
                                 return;
@@ -562,8 +562,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     View {
                         view_inner: ViewInner::Leaf {
                             leaf: proposed_leaf.commit(),
-                            state: state.clone(),
-                            delta: Some(delta.clone()),
+                            state: Arc::clone(&state),
+                            delta: Some(Arc::clone(&delta)),
                         },
                     },
                 );

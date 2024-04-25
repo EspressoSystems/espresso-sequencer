@@ -167,7 +167,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 
         if !primary_failed && Self::should_delay(&message) {
             let duration = *self.delay_duration.read().await;
-            let primary_fail_counter = self.primary_fail_counter.clone();
+            let primary_fail_counter = Arc::clone(&self.primary_fail_counter);
             self.delayed_tasks
                 .write()
                 .await
@@ -480,7 +480,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     }
 
     fn update_view(&self, view: u64) {
-        let delayed_map = self.delayed_tasks.clone();
+        let delayed_map = Arc::clone(&self.delayed_tasks);
         async_spawn(async move {
             let mut cancel_tasks = Vec::new();
             {

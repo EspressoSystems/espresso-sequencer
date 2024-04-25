@@ -204,14 +204,14 @@ where
     };
 
     let mut state = VoteCollectionTaskState::<TYPES, VOTE, CERT> {
-        membership: info.membership.clone(),
+        membership: Arc::clone(&info.membership),
         public_key: info.public_key.clone(),
         accumulator: Some(new_accumulator),
         view: info.view,
         id: info.id,
     };
 
-    let result = state.handle_event(event.clone(), sender).await;
+    let result = state.handle_event(Arc::clone(&event), sender).await;
 
     if result == Some(HotShotTaskCompleted) {
         // The protocol has finished
