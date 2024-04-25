@@ -16,7 +16,6 @@ mod ns_iter;
 mod ns_payload;
 mod ns_proof;
 mod payload_bytes;
-mod tx_iter;
 mod tx_proof;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

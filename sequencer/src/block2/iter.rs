@@ -1,6 +1,6 @@
 use super::{
     ns_iter::{NsIndex, NsIter},
-    tx_iter::{TxIndex, TxIter},
+    ns_payload::{TxIndex, TxIter},
     Payload,
 };
 use serde::{Deserialize, Serialize};

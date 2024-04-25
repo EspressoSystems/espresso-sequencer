@@ -6,10 +6,10 @@ use super::{
         num_txs_as_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
         NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
     },
-    tx_iter::{TxIndex, TxIter},
     Payload,
 };
 use crate::{NamespaceId, Transaction};
+use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -138,5 +138,26 @@ impl Payload {
 impl<'a> NsPayload<'a> {
     pub fn temporary_from_byte_slice(bytes: &'a [u8]) -> Self {
         Self(bytes)
+    }
+}
+
+/// TODO explain: index has same byte length as num_txs, store in serialized form
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
+
+pub struct TxIter(Range<usize>);
+
+impl TxIter {
+    pub fn new(ns_payload: &NsPayload) -> Self {
+        Self(0..ns_payload.num_txs())
+    }
+}
+
+// TODO explain: boilerplate `impl Iterator` delegates to `Range`
+impl Iterator for TxIter {
+    type Item = TxIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|i| TxIndex(num_txs_as_bytes(i)))
     }
 }
