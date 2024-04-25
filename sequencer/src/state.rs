@@ -277,7 +277,7 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let msg = proposed_header.fee_message();
+    let msg = proposed_header.fee_message().context("invalid fee")?;
     // verify signature
     anyhow::ensure!(
         proposed_header
@@ -965,8 +965,12 @@ impl CheckedSub for FeeAmount {
 }
 
 impl FeeAmount {
-    pub(crate) fn as_u64(&self) -> u64 {
-        self.0.as_u64()
+    pub(crate) fn as_u64(&self) -> Option<u64> {
+        if self.0 <= u64::MAX.into() {
+            Some(self.0.as_u64())
+        } else {
+            None
+        }
     }
 }
 

@@ -2,7 +2,7 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
 };
 use anyhow::Context;
@@ -231,12 +231,15 @@ impl Header {
     /// This message relates the fee info in this header to the payload corresponding to the header.
     /// The message is signed by the builder (or whoever is paying for inclusion of the block) and
     /// validated by consensus, as authentication for charging the fee to the builder account.
-    pub fn fee_message(&self) -> Vec<u8> {
-        fee_message(
-            self.fee_info.amount(),
+    pub fn fee_message(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(fee_message(
+            self.fee_info.amount().as_u64().context(format!(
+                "fee amount out of range: {:?}",
+                self.fee_info.amount()
+            ))?,
             self.payload_commitment,
             self.metadata(),
-        )
+        ))
     }
 }
 
@@ -258,7 +261,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         // Validate the builder's signature, recovering their fee account address so that we can
         // fetch the account state if missing.
-        let fee_msg = fee_message(builder_fee.fee_amount.into(), payload_commitment, &metadata);
+        let fee_msg = fee_message(builder_fee.fee_amount, payload_commitment, &metadata);
         let builder_account = FeeAccount::from(
             builder_fee
                 .fee_signature
@@ -340,7 +343,8 @@ impl BlockHeader<SeqTypes> for Header {
             validated_state,
             instance_state.chain_config,
         )
-        .expect("invalid proposal")
+        // TODO we should be able to return an error from `Header::new`
+        .unwrap_or_else(|err| panic!("invalid proposal: {err:#}"))
     }
 
     fn genesis(
@@ -393,12 +397,12 @@ impl BlockHeader<SeqTypes> for Header {
 }
 
 fn fee_message(
-    amount: FeeAmount,
+    amount: u64,
     payload_commitment: VidCommitment,
     metadata: &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
 ) -> Vec<u8> {
     let mut data = vec![];
-    data.extend_from_slice(amount.as_u64().to_be_bytes().as_ref());
+    data.extend_from_slice(amount.to_be_bytes().as_ref());
     data.extend_from_slice(metadata.encode().as_ref());
     data.extend_from_slice(payload_commitment.as_ref());
     data

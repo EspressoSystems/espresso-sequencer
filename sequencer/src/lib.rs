@@ -463,8 +463,11 @@ pub mod testing {
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
     pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(1usize, ())
-            .await
+        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+            TestConfig::NUM_NODES,
+            (),
+        )
+        .await
     }
 
     #[derive(Clone)]
@@ -577,7 +580,7 @@ pub mod testing {
         pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
             &self,
             i: usize,
-            state: ValidatedState,
+            mut state: ValidatedState,
             persistence: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
@@ -607,6 +610,10 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
+            // Make sure the builder account is funded.
+            let builder_account = Self::builder_key().fee_account();
+            tracing::info!(%builder_account, "prefunding builder account");
+            state.prefund_account(builder_account, U256::max_value().into());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
