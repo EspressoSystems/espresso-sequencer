@@ -1,4 +1,4 @@
-use self::ns_iter::NsTable;
+use self::ns_table::NsTable;
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
@@ -12,9 +12,9 @@ use std::{collections::HashMap, fmt::Display};
 use tx_proof::TxProof;
 
 mod iter;
-mod ns_iter;
 mod ns_payload;
 mod ns_proof;
+mod ns_table;
 mod payload_bytes;
 mod tx_proof;
 

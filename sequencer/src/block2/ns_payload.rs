@@ -1,7 +1,7 @@
 // use serde::{Deserialize, Serialize};
 
 use super::{
-    ns_iter::NsIndex,
+    ns_table::NsIndex,
     payload_bytes::{
         num_txs_as_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
         NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
