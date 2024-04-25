@@ -42,7 +42,7 @@ pub const STATIC_VER_0_1: Version01 = StaticVersion {};
 pub const EVENT_CHANNEL_SIZE: usize = 100_000;
 
 /// Default channel size for HotShot -> application communication
-pub const EXTERNAL_EVENT_CHANNEL_SIZE: usize = 100_000;
+pub const EXTERNAL_EVENT_CHANNEL_SIZE: usize = 1000;
 
 /// Constants for `WebServerNetwork` and `WebServer`
 /// The Web CDN is not, strictly speaking, bound to the network; it can have its own versioning.
