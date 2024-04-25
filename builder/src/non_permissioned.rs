@@ -116,8 +116,7 @@ impl BuilderConfig {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
                 .encode()
-                .expect("unable to encode genesis payload")
-                .collect();
+                .expect("unable to encode genesis payload");
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
@@ -324,7 +323,7 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(

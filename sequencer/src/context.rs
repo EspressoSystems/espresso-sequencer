@@ -232,11 +232,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
-            tracing::info!("waiting for orchestrated start");
+            tracing::warn!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_index)
                 .await;
         }
+        tracing::warn!("starting consensus");
         self.handle.hotshot.start_consensus().await;
     }
 
