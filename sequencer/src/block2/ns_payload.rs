@@ -12,7 +12,8 @@ use crate::{NamespaceId, Transaction};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-// #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+// TODO make ns_payload a sub module of ns_table?
+// TODO move this to ns_table.rs so we can construct a `Payload` there and keep `NsTable` fields private?
 #[derive(Default)]
 pub struct NamespacePayloadBuilder {
     tx_table_entries: Vec<u8>,
@@ -85,8 +86,6 @@ impl<'a> NsPayload<'a> {
     /// Read the tx offset from the `index`th entry from the tx table.
     ///
     /// Panics if `index >= self.num_txs()`.
-    ///
-    /// TODO make tx_iter a submodule of this module and move this method inside it
     pub fn read_tx_offset(&self, index: &TxIndex) -> usize {
         let start = tx_offset_from_bytes(&index.0) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
         tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
