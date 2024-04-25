@@ -59,6 +59,11 @@ impl Payload {
             return None; // error: common inconsistent with self
         }
 
+        // TODO check index.ns_index in bounds
+        let ns_range = self
+            .ns_table
+            .ns_payload_range(&index.ns_index, self.payload.len());
+
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // BEGIN WIP
@@ -126,20 +131,22 @@ impl Payload {
         // };
         // END WIP
 
-        // payload byte index range for the `num_txs` header in this namespaces
-        // tx table
-        //
-        // TODO check index.ns_index in bounds
-        let ns_range = self
-            .ns_table
-            .ns_payload_range(&index.ns_index, self.payload.len());
-
-        let num_txs_range = Range {
-            start: ns_range.start,
-            end: ns_range
-                .start
-                .saturating_add(NUM_TXS_BYTE_LEN)
-                .min(ns_range.end),
+        // Read the tx table len from this namespace's tx table and compute a
+        // proof of correctness.
+        let (payload_num_txs, payload_proof_num_txs) = {
+            // TODO make range_num_txs a method (of NsPayload)?
+            let range_num_txs = Range {
+                start: ns_range.start,
+                end: ns_range
+                    .start
+                    .saturating_add(NUM_TXS_BYTE_LEN)
+                    .min(ns_range.end),
+            };
+            (
+                // TODO make read_num_txs a method (of NsPayload)? Careful not to correct the original bytes!
+                self.payload.get(range_num_txs.clone())?.try_into().unwrap(), // panic is impossible [TODO after we fix ns iterator])
+                vid.payload_proof(&self.payload, range_num_txs).ok()?,
+            )
         };
 
         Some((
@@ -147,8 +154,8 @@ impl Payload {
             TxProof {
                 ns_range_start: ns_offset_as_bytes(ns_range.start),
                 ns_range_end: ns_offset_as_bytes(ns_range.end),
-                payload_num_txs: self.payload.get(num_txs_range.clone())?.try_into().unwrap(), // panic is impossible [TODO after we fix ns iterator]
-                payload_proof_num_txs: vid.payload_proof(&self.payload, num_txs_range).ok()?,
+                payload_num_txs,
+                payload_proof_num_txs,
                 //     payload_tx_range_start,
                 //     payload_tx_range_end,
                 //     payload_proof_tx_range: vid.payload_proof(&self.payload, tx_table_range).ok()?,
