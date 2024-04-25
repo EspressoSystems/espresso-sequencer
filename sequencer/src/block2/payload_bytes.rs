@@ -72,7 +72,7 @@ pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
 /// Deserialize `bytes` into a count of transactions (`usize`).
 ///
 /// # Panics
-/// If `bytes.len()` differs from [`NUM_TXS_BYTE_LEN`].
+/// If `bytes.len()` exceeds [`NUM_TXS_BYTE_LEN`].
 pub fn num_txs_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes)
 }
@@ -88,7 +88,7 @@ pub fn tx_offset_as_bytes(tx_offset: usize) -> [u8; TX_OFFSET_BYTE_LEN] {
 /// Deserialize `bytes` into a transaction offset (`usize`).
 ///
 /// # Panics
-/// If `bytes.len()` differs from [`TX_OFFSET_BYTE_LEN`].
+/// If `bytes.len()` exceeds [`TX_OFFSET_BYTE_LEN`].
 pub fn tx_offset_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<TX_OFFSET_BYTE_LEN>(bytes)
 }
@@ -104,7 +104,7 @@ pub fn num_nss_as_bytes(num_nss: usize) -> [u8; NUM_NSS_BYTE_LEN] {
 /// Deserialize `bytes` into a count of namespaces (`usize`).
 ///
 /// # Panics
-/// If `bytes.len()` differs from [`NUM_NSS_BYTE_LEN`].
+/// If `bytes.len()` exceeds [`NUM_NSS_BYTE_LEN`].
 pub fn num_nss_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<NUM_NSS_BYTE_LEN>(bytes)
 }
@@ -120,7 +120,7 @@ pub fn ns_offset_as_bytes(ns_offset: usize) -> [u8; NS_OFFSET_BYTE_LEN] {
 /// Deserialize `bytes` into a namespace offset (`usize`).
 ///
 /// # Panics
-/// If `bytes.len()` differs from [`NS_OFFSET_BYTE_LEN`].
+/// If `bytes.len()` exceeds [`NS_OFFSET_BYTE_LEN`].
 pub fn ns_offset_from_bytes(bytes: &[u8]) -> usize {
     usize_from_bytes::<NS_OFFSET_BYTE_LEN>(bytes)
 }
@@ -143,7 +143,7 @@ pub fn ns_id_as_bytes(ns_id: NamespaceId) -> [u8; NS_ID_BYTE_LEN] {
 /// Deserialize `bytes` into a [`NamespaceId`].
 ///
 /// # Panics
-/// If `bytes.len()` differs [`NS_ID_BYTE_LEN`].
+/// If `bytes.len()` exceeds [`NS_ID_BYTE_LEN`].
 pub fn ns_id_from_bytes(bytes: &[u8]) -> NamespaceId {
     NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(bytes))
 }
@@ -178,17 +178,15 @@ macro_rules! uint_bytes_impl {
                 ///
                 /// # Panics
                 /// If `bytes.len()` is too large to fit into a `$T`.
-                ///
-                /// TODO fix: currently we panic if bytes.len() differs from BYTE_LEN
                 fn [<$T _from_bytes>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
-                    assert_eq!(bytes.len(), BYTE_LEN, "bytes len {} differs from BYTE_LEN {BYTE_LEN}", bytes.len());
+                    assert!(bytes.len() <= BYTE_LEN, "bytes len {} exceeds BYTE_LEN {BYTE_LEN}", bytes.len());
                     assert!(
                         BYTE_LEN <= size_of::<$T>(),
                         "BYTE_LEN {BYTE_LEN} cannot fit into {}",
                         stringify!($T)
                     );
                     let mut [<$T _bytes>] = [0; size_of::<$T>()];
-                    [<$T _bytes>][..BYTE_LEN].copy_from_slice(bytes);
+                    [<$T _bytes>][..bytes.len()].copy_from_slice(bytes);
                     $T::from_le_bytes([<$T _bytes>])
                 }
 
@@ -213,11 +211,6 @@ mod test {
     use fluent_asserter::prelude::*;
     use paste::paste;
     use std::mem::size_of;
-
-    #[test]
-    fn tx_table_range() {
-        // TODO
-    }
 
     macro_rules! uint_bytes_test_impl {
             ($T:ty) => {
@@ -300,6 +293,35 @@ mod test {
                         );
 
                         assert_that_code!(|| [<$T _from_bytes>]::<{size_of::<$T>() + 1}>(&bytes[..])).panics();
+                    }
+
+                    #[test]
+                    fn [<$T _from_bytes_allows_smaller_byte_lens>]() {
+                        // This test same as `xxx_from_bytes_correctness` except
+                        // we set the const param `BYTE_LEN` to
+                        // `size_of::<$T>()` in all cases. Why? To ensure that
+                        // `xxx_from_bytes` allows its arg to have length
+                        // smaller than `BYTE_LEN`.
+                        let bytes = [255; size_of::<$T>() + 1];
+
+                        assert_eq!(
+                            [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..0]),
+                            [<$T _max_from_byte_len>](0)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..1]),
+                            [<$T _max_from_byte_len>](1)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>() - 1]),
+                            [<$T _max_from_byte_len>](size_of::<$T>() - 1)
+                        );
+                        assert_eq!(
+                            [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>()]),
+                            [<$T _max_from_byte_len>](size_of::<$T>())
+                        );
+
+                        assert_that_code!(|| [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..])).panics();
                     }
                 }
             };
