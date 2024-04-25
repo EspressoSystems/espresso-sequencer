@@ -39,6 +39,14 @@ contract DeployLightClientContractScript is Script {
         return deployContract(state, numBlocksPerEpoch);
     }
 
+    function runBenchSepolia(uint32 numBlocksPerEpoch, uint32 numInitValidators) external {
+        (address payable proxyAddress, address admin,) =
+            this.run(numBlocksPerEpoch, numInitValidators);
+        LC lc = LC(proxyAddress);
+        vm.prank(admin);
+        lc.setPermissionedProver(admin);
+    }
+
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
