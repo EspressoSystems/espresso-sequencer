@@ -171,8 +171,7 @@ where
                 .map_err(Error::from_request_error)?;
             let hash = tx.commit();
             state
-                .consensus()
-                .submit_transaction(tx)
+                .submit(tx)
                 .await
                 .map_err(|err| Error::internal(err.to_string()))?;
             Ok(hash)

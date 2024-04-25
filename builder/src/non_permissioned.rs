@@ -20,7 +20,7 @@ use hotshot_builder_core::{
         BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
         ResponseMessage,
     },
-    service::{run_non_permissioned_standalone_builder_service, GlobalState},
+    service::{run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState},
 };
 
 use hotshot_types::{
@@ -80,6 +80,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 }
 
 impl BuilderConfig {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -87,6 +88,8 @@ impl BuilderConfig {
         instance_state: NodeState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
+        max_api_timeout_duration: Duration,
+        buffered_view_num_count: usize,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -113,19 +116,18 @@ impl BuilderConfig {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
                 .encode()
-                .expect("unable to encode genesis payload")
-                .collect();
+                .expect("unable to encode genesis payload");
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
             vid_commitment,
+            bootstrapped_view,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -148,6 +150,7 @@ impl BuilderConfig {
             res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
+            buffered_view_num_count,
         );
 
         // spawn the builder event loop
@@ -155,8 +158,16 @@ impl BuilderConfig {
             builder_state.event_loop();
         });
 
+        // create the proxy global state it will server the builder apis
+        let proxy_global_state = ProxyGlobalState::new(
+            global_state.clone(),
+            (builder_key_pair.fee_account(), builder_key_pair),
+            max_api_timeout_duration,
+        );
+
+        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
         // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), global_state.clone());
+        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_api_state);
 
         // create a client for it
         // Start Client for the event streaming api
@@ -312,7 +323,7 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -320,6 +331,9 @@ mod test {
             parent_commitment.as_ref(),
         )
         .expect("Claim block signing failed");
+
+        // sleep and wait for builder service to startup
+        async_sleep(Duration::from_millis(3000)).await;
 
         // test getting available blocks
         let available_block_info = match builder_client

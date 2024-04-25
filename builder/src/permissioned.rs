@@ -59,7 +59,7 @@ use hotshot_builder_core::{
     },
     service::{
         run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service, GlobalState,
+        run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
     },
 };
 use hotshot_state_prover;
@@ -140,6 +140,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
+    max_api_timeout_duration: Duration,
+    buffered_view_num_count: usize,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -284,6 +286,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         channel_capacity,
         instance_state,
         hotshot_builder_api_url,
+        max_api_timeout_duration,
+        buffered_view_num_count,
     )
     .await?;
 
@@ -379,6 +383,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
         hotshot_builder_api_url: Url,
+        max_api_timeout_duration: Duration,
+        buffered_view_num_count: usize,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -405,19 +411,18 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
                 .encode()
-                .expect("unable to encode genesis payload")
-                .collect();
+                .expect("unable to encode genesis payload");
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (eth_key_pair.fee_account(), eth_key_pair),
             req_sender,
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
             vid_commitment,
+            bootstrapped_view,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -440,6 +445,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
+            buffered_view_num_count,
         );
 
         let hotshot_handle_clone = hotshot_handle.clone();
@@ -461,7 +467,16 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             builder_state.event_loop();
         });
 
-        run_builder_api_service(hotshot_builder_api_url.clone(), global_state.clone());
+        // create the proxy global state it will server the builder apis
+        let proxy_global_state = ProxyGlobalState::new(
+            global_state.clone(),
+            (eth_key_pair.fee_account(), eth_key_pair),
+            max_api_timeout_duration,
+        );
+
+        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
+
+        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_api_state);
 
         let ctx = Self {
             hotshot_handle: hotshot_handle_clone,
@@ -578,7 +593,7 @@ mod test {
         let (hotshot_client_pub_key, hotshot_client_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
 
         // sign the parent_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -591,6 +606,8 @@ mod test {
         tracing::info!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             );
+        // sleep and wait for builder service to startup
+        async_sleep(Duration::from_millis(3000)).await;
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
                 "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"

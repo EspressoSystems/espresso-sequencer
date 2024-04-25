@@ -142,8 +142,8 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         self.write().await.record_action(view, action).await
     }
-    async fn update_high_qc(&self, high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        self.write().await.update_high_qc(high_qc).await
+    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn update_undecided_state(
@@ -314,6 +314,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         }
         None => {
             tracing::info!("loading network config from orchestrator");
+            tracing::error!(
+                "waiting for other nodes to connect, DO NOT RESTART until fully connected"
+            );
             let config = NetworkConfig::get_complete_config(
                 &orchestrator_client,
                 None,
@@ -331,6 +334,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
                 "loaded config",
             );
             persistence.save_config(&config).await?;
+            tracing::error!("all nodes connected");
             (config, true)
         }
     };
@@ -380,9 +384,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
     let (da_network, quorum_network) = {
-        tracing::info!("Waiting for the CDN connection to be initialized");
+        tracing::warn!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
-        tracing::info!("CDN connection initialized");
+        tracing::warn!("CDN connection initialized");
         (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
     };
 
@@ -405,7 +409,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
+        tracing::info!("Prefunding account {:?} for demo", address);
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
@@ -490,15 +494,12 @@ pub mod testing {
             let num_nodes = Self::NUM_NODES;
 
             // Generate keys for the nodes.
-            let priv_keys = (0..num_nodes)
-                .map(|_| PrivKey::generate(&mut rand::thread_rng()))
-                .collect::<Vec<_>>();
-            let pub_keys = priv_keys
-                .iter()
-                .map(PubKey::from_private)
-                .collect::<Vec<_>>();
+            let seed = [0; 32];
+            let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
+                .map(|i| PubKey::generated_from_seed_indexed(seed, i as u64))
+                .unzip();
             let state_key_pairs = (0..num_nodes)
-                .map(|_| StateKeyPair::generate())
+                .map(|i| StateKeyPair::generate_from_seed_indexed(seed, i as u64))
                 .collect::<Vec<_>>();
             let known_nodes_with_stake = pub_keys
                 .iter()
@@ -620,7 +621,7 @@ pub mod testing {
             };
 
             let key = Self::builder_key(i);
-            tracing::info!("node {i} is builder {:x}", key.address());
+            let address = key.address();
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
@@ -629,6 +630,13 @@ pub mod testing {
             )
             .with_genesis(state);
 
+            tracing::info!(
+                i,
+                key = %config.my_own_validator_config.public_key,
+                state_key = %config.my_own_validator_config.state_key_pair.ver_key(),
+                %address,
+                "starting node",
+            );
             SequencerContext::init(
                 config,
                 node_state,
@@ -780,8 +788,7 @@ mod test {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
                     .encode()
-                    .expect("unable to encode genesis payload")
-                    .collect();
+                    .expect("unable to encode genesis payload");
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();

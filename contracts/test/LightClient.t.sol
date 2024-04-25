@@ -10,19 +10,42 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientMock as LCTest } from "./mocks/LightClientMock.sol";
+import { LightClientMock as LCMock } from "./mocks/LightClientMock.sol";
+import { DeployLightClientTestScript } from "./DeployLightClientTestScript.s.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
 contract LightClientCommonTest is Test {
-    LCTest public lc;
+    LCMock public lc;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
+    DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
+    address payable public lcTestProxy;
+    address public admin = makeAddr("admin");
+    address public permissionedProver = makeAddr("prover");
 
     function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
-        lc = new LCTest(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch);
+    }
+
+    function deployAndInitProxy(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+        public
+        returns (address payable, address)
+    {
+        //deploy light client test with a proxy
+        (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
+
+        //cast the proxy to be of type light client test
+        lc = LCMock(lcTestProxy);
+
+        //set permissioned flag
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(permissionedProver);
+        vm.prank(admin);
+        lc.setPermissionedProver(permissionedProver);
+        return (lcTestProxy, admin);
     }
 
     /// @dev initialized ledger like genesis and system params
@@ -36,9 +59,10 @@ contract LightClientCommonTest is Test {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state, bytes32 votingSTComm, bytes32 frozenSTComm) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
-
         genesis = state;
-        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
+
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
         assertEq(frozenSTComm, expectedStakeTableComm);
@@ -74,7 +98,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         private
     {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCTest(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -112,6 +136,153 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     }
 }
 
+contract LightClient_permissionedProver_Test is LightClientCommonTest {
+    LC.LightClientState internal newState;
+    V.PlonkProof internal newProof;
+
+    function setUp() public {
+        init();
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(1));
+        cmds[5] = vm.toString(uint64(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        newState = states[0];
+        newProof = proofs[0];
+    }
+
+    function test_NoProverPermissionsRequired() external {
+        //ensure that the permissioned prover mode is set
+        assert(lc.permissionedProverEnabled());
+
+        //set permissioned flag to false
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverNotRequired();
+        vm.prank(admin);
+        lc.disablePermissionedProverMode();
+
+        //assert that the contract is not permissioned
+        assert(lc.permissionedProverEnabled() == false);
+
+        // assert that the prover address is zero address when the contract is not permissioned
+        assertEq(lc.permissionedProver(), address(0));
+
+        //any prover can call the newFinalizedState method as the contract is not in permissioned
+        // prover mode
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        vm.prank(makeAddr("randomUser"));
+        lc.newFinalizedState(newState, newProof);
+    }
+
+    function test_UpdatePermissionedProverWhenPermissionedProverModeDisabled() external {
+        vm.startPrank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverNotRequired();
+        lc.disablePermissionedProverMode();
+        assertEq(lc.permissionedProver(), address(0));
+
+        address newProver = makeAddr("another prover");
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
+        vm.stopPrank();
+    }
+
+    function test_UpdatePermissionedProverWhenPermissionedProverModeEnabled() external {
+        assert(lc.permissionedProverEnabled());
+        assertEq(lc.permissionedProver(), permissionedProver);
+
+        address newProver = makeAddr("another prover");
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        vm.prank(admin);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
+    }
+
+    function testFuzz_UpdatePermissionedProverWhenPermissionedProverModeEnabled(address newProver)
+        external
+    {
+        vm.assume(newProver != address(0)); //otherwise it would have reverted with
+            // InvalidAddress()
+        vm.assume(newProver != permissionedProver); //otherwise it would have reverted with
+            // NoChangeRequired()
+        assert(lc.permissionedProverEnabled());
+        assertEq(lc.permissionedProver(), permissionedProver);
+
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(newProver);
+        vm.prank(admin);
+        lc.setPermissionedProver(newProver);
+        assertEq(newProver, lc.permissionedProver());
+    }
+
+    function test_OldProverNoLongerWorks() public {
+        assertEq(lc.permissionedProver(), permissionedProver);
+        address oldPermissionedProver = permissionedProver;
+
+        address prover2 = makeAddr("prover2");
+        vm.expectEmit(true, true, true, true);
+        emit LC.PermissionedProverRequired(prover2);
+        vm.prank(admin);
+        lc.setPermissionedProver(prover2);
+        assertEq(lc.permissionedProver(), prover2);
+
+        //confirm that the old prover doesn't work
+        vm.prank(oldPermissionedProver);
+        vm.expectRevert(LC.ProverNotPermissioned.selector);
+        lc.newFinalizedState(newState, newProof);
+
+        //confirm that the new prover works
+        vm.prank(prover2);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        lc.newFinalizedState(newState, newProof);
+    }
+
+    function test_RevertWhen_sameProverSentInUpdate() public {
+        assertEq(lc.permissionedProverEnabled(), true);
+        address currentProver = lc.permissionedProver();
+        vm.prank(admin);
+        vm.expectRevert(LC.NoChangeRequired.selector);
+        lc.setPermissionedProver(currentProver);
+    }
+
+    function test_RevertWhen_UpdatePermissionedProverToZeroAddress() external {
+        vm.expectRevert(LC.InvalidAddress.selector);
+        vm.prank(admin);
+        lc.setPermissionedProver(address(0));
+    }
+
+    function test_RevertWhen_NonAdminTriesToUpdatePermissionedProver() external {
+        vm.expectRevert();
+        vm.prank(makeAddr("not an admin"));
+        lc.setPermissionedProver(makeAddr("new prover"));
+    }
+
+    function test_RevertWhen_ProverDoesNotHavePermissions() external {
+        vm.expectRevert(LC.ProverNotPermissioned.selector);
+        vm.prank(makeAddr("ProverWithNoPermissions"));
+        lc.newFinalizedState(newState, newProof);
+    }
+
+    function test_RevertWhen_ProverAddressNotPermissionedEvenIfAdminAddress() external {
+        vm.expectRevert(LC.ProverNotPermissioned.selector);
+        vm.prank(admin);
+        lc.newFinalizedState(newState, newProof);
+    }
+}
+
 contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     function setUp() public {
         init();
@@ -133,6 +304,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
+        vm.prank(permissionedProver);
         lc.newFinalizedState(states[0], proofs[0]);
     }
 
@@ -162,7 +334,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        initLC(genesis, BLOCKS_PER_EPOCH_TEST);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+
+        genesis = state;
 
         // Generating a few consecutive states and proofs
         cmds = new string[](6);
@@ -183,6 +357,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         for (uint256 i = 0; i < BLOCKS_PER_EPOCH_TEST + 1; i++) {
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+            vm.prank(permissionedProver);
             lc.newFinalizedState(states[i], proofs[i]);
 
             // check if LightClient.sol states are updated correctly
@@ -220,7 +395,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
-        initLC(genesis, numBlockPerEpoch);
+        deployAndInitProxy(genesis, numBlockPerEpoch);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -234,6 +409,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(state.viewNum, state.blockHeight, state.blockCommRoot);
+        vm.prank(permissionedProver);
         lc.newFinalizedState(state, proof);
 
         assertEq(lc.currentEpoch(), 1);
@@ -260,6 +436,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         LC.LightClientState memory state = genesis;
         state.viewNum = 10;
+        vm.startPrank(permissionedProver);
         lc.setFinalizedState(state);
 
         // outdated view num
@@ -271,6 +448,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         state.blockHeight = numBlockSkipped + 1;
         vm.expectRevert(LC.OutdatedState.selector);
         lc.newFinalizedState(newState, proof);
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when the last block of current epoch is skipped before block of the
@@ -286,7 +464,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         // first update with the first block in epoch 1, which should pass
+        vm.startPrank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
         lc.newFinalizedState(states[0], proofs[0]);
+
         // then directly update with the first block in epoch 2, which should fail
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -294,6 +476,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             )
         );
         lc.newFinalizedState(states[1], proofs[1]);
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when user inputs contain malformed field elements
@@ -313,6 +496,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         LC.LightClientState memory badState = newState;
 
         // invalid scalar for blockCommRoot
+        vm.startPrank(permissionedProver);
         badState.blockCommRoot = BN254.ScalarField.wrap(BN254.R_MOD);
         vm.expectRevert("Bn254: invalid scalar field");
         lc.newFinalizedState(badState, proof);
@@ -341,6 +525,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.expectRevert("Bn254: invalid scalar field");
         lc.newFinalizedState(badState, proof);
         badState.stakeTableAmountComm = newState.stakeTableAmountComm;
+        vm.stopPrank();
     }
 
     /// @dev Test unhappy path when the plonk proof or the public inputs are wrong
@@ -361,6 +546,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         LC.LightClientState memory badState = newState;
 
         // wrong view num
+        vm.startPrank(permissionedProver);
         badState.viewNum = newState.viewNum + 2;
         vm.expectRevert(LC.InvalidProof.selector);
         lc.newFinalizedState(badState, proof);
@@ -411,6 +597,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (V.PlonkProof memory dummyProof) = abi.decode(result, (V.PlonkProof));
         vm.expectRevert(LC.InvalidProof.selector);
         lc.newFinalizedState(newState, dummyProof);
+
+        vm.stopPrank();
     }
 
     /// @dev Test that update on finalized state will fail if a different stake table is used
@@ -425,6 +613,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState, V.PlonkProof));
 
         vm.expectRevert(LC.InvalidProof.selector);
+        vm.prank(permissionedProver);
         lc.newFinalizedState(newState, proof);
     }
 }
