@@ -314,6 +314,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         }
         None => {
             tracing::info!("loading network config from orchestrator");
+            tracing::error!(
+                "waiting for other nodes to connect, DO NOT RESTART until fully connected"
+            );
             let config = NetworkConfig::get_complete_config(
                 &orchestrator_client,
                 None,
@@ -331,6 +334,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
                 "loaded config",
             );
             persistence.save_config(&config).await?;
+            tracing::error!("all nodes connected");
             (config, true)
         }
     };
@@ -380,9 +384,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
     let (da_network, quorum_network) = {
-        tracing::info!("Waiting for the CDN connection to be initialized");
+        tracing::warn!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
-        tracing::info!("CDN connection initialized");
+        tracing::warn!("CDN connection initialized");
         (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
     };
 
@@ -405,7 +409,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
+        tracing::info!("Prefunding account {:?} for demo", address);
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
