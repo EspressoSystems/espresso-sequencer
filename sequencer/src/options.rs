@@ -136,21 +136,6 @@ pub struct Options {
     #[clap(raw = true)]
     modules: Vec<String>,
 
-    /// Mnemonic phrase for builder account.
-    ///
-    /// This is the address fees will be charged to.
-    /// It must be funded with ETH in the Espresso fee ledger
-    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
-    pub eth_mnemonic: String,
-
-    /// Index of a funded account derived from eth-mnemonic.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
-        default_value = "8"
-    )]
-    pub eth_account_index: u32,
-
     /// Prefunded the builder accounts. Use for demo purposes only.
     ///
     /// Comma-separated list of Ethereum addresses.
