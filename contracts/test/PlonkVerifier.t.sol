@@ -233,12 +233,8 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         cmds[2] = vm.toString(uint32(1));
 
         bytes memory result = vm.ffi(cmds);
-        (
-            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
-            uint256[][] memory publicInputs,
-            ,
-            bytes[] memory extraTranscriptInitMsgs
-        ) = abi.decode(
+        (IPlonkVerifier.VerifyingKey[] memory verifyingKeys, uint256[][] memory publicInputs,,) =
+        abi.decode(
             result,
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
