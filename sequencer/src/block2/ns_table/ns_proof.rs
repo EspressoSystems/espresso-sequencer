@@ -1,4 +1,5 @@
-use super::{ns_payload::NsPayload, ns_table::NsTable, Payload};
+use super::{ns_payload::NsPayload, NsTable};
+use crate::block2::Payload;
 use crate::{NamespaceId, Transaction};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,

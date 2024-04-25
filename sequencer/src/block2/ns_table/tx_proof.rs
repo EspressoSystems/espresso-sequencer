@@ -1,9 +1,13 @@
-use super::{
-    iter::Index,
-    payload_bytes::{ns_offset_as_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN},
-    Payload,
+use crate::{
+    block2::{
+        iter::Index,
+        payload_bytes::{
+            ns_offset_as_bytes, ns_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN,
+        },
+        Payload,
+    },
+    Transaction,
 };
-use crate::{block2::payload_bytes::ns_offset_from_bytes, Transaction};
 use hotshot_query_service::{VidCommitment, VidCommon};
 use hotshot_types::vid::{vid_scheme, SmallRangeProofType, VidSchemeType};
 use jf_primitives::vid::{

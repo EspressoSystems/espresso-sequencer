@@ -1,5 +1,5 @@
 use super::{
-    ns_payload::{TxIndex, TxIter},
+    ns_table::ns_payload::{TxIndex, TxIter},
     ns_table::{NsIndex, NsIter},
     Payload,
 };
@@ -8,7 +8,7 @@ use std::iter::Peekable;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
-    pub(super) ns_index: NsIndex,
+    pub(super) ns_index: NsIndex, // TODO remove pub(super)
     pub(super) tx_index: TxIndex,
 }
 

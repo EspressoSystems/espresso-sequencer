@@ -4,19 +4,16 @@ use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use iter::{Index, Iter};
-use ns_payload::NamespacePayloadBuilder;
+use ns_table::ns_payload::NamespacePayloadBuilder;
+use ns_table::tx_proof::TxProof;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
-use tx_proof::TxProof;
 
 mod iter;
-mod ns_payload;
-mod ns_proof;
 mod ns_table;
 mod payload_bytes;
-mod tx_proof;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
