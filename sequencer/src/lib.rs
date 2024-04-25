@@ -819,8 +819,7 @@ mod test {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
                     .encode()
-                    .expect("unable to encode genesis payload")
-                    .collect();
+                    .expect("unable to encode genesis payload");
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();

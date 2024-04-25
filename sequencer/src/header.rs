@@ -117,6 +117,8 @@ impl Committable for Header {
     }
 
     fn tag() -> String {
+        // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
+        // thus be more intuitive to users than "HEADER".
         "BLOCK".into()
     }
 }
