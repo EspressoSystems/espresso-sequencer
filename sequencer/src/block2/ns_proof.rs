@@ -1,4 +1,4 @@
-use super::{ns_iter::NsTable, tx_iter::parse_ns_payload, Payload};
+use super::{ns_iter::NsTable, ns_payload::NsPayload, Payload};
 use crate::{NamespaceId, Transaction};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
@@ -93,7 +93,8 @@ impl NsProof {
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
                 Some((
-                    parse_ns_payload(&pf.ns_payload_flat, self.ns_id),
+                    NsPayload::temporary_from_byte_slice(&pf.ns_payload_flat)
+                        .export_all_txs(&self.ns_id),
                     self.ns_id,
                 ))
             }

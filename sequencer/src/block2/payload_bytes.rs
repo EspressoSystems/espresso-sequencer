@@ -178,6 +178,8 @@ macro_rules! uint_bytes_impl {
                 ///
                 /// # Panics
                 /// If `bytes.len()` is too large to fit into a `$T`.
+                ///
+                /// TODO fix: currently we panic if bytes.len() differs from BYTE_LEN
                 fn [<$T _from_bytes>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
                     assert_eq!(bytes.len(), BYTE_LEN, "bytes len {} differs from BYTE_LEN {BYTE_LEN}", bytes.len());
                     assert!(

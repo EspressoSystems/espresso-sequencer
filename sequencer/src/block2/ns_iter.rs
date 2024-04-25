@@ -9,9 +9,6 @@ use std::{collections::HashSet, ops::Range};
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable(pub(super) Vec<u8>); // TODO remove pub(super)
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct NsIndex(u32);
-
 impl NsTable {
     /// The number of bytes used to encode the number of entries in the
     /// namespace table.
@@ -93,6 +90,10 @@ impl NsTable {
         self.iter().count()
     }
 }
+
+/// TODO make it `[u8; NUM_NSS_BYTE_LEN]` like `TxIndex` instead of `u32`
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct NsIndex(u32);
 
 /// Return type for [`Payload::ns_iter`].
 pub struct NsIter<'a> {

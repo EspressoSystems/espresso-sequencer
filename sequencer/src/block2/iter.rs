@@ -28,25 +28,15 @@ impl Ord for Index {
 /// Cartesian product of [`NsIter`], [`TxIter`].
 pub struct Iter<'a> {
     ns_iter: Peekable<NsIter<'a>>,
-    tx_iter: TxIter<'a>,
-    block: &'a Payload, // TODO is there a good way to reuse ns_iter.block?
+    tx_iter: Option<TxIter>,
+    block: &'a Payload,
 }
 
 impl<'a> Iter<'a> {
     pub fn new(block: &'a Payload) -> Self {
-        let mut ns_iter = NsIter::new(&block.ns_table).peekable();
-
-        // TODO sucks that I need to:
-        // - call ns_iter.peek() in this constructor
-        // - call TxIter::new here *and* in next()
-        let tx_iter = TxIter::new(ns_iter.peek().map_or(&[], |ns_index| {
-            &block.payload[block
-                .ns_table
-                .ns_payload_range(ns_index, block.payload.len())]
-        }));
         Self {
-            ns_iter,
-            tx_iter,
+            ns_iter: NsIter::new(&block.ns_table).peekable(),
+            tx_iter: None,
             block,
         }
     }
@@ -60,23 +50,20 @@ impl<'a> Iterator for Iter<'a> {
             let Some(ns_index) = self.ns_iter.peek() else {
                 return None; // ns_iter consumed
             };
-            if let Some(tx_index) = self.tx_iter.next() {
+
+            if let Some(tx_index) = self
+                .tx_iter
+                .get_or_insert_with(|| TxIter::new(&self.block.ns_payload(ns_index))) // ensure `tx_iter` is set
+                .next()
+            {
                 return Some(Index {
                     ns_index: ns_index.clone(),
                     tx_index,
                 });
             }
-            // tx_iter consumed for this namespace
-            self.ns_iter.next();
 
-            // TODO ugly as sin, fix this
-            self.tx_iter = TxIter::new(
-                &self.block.payload[self.ns_iter.peek().map(|ns_index| {
-                    self.block
-                        .ns_table
-                        .ns_payload_range(ns_index, self.block.payload.len())
-                })?],
-            );
+            self.tx_iter = None; // unset `tx_iter`; it's consumed for this namespace
+            self.ns_iter.next();
         }
     }
 }

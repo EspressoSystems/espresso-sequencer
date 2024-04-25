@@ -27,12 +27,19 @@ fn basic_correctness() {
         tracing::info!("test case {} nss {} txs", test.nss.len(), all_txs.len());
 
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
+        tracing::info!(
+            "ns_table {:?}, payload {:?}",
+            block.ns_table.0,
+            block.payload
+        );
 
         // test correct number of nss, txs
         assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
         assert_eq!(block.ns_table.iter().count(), test.nss.len());
         assert_eq!(block.len(&block.ns_table.0), all_txs.len());
         assert_eq!(block.iter(&block.ns_table.0).count(), all_txs.len());
+
+        tracing::info!("all_txs {:?}", all_txs);
 
         let (vid_commit, vid_common) = {
             let disperse_data = vid.disperse(&block.payload).unwrap();
@@ -42,6 +49,7 @@ fn basic_correctness() {
         // test iterate over all txs
         for tx_index in block.iter(&block.ns_table.0) {
             let tx = block.transaction(&tx_index).unwrap();
+            tracing::info!("tx {:?}, {:?}", tx_index, tx);
 
             // warning: linear search for a tx
             let test_tx = all_txs.remove(all_txs.iter().position(|t| t == &tx).unwrap());

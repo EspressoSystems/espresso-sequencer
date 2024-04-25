@@ -36,20 +36,14 @@ pub struct TxProof {
 }
 
 impl Payload {
+    // TODO Panics if index is out of bounds
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-        Some(Transaction::new(
-            self.ns_table.read_ns_id(&index.ns_index),
-            // TODO ugly
-            self.payload
-                .get(
-                    self.ns_table
-                        .ns_payload_range(&index.ns_index, self.payload.len()),
-                )?
-                .get(index.tx_index.range.clone())?
-                .to_vec(),
-        ))
+        Some(
+            self.ns_payload(&index.ns_index)
+                .export_tx(&self.ns_table.read_ns_id(&index.ns_index), &index.tx_index),
+        )
     }
 
     pub fn transaction_with_proof(
