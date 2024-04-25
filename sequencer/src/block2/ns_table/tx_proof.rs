@@ -2,7 +2,8 @@ use crate::{
     block2::{
         iter::Index,
         payload_bytes::{
-            ns_offset_as_bytes, ns_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN,
+            ns_offset_as_bytes, ns_offset_from_bytes, tx_offset_as_bytes, NS_OFFSET_BYTE_LEN,
+            NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -32,16 +33,16 @@ pub struct TxProof {
 
     payload_num_txs: [u8; NUM_TXS_BYTE_LEN], // serialized usize
     payload_proof_num_txs: SmallRangeProofType,
-    // payload_tx_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
-    // payload_tx_range_end: [u8; TX_OFFSET_BYTE_LEN],           // serialized usize
-    // payload_proof_tx_range: SmallRangeProofType,
 
+    payload_tx_table_entry_prev: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
+    payload_tx_table_entry: [u8; TX_OFFSET_BYTE_LEN],              // serialized usize
+    payload_proof_tx_range: SmallRangeProofType,
     // payload_proof_tx: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
 
 impl Payload {
-    // TODO Panics if index is out of bounds
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
+        // TODO check index.ns_index in bounds
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(
@@ -60,7 +61,8 @@ impl Payload {
         }
 
         // TODO check index.ns_index in bounds
-        let ns_range = self
+        let ns_payload = self.ns_payload(&index.ns_index);
+        let ns_payload_range = self
             .ns_table
             .ns_payload_range(&index.ns_index, self.payload.len());
 
@@ -136,29 +138,44 @@ impl Payload {
         let (payload_num_txs, payload_proof_num_txs) = {
             // TODO make range_num_txs a method (of NsPayload)?
             let range_num_txs = Range {
-                start: ns_range.start,
-                end: ns_range
+                start: ns_payload_range.start,
+                end: ns_payload_range
                     .start
                     .saturating_add(NUM_TXS_BYTE_LEN)
-                    .min(ns_range.end),
+                    .min(ns_payload_range.end),
             };
             (
                 // TODO make read_num_txs a method (of NsPayload)? Careful not to correct the original bytes!
+                // TODO should be safe to read NUM_TXS_BYTE_LEN from payload; we would have exited by now otherwise.
                 self.payload.get(range_num_txs.clone())?.try_into().unwrap(), // panic is impossible [TODO after we fix ns iterator])
                 vid.payload_proof(&self.payload, range_num_txs).ok()?,
             )
         };
 
+        // Read the tx table entries for this tx and compute a proof of
+        // correctness.
+        let payload_tx_table_entry_prev = ns_payload
+            .read_tx_offset_prev(&index.tx_index)
+            .map(tx_offset_as_bytes);
+        let payload_tx_table_entry = tx_offset_as_bytes(ns_payload.read_tx_offset(&index.tx_index));
+        let payload_proof_tx_range = {
+            // TODO add a method Payload::tx_payload_range(index: Index) that automatically translates NsPayload::tx_payload_range by the namespace offset?
+            let range = ns_payload.tx_payload_range(&index.tx_index);
+            let range = range.start.saturating_add(ns_payload_range.start)
+                ..range.end.saturating_add(ns_payload_range.start);
+            vid.payload_proof(&self.payload, range).ok()?
+        };
+
         Some((
             self.transaction(index)?,
             TxProof {
-                ns_range_start: ns_offset_as_bytes(ns_range.start),
-                ns_range_end: ns_offset_as_bytes(ns_range.end),
+                ns_range_start: ns_offset_as_bytes(ns_payload_range.start),
+                ns_range_end: ns_offset_as_bytes(ns_payload_range.end),
                 payload_num_txs,
                 payload_proof_num_txs,
-                //     payload_tx_range_start,
-                //     payload_tx_range_end,
-                //     payload_proof_tx_range: vid.payload_proof(&self.payload, tx_table_range).ok()?,
+                payload_tx_table_entry_prev,
+                payload_tx_table_entry,
+                payload_proof_tx_range,
                 //     payload_proof_tx: if tx_range.is_empty() {
                 //         None
                 //     } else {
@@ -199,32 +216,36 @@ impl TxProof {
         // };
         // END WIP
 
-        let num_txs_range = Range {
-            start: ns_range.start,
-            end: ns_range
-                .start
-                .saturating_add(NUM_TXS_BYTE_LEN)
-                .min(ns_range.end),
-        };
-
-        tracing::info!("verify {:?}, {:?}", num_txs_range, self.payload_num_txs);
-
         // Verify proof for tx table len
-        if vid
-            .payload_verify(
-                Statement {
-                    payload_subslice: &self.payload_num_txs,
-                    range: num_txs_range,
-                    commit,
-                    common,
-                },
-                &self.payload_proof_num_txs,
-            )
-            .ok()?
-            .is_err()
         {
-            return Some(false);
+            let num_txs_range = Range {
+                start: ns_range.start,
+                end: ns_range
+                    .start
+                    .saturating_add(NUM_TXS_BYTE_LEN)
+                    .min(ns_range.end),
+            };
+
+            tracing::info!("verify {:?}, {:?}", num_txs_range, self.payload_num_txs);
+
+            if vid
+                .payload_verify(
+                    Statement {
+                        payload_subslice: &self.payload_num_txs,
+                        range: num_txs_range,
+                        commit,
+                        common,
+                    },
+                    &self.payload_proof_num_txs,
+                )
+                .ok()?
+                .is_err()
+            {
+                return Some(false);
+            }
         }
+
+        // Verify proof for tx table entries
 
         Some(true)
     }
