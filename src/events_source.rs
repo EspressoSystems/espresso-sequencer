@@ -5,7 +5,7 @@ use futures::stream::{self, BoxStream, Stream, StreamExt};
 use hotshot_types::{
     data::{DAProposal, QuorumProposal},
     error::HotShotError,
-    event::{error_adaptor, Event, EventType, LeafChain},
+    event::{error_adaptor, Event, EventType},
     message::Proposal,
     traits::node_implementation::{ConsensusTime, NodeType},
     PeerConfig,
@@ -40,10 +40,13 @@ impl<Types: NodeType> From<Event<Types>> for BuilderEvent<Types> {
                     leaf_chain,
                     block_size,
                     ..
-                } => BuilderEventType::HotshotDecide {
-                    leaf_chain,
-                    block_size,
-                },
+                } => {
+                    let latest_decide_view_num = leaf_chain[0].leaf.get_view_number();
+                    BuilderEventType::HotshotDecide {
+                        latest_decide_view_num,
+                        block_size,
+                    }
+                }
                 EventType::DAProposal { proposal, sender } => {
                     BuilderEventType::HotshotDAProposal { proposal, sender }
                 }
@@ -78,7 +81,7 @@ pub enum BuilderEventType<Types: NodeType> {
     // Decide event with the chain of decided leaves
     HotshotDecide {
         /// The chain of decided leaves with its corresponding state and VID info.
-        leaf_chain: Arc<LeafChain<Types>>,
+        latest_decide_view_num: Types::Time,
         /// Optional information of the number of transactions in the block
         block_size: Option<u64>,
     },
