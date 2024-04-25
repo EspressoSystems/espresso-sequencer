@@ -377,7 +377,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                         }
                     }
                     Ok(None) => {}
-                    Err(e) => warn!("Failed to propose {e:#}"),
+                    Err(e) => debug!("Failed to propose {e:#}"),
                 }
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
