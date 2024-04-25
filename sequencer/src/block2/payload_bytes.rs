@@ -161,7 +161,7 @@ macro_rules! uint_bytes_impl {
                 fn [<$T _to_bytes>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
                     if size_of::<$T>() > BYTE_LEN {
                         assert!(
-                            n <= [<$T _max_from_byte_len2>](BYTE_LEN),
+                            n <= [<$T _max_from_byte_len>](BYTE_LEN),
                             "n {n} cannot fit into {BYTE_LEN} bytes"
                         );
                         n.to_le_bytes()[..BYTE_LEN].try_into().unwrap() // panic is impossible
@@ -193,7 +193,7 @@ macro_rules! uint_bytes_impl {
                 }
 
                 /// Return the largest `$T` value that can fit into `byte_len` bytes.
-                const fn [<$T _max_from_byte_len2>](byte_len: usize) -> $T {
+                const fn [<$T _max_from_byte_len>](byte_len: usize) -> $T {
                     if byte_len >= size_of::<$T>() {
                         $T::MAX
                     } else {
@@ -222,21 +222,21 @@ mod test {
     macro_rules! uint_bytes_test_impl {
             ($T:ty) => {
                 paste! {
-                    use super::{[<$T _max_from_byte_len2>], [<$T _to_bytes>], [<$T _from_bytes>]};
+                    use super::{[<$T _max_from_byte_len>], [<$T _to_bytes>], [<$T _from_bytes>]};
 
                     #[test]
-                    fn [<$T _max_from_byte_len2_correctness>]() {
+                    fn [<$T _max_from_byte_len_correctness>]() {
                         // test byte lengths 0 to size_of::<$T>()
                         let mut bytes = [0; size_of::<$T>()];
-                        assert_eq!([<$T _max_from_byte_len2>](0), 0);
+                        assert_eq!([<$T _max_from_byte_len>](0), 0);
                         for i in 0..bytes.len() {
                             bytes[i] = 0xff;
-                            assert_eq!([<$T _max_from_byte_len2>](i + 1).to_le_bytes(), bytes);
+                            assert_eq!([<$T _max_from_byte_len>](i + 1).to_le_bytes(), bytes);
                         }
 
                         // test byte lengths size_of::<$T>() to twice that length
                         for i in size_of::<$T>()..2 * size_of::<$T>() {
-                            assert_eq!([<$T _max_from_byte_len2>](i + 1), $T::MAX);
+                            assert_eq!([<$T _max_from_byte_len>](i + 1), $T::MAX);
                         }
                     }
 
@@ -284,19 +284,19 @@ mod test {
                         // `0`, `1`, `size_of::<$T>() - 1`, `size_of::<$T>()`.
                         assert_eq!(
                             [<$T _from_bytes>]::<0>(&bytes[..0]),
-                            [<$T _max_from_byte_len2>](0)
+                            [<$T _max_from_byte_len>](0)
                         );
                         assert_eq!(
                             [<$T _from_bytes>]::<1>(&bytes[..1]),
-                            [<$T _max_from_byte_len2>](1)
+                            [<$T _max_from_byte_len>](1)
                         );
                         assert_eq!(
                             [<$T _from_bytes>]::<{size_of::<$T>() - 1}>(&bytes[..size_of::<$T>() - 1]),
-                            [<$T _max_from_byte_len2>](size_of::<$T>() - 1)
+                            [<$T _max_from_byte_len>](size_of::<$T>() - 1)
                         );
                         assert_eq!(
                             [<$T _from_bytes>]::<{size_of::<$T>()}>(&bytes[..size_of::<$T>()]),
-                            [<$T _max_from_byte_len2>](size_of::<$T>())
+                            [<$T _max_from_byte_len>](size_of::<$T>())
                         );
 
                         assert_that_code!(|| [<$T _from_bytes>]::<{size_of::<$T>() + 1}>(&bytes[..])).panics();
