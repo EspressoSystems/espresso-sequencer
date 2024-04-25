@@ -1,5 +1,5 @@
 use super::{
-    ns_table::ns_payload::{TxIndex, TxIter},
+    ns_table::ns_payload::tx_iter::{TxIndex, TxIter},
     ns_table::{NsIndex, NsIter},
     Payload,
 };

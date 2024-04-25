@@ -12,6 +12,8 @@ use crate::{NamespaceId, Transaction};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
+use tx_iter::{TxIndex, TxIter};
+
 // TODO make ns_payload a sub module of ns_table?
 // TODO move this to ns_table.rs so we can construct a `Payload` there and keep `NsTable` fields private?
 #[derive(Default)]
@@ -83,14 +85,6 @@ impl<'a> NsPayload<'a> {
             .min(self.0.len())
     }
 
-    /// Read the tx offset from the `index`th entry from the tx table.
-    ///
-    /// Panics if `index >= self.num_txs()`.
-    pub fn read_tx_offset(&self, index: &TxIndex) -> usize {
-        let start = tx_offset_from_bytes(&index.0) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
-        tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
-    }
-
     /// Read subslice range for the `index`th tx from the tx
     /// table.
     ///
@@ -103,14 +97,11 @@ impl<'a> NsPayload<'a> {
             .read_tx_offset(index)
             .saturating_add(tx_table_byte_len)
             .min(self.0.len());
-        let start = if index.0 == [0; NUM_TXS_BYTE_LEN] {
-            tx_table_byte_len
-        } else {
-            let prev_index = TxIndex(num_txs_as_bytes(num_txs_from_bytes(&index.0) - 1));
-            self.read_tx_offset(&prev_index)
-                .saturating_add(tx_table_byte_len)
-                .min(end)
-        };
+        let start = self
+            .read_tx_offset_prev(index)
+            .unwrap_or(0)
+            .saturating_add(tx_table_byte_len)
+            .min(end);
         tracing::info!("tx_payload_range {:?}", start..end);
         start..end
     }
@@ -140,23 +131,51 @@ impl<'a> NsPayload<'a> {
     }
 }
 
-/// TODO explain: index has same byte length as num_txs, store in serialized form
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
+// TODO move this module to a separate file?
+// TODO pub(crate) only for iter module
+pub(crate) mod tx_iter {
+    use super::*; // TODO temp
+    /// TODO explain: index has same byte length as num_txs, store in serialized form
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+    pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
 
-pub struct TxIter(Range<usize>);
+    impl<'a> NsPayload<'a> {
+        /// Read the tx offset from the `index`th entry from the tx table.
+        ///
+        /// Panics if `index >= self.num_txs()`.
+        pub fn read_tx_offset(&self, index: &TxIndex) -> usize {
+            let start = tx_offset_from_bytes(&index.0) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
+            tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
+        }
 
-impl TxIter {
-    pub fn new(ns_payload: &NsPayload) -> Self {
-        Self(0..ns_payload.num_txs())
+        /// Read the tx offset from the `(index-1)`th entry from the tx table.
+        /// Returns `None` if `index` is zero.
+        ///
+        /// Panics if `index >= self.num_txs()`.
+        pub fn read_tx_offset_prev(&self, index: &TxIndex) -> Option<usize> {
+            if index.0 == [0; NUM_TXS_BYTE_LEN] {
+                None
+            } else {
+                let prev_index = TxIndex(num_txs_as_bytes(num_txs_from_bytes(&index.0) - 1));
+                Some(self.read_tx_offset(&prev_index))
+            }
+        }
     }
-}
 
-// TODO explain: boilerplate `impl Iterator` delegates to `Range`
-impl Iterator for TxIter {
-    type Item = TxIndex;
+    pub struct TxIter(Range<usize>);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|i| TxIndex(num_txs_as_bytes(i)))
+    impl TxIter {
+        pub fn new(ns_payload: &NsPayload) -> Self {
+            Self(0..ns_payload.num_txs())
+        }
+    }
+
+    // TODO explain: boilerplate `impl Iterator` delegates to `Range`
+    impl Iterator for TxIter {
+        type Item = TxIndex;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next().map(|i| TxIndex(num_txs_as_bytes(i)))
+        }
     }
 }
