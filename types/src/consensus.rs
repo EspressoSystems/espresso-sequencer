@@ -256,7 +256,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.cur_view = view_number;
     }
 
-    /// gather information from the parent chain of leafs
+    /// gather information from the parent chain of leaves
     /// # Errors
     /// If the leaf or its ancestors are not found in storage
     pub fn visit_leaf_ancestors<F>(

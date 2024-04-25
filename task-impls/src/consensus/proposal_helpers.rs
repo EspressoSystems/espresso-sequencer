@@ -1,5 +1,9 @@
 use core::time::Duration;
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::Sender;
@@ -7,19 +11,20 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use chrono::Utc;
 use committable::Committable;
 use futures::FutureExt;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus, View},
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
-    event::{Event, EventType},
+    event::{Event, EventType, LeafInfo},
     message::Proposal,
     simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader,
         election::Membership,
         network::{ConnectedNetwork, ConsensusIntentEvent},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
         storage::Storage,
@@ -30,7 +35,7 @@ use hotshot_types::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use super::ConsensusTaskState;
 use crate::{
@@ -801,4 +806,206 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
             .map(AnyhowTracing::err_as_debug),
         ));
     Ok(None)
+}
+
+/// Handle `QuorumProposalRecv` event content and submit a proposal if possible.
+#[allow(clippy::too_many_lines)]
+pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    proposal: &QuorumProposal<TYPES>,
+    event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    task_state: &mut ConsensusTaskState<TYPES, I>,
+) -> Result<()> {
+    let consensus = task_state.consensus.upgradable_read().await;
+    let view = proposal.get_view_number();
+    task_state.current_proposal = Some(proposal.clone());
+    let mut new_anchor_view = consensus.last_decided_view;
+    let mut new_locked_view = consensus.locked_view;
+    let mut last_view_number_visited = view;
+    let mut new_commit_reached: bool = false;
+    let mut new_decide_reached = false;
+    let mut new_decide_qc = None;
+    let mut leaf_views = Vec::new();
+    let mut leafs_decided = Vec::new();
+    let mut included_txns = HashSet::new();
+    let old_anchor_view = consensus.last_decided_view;
+    let parent_view = proposal.justify_qc.get_view_number();
+    let mut current_chain_length = 0usize;
+    if parent_view + 1 == view {
+        current_chain_length += 1;
+        if let Err(e) = consensus.visit_leaf_ancestors(
+            parent_view,
+            Terminator::Exclusive(old_anchor_view),
+            true,
+            |leaf, state, delta| {
+                if !new_decide_reached {
+                    if last_view_number_visited == leaf.get_view_number() + 1 {
+                        last_view_number_visited = leaf.get_view_number();
+                        current_chain_length += 1;
+                        if current_chain_length == 2 {
+                            new_locked_view = leaf.get_view_number();
+                            new_commit_reached = true;
+                            // The next leaf in the chain, if there is one, is decided, so this
+                            // leaf's justify_qc would become the QC for the decided chain.
+                            new_decide_qc = Some(leaf.get_justify_qc().clone());
+                        } else if current_chain_length == 3 {
+                            new_anchor_view = leaf.get_view_number();
+                            new_decide_reached = true;
+                        }
+                    } else {
+                        // nothing more to do here... we don't have a new chain extension
+                        return false;
+                    }
+                }
+                // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
+                if new_decide_reached {
+                    let mut leaf = leaf.clone();
+                    if leaf.get_view_number() == new_anchor_view {
+                        consensus
+                            .metrics
+                            .last_synced_block_height
+                            .set(usize::try_from(leaf.get_height()).unwrap_or(0));
+                    }
+                    if let Some(cert) = leaf.get_upgrade_certificate() {
+                        if cert.data.decide_by < view {
+                            warn!("Failed to decide an upgrade certificate in time. Ignoring.");
+                        } else {
+                            info!(
+                                "Updating consensus state with decided upgrade certificate: {:?}",
+                                cert
+                            );
+                            task_state.decided_upgrade_cert = Some(cert.clone());
+                        }
+                    }
+                    // If the block payload is available for this leaf, include it in
+                    // the leaf chain that we send to the client.
+                    if let Some(encoded_txns) =
+                        consensus.saved_payloads.get(&leaf.get_view_number())
+                    {
+                        let payload = BlockPayload::from_bytes(
+                            encoded_txns,
+                            leaf.get_block_header().metadata(),
+                        );
+
+                        leaf.fill_block_payload_unchecked(payload);
+                    }
+
+                    // Get the VID share at the leaf's view number, corresponding to our key
+                    // (if one exists)
+                    let vid_share = consensus
+                        .vid_shares
+                        .get(&leaf.get_view_number())
+                        .unwrap_or(&HashMap::new())
+                        .get(&task_state.public_key)
+                        .cloned()
+                        .map(|prop| prop.data);
+
+                    // Add our data into a new `LeafInfo`
+                    leaf_views.push(LeafInfo::new(
+                        leaf.clone(),
+                        Arc::clone(&state),
+                        delta.clone(),
+                        vid_share,
+                    ));
+                    leafs_decided.push(leaf.clone());
+                    if let Some(ref payload) = leaf.get_block_payload() {
+                        for txn in
+                            payload.transaction_commitments(leaf.get_block_header().metadata())
+                        {
+                            included_txns.insert(txn);
+                        }
+                    }
+                }
+                true
+            },
+        ) {
+            error!("view publish error {e}");
+        }
+    }
+
+    let included_txns_set: HashSet<_> = if new_decide_reached {
+        included_txns
+    } else {
+        HashSet::new()
+    };
+
+    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+    if new_commit_reached {
+        consensus.locked_view = new_locked_view;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    if new_decide_reached {
+        broadcast_event(
+            Arc::new(HotShotEvent::LeafDecided(leafs_decided)),
+            &event_stream,
+        )
+        .await;
+        let decide_sent = broadcast_event(
+            Event {
+                view_number: consensus.last_decided_view,
+                event: EventType::Decide {
+                    leaf_chain: Arc::new(leaf_views),
+                    qc: Arc::new(new_decide_qc.unwrap()),
+                    block_size: Some(included_txns_set.len().try_into().unwrap()),
+                },
+            },
+            &task_state.output_event_stream,
+        );
+        let old_anchor_view = consensus.last_decided_view;
+        consensus.collect_garbage(old_anchor_view, new_anchor_view);
+        consensus.last_decided_view = new_anchor_view;
+        consensus
+            .metrics
+            .last_decided_time
+            .set(Utc::now().timestamp().try_into().unwrap());
+        consensus.metrics.invalid_qc.set(0);
+        consensus
+            .metrics
+            .last_decided_view
+            .set(usize::try_from(consensus.last_decided_view.get_u64()).unwrap());
+        let cur_number_of_views_per_decide_event =
+            *task_state.cur_view - consensus.last_decided_view.get_u64();
+        consensus
+            .metrics
+            .number_of_views_per_decide_event
+            .add_point(cur_number_of_views_per_decide_event as f64);
+
+        debug!("Sending Decide for view {:?}", consensus.last_decided_view);
+        debug!("Decided txns len {:?}", included_txns_set.len());
+        decide_sent.await;
+        debug!("decide send succeeded");
+    }
+
+    let new_view = task_state.current_proposal.clone().unwrap().view_number + 1;
+    // In future we can use the mempool model where we fetch the proposal if we don't have it, instead of having to wait for it here
+    // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
+    let should_propose = task_state.quorum_membership.get_leader(new_view) == task_state.public_key
+        && consensus.high_qc.view_number
+            == task_state.current_proposal.clone().unwrap().view_number;
+    // todo get rid of this clone
+    let qc = consensus.high_qc.clone();
+
+    drop(consensus);
+    if new_decide_reached {
+        task_state.cancel_tasks(new_anchor_view).await;
+    }
+    if should_propose {
+        debug!(
+            "Attempting to publish proposal after voting; now in view: {}",
+            *new_view
+        );
+        if let Err(e) = task_state
+            .publish_proposal(qc.view_number + 1, event_stream.clone())
+            .await
+        {
+            warn!("Failed to propose; error = {e:?}");
+        };
+    }
+
+    ensure!(
+        task_state.vote_if_able(&event_stream).await,
+        "Failed to vote"
+    );
+    task_state.current_proposal = None;
+
+    Ok(())
 }
