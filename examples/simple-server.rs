@@ -42,7 +42,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 const NUM_NODES: usize = 2;
 
@@ -190,6 +190,7 @@ async fn init_consensus(
         num_bootstrap: 0,
         execution_type: ExecutionType::Continuous,
         election_config: None,
+        known_da_nodes: HashSet::from_iter(known_nodes_with_stake.clone()),
         da_staked_committee_size: pub_keys.len(),
         da_non_staked_committee_size: 0,
         my_own_validator_config: Default::default(),
@@ -215,6 +216,7 @@ async fn init_consensus(
                         .stake_amount
                         .as_u64(),
                     state_key_pair: state_key_pairs[node_id].clone(),
+                    is_da: true,
                 };
 
                 let network = Arc::new(MemoryNetwork::new(

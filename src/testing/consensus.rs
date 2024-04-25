@@ -40,9 +40,9 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use std::{collections::HashSet, fmt::Display};
 use tracing::{info_span, Instrument};
 
 struct MockNode<D: DataSourceLifeCycle> {
@@ -113,6 +113,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         private_key: priv_key.clone(),
                         stake_value: stake,
                         state_key_pair: state_key_pairs[node_id].clone(),
+                        is_da: true,
                     };
                     let config = HotShotConfig {
                         builder_url: builder_url.clone(),
@@ -134,6 +135,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         execution_type: ExecutionType::Continuous,
                         election_config: None,
                         da_staked_committee_size: pub_keys.len(),
+                        known_da_nodes: HashSet::from_iter(known_nodes_with_stake.clone()),
                         da_non_staked_committee_size: 0,
                         data_request_delay: Duration::from_millis(200),
                         view_sync_timeout: Duration::from_millis(250),
