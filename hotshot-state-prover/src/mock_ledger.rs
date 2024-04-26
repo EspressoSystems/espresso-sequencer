@@ -479,7 +479,7 @@ pub fn gen_plonk_proof_for_test(
         .zip(prove_keys.iter())
         .enumerate()
         .for_each(|(_, (cs, pk))| {
-            let extra_msg = Some(String::new().into_bytes()); // We set extra_msg="" for the contract tests to pass
+            let extra_msg = Some(vec![]); // We set extra_msg="" for the contract tests to pass
             proofs.push(
                 PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
                     rng,
