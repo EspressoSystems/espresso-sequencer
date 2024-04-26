@@ -36,6 +36,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use vbs::version::Version;
 
+use self::proposal_helpers::handle_quorum_proposal_validated;
 use crate::{
     consensus::{
         proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able},
@@ -47,8 +48,6 @@ use crate::{
         create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
     },
 };
-
-use self::proposal_helpers::handle_quorum_proposal_validated;
 
 /// Helper functions to handler proposal-related functionality.
 pub(crate) mod proposal_helpers;
