@@ -4,7 +4,6 @@ environment:
   - ESPRESSO_SEQUENCER_CDN_ENDPOINT=127.0.0.1:$ESPRESSO_CDN_SERVER_PORT
   - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL=http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
   - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
-  - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
   - ESPRESSO_DEMO_L1_HTTP_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
   - ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:$ESPRESSO_STATE_RELAY_SERVER_PORT
@@ -347,8 +346,10 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-  submit-transactions:
+  submit-transactions-public:
     command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -356,7 +357,25 @@ processes:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  submit-transactions-private:
+    command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
         path: /healthcheck
       failure_threshold: 100
 
