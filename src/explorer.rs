@@ -393,14 +393,15 @@ where
 mod test {
     use super::*;
     use crate::{
+        availability,
         testing::{
             consensus::{MockNetwork, MockSqlDataSource, TestableDataSourceWithExplorer},
-            mocks::MockTypes,
+            mocks::{mock_transaction, MockTypes},
             setup_test,
         },
         Error,
     };
-    use async_std::task::sleep;
+    use futures::StreamExt;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
     use std::{cmp::min, time::Duration};
@@ -513,7 +514,7 @@ mod test {
         assert!(!get_search_response.search_results.blocks.is_empty());
 
         if num_transactions > 0 {
-            let last_transaction = latest_transactions.last().unwrap();
+            let last_transaction = latest_transactions.first().unwrap();
             let transaction_detail_response: TransactionDetailResponse<MockTypes> = client
                 .get(format!("transaction/hash/{}", last_transaction.hash).as_str())
                 .send()
@@ -531,6 +532,7 @@ mod test {
                 transaction_detail_response.transaction_detail.details.hash,
                 last_transaction.hash
             );
+
             assert_eq!(
                 transaction_detail_response
                     .transaction_detail
@@ -538,6 +540,7 @@ mod test {
                     .height,
                 last_transaction.height
             );
+
             assert_eq!(
                 transaction_detail_response
                     .transaction_detail
@@ -545,6 +548,7 @@ mod test {
                     .num_transactions,
                 last_transaction.num_transactions
             );
+
             assert_eq!(
                 transaction_detail_response
                     .transaction_detail
@@ -553,23 +557,289 @@ mod test {
                 last_transaction.offset
             );
             // assert_eq!(transaction_detail_response.transaction_detail.details.size, last_transaction.size);
+
             assert_eq!(
                 transaction_detail_response.transaction_detail.details.time,
                 last_transaction.time
             );
 
-            let transaction_summaries_response: TransactionSummariesResponse<MockTypes> = client
-                .get(format!("transactions/hash/{}/{}", last_transaction.hash, 20).as_str())
-                .send()
-                .await
-                .unwrap();
+            // Transactions Summaries - No Filter
+            let n_txns = num_txns_per_block();
 
-            for (a, b) in transaction_summaries_response
-                .transaction_summaries
-                .iter()
-                .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
             {
-                assert_eq!(a, b);
+                // Retrieve transactions summaries via hash
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(format!("transactions/hash/{}/{}", last_transaction.hash, 20).as_str())
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // Retrieve transactions summaries via height and offset
+                // No offset, which should indicate the most recent transaction
+                // within the targeted block.
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!("transactions/from/{}/{}/{}", last_transaction.height, 0, 20)
+                                .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // Retrieve transactions summaries via height and offset (different offset)
+                // In this case since we're creating n_txns transactions per
+                // block, an offset of n_txns - 1 will ensure that we're still
+                // within the same starting target block.
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/from/{}/{}/{}",
+                                last_transaction.height,
+                                n_txns - 1,
+                                20
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .zip(
+                        latest_transactions
+                            .iter()
+                            .skip(n_txns - 1)
+                            .take(10)
+                            .collect::<Vec<_>>(),
+                    )
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // Retrieve transactions summaries via height and offset (different offset)
+                // In this case since we're creating n_txns transactions per
+                // block, an offset of n_txns + 1 will ensure that we're
+                // outside of the starting block
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/from/{}/{}/{}",
+                                last_transaction.height,
+                                n_txns + 1,
+                                20
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .zip(
+                        latest_transactions
+                            .iter()
+                            .skip(6)
+                            .take(10)
+                            .collect::<Vec<_>>(),
+                    )
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(format!("transactions/latest/{}", 20).as_str())
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            // Transactions Summaries - Block Filter
+
+            {
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/hash/{}/{}/block/{}",
+                                last_transaction.hash, 20, last_transaction.height
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .take_while(|t: &&TransactionSummary<MockTypes>| {
+                        t.height == last_transaction.height
+                    })
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // With an offset of 0, we should start at the most recent
+                // transaction within the specified block.
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/from/{}/{}/{}/block/{}",
+                                last_transaction.height, 0, 20, last_transaction.height
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .take_while(|t: &&TransactionSummary<MockTypes>| {
+                        t.height == last_transaction.height
+                    })
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // In this case, since we're creating n_txns transactions per
+                // block, an offset of n_txns - 1 will ensure that we're still
+                // within the same starting target block.
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/from/{}/{}/{}/block/{}",
+                                last_transaction.height,
+                                n_txns - 1,
+                                20,
+                                last_transaction.height
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .skip(n_txns - 1)
+                    .take_while(|t: &&TransactionSummary<MockTypes>| {
+                        t.height == last_transaction.height
+                    })
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                // In this case, since we're creating n_txns transactions per
+                // block, an offset of n_txns + 1 will ensure that we're
+                // outside of the starting target block
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/from/{}/{}/{}/block/{}",
+                                last_transaction.height,
+                                n_txns + 1,
+                                20,
+                                last_transaction.height
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .skip(n_txns + 1)
+                    .take_while(|t: &&TransactionSummary<MockTypes>| {
+                        t.height == last_transaction.height
+                    })
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
+            }
+
+            {
+                let transaction_summaries_response: TransactionSummariesResponse<MockTypes> =
+                    client
+                        .get(
+                            format!(
+                                "transactions/latest/{}/block/{}",
+                                20, last_transaction.height
+                            )
+                            .as_str(),
+                        )
+                        .send()
+                        .await
+                        .unwrap();
+
+                for (a, b) in transaction_summaries_response
+                    .transaction_summaries
+                    .iter()
+                    .take_while(|t: &&TransactionSummary<MockTypes>| {
+                        t.height == last_transaction.height
+                    })
+                    .zip(latest_transactions.iter().take(10).collect::<Vec<_>>())
+                {
+                    assert_eq!(a, b);
+                }
             }
         }
     }
@@ -577,6 +847,14 @@ mod test {
     #[async_std::test]
     async fn test_api() {
         test_api_helper::<MockSqlDataSource>().await;
+    }
+
+    fn num_blocks() -> usize {
+        10
+    }
+
+    fn num_txns_per_block() -> usize {
+        5
     }
 
     async fn test_api_helper<D: TestableDataSourceWithExplorer>() {
@@ -591,23 +869,73 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("explorer", define_api(STATIC_VER_0_1).unwrap())
             .unwrap();
+        app.register_module(
+            "availability",
+            availability::define_api(
+                &availability::Options {
+                    fetch_timeout: Duration::from_secs(5),
+                    ..Default::default()
+                },
+                STATIC_VER_0_1,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
         network.spawn(
             "server",
             app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
         );
 
         // Start a client.
-        let client = Client::<Error, Version01>::new(
+        let availability_client = Client::<Error, Version01>::new(
+            format!("http://localhost:{}/availability", port)
+                .parse()
+                .unwrap(),
+        );
+        let explorer_client = Client::<Error, Version01>::new(
             format!("http://localhost:{}/explorer", port)
                 .parse()
                 .unwrap(),
         );
-        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        assert!(
+            availability_client
+                .connect(Some(Duration::from_secs(60)))
+                .await
+        );
+
+        let mut blocks = availability_client
+            .socket("stream/blocks/0")
+            .subscribe::<availability::BlockQueryData<MockTypes>>()
+            .await
+            .unwrap();
+
+        let n_blocks = num_blocks();
+        let n_txns = num_txns_per_block();
+        for b in 0..n_blocks {
+            for t in 0..n_txns {
+                let nonce = b * n_txns + t;
+                let txn: hotshot_example_types::block_types::TestTransaction =
+                    mock_transaction(vec![nonce as u8]);
+                network.submit_transaction(txn).await;
+            }
+
+            // Wait for the transaction to be finalized.
+            for _ in 0..10 {
+                let block = blocks.next().await.unwrap();
+                let block = block.unwrap();
+
+                if !block.is_empty() {
+                    break;
+                }
+            }
+        }
+
+        assert!(explorer_client.connect(Some(Duration::from_secs(60))).await);
 
         // sleep a little bit to give some chance for blocks to be generated.
-        sleep(Duration::from_secs(5)).await;
-        validate(&client).await;
-
+        validate(&explorer_client).await;
         network.shut_down().await;
     }
 }

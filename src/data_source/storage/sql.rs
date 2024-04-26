@@ -2065,9 +2065,9 @@ where
                 "SELECT t.block_height AS height, t.index AS index FROM transaction AS t ORDER BY (t.block_height, t.index) DESC LIMIT 1",
                 vec![],
             ).await,
-            TransactionIdentifier::HeightAndOffset(height, offset) => self.query_one(
-                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.block_height = $1 ORDER BY (t.block_height, t.index) DESC OFFSET $2 LIMIT 1",
-                [*height as i64, *offset as i64],
+            TransactionIdentifier::HeightAndOffset(height, _) => self.query_one(
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.block_height = $1 ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                [*height as i64],
             ).await,
             TransactionIdentifier::Hash(hash) => self.query_one(
                 "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.hash = $1 ORDER BY (t.block_height, t.index) DESC LIMIT 1",
@@ -2085,6 +2085,11 @@ where
 
         let block_height = transaction_target.get::<_, i64>("height") as usize;
         let transaction_index = transaction_target.get::<_, Json<TransactionIndex<Types>>>("index");
+        let offset = if let TransactionIdentifier::HeightAndOffset(_, offset) = target {
+            *offset
+        } else {
+            0
+        };
 
         // Our block_stream is more-or-less always the same, the only difference
         // is a an additional filter on the identified transactions being found
@@ -2114,7 +2119,7 @@ where
                     vec![
                         Box::new(block_height as i64),
                         Box::new(&transaction_index),
-                        Box::new(range.num_transactions.get() as i64),
+                        Box::new((range.num_transactions.get() + offset) as i64),
                     ],
                 )
                 .await
@@ -2126,22 +2131,10 @@ where
                         "SELECT {BLOCK_COLUMNS}
                     FROM header AS h
                     JOIN payload AS p ON h.height = p.height
-                    WHERE h.height IN (
-                        SELECT t.block_height
-                            FROM transaction AS t
-                            WHERE (t.block_height, t.index) <= ($1, $2)
-                            ORDER BY (t.block_height, t.index) DESC
-                            LIMIT $3
-                    )
-                    AND h.height = $4
+                    WHERE  h.height = $1
                     ORDER BY h.height DESC"
                     ),
-                    vec![
-                        Box::new(block_height as i64),
-                        Box::new(&transaction_index),
-                        Box::new(range.num_transactions.get() as i64),
-                        Box::new(*block as i64),
-                    ],
+                    vec![Box::new(*block as i64)],
                 )
                 .await
             }
@@ -2177,11 +2170,10 @@ where
 
         Ok(transaction_summary_vec
             .into_iter()
+            .skip(offset)
             .skip_while(|txn| {
                 if let TransactionIdentifier::Hash(hash) = target {
                     txn.hash != *hash
-                } else if let TransactionIdentifier::HeightAndOffset(height, offset) = target {
-                    txn.height != *height as u64 && txn.offset != *offset as u64
                 } else {
                     false
                 }
