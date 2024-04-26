@@ -1,4 +1,10 @@
 use hotshot::{tasks::task_state::CreateTaskState};
+
+use std::sync::Arc;
+
+
+use hotshot_example_types::state_types::TestInstanceState;
+
 use hotshot_example_types::{
     block_types::TestMetadata,
     node_types::{MemoryImpl, TestTypes},
@@ -83,7 +89,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(node_id),
-            null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
         ),
     ];
 

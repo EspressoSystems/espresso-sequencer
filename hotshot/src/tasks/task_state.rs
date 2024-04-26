@@ -169,6 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
+            instance_state: handle.hotshot.get_instance_state(),
             id: handle.hotshot.id,
             builder_client: BuilderClient::new(handle.hotshot.config.builder_url.clone()),
         }

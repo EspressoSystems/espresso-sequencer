@@ -56,8 +56,11 @@ impl TestView {
 
         let transactions = Vec::new();
 
-        let (block_payload, metadata) =
-            TestBlockPayload::from_transactions(transactions.clone()).unwrap();
+        let (block_payload, metadata) = TestBlockPayload::from_transactions(
+            transactions.clone(),
+            Arc::new(TestInstanceState {}),
+        )
+        .unwrap();
         let builder_commitment = block_payload.builder_commitment(&metadata);
 
         let (private_key, public_key) = key_pair_for_id(*genesis_view);
@@ -171,8 +174,11 @@ impl TestView {
 
         let leader_public_key = public_key;
 
-        let (block_payload, metadata) =
-            TestBlockPayload::from_transactions(transactions.clone()).unwrap();
+        let (block_payload, metadata) = TestBlockPayload::from_transactions(
+            transactions.clone(),
+            Arc::new(TestInstanceState {}),
+        )
+        .unwrap();
         let builder_commitment = block_payload.builder_commitment(&metadata);
 
         let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());

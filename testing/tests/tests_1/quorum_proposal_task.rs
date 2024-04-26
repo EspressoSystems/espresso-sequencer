@@ -1,4 +1,8 @@
 use hotshot::tasks::{inject_quorum_proposal_polls, task_state::CreateTaskState};
+
+use hotshot_example_types::state_types::TestInstanceState;
+use std::sync::Arc;
+
 use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes},
     state_types::TestValidatedState,
@@ -101,7 +105,7 @@ async fn test_quorum_proposal_task_quorum_proposal() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             ),
         ],
         outputs: vec![quorum_proposal_send()],
@@ -162,7 +166,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             ),
         ],
         outputs: vec![quorum_proposal_send()],
@@ -228,7 +232,7 @@ async fn test_quorum_proposal_task_view_sync() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             ),
         ],
         outputs: vec![quorum_proposal_send()],
@@ -282,7 +286,7 @@ async fn test_quorum_proposal_task_propose_now() {
             commitment: payload_commitment,
             builder_commitment: builder_commitment.clone(),
             metadata: TestMetadata,
-            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            fee: null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:
@@ -298,7 +302,7 @@ async fn test_quorum_proposal_task_propose_now() {
             commitment: payload_commitment,
             builder_commitment: builder_commitment.clone(),
             metadata: TestMetadata,
-            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            fee: null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:
@@ -324,7 +328,7 @@ async fn test_quorum_proposal_task_propose_now() {
             commitment: payload_commitment,
             builder_commitment,
             metadata: TestMetadata,
-            fee: null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            fee: null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
             block_view: ViewNumber::new(2),
         },
         secondary_proposal_information:

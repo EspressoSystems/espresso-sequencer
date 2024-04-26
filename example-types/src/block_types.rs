@@ -10,6 +10,7 @@ use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
         node_implementation::NodeType,
+        states::InstanceState,
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
@@ -120,6 +121,7 @@ impl BlockPayload for TestBlockPayload {
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
+        _state: Arc<dyn InstanceState>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let txns_vec: Vec<TestTransaction> = transactions.into_iter().collect();
         Ok((

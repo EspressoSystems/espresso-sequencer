@@ -18,7 +18,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::signature_key::BuilderSignatureKey;
 use crate::{
     data::Leaf,
-    traits::{node_implementation::NodeType, ValidatedState},
+    traits::{node_implementation::NodeType, states::InstanceState, ValidatedState},
     utils::BuilderCommitment,
     vid::{vid_scheme, VidCommitment, VidSchemeType},
 };
@@ -51,7 +51,6 @@ pub trait BlockPayload:
 
     /// The type of the transitions we are applying
     type Transaction: Transaction;
-
     /// Data created during block building which feeds into the block header
     type Metadata: Clone
         + Debug
@@ -69,6 +68,7 @@ pub trait BlockPayload:
     /// If the transaction length conversion fails.
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
+        state: Arc<dyn InstanceState>,
     ) -> Result<(Self, Self::Metadata), Self::Error>;
 
     /// Build a payload with the encoded transaction bytes, metadata,

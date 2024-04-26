@@ -1,5 +1,5 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
-
+use hotshot_example_types::state_types::TestInstanceState;
 use hotshot::types::SignatureKey;
 use hotshot_example_types::{
     block_types::{TestBlockPayload, TestMetadata, TestTransaction},
@@ -36,7 +36,7 @@ async fn test_vid_task() {
 
     let mut vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(0));
     let transactions = vec![TestTransaction(vec![0])];
-    let (payload, metadata) = TestBlockPayload::from_transactions(transactions.clone()).unwrap();
+    let (payload, metadata) = TestBlockPayload::from_transactions(transactions.clone(), Arc::new(TestInstanceState {})).unwrap();
     let builder_commitment = payload.builder_commitment(&metadata);
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
@@ -86,7 +86,7 @@ async fn test_vid_task() {
         encoded_transactions,
         TestMetadata,
         ViewNumber::new(2),
-        null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+        null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
     ));
     input.push(HotShotEvent::BlockReady(
         vid_disperse.clone(),
@@ -108,7 +108,7 @@ async fn test_vid_task() {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(2),
-            null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+            null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
         ),
         1,
     );
