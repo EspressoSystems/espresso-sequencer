@@ -126,7 +126,8 @@ impl Serialize for Timestamp {
     /// serialize converts the timestamp into a string representation of a
     /// RFC3339 formatted date.
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.format(&Rfc3339).unwrap().serialize(serializer)
+        let formatted = self.0.format(&Rfc3339).map_err(serde::ser::Error::custom)?;
+        formatted.serialize(serializer)
     }
 }
 
