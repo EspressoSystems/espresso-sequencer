@@ -872,6 +872,7 @@ impl Committable for FeeInfo {
     Copy,
     Clone,
     Debug,
+    Display,
     Deserialize,
     Serialize,
     PartialEq,
@@ -884,6 +885,7 @@ impl Committable for FeeInfo {
     From,
     Into,
 )]
+#[display(fmt = "{_0}")]
 pub struct FeeAmount(U256);
 
 impl_to_fixed_bytes!(FeeAmount, U256);

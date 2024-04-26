@@ -301,6 +301,7 @@ pub struct L1Params {
     pub url: Url,
     pub finalized_block: Option<u64>,
     pub events_max_block_range: u64,
+    pub fee_contract_address: Address,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -461,7 +462,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     let l1_client = L1Client::new(
         l1_params.url,
-        Address::default(),
+        l1_params.fee_contract_address,
         l1_params.events_max_block_range,
     );
     let l1_genesis = match l1_params.finalized_block {

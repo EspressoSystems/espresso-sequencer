@@ -20,6 +20,7 @@ use crate::state::FeeInfo;
 use anyhow::Context;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use contract_bindings::fee_contract::FeeContract;
 use ethers::prelude::*;
 use futures::{
     join,
@@ -98,20 +99,21 @@ impl Committable for L1BlockInfo {
 pub struct L1Client {
     retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
-    provider: Provider<Http>,
-    /// `Address` of fee contract.
-    _address: Address,
+    provider: Arc<Provider<Http>>,
+    /// Bindings for fee contract.
+    fee_contract: FeeContract<Provider<Http>>,
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
     events_max_block_range: u64,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url, contract_address: Address, events_max_block_range: u64) -> Self {
+    pub fn new(url: Url, fee_contract_address: Address, events_max_block_range: u64) -> Self {
+        let provider = Arc::new(Provider::new(Http::new(url)));
         Self {
             retry_delay: Duration::from_secs(1),
-            provider: Provider::new(Http::new(url)),
-            _address: contract_address,
+            fee_contract: FeeContract::new(fee_contract_address, provider.clone()),
+            provider,
             events_max_block_range,
         }
     }
@@ -195,24 +197,20 @@ impl L1Client {
 
         // Fetch events for each chunk.
         let events = stream::iter(chunks).then(|(from, to)| {
-            let address = self._address;
-            let provider = self.provider.clone();
+            let fee_contract = self.fee_contract.clone();
             let retry_delay = self.retry_delay;
             async move {
                 tracing::debug!(from, to, "fetch events in range");
 
                 // query for deposit events, loop until successful.
                 loop {
-                    match contract_bindings::fee_contract::FeeContract::new(
-                        address,
-                        Arc::new(&provider),
-                    )
-                    .deposit_filter()
-                    .address(address.into())
-                    .from_block(from)
-                    .to_block(to)
-                    .query()
-                    .await
+                    match fee_contract
+                        .deposit_filter()
+                        .address(fee_contract.address().into())
+                        .from_block(from)
+                        .to_block(to)
+                        .query()
+                        .await
                     {
                         Ok(events) => break stream::iter(events),
                         Err(err) => {

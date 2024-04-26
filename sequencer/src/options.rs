@@ -172,6 +172,10 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,
 
+    /// Address of the L1 contract used to bridge fee tokens into Espresso.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    pub fee_contract_address: Address,
+
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]

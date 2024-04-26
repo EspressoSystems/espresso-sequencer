@@ -55,6 +55,10 @@ impl EthKeyPair {
     pub fn address(&self) -> Address {
         self.fee_account.address()
     }
+
+    pub fn signer(&self) -> LocalWallet {
+        LocalWallet::from_bytes(&self.signing_key.to_bytes()).unwrap()
+    }
 }
 
 impl Hash for EthKeyPair {
@@ -121,7 +125,7 @@ impl BuilderSignatureKey for FeeAccount {
         private_key: &Self::BuilderPrivateKey,
         data: &[u8],
     ) -> Result<Self::BuilderSignature, Self::SignError> {
-        let wallet = LocalWallet::from_bytes(&private_key.signing_key.to_bytes()).unwrap();
+        let wallet = private_key.signer();
         let message_hash = ethers::utils::hash_message(data);
         wallet.sign_hash(message_hash).map_err(|_| SigningError)
     }

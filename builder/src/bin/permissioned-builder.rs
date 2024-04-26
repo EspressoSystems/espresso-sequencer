@@ -228,6 +228,7 @@ async fn main() -> anyhow::Result<()> {
         url: opt.l1_provider_url,
         finalized_block: None,
         events_max_block_range: 10000,
+        fee_contract_address: Default::default(),
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
