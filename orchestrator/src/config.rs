@@ -566,6 +566,9 @@ fn default_builder_url() -> Url {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
 pub struct HotShotConfigFile<KEY: SignatureKey> {
+    /// The proportion of nodes required before the orchestrator issues the ready signal,
+    /// expressed as (numerator, denominator)
+    pub start_threshold: (u64, u64),
     /// Total number of staked nodes in the network
     pub num_nodes_with_stake: NonZeroUsize,
     /// Total number of non-staked nodes in the network
@@ -667,6 +670,7 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
     fn from(val: HotShotConfigFile<KEY>) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
+            start_threshold: val.start_threshold,
             num_nodes_with_stake: val.num_nodes_with_stake,
             num_nodes_without_stake: val.num_nodes_without_stake,
             known_da_nodes: val.known_da_nodes,
@@ -737,6 +741,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
 
         Self {
             num_nodes_with_stake: NonZeroUsize::new(10).unwrap(),
+            start_threshold: (8, 10),
             num_nodes_without_stake: 0,
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,

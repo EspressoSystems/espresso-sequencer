@@ -334,7 +334,11 @@ where
     fn post_ready(&mut self) -> Result<(), ServerError> {
         self.nodes_connected += 1;
         println!("Nodes connected: {}", self.nodes_connected);
-        if self.nodes_connected >= (self.config.config.num_nodes_with_stake.get() as u64) {
+        // i.e. nodes_connected >= num_nodes_with_stake * (start_threshold.0 / start_threshold.1)
+        if self.nodes_connected * self.config.config.start_threshold.1
+            >= (self.config.config.num_nodes_with_stake.get() as u64)
+                * self.config.config.start_threshold.0
+        {
             self.start = true;
         }
         Ok(())

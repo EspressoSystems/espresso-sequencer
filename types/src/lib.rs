@@ -160,6 +160,9 @@ impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
 pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     /// Whether to run one view or continuous views
     pub execution_type: ExecutionType,
+    /// The proportion of nodes required before the orchestrator issues the ready signal,
+    /// expressed as (numerator, denominator)
+    pub start_threshold: (u64, u64),
     /// Total number of nodes in the network
     // Earlier it was total_nodes
     pub num_nodes_with_stake: NonZeroUsize,

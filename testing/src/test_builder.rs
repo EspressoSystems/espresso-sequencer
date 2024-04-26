@@ -286,6 +286,7 @@ impl TestDescription {
         let config = HotShotConfig {
             // TODO this doesn't exist anymore
             execution_type: ExecutionType::Incremental,
+            start_threshold: (1, 1),
             num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
             // Currently making this zero for simplicity
             known_da_nodes,
