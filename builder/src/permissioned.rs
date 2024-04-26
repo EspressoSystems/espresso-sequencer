@@ -255,7 +255,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let instance_state = NodeState::new(
         node_index,
-        ChainConfig::new(0, max_block_size, 0),
+        ChainConfig::new(0, max_block_size, base_fee),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
@@ -289,7 +289,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
-        base_fee,
     )
     .await?;
 
@@ -385,7 +384,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -447,7 +445,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
-            base_fee,
+            instance_state
+                .chain_config()
+                .base_fee()
+                .as_u64()
+                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
         );
 

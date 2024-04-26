@@ -901,7 +901,7 @@ impl CheckedSub for FeeAmount {
 }
 
 impl FeeAmount {
-    pub(crate) fn as_u64(&self) -> Option<u64> {
+    pub fn as_u64(&self) -> Option<u64> {
         if self.0 <= u64::MAX.into() {
             Some(self.0.as_u64())
         } else {

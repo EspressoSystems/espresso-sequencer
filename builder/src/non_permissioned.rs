@@ -1,3 +1,4 @@
+use anyhow::Context;
 use async_broadcast::{
     broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
 };
@@ -59,7 +60,7 @@ pub struct BuilderConfig {
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    max_block_size: u64,
+    chain_config: ChainConfig,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(
@@ -69,7 +70,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     );
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
-        ChainConfig::new(0, max_block_size, 0),
+        chain_config,
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );
@@ -89,7 +90,6 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -151,7 +151,11 @@ impl BuilderConfig {
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
-            base_fee,
+            instance_state
+                .chain_config()
+                .base_fee()
+                .as_u64()
+                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
         );
 

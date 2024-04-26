@@ -196,6 +196,10 @@ impl NodeState {
         )
     }
 
+    pub fn chain_config(&self) -> &ChainConfig {
+        &self.chain_config
+    }
+
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
         self.l1_client = l1_client;
         self
@@ -592,7 +596,6 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
-                //??
                 builder_url: Url::parse(&format!(
                     "http://127.0.0.1:{}",
                     pick_unused_port().unwrap()
@@ -643,7 +646,6 @@ pub mod testing {
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
-                    true,
                 )
                 .await
             }))
@@ -660,18 +662,15 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: usize,
             bind_version: Ver,
-            is_da: bool,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
+            let my_peer_config = &config.known_nodes_with_stake[i];
             config.my_own_validator_config = ValidatorConfig {
-                public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
+                public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: self.priv_keys[i].clone(),
-                stake_value: config.known_nodes_with_stake[i]
-                    .stake_table_entry
-                    .stake_amount
-                    .as_u64(),
+                stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
-                is_da,
+                is_da: config.known_da_nodes.contains(my_peer_config),
             };
 
             let network = Arc::new(MemoryNetwork::new(

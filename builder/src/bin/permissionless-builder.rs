@@ -3,10 +3,10 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
+use ethers::types::U256;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::L1Params;
-use sequencer::{eth_signature_key::EthKeyPair, options::parse_size};
+use sequencer::{eth_signature_key::EthKeyPair, options::parse_size, ChainConfig, L1Params};
 use snafu::Snafu;
 use std::num::NonZeroUsize;
 use std::{str::FromStr, time::Duration};
@@ -42,9 +42,17 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     state_peers: Vec<Url>,
 
+    /// Unique identifier for this instance of the sequencer network.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    chain_id: u16,
+
     /// Maximum size in bytes of a block
     #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
-    pub max_block_size: u64,
+    max_block_size: u64,
+
+    /// Minimum fee in WEI per byte of payload
+    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
+    base_fee: U256,
 
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
@@ -79,10 +87,6 @@ struct NonPermissionedBuilderOptions {
         default_value = "15"
     )]
     buffer_view_num_count: usize,
-
-    /// Base Fee for a block
-    #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
-    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -118,13 +122,9 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        l1_params,
-        opt.state_peers,
-        opt.max_block_size,
-        sequencer_version,
-    )
-    .unwrap();
+    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
+    let instance_state =
+        build_instance_state(l1_params, opt.state_peers, chain_config, sequencer_version).unwrap();
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
@@ -144,7 +144,6 @@ async fn main() -> anyhow::Result<()> {
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
-        opt.base_fee,
     )
     .await;
 
