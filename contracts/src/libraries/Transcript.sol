@@ -152,25 +152,17 @@ library Transcript {
         );
 
         // public inputs
-        // This *if* statement is to avoid having tests failures
-        if (publicInput.length == 8) {
-            self.transcript = abi.encodePacked(
-                self.transcript,
-                Utils.reverseEndianness(publicInput[0]),
-                Utils.reverseEndianness(publicInput[1]),
-                Utils.reverseEndianness(publicInput[2]),
-                Utils.reverseEndianness(publicInput[3]),
-                Utils.reverseEndianness(publicInput[4]),
-                Utils.reverseEndianness(publicInput[5]),
-                Utils.reverseEndianness(publicInput[6]),
-                Utils.reverseEndianness(publicInput[7])
-            );
-        } else {
-            for (uint256 i = 0; i < publicInput.length; i++) {
-                self.transcript =
-                    abi.encodePacked(self.transcript, Utils.reverseEndianness(publicInput[i]));
-            }
-        }
+        self.transcript = abi.encodePacked(
+            self.transcript,
+            Utils.reverseEndianness(publicInput[0]),
+            Utils.reverseEndianness(publicInput[1]),
+            Utils.reverseEndianness(publicInput[2]),
+            Utils.reverseEndianness(publicInput[3]),
+            Utils.reverseEndianness(publicInput[4]),
+            Utils.reverseEndianness(publicInput[5]),
+            Utils.reverseEndianness(publicInput[6]),
+            Utils.reverseEndianness(publicInput[7])
+        );
     }
 
     /// @dev Append the proof to the transcript. Only used for test purposes.

@@ -95,21 +95,14 @@ library PlonkVerifier {
     ) internal view returns (bool) {
         _validateProof(proof);
 
-        // This *if* statement is needed in order for some tests to pass.
-        if (publicInput.length == 8) {
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[0]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[1]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[2]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[3]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[4]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[5]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[6]));
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[7]));
-        } else {
-            for (uint256 i = 0; i < publicInput.length; i++) {
-                BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
-            }
-        }
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[0]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[1]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[2]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[3]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[4]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[5]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[6]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[7]));
 
         PcsInfo memory pcsInfo = _preparePcsInfo(verifyingKey, publicInput, proof);
         return _verifyOpeningProofs(pcsInfo);

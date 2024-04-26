@@ -196,13 +196,13 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
     }
 
-    /// @dev Test when bad public input is supplied, the verification should fail
-    /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
-    function testFuzz_badPublicInput_fails(uint256[3] calldata randPublicInput) external {
-        uint256[] memory badPublicInput = new uint256[](3);
-        badPublicInput[0] = randPublicInput[0];
-        badPublicInput[1] = randPublicInput[1];
-        badPublicInput[2] = randPublicInput[2];
+    // @dev Test when bad public input is supplied, the verification should fail
+    // We know our `gen_circuit_for_test` in `diff_test.rs` has only 8 public inputs
+    function testFuzz_badPublicInput_fails(uint256[8] calldata randPublicInput) external {
+        uint256[] memory badPublicInput = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            badPublicInput[i] = randPublicInput[i];
+        }
         badPublicInput = sanitizeScalarFields(badPublicInput);
 
         string[] memory cmds = new string[](3);
@@ -303,7 +303,14 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
 
 contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
     /// @dev Test `preparePcsInfo` matches that of Jellyfish
-    function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[] memory publicInput) external {
+    function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[8] memory _publicInput)
+        external
+    {
+        uint256[] memory publicInput = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = _publicInput[i];
+        }
+
         publicInput = sanitizeScalarFields(publicInput);
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
@@ -353,9 +360,14 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
 
 contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     /// @dev Test `computeChallenges` matches that of Jellyfish
-    function testFuzz_computeChallenges_matches(uint64 seed, uint256[] memory publicInput)
+    function testFuzz_computeChallenges_matches(uint64 seed, uint256[8] memory _publicInput)
         external
     {
+        uint256[] memory publicInput = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = _publicInput[i];
+        }
+
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
         publicInput = sanitizeScalarFields(publicInput);

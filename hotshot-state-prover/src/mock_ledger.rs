@@ -517,6 +517,11 @@ pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkC
         (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
     )?;
 
+    // Create other public variables so that the number of public inputs is 8
+    for _i in 0..5 {
+        cs.create_public_variable(F::from(0u64))?;
+    }
+
     // Create gates:
     // 1. a0 + ... + a_{4*m-1} = b0 * b1
     // 2. (b1 + a0) * (b1 - a0) = c

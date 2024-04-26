@@ -146,8 +146,13 @@ contract Transcript_appendVkAndPubInput_Test is Test {
     /// @dev Test if `appendVkAndPubInput` matches that of Jellyfish
     function testFuzz_appendVkAndPubInput_matches(
         T.TranscriptData memory transcript,
-        uint256[] memory publicInput
+        uint256[8] memory _publicInput
     ) external {
+        uint256[] memory publicInput = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = _publicInput[i];
+        }
+
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
