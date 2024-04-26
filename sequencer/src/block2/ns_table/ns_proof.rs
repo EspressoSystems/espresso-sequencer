@@ -1,6 +1,5 @@
-use super::{ns_payload::NsPayload, NsTable};
-use crate::block2::Payload;
-use crate::{NamespaceId, Transaction};
+use super::{ns_payload::NsPayloadOwned, NsTable};
+use crate::{block2::Payload, NamespaceId, Transaction};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
@@ -27,8 +26,8 @@ impl NsProof {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct NsProofExistence {
-    #[serde(with = "base64_bytes")]
-    ns_payload_flat: Vec<u8>,
+    // TODO `#[serde(with = "base64_bytes")]` screws up serde for `NsPayloadOwned`.
+    ns_payload: NsPayloadOwned,
     ns_proof: LargeRangeProofType,
 }
 
@@ -46,17 +45,20 @@ impl Payload {
                 existence: None,
             });
         };
-        let ns_range = self
-            .ns_table
-            .ns_payload_range(&ns_index, self.payload.len());
+        let ns_payload = self.ns_payload(&ns_index).to_owned();
+        let ns_proof = {
+            let ns_payload_range = self
+                .ns_table
+                .ns_payload_range(&ns_index, self.payload.len());
+            let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+            vid.payload_proof(&self.payload, ns_payload_range).ok()? // error: failure to make a payload proof
+        };
 
         Some(NsProof {
             ns_id,
             existence: Some(NsProofExistence {
-                ns_payload_flat: self.payload[ns_range.clone()].into(),
-                ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(common))
-                    .payload_proof(&self.payload, ns_range)
-                    .ok()?, // error: failure to make a payload proof
+                ns_payload,
+                ns_proof,
             }),
         })
     }
@@ -78,7 +80,7 @@ impl NsProof {
                 vid_scheme(VidSchemeType::get_num_storage_nodes(common))
                     .payload_verify(
                         Statement {
-                            payload_subslice: &pf.ns_payload_flat,
+                            payload_subslice: pf.ns_payload.as_byte_slice(),
                             range: ns_table.ns_payload_range(
                                 &ns_index,
                                 VidSchemeType::get_payload_byte_len(common),
@@ -93,11 +95,7 @@ impl NsProof {
 
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
-                Some((
-                    NsPayload::temporary_from_byte_slice(&pf.ns_payload_flat)
-                        .export_all_txs(&self.ns_id),
-                    self.ns_id,
-                ))
+                Some((pf.ns_payload.export_all_txs(&self.ns_id), self.ns_id))
             }
             (None, None) => Some((Vec::new(), self.ns_id)), // successful verification of nonexistence
             (None, Some(_)) | (Some(_), None) => None, // error: expect [non]existence but found the opposite

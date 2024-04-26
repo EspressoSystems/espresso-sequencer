@@ -204,18 +204,6 @@ impl TxProof {
             ns_offset_from_bytes(&self.ns_range_start)..ns_offset_from_bytes(&self.ns_range_end);
         // let tx_table_byte_len = (); // from num_txs bytes, capped by namespace size, offset by namespace.start
 
-        // // Computing tx payload range from what's in the tx table
-        // // TODO refactor and use this everywhere, don't use tx iter range
-        // let tx_range = {
-        //     let start = tx_offset_from_bytes(
-        //         &self
-        //             .payload_tx_range_start
-        //             .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
-        //     )
-        //     .saturating_add(ns_range.start);
-        // };
-        // END WIP
-
         // Verify proof for tx table len
         {
             let num_txs_range = Range {
@@ -246,6 +234,18 @@ impl TxProof {
         }
 
         // Verify proof for tx table entries
+        {
+            // let tx_range = {
+            //     // TODO translate by ns offset and tx_table_byte_len
+            //     let end = tx_offset_from_bytes(&self.payload_tx_table_entry).;
+            //     let start = tx_offset_from_bytes(
+            //         &self
+            //             .payload_tx_table_entry_prev
+            //             .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
+            //     )
+            //     .saturating_add(ns_range.start);
+            // };
+        }
 
         Some(true)
     }

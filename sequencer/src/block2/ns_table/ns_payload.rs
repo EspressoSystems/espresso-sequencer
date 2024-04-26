@@ -14,7 +14,7 @@ use std::ops::Range;
 
 use tx_iter::{TxIndex, TxIter};
 
-// TODO make ns_payload a sub module of ns_table?
+// TODO move all the modules from inside ns_table back up to block2?
 // TODO move this to ns_table.rs so we can construct a `Payload` there and keep `NsTable` fields private?
 #[derive(Default)]
 pub struct NamespacePayloadBuilder {
@@ -43,11 +43,20 @@ impl NamespacePayloadBuilder {
     }
 }
 
+/// TODO explain: [`NsPayloadOwned`] to [`NsPayload`] as [`Vec<T>`] is to `[T]`.
+#[repr(transparent)]
+// #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 // #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[derive(Debug)]
-pub struct NsPayload<'a>(&'a [u8]);
+pub struct NsPayload([u8]);
 
-impl<'a> NsPayload<'a> {
+#[repr(transparent)]
+// #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct NsPayloadOwned(Vec<u8>);
+
+impl NsPayload {
     /// Number of bytes used to encode the number of txs in the tx table.
     ///
     /// Returns the minimum of [`NUM_TXS_BYTE_LEN`] and the byte length of the
@@ -106,6 +115,11 @@ impl<'a> NsPayload<'a> {
         start..end
     }
 
+    /// Access the bytes of this [`NsPayload`].
+    pub fn as_byte_slice(&self) -> &[u8] {
+        &self.0
+    }
+
     /// TODO store `ns_id` in `NsPayload` struct?
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
         TxIter::new(self)
@@ -119,15 +133,46 @@ impl<'a> NsPayload<'a> {
 
 impl Payload {
     /// TODO panics if index out of bounds
-    pub fn ns_payload(&self, index: &NsIndex) -> NsPayload {
-        NsPayload(&self.payload[self.ns_table.ns_payload_range(index, self.payload.len())])
+    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
+        NsPayload::new(&self.payload[self.ns_table.ns_payload_range(index, self.payload.len())])
     }
 }
 
-// TODO move everything in ns_proof.rs into this file so you don't need to do the following
-impl<'a> NsPayload<'a> {
-    pub fn temporary_from_byte_slice(bytes: &'a [u8]) -> Self {
-        Self(bytes)
+/// Crazy boilerplate code to make it so that [`NsPayloadOwned`] is to
+/// [`NsPayload`] as [`Vec<T>`] is to `[T]`. See [How can I create newtypes for
+/// an unsized type and its owned counterpart (like `str` and `String`) in safe
+/// Rust? - Stack Overflow](https://stackoverflow.com/q/64977525)
+mod ns_payload_owned {
+    use super::{NsPayload, NsPayloadOwned};
+    use std::borrow::Borrow;
+    use std::ops::Deref;
+
+    impl NsPayload {
+        // pub(super) because I want it private to this file, but I also want to
+        // contain this boilerplate code in its on module.ß
+        pub(super) fn new(p: &[u8]) -> &NsPayload {
+            unsafe { &*(p as *const [u8] as *const NsPayload) }
+        }
+    }
+
+    impl Deref for NsPayloadOwned {
+        type Target = NsPayload;
+        fn deref(&self) -> &NsPayload {
+            NsPayload::new(&self.0)
+        }
+    }
+
+    impl Borrow<NsPayload> for NsPayloadOwned {
+        fn borrow(&self) -> &NsPayload {
+            self.deref()
+        }
+    }
+
+    impl ToOwned for NsPayload {
+        type Owned = NsPayloadOwned;
+        fn to_owned(&self) -> NsPayloadOwned {
+            NsPayloadOwned(self.0.to_owned())
+        }
     }
 }
 
@@ -139,7 +184,7 @@ pub(crate) mod tx_iter {
     #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
     pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
 
-    impl<'a> NsPayload<'a> {
+    impl NsPayload {
         /// Read the tx offset from the `index`th entry from the tx table.
         ///
         /// Panics if `index >= self.num_txs()`.
