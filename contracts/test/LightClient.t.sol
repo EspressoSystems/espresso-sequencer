@@ -26,10 +26,6 @@ contract LightClientCommonTest is Test {
     address public admin = makeAddr("admin");
     address public permissionedProver = makeAddr("prover");
 
-    function initLC(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch) public {
-        lc = new LCMock(_genesis, _blocksPerEpoch);
-    }
-
     function deployAndInitProxy(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
         public
         returns (address payable, address)

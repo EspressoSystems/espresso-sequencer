@@ -89,8 +89,8 @@ NUM_INIT_VALIDATORS := "5"
 lc-contract-benchmarks-sepolia:
     #!/usr/bin/env bash
     set -euxo pipefail
-    #forge script contracts/script/LightClient.s.sol --sig "runBenchSepolia(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
-    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/LightClient.s.sol/11155111/runBenchSepolia-latest.json | jq -r .receipts[-1].contractAddress`
+    #forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
+    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/DeployLightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
     echo $LC_CONTRACT_ADDRESS
     forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 

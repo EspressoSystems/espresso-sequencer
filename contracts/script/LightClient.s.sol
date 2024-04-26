@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Script.sol";
 
 import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientMock as LCMock } from "../test/mocks/LightClientMock.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientContractScript is Script {
@@ -37,14 +38,6 @@ contract DeployLightClientContractScript is Script {
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
         return deployContract(state, numBlocksPerEpoch);
-    }
-
-    function runBenchSepolia(uint32 numBlocksPerEpoch, uint32 numInitValidators) external {
-        (address payable proxyAddress, address admin,) =
-            this.run(numBlocksPerEpoch, numInitValidators);
-        LC lc = LC(proxyAddress);
-        vm.prank(admin);
-        lc.setPermissionedProver(admin);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl

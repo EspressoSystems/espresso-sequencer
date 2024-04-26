@@ -6,6 +6,7 @@ import "forge-std/Script.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientMock as LCMock } from "../test/mocks/LightClientMock.sol";
 
 contract CallNewFinalizedState is Script {
     LC.LightClientState public genesis;
@@ -13,8 +14,8 @@ contract CallNewFinalizedState is Script {
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)
         external
     {
-        uint64 numRegistrations = uint64(1);
-        uint64 numExits = uint64(1);
+        uint64 numRegistrations = uint64(3);
+        uint64 numExits = uint64(3);
 
         // Generating a few consecutive states and proofs
         string[] memory cmds = new string[](4);
@@ -35,7 +36,7 @@ contract CallNewFinalizedState is Script {
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
 
-        LC lc = LC(lcContractAddress);
+        LCMock lc = LCMock(lcContractAddress);
 
         lc.newFinalizedState(states[0], proofs[0]);
 

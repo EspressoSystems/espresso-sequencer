@@ -133,6 +133,23 @@ Running the script will save a file with details about the deployment in `contra
 - code for demo purposes goes into the `contracts/demo` folder
 - code that eventually ends up in production goes into the `contracts/src` folder
 
+#### Benchmarking and profiling
+
+The gas consumption for updating the state of the light client contract can be seen by running:
+
+```
+> forge snapshot
+> grep testCorrectUpdateBench .gas-snapshot
+```
+
+In order to profile the gas consumption of the light client contract do the following:
+
+1. Set the environment variables `SEPOLIA_RPC_URL`, `MNEMONIC` and `ETHERSCAN_API_KEY`.
+2. `just lc-contract-benchmarks-sepolia`
+3. Create an account on [sentio.xyz](https://app.sentio.xyz/).
+4. Use the hash of the transaction generated in step two when calling the function `newFinalizedState` in order to
+   obtain the gas profile.
+
 ## Misc
 
 ### Authenticate with GitHub container registry
