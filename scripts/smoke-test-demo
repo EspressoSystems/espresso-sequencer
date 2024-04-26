@@ -6,7 +6,7 @@ set -e
 set -a; source .env; set +a;
 
 SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
-LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
 SEQUENCER_BLOCKS_TIMEOUT=120
 
 # usage: wait_for timeout_in_secs name URL
