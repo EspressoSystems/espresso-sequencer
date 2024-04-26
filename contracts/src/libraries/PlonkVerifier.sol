@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.0;
 
-import { BN254 } from "bn254/BN254.sol";
+import { BN254, Utils } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "./PolynomialEval.sol";
 import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 import { Transcript } from "./Transcript.sol";
@@ -186,8 +186,14 @@ library PlonkVerifier {
         uint256 p = BN254.R_MOD;
 
         transcript.appendVkAndPubInput(verifyingKey, publicInput);
-        transcript.append5GroupElements(
-            proof.wire0, proof.wire1, proof.wire2, proof.wire3, proof.wire4
+
+        transcript.transcript = abi.encodePacked(
+            transcript.transcript,
+            BN254.g1Serialize(proof.wire0),
+            BN254.g1Serialize(proof.wire1),
+            BN254.g1Serialize(proof.wire2),
+            BN254.g1Serialize(proof.wire3),
+            BN254.g1Serialize(proof.wire4)
         );
 
         // have to compute tau, but not really used anywhere
@@ -196,31 +202,47 @@ library PlonkVerifier {
         res.beta = transcript.getAndAppendChallenge();
         res.gamma = transcript.getAndAppendChallenge();
 
-        transcript.appendGroupElement(proof.prodPerm);
+        transcript.transcript =
+            abi.encodePacked(transcript.transcript, BN254.g1Serialize(proof.prodPerm));
 
         res.alpha = transcript.getAndAppendChallenge();
 
-        transcript.append5GroupElements(
-            proof.split0, proof.split1, proof.split2, proof.split3, proof.split4
+        transcript.transcript = abi.encodePacked(
+            transcript.transcript,
+            BN254.g1Serialize(proof.split0),
+            BN254.g1Serialize(proof.split1),
+            BN254.g1Serialize(proof.split2),
+            BN254.g1Serialize(proof.split3),
+            BN254.g1Serialize(proof.split4)
         );
 
         res.zeta = transcript.getAndAppendChallenge();
 
         // Append proof evaluations
-        transcript.append5FieldElements(
-            proof.wireEval0, proof.wireEval1, proof.wireEval2, proof.wireEval3, proof.wireEval4
+        transcript.transcript = abi.encodePacked(
+            transcript.transcript,
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.wireEval0)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.wireEval1)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.wireEval2)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.wireEval3)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.wireEval4))
         );
-        transcript.append5FieldElements(
-            proof.sigmaEval0,
-            proof.sigmaEval1,
-            proof.sigmaEval2,
-            proof.sigmaEval3,
-            proof.prodPermZetaOmegaEval
+
+        transcript.transcript = abi.encodePacked(
+            transcript.transcript,
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.sigmaEval0)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.sigmaEval1)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.sigmaEval2)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.sigmaEval3)),
+            Utils.reverseEndianness(BN254.ScalarField.unwrap(proof.prodPermZetaOmegaEval))
         );
 
         res.v = transcript.getAndAppendChallenge();
 
-        transcript.append2GroupElements(proof.zeta, proof.zetaOmega);
+        transcript.transcript = abi.encodePacked(
+            transcript.transcript, BN254.g1Serialize(proof.zeta), BN254.g1Serialize(proof.zetaOmega)
+        );
+
         res.u = transcript.getAndAppendChallenge();
 
         assembly {
