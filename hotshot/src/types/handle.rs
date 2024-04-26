@@ -27,7 +27,7 @@ use crate::{traits::NodeImplementation, types::Event, SystemContext};
 pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The [sender](Sender) and [receiver](Receiver),
     /// to allow the application to communicate with HotShot.
-    pub(crate) output_event_stream: (Sender<Event<TYPES>>, Receiver<Event<TYPES>>),
+    pub(crate) output_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
 
     /// access to the internal event stream, in case we need to, say, shut something down
     #[allow(clippy::type_complexity)]
@@ -48,7 +48,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandle<TYPES, I> {
     /// obtains a stream to expose to the user
     pub fn get_event_stream(&self) -> impl Stream<Item = Event<TYPES>> {
-        self.output_event_stream.1.clone()
+        self.output_event_stream.1.activate_cloned()
     }
 
     /// HACK so we can know the types when running tests...
@@ -57,7 +57,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// - type wrapper
     #[must_use]
     pub fn get_event_stream_known_impl(&self) -> Receiver<Event<TYPES>> {
-        self.output_event_stream.1.clone()
+        self.output_event_stream.1.activate_cloned()
     }
 
     /// HACK so we can know the types when running tests...
