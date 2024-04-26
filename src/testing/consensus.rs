@@ -13,10 +13,7 @@
 use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
 use crate::{
     availability::AvailabilityDataSource,
-    data_source::{
-        storage::ExplorerStorage, FileSystemDataSource, SqlDataSource, UpdateDataSource,
-        VersionedDataSource,
-    },
+    data_source::{FileSystemDataSource, SqlDataSource, UpdateDataSource, VersionedDataSource},
     fetching::provider::NoFetching,
     node::NodeDataSource,
     status::{StatusDataSource, UpdateStatusData},
@@ -326,8 +323,3 @@ impl<T> TestableDataSource for T where
         + VersionedDataSource
 {
 }
-
-pub trait TestableDataSourceWithExplorer: TestableDataSource + ExplorerStorage<MockTypes> {}
-
-impl<T> TestableDataSourceWithExplorer for T where T: TestableDataSource + ExplorerStorage<MockTypes>
-{}

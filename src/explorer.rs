@@ -390,7 +390,7 @@ mod test {
     use crate::{
         availability,
         testing::{
-            consensus::{MockNetwork, MockSqlDataSource, TestableDataSourceWithExplorer},
+            consensus::{MockNetwork, MockSqlDataSource},
             mocks::{mock_transaction, MockTypes},
             setup_test,
         },
@@ -841,7 +841,7 @@ mod test {
 
     #[async_std::test]
     async fn test_api() {
-        test_api_helper::<MockSqlDataSource>().await;
+        test_api_helper().await;
     }
 
     fn num_blocks() -> usize {
@@ -852,11 +852,11 @@ mod test {
         5
     }
 
-    async fn test_api_helper<D: TestableDataSourceWithExplorer>() {
+    async fn test_api_helper() {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::<D>::init().await;
+        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
         network.start().await;
 
         // Start the web server.
