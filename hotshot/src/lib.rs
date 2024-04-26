@@ -706,20 +706,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
         self.hotshot.config.num_nodes_with_stake
     }
 
-    fn propose_min_round_time(&self) -> Duration {
-        self.hotshot.config.propose_min_round_time
-    }
-
-    fn propose_max_round_time(&self) -> Duration {
-        self.hotshot.config.propose_max_round_time
-    }
-
-    fn max_transactions(&self) -> NonZeroUsize {
-        self.hotshot.config.max_transactions
-    }
-
-    fn min_transactions(&self) -> usize {
-        self.hotshot.config.min_transactions
+    fn builder_timeout(&self) -> Duration {
+        self.hotshot.config.builder_timeout
     }
 
     async fn send_event(&self, event: Event<TYPES>) {

@@ -45,8 +45,6 @@ num_nodes_without_stake = 0
 staked_committee_nodes = 10
 non_staked_committee_nodes = 0
 fixed_leader_for_gpuvid = 0
-max_transactions = 1
-min_transactions = 1
 next_view_timeout = 30000
 timeout_ratio = [
     11,
@@ -100,12 +98,8 @@ nanos = 0
 secs = 0
 nanos = 200_000_000
 
-[config.propose_min_round_time]
-secs = 0
-nanos = 0
-
 # TODO (Keyao) Clean up configuration parameters.
 # <https://github.com/EspressoSystems/HotShot/issues/1823>
-[config.propose_max_round_time]
+[config.builder_timeout]
 secs = 2
 nanos = 0

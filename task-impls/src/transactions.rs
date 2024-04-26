@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::{bail, Context};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
@@ -243,55 +244,35 @@ impl<
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
-        let parent_commitment = self.latest_known_vid_commitment().await;
-
-        let mut latest_block: Option<BuilderResponses<TYPES>> = None;
-        let mut first_iteration = true;
-        while task_start_time.elapsed() < self.api.propose_max_round_time()
-            && latest_block.as_ref().map_or(true, |builder_response| {
-                builder_response
-                    .block_data
-                    .block_payload
-                    .num_transactions(&builder_response.block_data.metadata)
-                    < self.api.min_transactions()
-            })
-        {
-            // Sleep if this isn't the first iteration
-            if first_iteration {
-                first_iteration = false;
-            } else {
-                async_sleep(Duration::from_millis(100)).await;
+        let parent_comm = self.latest_known_vid_commitment().await;
+        let parent_comm_sig = match <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+            &self.private_key,
+            parent_comm.as_ref(),
+        ) {
+            Ok(sig) => sig,
+            Err(err) => {
+                error!(%err, "Failed to sign block hash");
+                return None;
             }
+        };
 
-            let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
-                &self.private_key,
-                parent_commitment.as_ref(),
-            ) else {
-                error!("Failed to sign block hash");
-                continue;
-            };
-
-            let mut available_blocks = match async_compatibility_layer::art::async_timeout(
+        while task_start_time.elapsed() < self.api.builder_timeout() {
+            match async_compatibility_layer::art::async_timeout(
                 self.api
-                    .propose_max_round_time()
+                    .builder_timeout()
                     .saturating_sub(task_start_time.elapsed()),
-                self.builder_client.get_available_blocks(
-                    parent_commitment,
-                    self.public_key.clone(),
-                    &request_signature,
-                ),
+                self.get_block_from_builder(parent_comm, &parent_comm_sig),
             )
             .await
             {
-                // We got available blocks
-                Ok(Ok(blocks)) => {
-                    tracing::debug!("Got available blocks: {:?}", blocks);
-                    blocks
+                // We got a block
+                Ok(Ok(block)) => {
+                    return Some(block);
                 }
 
-                // We failed to get available blocks
+                // We failed to get a block
                 Ok(Err(err)) => {
-                    error!(%err, "Couldn't get available blocks");
+                    error!(%err, "Couldn't get a block");
                     // pause a bit
                     async_sleep(Duration::from_millis(100)).await;
                     continue;
@@ -299,119 +280,104 @@ impl<
 
                 // We timed out while getting available blocks
                 Err(err) => {
-                    if latest_block.is_none() {
-                        error!(%err, "Timeout while getting available blocks");
-                    }
-                    break;
+                    error!(%err, "Timeout while getting available blocks");
+                    return None;
                 }
-            };
-
-            available_blocks.sort_by_key(|block_info| block_info.offered_fee);
-
-            let Some(block_info) = available_blocks.pop() else {
-                continue;
-            };
-
-            // Verify signature over chosen block instead of
-            // verifying the signature over all the blocks received from builder
-            if !block_info.sender.validate_block_info_signature(
-                &block_info.signature,
-                block_info.block_size,
-                block_info.offered_fee,
-                &block_info.block_hash,
-            ) {
-                error!("Failed to verify available block info response message signature");
-                continue;
-            }
-
-            // Don't try to re-claim the same block if builder advertises it again
-            if latest_block.as_ref().map_or(false, |builder_response| {
-                builder_response
-                    .block_data
-                    .block_payload
-                    .builder_commitment(&builder_response.block_data.metadata)
-                    == block_info.block_hash
-            }) {
-                continue;
-            }
-
-            let Ok(request_signature) = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
-                &self.private_key,
-                block_info.block_hash.as_ref(),
-            ) else {
-                error!("Failed to sign block hash");
-                continue;
-            };
-
-            let (block, header_input) = futures::join! {
-                self.builder_client.claim_block(block_info.block_hash.clone(), self.public_key.clone(), &request_signature),
-                self.builder_client.claim_block_header_input(block_info.block_hash.clone(), self.public_key.clone(), &request_signature)
-            };
-
-            let block_data = match block {
-                Ok(block_data) => {
-                    // verify the signature over the message, construct the builder commitment
-                    let builder_commitment = block_data
-                        .block_payload
-                        .builder_commitment(&block_data.metadata);
-                    if !block_data.sender.validate_builder_signature(
-                        &block_data.signature,
-                        builder_commitment.as_ref(),
-                    ) {
-                        error!("Failed to verify available block data response message signature");
-                        continue;
-                    }
-                    block_data
-                }
-                Err(err) => {
-                    error!(%err, "Failed to claim block data");
-                    continue;
-                }
-            };
-
-            let header_input = match header_input {
-                Ok(header_input) => {
-                    // first verify the message signature and later verify the fee_signature
-                    if !header_input.sender.validate_builder_signature(
-                        &header_input.message_signature,
-                        header_input.vid_commitment.as_ref(),
-                    ) {
-                        error!("Failed to verify available block header input data response message signature");
-                        continue;
-                    }
-
-                    // verify the signature over the message
-                    if !header_input.sender.validate_fee_signature(
-                        &header_input.fee_signature,
-                        block_info.offered_fee,
-                        &block_data.metadata,
-                        &header_input.vid_commitment,
-                    ) {
-                        error!("Failed to verify fee signature");
-                        continue;
-                    }
-                    header_input
-                }
-                Err(err) => {
-                    error!(%err, "Failed to claim block header input");
-                    continue;
-                }
-            };
-
-            let num_txns = block_data
-                .block_payload
-                .num_transactions(&block_data.metadata);
-
-            latest_block = Some(BuilderResponses {
-                blocks_initial_info: block_info,
-                block_data,
-                block_header: header_input,
-            });
-            if num_txns >= self.api.min_transactions() {
-                return latest_block;
             }
         }
-        latest_block
+
+        tracing::warn!("could not get a block from the builder in time");
+        None
+    }
+
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "get_block_from_builder", level = "error")]
+    async fn get_block_from_builder(
+        &self,
+        parent_comm: VidCommitment,
+        parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> anyhow::Result<BuilderResponses<TYPES>> {
+        let available_blocks = self
+            .builder_client
+            .get_available_blocks(parent_comm, self.public_key.clone(), parent_comm_sig)
+            .await
+            .context("getting available blocks")?;
+        tracing::debug!("Got available blocks: {available_blocks:?}");
+
+        let block_info = available_blocks
+            .into_iter()
+            .max_by(|l, r| {
+                // We want the block with the highest fee per byte of data we're going to have to
+                // process, thus our comparision function is:
+                //      (l.offered_fee / l.block_size) < (r.offered_fee / r.block_size)
+                // To avoid floating point math (which doesn't even have an `Ord` impl) we multiply
+                // through by the denominators to get
+                //      l.offered_fee * r.block_size < r.offered_fee * l.block_size
+                // We cast up to u128 to avoid overflow.
+                (u128::from(l.offered_fee) * u128::from(r.block_size))
+                    .cmp(&(u128::from(r.offered_fee) * u128::from(l.block_size)))
+            })
+            .context("no available blocks")?;
+        tracing::debug!("Selected block: {block_info:?}");
+
+        // Verify signature over chosen block.
+        if !block_info.sender.validate_block_info_signature(
+            &block_info.signature,
+            block_info.block_size,
+            block_info.offered_fee,
+            &block_info.block_hash,
+        ) {
+            bail!("Failed to verify available block info response message signature");
+        }
+
+        let request_signature = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+            &self.private_key,
+            block_info.block_hash.as_ref(),
+        )
+        .context("signing block hash")?;
+
+        let (block, header_input) = futures::join! {
+            self.builder_client.claim_block(block_info.block_hash.clone(), self.public_key.clone(), &request_signature),
+            self.builder_client.claim_block_header_input(block_info.block_hash.clone(), self.public_key.clone(), &request_signature)
+        };
+
+        let block_data = block.context("claiming block data")?;
+
+        // verify the signature over the message, construct the builder commitment
+        let builder_commitment = block_data
+            .block_payload
+            .builder_commitment(&block_data.metadata);
+        if !block_data
+            .sender
+            .validate_builder_signature(&block_data.signature, builder_commitment.as_ref())
+        {
+            bail!("Failed to verify available block data response message signature");
+        }
+
+        let header_input = header_input.context("claiming header input")?;
+
+        // first verify the message signature and later verify the fee_signature
+        if !header_input.sender.validate_builder_signature(
+            &header_input.message_signature,
+            header_input.vid_commitment.as_ref(),
+        ) {
+            bail!("Failed to verify available block header input data response message signature");
+        }
+
+        // verify the signature over the message
+        if !header_input.sender.validate_fee_signature(
+            &header_input.fee_signature,
+            block_info.offered_fee,
+            &block_data.metadata,
+            &header_input.vid_commitment,
+        ) {
+            bail!("Failed to verify fee signature");
+        }
+
+        Ok(BuilderResponses {
+            blocks_initial_info: block_info,
+            block_data,
+            block_header: header_input,
+        })
     }
 }
 

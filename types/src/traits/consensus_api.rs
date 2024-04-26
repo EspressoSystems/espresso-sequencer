@@ -19,18 +19,8 @@ pub trait ConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>>: Send + Sy
     /// Total number of nodes in the network. Also known as `n`.
     fn total_nodes(&self) -> NonZeroUsize;
 
-    /// The minimum amount of time a leader has to wait before sending a propose
-    fn propose_min_round_time(&self) -> Duration;
-
-    /// The maximum amount of time a leader can wait before sending a propose.
-    /// If this time is reached, the leader has to send a propose without transactions.
-    fn propose_max_round_time(&self) -> Duration;
-
-    /// Retuns the maximum transactions allowed in a block
-    fn max_transactions(&self) -> NonZeroUsize;
-
-    /// Returns the minimum transactions that must be in a block
-    fn min_transactions(&self) -> usize;
+    /// The maximum amount of time a leader can wait to get a block from a builder.
+    fn builder_timeout(&self) -> Duration;
 
     /// Get a reference to the public key.
     fn public_key(&self) -> &TYPES::SignatureKey;

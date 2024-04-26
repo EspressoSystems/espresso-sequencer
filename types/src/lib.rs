@@ -165,10 +165,6 @@ pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub num_nodes_with_stake: NonZeroUsize,
     /// Number of nodes without stake
     pub num_nodes_without_stake: usize,
-    /// Minimum transactions per block
-    pub min_transactions: usize,
-    /// Maximum transactions per block
-    pub max_transactions: NonZeroUsize,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// All public keys known to be DA nodes
@@ -195,10 +191,8 @@ pub struct HotShotConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub start_delay: u64,
     /// Number of network bootstrap nodes
     pub num_bootstrap: usize,
-    /// The minimum amount of time a leader has to wait to start a round
-    pub propose_min_round_time: Duration,
-    /// The maximum amount of time a leader can wait to start a round
-    pub propose_max_round_time: Duration,
+    /// The maximum amount of time a leader can wait to get a block from a builder
+    pub builder_timeout: Duration,
     /// time to wait until we request data associated with a proposal
     pub data_request_delay: Duration,
     /// the election configuration
