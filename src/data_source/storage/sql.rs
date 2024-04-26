@@ -2242,16 +2242,24 @@ where
         let txns = block.enumerate().map(|(_, txn)| txn).collect::<Vec<_>>();
 
         let (offset, txn) = match target {
-            TransactionIdentifier::Latest => txns.into_iter().enumerate().last().unwrap(),
-            TransactionIdentifier::HeightAndOffset(_, offset) => {
-                txns.into_iter().enumerate().rev().nth(offset).unwrap()
+            TransactionIdentifier::Latest => txns.into_iter().enumerate().last().ok_or(
+                GetTransactionDetailError::TransactionNotFound("Latest".to_string()),
+            ),
+            TransactionIdentifier::HeightAndOffset(height, offset) => {
+                txns.into_iter().enumerate().rev().nth(offset).ok_or(
+                    GetTransactionDetailError::TransactionNotFound(format!(
+                        "at {height} and {offset}"
+                    )),
+                )
             }
             TransactionIdentifier::Hash(hash) => txns
                 .into_iter()
                 .enumerate()
                 .find(|(_, txn)| txn.commit() == hash)
-                .unwrap(),
-        };
+                .ok_or(GetTransactionDetailError::TransactionNotFound(format!(
+                    "hash {hash}"
+                ))),
+        }?;
 
         Ok(TransactionDetailResponse::try_from((&block, offset, txn))?)
     }
