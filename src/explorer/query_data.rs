@@ -11,13 +11,13 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::{
-    errors::{ExplorerAPIError, InvalidLimit, Unimplemented},
+    errors::{BadQuery, ExplorerAPIError, InvalidLimit, NotFound, QueryError, Unimplemented},
     monetary_value::MonetaryValue,
     traits::ExplorerHeader,
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
-    Header, Payload, QueryError, Resolvable, Transaction,
+    Header, Payload, Resolvable, Transaction,
 };
 use crate::{node::BlockHash, types::HeightIndexed};
 use hotshot_types::traits::node_implementation::NodeType;
@@ -245,7 +245,7 @@ impl From<TryFromIntError> for TimestampConversionError {
     }
 }
 
-impl From<TimestampConversionError> for QueryError {
+impl From<TimestampConversionError> for crate::QueryError {
     fn from(value: TimestampConversionError) -> Self {
         Self::Error {
             message: format!("{:?}", value),
@@ -512,7 +512,7 @@ where
 
 pub enum GetBlockDetailError {
     Unimplemented(Unimplemented),
-    BlockNotFound(String),
+    BlockNotFound(NotFound),
     QueryError(QueryError),
 }
 
@@ -521,7 +521,7 @@ impl GetBlockDetailError {
         match self {
             GetBlockDetailError::Unimplemented(err) => err.status(),
             GetBlockDetailError::QueryError(err) => err.status(),
-            GetBlockDetailError::BlockNotFound(_) => StatusCode::NotFound,
+            GetBlockDetailError::BlockNotFound(err) => err.status(),
         }
     }
 }
@@ -531,7 +531,7 @@ impl Display for GetBlockDetailError {
         match self {
             GetBlockDetailError::Unimplemented(err) => write!(f, "{err}"),
             GetBlockDetailError::QueryError(err) => write!(f, "{err}"),
-            GetBlockDetailError::BlockNotFound(_) => write!(f, "block not found"),
+            GetBlockDetailError::BlockNotFound(err) => write!(f, "{err}"),
         }
     }
 }
@@ -540,8 +540,8 @@ impl ExplorerAPIError for GetBlockDetailError {
     fn code(&self) -> &str {
         match self {
             GetBlockDetailError::Unimplemented(err) => err.code(),
-            GetBlockDetailError::QueryError(_) => "QUERY_ERROR",
-            GetBlockDetailError::BlockNotFound(_) => "BLOCK_NOT_FOUND",
+            GetBlockDetailError::QueryError(err) => err.code(),
+            GetBlockDetailError::BlockNotFound(err) => err.code(),
         }
     }
 }
@@ -556,9 +556,9 @@ impl std::error::Error for GetBlockDetailError {
     }
 }
 
-impl From<QueryError> for GetBlockDetailError {
-    fn from(value: QueryError) -> Self {
-        GetBlockDetailError::QueryError(value)
+impl From<crate::QueryError> for GetBlockDetailError {
+    fn from(value: crate::QueryError) -> Self {
+        GetBlockDetailError::QueryError(QueryError { error: value })
     }
 }
 
@@ -569,7 +569,7 @@ impl From<QueryError> for GetBlockDetailError {
 pub enum GetBlockSummariesError {
     Unimplemented(Unimplemented),
     InvalidLimit(InvalidLimit),
-    TargetNotFound(String),
+    TargetNotFound(NotFound),
     QueryError(QueryError),
 }
 
@@ -579,7 +579,7 @@ impl GetBlockSummariesError {
             GetBlockSummariesError::Unimplemented(err) => err.status(),
             GetBlockSummariesError::InvalidLimit(err) => err.status(),
             GetBlockSummariesError::QueryError(err) => err.status(),
-            GetBlockSummariesError::TargetNotFound(_) => StatusCode::NotFound,
+            GetBlockSummariesError::TargetNotFound(err) => err.status(),
         }
     }
 }
@@ -590,9 +590,7 @@ impl Display for GetBlockSummariesError {
             GetBlockSummariesError::Unimplemented(err) => write!(f, "{err}"),
             GetBlockSummariesError::InvalidLimit(err) => write!(f, "{err}"),
             GetBlockSummariesError::QueryError(err) => write!(f, "{err}"),
-            GetBlockSummariesError::TargetNotFound(identifier) => {
-                write!(f, "target not found: {}", identifier)
-            }
+            GetBlockSummariesError::TargetNotFound(err) => write!(f, "{err}"),
         }
     }
 }
@@ -602,8 +600,8 @@ impl ExplorerAPIError for GetBlockSummariesError {
         match self {
             GetBlockSummariesError::Unimplemented(err) => err.code(),
             GetBlockSummariesError::InvalidLimit(err) => err.code(),
-            GetBlockSummariesError::QueryError(_) => "QUERY_ERROR",
-            GetBlockSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
+            GetBlockSummariesError::QueryError(err) => err.code(),
+            GetBlockSummariesError::TargetNotFound(err) => err.code(),
         }
     }
 }
@@ -619,9 +617,9 @@ impl std::error::Error for GetBlockSummariesError {
     }
 }
 
-impl From<QueryError> for GetBlockSummariesError {
-    fn from(value: QueryError) -> Self {
-        GetBlockSummariesError::QueryError(value)
+impl From<crate::QueryError> for GetBlockSummariesError {
+    fn from(value: crate::QueryError) -> Self {
+        GetBlockSummariesError::QueryError(QueryError { error: value })
     }
 }
 
@@ -631,9 +629,8 @@ impl From<QueryError> for GetBlockSummariesError {
 #[serde(untagged)]
 pub enum GetTransactionDetailError {
     Unimplemented(Unimplemented),
-    TransactionNotFound(String),
+    TransactionNotFound(NotFound),
     QueryError(QueryError),
-    TimestampConversionError,
 }
 
 impl GetTransactionDetailError {
@@ -641,8 +638,7 @@ impl GetTransactionDetailError {
         match self {
             GetTransactionDetailError::Unimplemented(err) => err.status(),
             GetTransactionDetailError::QueryError(err) => err.status(),
-            GetTransactionDetailError::TransactionNotFound(_) => StatusCode::NotFound,
-            GetTransactionDetailError::TimestampConversionError => StatusCode::InternalServerError,
+            GetTransactionDetailError::TransactionNotFound(err) => err.status(),
         }
     }
 }
@@ -652,12 +648,7 @@ impl Display for GetTransactionDetailError {
         match self {
             GetTransactionDetailError::Unimplemented(err) => write!(f, "{err}"),
             GetTransactionDetailError::QueryError(err) => write!(f, "{err}"),
-            GetTransactionDetailError::TransactionNotFound(identifier) => {
-                write!(f, "transaction not found: {}", identifier)
-            }
-            GetTransactionDetailError::TimestampConversionError => {
-                write!(f, "unable to convert a timestamp")
-            }
+            GetTransactionDetailError::TransactionNotFound(err) => write!(f, "{err}"),
         }
     }
 }
@@ -666,9 +657,8 @@ impl ExplorerAPIError for GetTransactionDetailError {
     fn code(&self) -> &str {
         match self {
             GetTransactionDetailError::Unimplemented(err) => err.code(),
-            GetTransactionDetailError::QueryError(_) => "QUERY_ERROR",
-            GetTransactionDetailError::TransactionNotFound(_) => "TRANSACTION_NOT_FOUND",
-            GetTransactionDetailError::TimestampConversionError => "TIMESTAMP_CONVERSION_ERROR",
+            GetTransactionDetailError::QueryError(err) => err.code(),
+            GetTransactionDetailError::TransactionNotFound(err) => err.code(),
         }
     }
 }
@@ -685,15 +675,17 @@ impl std::error::Error for GetTransactionDetailError {
 
 // Implement implicit conversion between these errors for the branch operator.
 
-impl From<QueryError> for GetTransactionDetailError {
-    fn from(value: QueryError) -> Self {
-        GetTransactionDetailError::QueryError(value)
+impl From<crate::QueryError> for GetTransactionDetailError {
+    fn from(value: crate::QueryError) -> Self {
+        GetTransactionDetailError::QueryError(QueryError { error: value })
     }
 }
 
 impl From<TimestampConversionError> for GetTransactionDetailError {
-    fn from(_: TimestampConversionError) -> Self {
-        GetTransactionDetailError::TimestampConversionError
+    fn from(value: TimestampConversionError) -> Self {
+        GetTransactionDetailError::QueryError(QueryError {
+            error: value.into(),
+        })
     }
 }
 
@@ -704,7 +696,7 @@ impl From<TimestampConversionError> for GetTransactionDetailError {
 pub enum GetTransactionSummariesError {
     Unimplemented(Unimplemented),
     InvalidLimit(InvalidLimit),
-    TargetNotFound(String),
+    TargetNotFound(NotFound),
     QueryError(QueryError),
 }
 
@@ -714,7 +706,7 @@ impl GetTransactionSummariesError {
             GetTransactionSummariesError::Unimplemented(err) => err.status(),
             GetTransactionSummariesError::InvalidLimit(err) => err.status(),
             GetTransactionSummariesError::QueryError(err) => err.status(),
-            GetTransactionSummariesError::TargetNotFound(_) => StatusCode::NotFound,
+            GetTransactionSummariesError::TargetNotFound(err) => err.status(),
         }
     }
 }
@@ -725,9 +717,7 @@ impl Display for GetTransactionSummariesError {
             GetTransactionSummariesError::Unimplemented(err) => write!(f, "{err}"),
             GetTransactionSummariesError::InvalidLimit(err) => write!(f, "{err}"),
             GetTransactionSummariesError::QueryError(err) => write!(f, "{err}"),
-            GetTransactionSummariesError::TargetNotFound(identifier) => {
-                write!(f, "target not found: {}", identifier)
-            }
+            GetTransactionSummariesError::TargetNotFound(err) => write!(f, "{err}"),
         }
     }
 }
@@ -737,8 +727,8 @@ impl ExplorerAPIError for GetTransactionSummariesError {
         match self {
             GetTransactionSummariesError::Unimplemented(err) => err.code(),
             GetTransactionSummariesError::InvalidLimit(err) => err.code(),
-            GetTransactionSummariesError::QueryError(_) => "QUERY_ERROR",
-            GetTransactionSummariesError::TargetNotFound(_) => "TARGET_NOT_FOUND",
+            GetTransactionSummariesError::QueryError(err) => err.code(),
+            GetTransactionSummariesError::TargetNotFound(err) => err.code(),
         }
     }
 }
@@ -754,9 +744,9 @@ impl std::error::Error for GetTransactionSummariesError {
     }
 }
 
-impl From<QueryError> for GetTransactionSummariesError {
-    fn from(value: QueryError) -> Self {
-        GetTransactionSummariesError::QueryError(value)
+impl From<crate::QueryError> for GetTransactionSummariesError {
+    fn from(value: crate::QueryError) -> Self {
+        GetTransactionSummariesError::QueryError(QueryError { error: value })
     }
 }
 
@@ -799,7 +789,7 @@ impl Display for GetExplorerSummaryError {
 impl ExplorerAPIError for GetExplorerSummaryError {
     fn code(&self) -> &str {
         match self {
-            GetExplorerSummaryError::QueryError(_) => "QUERY_ERROR",
+            GetExplorerSummaryError::QueryError(err) => err.code(),
             GetExplorerSummaryError::Unimplemented(err) => err.code(),
             GetExplorerSummaryError::GetBlockDetailError(err) => err.code(),
             GetExplorerSummaryError::GetBlockSummariesError(err) => err.code(),
@@ -822,9 +812,9 @@ impl std::error::Error for GetExplorerSummaryError {
 
 // Implement implicit conversion between these errors for the branch operator.
 
-impl From<QueryError> for GetExplorerSummaryError {
-    fn from(value: QueryError) -> Self {
-        GetExplorerSummaryError::QueryError(value)
+impl From<crate::QueryError> for GetExplorerSummaryError {
+    fn from(value: crate::QueryError) -> Self {
+        GetExplorerSummaryError::QueryError(QueryError { error: value })
     }
 }
 
@@ -853,7 +843,7 @@ impl From<GetTransactionSummariesError> for GetExplorerSummaryError {
 pub enum GetSearchResultsError {
     Unimplemented(Unimplemented),
     QueryError(QueryError),
-    InvalidQuery,
+    InvalidQuery(BadQuery),
 }
 
 impl GetSearchResultsError {
@@ -861,7 +851,7 @@ impl GetSearchResultsError {
         match self {
             GetSearchResultsError::QueryError(err) => err.status(),
             GetSearchResultsError::Unimplemented(err) => err.status(),
-            GetSearchResultsError::InvalidQuery => StatusCode::BadRequest,
+            GetSearchResultsError::InvalidQuery(err) => err.status(),
         }
     }
 }
@@ -871,7 +861,7 @@ impl Display for GetSearchResultsError {
         match self {
             GetSearchResultsError::QueryError(err) => write!(f, "{err}"),
             GetSearchResultsError::Unimplemented(err) => write!(f, "{err}"),
-            GetSearchResultsError::InvalidQuery => write!(f, "invalid query"),
+            GetSearchResultsError::InvalidQuery(err) => write!(f, "{err}"),
         }
     }
 }
@@ -879,9 +869,9 @@ impl Display for GetSearchResultsError {
 impl ExplorerAPIError for GetSearchResultsError {
     fn code(&self) -> &str {
         match self {
-            GetSearchResultsError::QueryError(_) => "QUERY_ERROR",
+            GetSearchResultsError::QueryError(err) => err.code(),
             GetSearchResultsError::Unimplemented(err) => err.code(),
-            GetSearchResultsError::InvalidQuery => "INVALID_QUERY",
+            GetSearchResultsError::InvalidQuery(err) => err.code(),
         }
     }
 }
@@ -891,13 +881,13 @@ impl std::error::Error for GetSearchResultsError {
         match self {
             GetSearchResultsError::Unimplemented(err) => Some(err),
             GetSearchResultsError::QueryError(err) => Some(err),
-            GetSearchResultsError::InvalidQuery => None,
+            GetSearchResultsError::InvalidQuery(err) => Some(err),
         }
     }
 }
 
-impl From<QueryError> for GetSearchResultsError {
-    fn from(value: QueryError) -> Self {
-        GetSearchResultsError::QueryError(value)
+impl From<crate::QueryError> for GetSearchResultsError {
+    fn from(value: crate::QueryError) -> Self {
+        GetSearchResultsError::QueryError(QueryError { error: value })
     }
 }

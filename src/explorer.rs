@@ -368,7 +368,7 @@ where
                     .string_param("query")
                     .map_err(|err| {
                         tracing::error!("query param error: {}", err);
-                        GetSearchResultsError::InvalidQuery
+                        GetSearchResultsError::InvalidQuery(errors::BadQuery {})
                     })
                     .map_err(Error::GetSearchResults)?
                     .to_string();

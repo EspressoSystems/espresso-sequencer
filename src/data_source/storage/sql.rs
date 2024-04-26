@@ -25,6 +25,7 @@ use crate::{
     },
     explorer::{
         self,
+        errors::NotFound,
         query_data::{
             BalanceAmount, BlockDetail, BlockIdentifier, BlockRange, BlockSummary,
             ExplorerHistograms, ExplorerSummary, GenesisOverview, GetBlockDetailError,
@@ -2243,22 +2244,24 @@ where
 
         let (offset, txn) = match target {
             TransactionIdentifier::Latest => txns.into_iter().enumerate().last().ok_or(
-                GetTransactionDetailError::TransactionNotFound("Latest".to_string()),
+                GetTransactionDetailError::TransactionNotFound(NotFound {
+                    key: "Latest".to_string(),
+                }),
             ),
             TransactionIdentifier::HeightAndOffset(height, offset) => {
                 txns.into_iter().enumerate().rev().nth(offset).ok_or(
-                    GetTransactionDetailError::TransactionNotFound(format!(
-                        "at {height} and {offset}"
-                    )),
+                    GetTransactionDetailError::TransactionNotFound(NotFound {
+                        key: format!("at {height} and {offset}"),
+                    }),
                 )
             }
             TransactionIdentifier::Hash(hash) => txns
                 .into_iter()
                 .enumerate()
                 .find(|(_, txn)| txn.commit() == hash)
-                .ok_or(GetTransactionDetailError::TransactionNotFound(format!(
-                    "hash {hash}"
-                ))),
+                .ok_or(GetTransactionDetailError::TransactionNotFound(NotFound {
+                    key: format!("hash {hash}"),
+                })),
         }?;
 
         Ok(TransactionDetailResponse::try_from((&block, offset, txn))?)
