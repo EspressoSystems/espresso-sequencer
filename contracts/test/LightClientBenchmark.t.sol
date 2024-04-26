@@ -19,6 +19,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
     /// @dev for benchmarking purposes only
     function testCorrectUpdateBench() external {
+        vm.pauseGasMetering();
         // Generating a few consecutive states and proofs
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -31,7 +32,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+        vm.resumeGasMetering();
         vm.prank(permissionedProver);
+
         lc.newFinalizedState(states[0], proofs[0]);
     }
 }
