@@ -38,18 +38,13 @@ use vbs::version::StaticVersionType;
 /// [Error] is an enum that represents the various errors that can be returned
 /// from the Explorer API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum Error {
-    #[serde(untagged)]
     GetBlockDetail(GetBlockDetailError),
-    #[serde(untagged)]
     GetBlockSummaries(GetBlockSummariesError),
-    #[serde(untagged)]
     GetTransactionDetail(GetTransactionDetailError),
-    #[serde(untagged)]
     GetTransactionSummaries(GetTransactionSummariesError),
-    #[serde(untagged)]
     GetExplorerSummary(GetExplorerSummaryError),
-    #[serde(untagged)]
     GetSearchResults(GetSearchResultsError),
 }
 

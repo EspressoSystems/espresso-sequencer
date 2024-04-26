@@ -508,13 +508,11 @@ where
 /// [GetBlockDetailError] represents an error that has occurred in response to
 /// the [GetBlockDetail] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 
 pub enum GetBlockDetailError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     BlockNotFound(String),
-    #[serde(untagged)]
     QueryError(QueryError),
 }
 
@@ -567,14 +565,11 @@ impl From<QueryError> for GetBlockDetailError {
 /// [GetBlockSummariesError] represents an error that has occurred in response
 /// to the [GetBlockSummaries] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum GetBlockSummariesError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     InvalidLimit(InvalidLimit),
-    #[serde(untagged)]
     TargetNotFound(String),
-    #[serde(untagged)]
     QueryError(QueryError),
 }
 
@@ -633,14 +628,11 @@ impl From<QueryError> for GetBlockSummariesError {
 /// [GetTransactionDetailError] represents an error that has occurred in
 /// response to the [GetTransactionDetail] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum GetTransactionDetailError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     TransactionNotFound(String),
-    #[serde(untagged)]
     QueryError(QueryError),
-    #[serde(untagged)]
     TimestampConversionError,
 }
 
@@ -708,14 +700,11 @@ impl From<TimestampConversionError> for GetTransactionDetailError {
 /// [GetTransactionSummariesError] represents an error that has occurred in
 /// response to the [GetTransactionSummaries] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum GetTransactionSummariesError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     InvalidLimit(InvalidLimit),
-    #[serde(untagged)]
     TargetNotFound(String),
-    #[serde(untagged)]
     QueryError(QueryError),
 }
 
@@ -774,16 +763,12 @@ impl From<QueryError> for GetTransactionSummariesError {
 /// [GetExplorerSummaryError] represents an error that has occurred in response
 /// to the [GetExplorerSummary] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum GetExplorerSummaryError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     QueryError(QueryError),
-    #[serde(untagged)]
     GetBlockDetailError(GetBlockDetailError),
-    #[serde(untagged)]
     GetBlockSummariesError(GetBlockSummariesError),
-    #[serde(untagged)]
     GetTransactionSummariesError(GetTransactionSummariesError),
 }
 
@@ -864,12 +849,10 @@ impl From<GetTransactionSummariesError> for GetExplorerSummaryError {
 /// [GetSearchResultsError] represents an error that has occurred in response
 /// to the [GetSearchResults] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum GetSearchResultsError {
-    #[serde(untagged)]
     Unimplemented(Unimplemented),
-    #[serde(untagged)]
     QueryError(QueryError),
-    #[serde(untagged)]
     InvalidQuery,
 }
 
