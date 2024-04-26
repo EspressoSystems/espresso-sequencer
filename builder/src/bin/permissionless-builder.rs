@@ -6,7 +6,7 @@ use es_version::SEQUENCER_VERSION;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::eth_signature_key::EthKeyPair;
-use sequencer::{BuilderParams, L1Params};
+use sequencer::L1Params;
 use snafu::Snafu;
 use std::num::NonZeroUsize;
 use std::{str::FromStr, time::Duration};
@@ -101,24 +101,12 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
-
-    let builder_params = BuilderParams {
-        mnemonic: opt.eth_mnemonic,
-        prefunded_accounts: vec![],
-        eth_account_index: opt.eth_account_index,
-    };
-
     let bootstrapped_view = ViewNumber::new(opt.view_number);
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        l1_params,
-        builder_params,
-        opt.state_peers,
-        sequencer_version,
-    )
-    .unwrap();
+    let instance_state =
+        build_instance_state(l1_params, opt.state_peers, sequencer_version).unwrap();
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
