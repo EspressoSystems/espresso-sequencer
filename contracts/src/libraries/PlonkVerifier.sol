@@ -206,7 +206,18 @@ library PlonkVerifier {
 
         res.zeta = transcript.getAndAppendChallenge();
 
-        transcript.appendProofEvaluations(proof);
+        // Append proof evaluations
+        transcript.append5FieldElements(
+            proof.wireEval0, proof.wireEval1, proof.wireEval2, proof.wireEval3, proof.wireEval4
+        );
+        transcript.append5FieldElements(
+            proof.sigmaEval0,
+            proof.sigmaEval1,
+            proof.sigmaEval2,
+            proof.sigmaEval3,
+            proof.prodPermZetaOmegaEval
+        );
+
         res.v = transcript.getAndAppendChallenge();
 
         transcript.append2GroupElements(proof.zeta, proof.zetaOmega);

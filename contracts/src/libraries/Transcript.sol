@@ -274,7 +274,7 @@ library Transcript {
         }
     }
 
-    /// @dev Append the proof to the transcript.
+    /// @dev Append the proof to the transcript. Only used for test purposes.
     function appendProofEvaluations(
         TranscriptData memory self,
         IPlonkVerifier.PlonkProof memory proof
