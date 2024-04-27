@@ -138,14 +138,17 @@ Running the script will save a file with details about the deployment in `contra
 The gas consumption for updating the state of the light client contract can be seen by running:
 
 ```
-> forge snapshot
-> grep testCorrectUpdateBench .gas-snapshot
+> just lc-contract-benchmark
+cargo build --bin diff-test --release
+    Finished release [optimized] target(s) in 0.41s
+forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
+[PASS] testCorrectUpdateBench() (gas: 597104)
 ```
 
 In order to profile the gas consumption of the light client contract do the following:
 
 1. Set the environment variables `SEPOLIA_RPC_URL`, `MNEMONIC` and `ETHERSCAN_API_KEY`.
-2. `just lc-contract-benchmarks-sepolia`
+2. `just lc-contract-profiling-sepolia`
 3. Create an account on [sentio.xyz](https://app.sentio.xyz/).
 4. Use the hash of the transaction generated in step two when calling the function `newFinalizedState` in order to
    obtain the gas profile.
