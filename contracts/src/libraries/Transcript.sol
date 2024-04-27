@@ -53,9 +53,6 @@ library Transcript {
             // Load the length of 'b'
             let bLength := mload(b)
 
-            // Calculate total data length (32 bytes for 'a' + length of 'b')
-            let totalLength := add(32, bLength)
-
             // Allocate memory for 'a' + 'b'
             let data := mload(0x40) // Load free memory pointer
 
@@ -69,7 +66,7 @@ library Transcript {
             }
 
             // Compute the keccak256 hash of the data
-            hash := keccak256(data, totalLength)
+            hash := keccak256(data, add(32, bLength))
         }
 
         self.state = hash;
