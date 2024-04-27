@@ -42,8 +42,13 @@ library Transcript {
         self.transcript = abi.encodePacked(self.transcript, BN254.g1Serialize(comm));
     }
 
-    // @dev This function computes keccak256(bytes32 a, bytes b)
-    function computeHash(bytes32 a, bytes memory b) public pure returns (bytes32 result) {
+    function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
+        bytes32 hash;
+
+        bytes32 a = self.state;
+        bytes memory b = self.transcript;
+
+        // Computes keccak256(bytes32 a, bytes b)
         assembly {
             // Load the length of 'b'
             let bLength := mload(b)
@@ -57,19 +62,15 @@ library Transcript {
             // Store 'a' in memory
             mstore(data, a)
 
-            // Copy 'b' to memory after 'a'
-            let dataOffset := add(data, 32) // Start right after 'a'
+            // Copy 'self.transcript' to memory after 'self.state'
+            let dataOffset := add(data, 32) // Start right after 'self.state'
             for { let i := 0 } lt(i, bLength) { i := add(i, 0x20) } {
                 mstore(add(dataOffset, i), mload(add(add(b, i), 0x20)))
             }
 
             // Compute the keccak256 hash of the data
-            result := keccak256(data, totalLength)
+            hash := keccak256(data, totalLength)
         }
-    }
-
-    function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        bytes32 hash = computeHash(self.state, self.transcript);
 
         self.state = hash;
 
