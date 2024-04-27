@@ -121,7 +121,7 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// Configuration items for this hotshot instance
-    pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    pub config: HotShotConfig<TYPES::SignatureKey>,
 
     /// Networks used by the instance of hotshot
     pub networks: Arc<Networks<TYPES, I>>,
@@ -205,7 +205,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
-        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        config: HotShotConfig<TYPES::SignatureKey>,
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
@@ -483,7 +483,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
-        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        config: HotShotConfig<TYPES::SignatureKey>,
         memberships: Memberships<TYPES>,
         networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,

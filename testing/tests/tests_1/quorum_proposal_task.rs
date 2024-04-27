@@ -52,9 +52,11 @@ async fn test_quorum_proposal_task_quorum_proposal() {
     // case in the genesis view.
     let handle = build_system_handle(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
     let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -131,10 +133,12 @@ async fn test_quorum_proposal_task_qc_timeout() {
 
     let handle = build_system_handle(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
     let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -195,10 +199,12 @@ async fn test_quorum_proposal_task_view_sync() {
     // case in the genesis view.
     let handle = build_system_handle(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
     let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -265,9 +271,11 @@ async fn test_quorum_proposal_task_propose_now() {
     let handle = build_system_handle(2).await.0;
     let (private_key, public_key) = key_pair_for_id(2);
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
     let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -388,8 +396,10 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
     // case in the genesis view.
     let handle = build_system_handle(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();

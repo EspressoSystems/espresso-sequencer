@@ -345,7 +345,7 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
     /// # Panics
     /// If we are unable to calculate the replication factor
     pub async fn from_config<TYPES: NodeType>(
-        mut config: NetworkConfig<K, TYPES::ElectionConfigType>,
+        mut config: NetworkConfig<K>,
         bind_address: SocketAddr,
         pub_key: &K,
         priv_key: &K::PrivateKey,

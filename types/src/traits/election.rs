@@ -21,33 +21,15 @@ pub enum ElectionError {
     MathError,
 }
 
-/// election config
-pub trait ElectionConfig:
-    Default
-    + Clone
-    + serde::Serialize
-    + for<'de> serde::Deserialize<'de>
-    + Sync
-    + Send
-    + core::fmt::Debug
-{
-}
-
 /// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
 {
-    /// generate a default election configuration
-    fn default_election_config(
-        num_nodes_with_stake: u64,
-        num_nodes_without_stake: u64,
-    ) -> TYPES::ElectionConfigType;
-
     /// create an election
     /// TODO may want to move this to a testableelection trait
     fn create_election(
-        entries: Vec<PeerConfig<TYPES::SignatureKey>>,
-        config: TYPES::ElectionConfigType,
+        all_nodes: Vec<PeerConfig<TYPES::SignatureKey>>,
+        committee_members: Vec<PeerConfig<TYPES::SignatureKey>>,
         fixed_leader_for_gpuvid: usize,
     ) -> Self;
 

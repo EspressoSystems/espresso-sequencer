@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
-use hotshot::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
+use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot::traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue};
 use hotshot::traits::NodeImplementation;
 use hotshot::types::SignatureKey;
@@ -50,7 +50,6 @@ impl NodeType for Test {
     type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
     type Transaction = TestTransaction;
-    type ElectionConfigType = StaticElectionConfig;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
     type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;

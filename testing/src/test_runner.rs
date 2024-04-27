@@ -61,7 +61,7 @@ pub type LateNodeContext<TYPES, I> = Either<
     (
         <I as NodeImplementation<TYPES>>::Storage,
         Memberships<TYPES>,
-        HotShotConfig<<TYPES as NodeType>::SignatureKey, <TYPES as NodeType>::ElectionConfigType>,
+        HotShotConfig<<TYPES as NodeType>::SignatureKey>,
     ),
 >;
 
@@ -119,7 +119,7 @@ impl<
         N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
     > TestRunner<TYPES, I, N>
 where
-    I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
+    I: TestableNodeImplementation<TYPES>,
     I: NodeImplementation<
         TYPES,
         QuorumNetwork = N,
@@ -335,12 +335,7 @@ where
         let mut results = vec![];
         let config = self.launcher.resource_generator.config.clone();
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
-        let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
-            TYPES::Membership::default_election_config(
-                config.num_nodes_with_stake.get() as u64,
-                config.num_nodes_without_stake as u64,
-            )
-        });
+
         let (mut builder_task, builder_url) =
             B::start(config.num_nodes_with_stake.into(), B::Config::default()).await;
         for i in 0..total {
@@ -349,30 +344,25 @@ where
             self.next_node_id += 1;
             tracing::debug!("launch node {}", i);
 
-            let committee_election_config = I::committee_election_config_generator();
             let memberships = Memberships {
                 quorum_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
-                    quorum_election_config.clone(),
+                    known_nodes_with_stake.clone(),
                     config.fixed_leader_for_gpuvid,
                 ),
                 da_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
-                    committee_election_config(
-                        // Use the _actual_ number of DA nodes instead of expected
-                        config.known_da_nodes.len() as u64,
-                        config.num_nodes_without_stake as u64,
-                    ),
+                    config.known_da_nodes.clone(),
                     config.fixed_leader_for_gpuvid,
                 ),
                 vid_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
-                    quorum_election_config.clone(),
+                    known_nodes_with_stake.clone(),
                     config.fixed_leader_for_gpuvid,
                 ),
                 view_sync_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
-                    quorum_election_config.clone(),
+                    known_nodes_with_stake.clone(),
                     config.fixed_leader_for_gpuvid,
                 ),
             };
@@ -446,7 +436,7 @@ where
         networks: Networks<TYPES, I>,
         memberships: Memberships<TYPES>,
         initializer: HotShotInitializer<TYPES>,
-        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+        config: HotShotConfig<TYPES::SignatureKey>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         storage: I::Storage,
     ) -> Arc<SystemContext<TYPES, I>> {

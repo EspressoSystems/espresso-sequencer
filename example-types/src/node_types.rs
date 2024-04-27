@@ -1,5 +1,5 @@
 use hotshot::traits::{
-    election::static_committee::{GeneralStaticCommittee, StaticCommittee, StaticElectionConfig},
+    election::static_committee::{GeneralStaticCommittee, StaticCommittee},
     implementations::{
         CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork, WebServerNetwork,
     },
@@ -42,7 +42,6 @@ impl NodeType for TestTypes {
     type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
     type Transaction = TestTransaction;
-    type ElectionConfigType = StaticElectionConfig;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
     type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;

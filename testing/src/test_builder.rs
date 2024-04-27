@@ -1,11 +1,10 @@
-use std::{collections::HashSet, num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::{
-    traits::{election::Membership, node_implementation::NodeType},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
 
@@ -230,7 +229,7 @@ impl TestDescription {
     #[must_use]
     pub fn gen_launcher<
         TYPES: NodeType<InstanceState = TestInstanceState>,
-        I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
+        I: TestableNodeImplementation<TYPES>,
     >(
         self,
         node_id: u64,
@@ -248,7 +247,7 @@ impl TestDescription {
             ..
         } = self.clone();
 
-        let mut known_da_nodes = HashSet::new();
+        let mut known_da_nodes = Vec::new();
 
         // We assign known_nodes' public key and stake value here rather than read from config file since it's a test.
         let known_nodes_with_stake = (0..num_nodes_with_stake)
@@ -263,7 +262,7 @@ impl TestDescription {
 
                 // Add the node to the known DA nodes based on the index (for tests)
                 if node_id_ < da_staked_committee_size {
-                    known_da_nodes.insert(cur_validator_config.get_public_config());
+                    known_da_nodes.push(cur_validator_config.get_public_config());
                 }
 
                 cur_validator_config.get_public_config()
@@ -305,11 +304,6 @@ impl TestDescription {
             start_delay: 1,
             builder_timeout: Duration::from_millis(1000),
             data_request_delay: Duration::from_millis(200),
-            // TODO what's the difference between this and the second config?
-            election_config: Some(TYPES::Membership::default_election_config(
-                num_nodes_with_stake as u64,
-                0,
-            )),
             // Placeholder until we spin up the builder
             builder_url: Url::parse("http://localhost:9999").expect("Valid URL"),
         };
@@ -325,7 +319,7 @@ impl TestDescription {
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
-            |a: &mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>| {
+            |a: &mut HotShotConfig<TYPES::SignatureKey>| {
                 a.next_view_timeout = next_view_timeout;
                 a.timeout_ratio = timeout_ratio;
                 a.round_start_delay = round_start_delay;

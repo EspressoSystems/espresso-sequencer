@@ -52,10 +52,8 @@ async fn main() -> Result<()> {
 
     // Attempt to get the config from the orchestrator.
     // Loops internally until the config is received.
-    let config: NetworkConfig<
-        <TestTypes as NodeType>::SignatureKey,
-        <TestTypes as NodeType>::ElectionConfigType,
-    > = orchestrator_client.get_config_after_collection().await;
+    let config: NetworkConfig<<TestTypes as NodeType>::SignatureKey> =
+        orchestrator_client.get_config_after_collection().await;
 
     tracing::info!("Received config from orchestrator");
 

@@ -38,6 +38,8 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let node_id = 2;
     let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
 
     let mut vid =
         vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(node_id));
@@ -48,7 +50,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone());
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();

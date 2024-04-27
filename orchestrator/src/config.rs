@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     env, fs,
     net::SocketAddr,
     num::NonZeroUsize,
@@ -11,8 +10,7 @@ use std::{
 
 use clap::ValueEnum;
 use hotshot_types::{
-    traits::{election::ElectionConfig, signature_key::SignatureKey},
-    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+    traits::signature_key::SignatureKey, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use libp2p::{Multiaddr, PeerId};
 use serde_inline_default::serde_inline_default;
@@ -156,7 +154,7 @@ impl Default for RandomBuilderConfig {
 /// a network configuration
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound(deserialize = ""))]
-pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
+pub struct NetworkConfig<KEY: SignatureKey> {
     /// number of views to run
     pub rounds: usize,
     /// number of transactions per view
@@ -181,12 +179,10 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub start_delay_seconds: u64,
     /// name of the key type (for debugging)
     pub key_type_name: String,
-    /// election config type (for debugging)
-    pub election_config_type_name: String,
     /// the libp2p config
     pub libp2p_config: Option<Libp2pConfig>,
     /// the hotshot config
-    pub config: HotShotConfig<KEY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<KEY>,
     /// the webserver config
     pub web_server_config: Option<WebServerConfig>,
     /// the data availability web server config
@@ -211,7 +207,7 @@ pub enum NetworkConfigSource {
     File,
 }
 
-impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
+impl<K: SignatureKey> NetworkConfig<K> {
     /// Asynchronously retrieves a `NetworkConfig` either from a file or from an orchestrator.
     ///
     /// This function takes an `OrchestratorClient`, an optional file path, and Libp2p-specific parameters.
@@ -242,7 +238,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         file: Option<String>,
         libp2p_address: Option<SocketAddr>,
         libp2p_public_key: Option<PeerId>,
-    ) -> anyhow::Result<(NetworkConfig<K, E>, NetworkConfigSource)> {
+    ) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
         if let Some(file) = file {
             info!("Retrieving config from the file");
             // if we pass in file, try there first
@@ -301,7 +297,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         libp2p_public_key: Option<PeerId>,
         // If true, we will use the node index to determine if we are a DA node
         indexed_da: bool,
-    ) -> anyhow::Result<(NetworkConfig<K, E>, NetworkConfigSource)> {
+    ) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
         let (mut run_config, source) =
             Self::from_file_or_orchestrator(client, file, libp2p_address, libp2p_public_key)
                 .await?;
@@ -324,8 +320,8 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
         }
 
         // one more round of orchestrator here to get peer's public key/config
-        let updated_config: NetworkConfig<K, E> = client
-            .post_and_wait_all_public_keys::<K, E>(
+        let updated_config: NetworkConfig<K> = client
+            .post_and_wait_all_public_keys::<K>(
                 run_config.node_index,
                 run_config
                     .config
@@ -434,7 +430,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     }
 }
 
-impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
+impl<K: SignatureKey> Default for NetworkConfig<K> {
     fn default() -> Self {
         Self {
             rounds: ORCHESTRATOR_DEFAULT_NUM_ROUNDS,
@@ -446,7 +442,6 @@ impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
             config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
             key_type_name: std::any::type_name::<K>().to_string(),
-            election_config_type_name: std::any::type_name::<E>().to_string(),
             web_server_config: None,
             da_web_server_config: None,
             cdn_marshal_address: None,
@@ -512,7 +507,7 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     pub random_builder: Option<RandomBuilderConfig>,
 }
 
-impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkConfig<K, E> {
+impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
     fn from(val: NetworkConfigFile<K>) -> Self {
         NetworkConfig {
             rounds: val.rounds,
@@ -544,7 +539,6 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkC
             }),
             config: val.config.into(),
             key_type_name: std::any::type_name::<K>().to_string(),
-            election_config_type_name: std::any::type_name::<E>().to_string(),
             start_delay_seconds: val.start_delay_seconds,
             cdn_marshal_address: val.cdn_marshal_address,
             web_server_config: val.web_server_config,
@@ -581,7 +575,7 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     #[serde(skip)]
     /// The known DA nodes' public key and stake values
-    pub known_da_nodes: HashSet<PeerConfig<KEY>>,
+    pub known_da_nodes: Vec<PeerConfig<KEY>>,
     #[serde(skip)]
     /// The known non-staking nodes'
     pub known_nodes_without_stake: Vec<KEY>,
@@ -666,7 +660,7 @@ impl ValidatorConfigFile {
     }
 }
 
-impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY, E> {
+impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
     fn from(val: HotShotConfigFile<KEY>) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
@@ -688,7 +682,6 @@ impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotS
             num_bootstrap: val.num_bootstrap,
             builder_timeout: val.builder_timeout,
             data_request_delay: val.data_request_delay,
-            election_config: None,
             builder_url: val.builder_url,
         }
     }
@@ -708,9 +701,9 @@ impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
         ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1, val.is_da)
     }
 }
-impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile> for HotShotConfig<KEY, E> {
+impl<KEY: SignatureKey> From<ValidatorConfigFile> for HotShotConfig<KEY> {
     fn from(value: ValidatorConfigFile) -> Self {
-        let mut config: HotShotConfig<KEY, E> = HotShotConfigFile::default().into();
+        let mut config: HotShotConfig<KEY> = HotShotConfigFile::default().into();
         config.my_own_validator_config = value.into();
         config
     }
@@ -722,7 +715,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
         let staked_committee_nodes: usize = 5;
 
         // Aggregate the DA nodes
-        let mut known_da_nodes = HashSet::new();
+        let mut known_da_nodes = Vec::new();
 
         let gen_known_nodes_with_stake = (0..10)
             .map(|node_id| {
@@ -731,7 +724,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
 
                 // Add to DA nodes based on index
                 if node_id < staked_committee_nodes as u64 {
-                    known_da_nodes.insert(cur_validator_config.get_public_config());
+                    known_da_nodes.push(cur_validator_config.get_public_config());
                     cur_validator_config.is_da = true;
                 }
 

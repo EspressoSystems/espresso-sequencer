@@ -67,7 +67,7 @@ impl<
         N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
     > TestTaskState for SpinningTask<TYPES, I>
 where
-    I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
+    I: TestableNodeImplementation<TYPES>,
     I: NodeImplementation<
         TYPES,
         QuorumNetwork = N,

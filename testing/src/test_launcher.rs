@@ -29,7 +29,7 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
     /// generate new storage for each node
     pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node
-    pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    pub config: HotShotConfig<TYPES::SignatureKey>,
 }
 
 /// test launcher
@@ -58,7 +58,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     #[must_use]
     pub fn modify_default_config(
         mut self,
-        mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>),
+        mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey>),
     ) -> Self {
         f(&mut self.resource_generator.config);
         self

@@ -3,11 +3,7 @@ use std::{net::SocketAddr, time::Duration};
 use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
-use hotshot_types::{
-    constants::Version01,
-    traits::{election::ElectionConfig, signature_key::SignatureKey},
-    PeerConfig,
-};
+use hotshot_types::{constants::Version01, traits::signature_key::SignatureKey, PeerConfig};
 use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
@@ -84,8 +80,6 @@ pub struct BenchResultsDownloadConfig {
     pub transaction_size: u64,
     /// The number of rounds
     pub rounds: usize,
-    /// The type of leader election used
-    pub leader_election_type: String,
 
     // Results starting here
     /// The average latency of the transactions
@@ -196,11 +190,11 @@ impl OrchestratorClient {
     /// # Errors
     /// If we were unable to serialize the Libp2p data
     #[allow(clippy::type_complexity)]
-    pub async fn get_config_without_peer<K: SignatureKey, E: ElectionConfig>(
+    pub async fn get_config_without_peer<K: SignatureKey>(
         &self,
         libp2p_address: Option<SocketAddr>,
         libp2p_public_key: Option<PeerId>,
-    ) -> anyhow::Result<NetworkConfig<K, E>> {
+    ) -> anyhow::Result<NetworkConfig<K>> {
         // Get the (possible) Libp2p advertise address from our args
         let libp2p_address = libp2p_address.map(|f| {
             Multiaddr::try_from(format!(
@@ -236,7 +230,7 @@ impl OrchestratorClient {
         // get the corresponding config
         let f = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
-                let config: Result<NetworkConfig<K, E>, ClientError> = client
+                let config: Result<NetworkConfig<K>, ClientError> = client
                     .post(&format!("api/config/{node_index}"))
                     .send()
                     .await;
@@ -277,9 +271,7 @@ impl OrchestratorClient {
     ///
     /// Does not fail, retries internally until success.
     #[instrument(skip_all, name = "orchestrator config")]
-    pub async fn get_config_after_collection<K: SignatureKey, E: ElectionConfig>(
-        &self,
-    ) -> NetworkConfig<K, E> {
+    pub async fn get_config_after_collection<K: SignatureKey>(&self) -> NetworkConfig<K> {
         // Define the request for post-register configurations
         let get_config_after_collection = |client: Client<ClientError, OrchestratorVersion>| {
             async move {
@@ -308,12 +300,12 @@ impl OrchestratorClient {
     /// # Panics
     /// if unable to post
     #[instrument(skip(self), name = "orchestrator public keys")]
-    pub async fn post_and_wait_all_public_keys<K: SignatureKey, E: ElectionConfig>(
+    pub async fn post_and_wait_all_public_keys<K: SignatureKey>(
         &self,
         node_index: u64,
         my_pub_key: PeerConfig<K>,
         is_da: bool,
-    ) -> NetworkConfig<K, E> {
+    ) -> NetworkConfig<K> {
         // send my public key
         let _send_pubkey_ready_f: Result<(), ClientError> = self
             .client
