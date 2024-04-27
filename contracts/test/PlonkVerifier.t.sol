@@ -317,13 +317,12 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
 
         V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof);
 
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-pcs-info";
         cmds[2] = vm.toString(abi.encode(vk));
         cmds[3] = vm.toString(abi.encode(publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
-        cmds[5] = vm.toString(abi.encode(""));
 
         bytes memory result = vm.ffi(cmds);
         (
