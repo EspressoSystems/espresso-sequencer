@@ -64,11 +64,11 @@ hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-eve
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.2.3", package = "cdn-broker" }
+], tag = "0.2.4", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.2.3", package = "cdn-marshal" }
+], tag = "0.2.4", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4", features = [
   "test-apis",
