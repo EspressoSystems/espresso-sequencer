@@ -383,7 +383,6 @@ processes:
 
   permissionless-builder:
     command: permissionless-builder
-    log_location: testing_builder.json
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
