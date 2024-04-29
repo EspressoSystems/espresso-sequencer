@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{BlockBuildingSnafu, Transaction};
+use crate::{BlockBuildingSnafu, NodeState, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{states::InstanceState, BlockPayload};
@@ -62,8 +62,14 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         }
     }
 
+    // TODO remove
     fn genesis() -> (Self, Self::Metadata) {
-        unimplemented!("TODO remove from trait");
+        // this is only called from `Leaf::genesis`. Since we are
+        // passing empty list, max_block_size is irrelevant so we can
+        // use the mock NodeState. A future update to HotShot should
+        // make a change there to remove the need for this workaround.
+
+        Self::from_transactions([], Arc::new(NodeState::mock())).unwrap()
     }
 
     fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
