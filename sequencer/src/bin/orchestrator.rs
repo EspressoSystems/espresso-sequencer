@@ -134,7 +134,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_BUILDER_TIMEOUT",
-        default_value = "1ms",
+        default_value = "1s",
         value_parser = parse_duration
     )]
     builder_timeout: Duration,

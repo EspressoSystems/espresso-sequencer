@@ -537,7 +537,10 @@ pub mod testing {
                 ))
                 .unwrap(),
                 builder_timeout: Duration::from_secs(1),
-                start_threshold: (known_nodes_with_stake.clone().len() as u64, known_nodes_with_stake.clone().len() as u64),
+                start_threshold: (
+                    known_nodes_with_stake.clone().len() as u64,
+                    known_nodes_with_stake.clone().len() as u64,
+                ),
             };
 
             Self {

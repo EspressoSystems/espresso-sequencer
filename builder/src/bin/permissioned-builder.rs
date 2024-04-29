@@ -180,7 +180,7 @@ pub struct PermissionedBuilderOptions {
         short,
         long,
         env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
-        default_value = "15"
+        default_value = "0"
     )]
     base_fee: u64,
 }
