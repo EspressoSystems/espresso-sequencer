@@ -13,7 +13,7 @@
 use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
 use crate::{
     availability::AvailabilityDataSource,
-    data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+    data_source::{FileSystemDataSource, SqlDataSource, UpdateDataSource, VersionedDataSource},
     fetching::provider::NoFetching,
     node::NodeDataSource,
     status::{StatusDataSource, UpdateStatusData},
@@ -60,6 +60,7 @@ pub struct MockNetwork<D: DataSourceLifeCycle> {
 // MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
 // convenient type alias.
 pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
+pub type MockSqlDataSource = SqlDataSource<MockTypes, NoFetching>;
 
 pub const NUM_NODES: usize = 2;
 

@@ -75,7 +75,7 @@
 
 use super::{
     notifier::Notifier,
-    storage::{pruning::PruneStorage, AvailabilityStorage},
+    storage::{pruning::PruneStorage, AvailabilityStorage, ExplorerStorage},
     VersionedDataSource,
 };
 use crate::{
@@ -84,6 +84,7 @@ use crate::{
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
+    explorer,
     fetching::{self, request, Provider},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
@@ -730,6 +731,76 @@ where
 
     async fn revert(&mut self) {
         self.fetcher.storage.write().await.revert().await
+    }
+}
+
+#[async_trait]
+impl<Types, S, P> ExplorerStorage<Types> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload,
+    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    S: ExplorerStorage<Types> + Send + Sync,
+    P: Send + Sync,
+{
+    async fn get_block_summaries(
+        &self,
+        request: explorer::query_data::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::BlockSummary<Types>>,
+        explorer::query_data::GetBlockSummariesError,
+    > {
+        self.storage().await.get_block_summaries(request).await
+    }
+
+    async fn get_block_detail(
+        &self,
+        request: explorer::query_data::BlockIdentifier<Types>,
+    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
+    {
+        self.storage().await.get_block_detail(request).await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::TransactionSummary<Types>>,
+        explorer::query_data::GetTransactionSummariesError,
+    > {
+        self.storage()
+            .await
+            .get_transaction_summaries(request)
+            .await
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: explorer::query_data::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::query_data::TransactionDetailResponse<Types>,
+        explorer::query_data::GetTransactionDetailError,
+    > {
+        self.storage().await.get_transaction_detail(request).await
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<
+        explorer::query_data::ExplorerSummary<Types>,
+        explorer::query_data::GetExplorerSummaryError,
+    > {
+        self.storage().await.get_explorer_summary().await
+    }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<
+        explorer::query_data::SearchResult<Types>,
+        explorer::query_data::GetSearchResultsError,
+    > {
+        self.storage().await.get_search_results(query).await
     }
 }
 

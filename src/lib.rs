@@ -410,6 +410,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
+pub mod explorer;
 pub mod fetching;
 pub mod merklized_state;
 pub mod metrics;
@@ -563,7 +564,6 @@ mod test {
     use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
-
     use futures::FutureExt;
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
