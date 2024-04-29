@@ -375,14 +375,12 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-
     use self::{
         data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
     };
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
-        empty_builder_commitment,
         persistence::no_storage::NoStorage,
         state::{FeeAccount, FeeAmount},
         test_helpers::{
@@ -390,11 +388,11 @@ mod test {
             submit_test_helper, TestNetwork,
         },
         testing::TestConfig,
-        Header, NodeState,
+        Header,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
-    use committable::{Commitment, Committable};
+    use committable::Commitment;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use ethers::utils::Anvil;
     use futures::future::{self, join_all};
@@ -406,12 +404,9 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics},
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
-    use jf_primitives::merkle_tree::{
-        prelude::{MerkleProof, Sha3Node},
-        AppendableMerkleTreeScheme,
-    };
+    use jf_primitives::merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -470,22 +465,9 @@ mod test {
                 .status(Default::default()),
         );
 
-        // Populate one account so we have something to look up later. Leave the other accounts
-        // unpopulated, which proves we can handle state updates even with missing accounts.
-        let account = TestConfig::builder_key(0).fee_account();
-        let mut state = ValidatedState::default();
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        state.prefund_account(account, 1.into());
-        let mut network = TestNetwork::with_state(
-            options,
-            std::array::from_fn(|_| state.clone()),
-            [NoStorage; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| MockStateCatchup::default()),
-            l1,
-        )
-        .await;
-
+        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES], l1).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -522,6 +504,7 @@ mod test {
             assert_eq!(*path.elem().unwrap(), block.hash());
 
             tracing::info!(i, "get fee state");
+            let account = TestConfig::builder_key().fee_account();
             let path = client
                 .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
                     "fee-state/{}/{}",
@@ -540,81 +523,6 @@ mod test {
     async fn test_catchup() {
         setup_logging();
         setup_backtrace();
-
-        // Create some non-trivial initial state. We will give all the nodes in the network this
-        // state, except for one, which will have a forgotten state and need to catch up.
-        let mut state = ValidatedState::default();
-        // Prefund an arbitrary account so the fee state has some data to forget.
-        state.prefund_account(Default::default(), 1000.into());
-        // Push an arbitrary header commitment so the block state has some data to forget.
-        state
-            .block_merkle_tree
-            .push(
-                Header::genesis(
-                    &NodeState::mock(),
-                    Default::default(),
-                    empty_builder_commitment(),
-                    Default::default(),
-                )
-                .commit(),
-            )
-            .unwrap();
-        let states = std::array::from_fn(|i| {
-            if i == TestConfig::NUM_NODES - 1 {
-                state.forget()
-            } else {
-                state.clone()
-            }
-        });
-
-        // Start a sequencer network, using the query service for catchup.
-        let port = pick_unused_port().expect("No ports free");
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-        let network = TestNetwork::with_state(
-            Options::from(options::Http { port }).catchup(Default::default()),
-            states,
-            [NoStorage; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-        )
-        .await;
-        let mut events = network.server.get_event_stream();
-
-        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
-        // up.
-        let builder = TestConfig::builder_key(TestConfig::NUM_NODES - 1).fee_account();
-        'outer: loop {
-            let event = events.next().await.unwrap();
-            let EventType::Decide { leaf_chain, .. } = event.event else {
-                continue;
-            };
-            for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let height = leaf.get_block_header().height;
-                let leaf_builder = leaf.get_block_header().fee_info.account();
-                tracing::info!(
-                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
-                );
-                if height > 1 && leaf_builder == builder {
-                    break 'outer;
-                }
-            }
-        }
-    }
-
-    #[async_std::test]
-    async fn test_catchup_live() {
-        setup_logging();
-        setup_backtrace();
-
-        // Similar to `test_catchup`, but instead of _starting_ with a non-trivial state and a node
-        // that is missing the state, we start consensus normally, wait for it to make some
-        // progress, stop one node and let it fall behind, then start it again and check that it
-        // catches up.
 
         // Start a sequencer network, using the query service for catchup.
         let port = pick_unused_port().expect("No ports free");
@@ -678,24 +586,30 @@ mod test {
             .await;
         let mut events = node.get_event_stream();
 
-        // Wait for a (non-genesis) block proposed by the lagging node, to prove that it has caught
-        // up.
-        let builder = TestConfig::builder_key(1).fee_account();
-        'outer: loop {
+        // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
+        // caught up and all nodes are in sync.
+        let mut proposers = [false; TestConfig::NUM_NODES];
+        loop {
             let event = events.next().await.unwrap();
-            tracing::info!(?event, "restarted node got event");
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let height = leaf.get_height();
-                let leaf_builder = leaf.get_block_header().fee_info.account();
-                tracing::info!(
-                    "waiting for block from {builder}, block {height} is from {leaf_builder}",
-                );
-                if height > 1 && leaf_builder == builder {
-                    break 'outer;
+                let leaf_builder =
+                    (leaf.get_view_number().get_u64() as usize) % TestConfig::NUM_NODES;
+                if height == 0 {
+                    continue;
                 }
+
+                tracing::info!(
+                    "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
+                );
+                proposers[leaf_builder] = true;
+            }
+
+            if proposers.iter().all(|has_proposed| *has_proposed) {
+                break;
             }
         }
     }

@@ -390,12 +390,9 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let key = Self::builder_key(i);
-            tracing::info!("node {i} is builder {:x}", key.address());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
-                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -417,14 +414,6 @@ pub mod testing {
 
             tracing::info!("After init hotshot");
             handle
-        }
-
-        pub fn builder_key(i: usize) -> EthKeyPair {
-            EthKeyPair::from_mnemonic(
-                "test test test test test test test test test test test junk",
-                i as u32,
-            )
-            .unwrap()
         }
 
         // url for the hotshot event streaming api
@@ -538,19 +527,12 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let key = HotShotTestConfig::builder_key(Self::SUBSCRIBED_DA_NODE_ID);
-            tracing::info!(
-                "node {} is builder {:x}",
-                Self::SUBSCRIBED_DA_NODE_ID,
-                key.address()
-            );
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -604,19 +586,12 @@ pub mod testing {
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let key = HotShotTestConfig::builder_key(HotShotTestConfig::NUM_STAKED_NODES);
-            tracing::info!(
-                "node {} is builder {:x}",
-                HotShotTestConfig::NUM_STAKED_NODES,
-                key.address()
-            );
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
                 ),
-                key,
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());

@@ -24,7 +24,6 @@ use ethers::types::{Address, U256};
 
 use l1_client::L1Client;
 
-use eth_signature_key::EthKeyPair;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -61,6 +60,7 @@ use hotshot_types::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
     },
@@ -164,14 +164,12 @@ pub struct NodeState {
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
-    builder_key: EthKeyPair,
 }
 
 impl NodeState {
     pub fn new(
         chain_config: ChainConfig,
         l1_client: L1Client,
-        builder_key: EthKeyPair,
         catchup: impl StateCatchup + 'static,
     ) -> Self {
         Self {
@@ -179,7 +177,6 @@ impl NodeState {
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
-            builder_key,
         }
     }
 
@@ -188,18 +185,12 @@ impl NodeState {
         Self::new(
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
-            state::FeeAccount::test_key_pair(),
             catchup::mock::MockStateCatchup::default(),
         )
     }
 
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
         self.l1_client = l1_client;
-        self
-    }
-
-    pub fn with_builder(mut self, key: EthKeyPair) -> Self {
-        self.builder_key = key;
         self
     }
 
@@ -270,8 +261,6 @@ pub struct NetworkParams {
 
 #[derive(Clone, Debug)]
 pub struct BuilderParams {
-    pub mnemonic: String,
-    pub eth_account_index: u32,
     pub prefunded_accounts: Vec<Address>,
 }
 
@@ -317,6 +306,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         }
         None => {
             tracing::info!("loading network config from orchestrator");
+            tracing::error!(
+                "waiting for other nodes to connect, DO NOT RESTART until fully connected"
+            );
             let config = NetworkConfig::get_complete_config(
                 &orchestrator_client,
                 None,
@@ -334,6 +326,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
                 "loaded config",
             );
             persistence.save_config(&config).await?;
+            tracing::error!("all nodes connected");
             (config, true)
         }
     };
@@ -383,9 +376,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
     let (da_network, quorum_network) = {
-        tracing::info!("Waiting for the CDN connection to be initialized");
+        tracing::warn!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
-        tracing::info!("CDN connection initialized");
+        tracing::warn!("CDN connection initialized");
         (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
     };
 
@@ -402,13 +395,9 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let builder_key =
-        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
-    tracing::info!("Builder account address {:?}", builder_key.address());
-
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
+        tracing::info!("Prefunding account {:?} for demo", address);
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
@@ -417,7 +406,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState {
         chain_config,
         l1_client,
-        builder_key,
         genesis_state,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     };
@@ -447,7 +435,10 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::{catchup::mock::MockStateCatchup, persistence::no_storage::NoStorage};
+    use crate::{
+        catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair,
+        persistence::no_storage::NoStorage,
+    };
     use committable::Committable;
     use futures::{
         future::join_all,
@@ -465,21 +456,20 @@ pub mod testing {
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::{
-            block_contents::BlockHeader, metrics::NoMetrics, signature_key::StakeTableEntryType,
-            stake_table::StakeTableScheme,
-        },
-        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
-
     use std::time::Duration;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
 
     pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(1usize, ())
-            .await
+        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+            TestConfig::NUM_NODES,
+            (),
+        )
+        .await
     }
 
     #[derive(Clone)]
@@ -498,7 +488,7 @@ pub mod testing {
             // Generate keys for the nodes.
             let seed = [0; 32];
             let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
-                .map(|i| PubKey::generated_from_seed_indexed(seed, i as u64))
+                .map(|i| <PubKey as SignatureKey>::generated_from_seed_indexed(seed, i as u64))
                 .unzip();
             let state_key_pairs = (0..num_nodes)
                 .map(|i| StateKeyPair::generate_from_seed_indexed(seed, i as u64))
@@ -621,7 +611,7 @@ pub mod testing {
         pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
             &self,
             i: usize,
-            state: ValidatedState,
+            mut state: ValidatedState,
             persistence: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
@@ -651,12 +641,13 @@ pub mod testing {
                 _pd: Default::default(),
             };
 
-            let key = Self::builder_key(i);
-            let address = key.address();
+            // Make sure the builder account is funded.
+            let builder_account = Self::builder_key().fee_account();
+            tracing::info!(%builder_account, "prefunding builder account");
+            state.prefund_account(builder_account, U256::max_value().into());
             let node_state = NodeState::new(
                 ChainConfig::default(),
                 L1Client::new(self.url.clone(), Address::default()),
-                key,
                 catchup,
             )
             .with_genesis(state);
@@ -665,7 +656,6 @@ pub mod testing {
                 i,
                 key = %config.my_own_validator_config.public_key,
                 state_key = %config.my_own_validator_config.state_key_pair.ver_key(),
-                %address,
                 "starting node",
             );
             SequencerContext::init(
@@ -683,12 +673,8 @@ pub mod testing {
             .unwrap()
         }
 
-        pub fn builder_key(i: usize) -> EthKeyPair {
-            EthKeyPair::from_mnemonic(
-                "test test test test test test test test test test test junk",
-                i as u32,
-            )
-            .unwrap()
+        pub fn builder_key() -> EthKeyPair {
+            FeeAccount::generated_from_seed_indexed([1; 32], 0).1
         }
     }
 

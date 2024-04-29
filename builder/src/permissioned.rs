@@ -240,11 +240,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    // creating the instance state without any builder mnemonic
-    let builder_key =
-        EthKeyPair::from_mnemonic(&builder_params.mnemonic, builder_params.eth_account_index)?;
-    tracing::info!("Builder account address {:?}", builder_key.address());
-
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
         tracing::warn!("Prefunding account {:?} for demo", address);
@@ -256,7 +251,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState::new(
         ChainConfig::default(),
         l1_client,
-        builder_key,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
 
