@@ -1515,7 +1515,29 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
+ "clap",
+ "dashmap",
+ "derivative",
+ "jf-primitives 0.4.0-pre.0",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3#b18d932630d89bd9cb3308c1805dbdaff911311f"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3)",
  "clap",
  "dashmap",
  "derivative",
@@ -1537,7 +1559,7 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
  "clap",
  "jf-primitives 0.4.0-pre.0",
  "rand 0.8.5",
@@ -1552,7 +1574,21 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
+ "clap",
+ "jf-primitives 0.4.0-pre.0",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3#b18d932630d89bd9cb3308c1805dbdaff911311f"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3)",
  "clap",
  "jf-primitives 0.4.0-pre.0",
  "tokio",
@@ -1564,6 +1600,38 @@ dependencies = [
 name = "cdn-proto"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1#3a80e1839770062a2a6dc42914463e6cff1c9045"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp",
+ "derivative",
+ "jf-primitives 0.4.0-pre.0",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "mockall",
+ "parking_lot",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.12.1",
+ "redis",
+ "rkyv",
+ "rustls 0.21.10",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3#b18d932630d89bd9cb3308c1805dbdaff911311f"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -3985,9 +4053,9 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker",
+ "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
  "cdn-client",
- "cdn-marshal",
+ "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.1)",
  "committable",
  "custom_debug 0.5.1",
  "dashmap",
@@ -8490,8 +8558,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
- "cdn-broker",
- "cdn-marshal",
+ "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3)",
+ "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.3)",
  "clap",
  "cld",
  "committable",
