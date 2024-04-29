@@ -155,11 +155,11 @@ async fn init_consensus(
     // Get the number of nodes with stake
     let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
 
-    // Create memberships
-    let election_config =
-        MockMembership::default_election_config(num_nodes_with_stake.get() as u64, 0);
-    let membership =
-        MockMembership::create_election(known_nodes_with_stake.clone(), election_config, 0);
+    let membership = MockMembership::create_election(
+        known_nodes_with_stake.clone(),
+        known_nodes_with_stake.clone(),
+        0,
+    );
     let memberships = Memberships {
         quorum_membership: membership.clone(),
         da_membership: membership.clone(),
@@ -183,19 +183,19 @@ async fn init_consensus(
         round_start_delay: 0,
         next_view_timeout: 10000,
         timeout_ratio: (11, 10),
-        propose_min_round_time: Duration::from_secs(0),
-        propose_max_round_time: Duration::from_secs(2),
-        min_transactions: 1,
-        max_transactions: NonZeroUsize::new(100).unwrap(),
         num_bootstrap: 0,
         execution_type: ExecutionType::Continuous,
-        election_config: None,
-        known_da_nodes: HashSet::from_iter(known_nodes_with_stake.clone()),
+        known_da_nodes: known_nodes_with_stake.clone(),
         da_staked_committee_size: pub_keys.len(),
         da_non_staked_committee_size: 0,
         my_own_validator_config: Default::default(),
         data_request_delay: Duration::from_millis(200),
         view_sync_timeout: Duration::from_millis(250),
+        start_threshold: (
+            known_nodes_with_stake.len() as u64,
+            known_nodes_with_stake.len() as u64,
+        ),
+        builder_timeout: Duration::from_secs(1),
     };
 
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
