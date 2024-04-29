@@ -223,9 +223,7 @@ async fn main() -> anyhow::Result<()> {
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
 
     let builder_params = BuilderParams {
-        mnemonic: opt.eth_mnemonic,
         prefunded_accounts: vec![],
-        eth_account_index: opt.eth_account_index,
     };
 
     // Parse supplied Libp2p addresses to their socket form

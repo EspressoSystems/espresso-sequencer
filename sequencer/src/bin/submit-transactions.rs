@@ -104,9 +104,21 @@ struct Options {
     #[clap(short, long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_PORT")]
     port: Option<u16>,
 
+    /// Alternative URL to submit transactions to, if not the query service URL.
+    #[clap(long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    submit_url: Option<Url>,
+
     /// URL of the query service.
-    #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
+}
+
+impl Options {
+    fn submit_url(&self) -> Url {
+        self.submit_url
+            .clone()
+            .unwrap_or_else(|| self.url.join("submit").unwrap())
+    }
 }
 
 #[async_std::main]
@@ -221,7 +233,9 @@ async fn submit_transactions<Ver: StaticVersionType>(
     mut rng: ChaChaRng,
     _: Ver,
 ) {
-    let client = Client::<Error, Ver>::new(opt.url.clone());
+    let url = opt.submit_url();
+    tracing::info!(%url, "starting load generator task");
+    let client = Client::<Error, Ver>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -236,7 +250,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
             tx.payload().len()
         );
         if let Err(err) = client
-            .post::<()>("submit/submit")
+            .post::<()>("submit")
             .body_binary(&tx)
             .unwrap()
             .send()

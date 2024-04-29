@@ -55,9 +55,7 @@ where
         url: opt.l1_provider_url,
     };
     let builder_params = BuilderParams {
-        mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
-        eth_account_index: opt.eth_account_index,
     };
 
     // Parse supplied Libp2p addresses to their socket form
