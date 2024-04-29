@@ -80,7 +80,8 @@ pub struct BenchResultsDownloadConfig {
     pub transaction_size: u64,
     /// The number of rounds
     pub rounds: usize,
-
+    /// The type of leader election: static, fixed, random
+    pub leader_election_type: String,
     // Results starting here
     /// The average latency of the transactions
     pub avg_latency_in_sec: i64,

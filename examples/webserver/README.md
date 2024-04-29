@@ -43,7 +43,7 @@ If using gpu-vid, you have to run:
 ```
 just async_std example webserver -- http://127.0.0.1:9000 
 just async_std example webserver -- http://127.0.0.1:9001 
-just async_std example orchestrator-webserver -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://127.0.0.1:4444 --total_nodes 10 --da_committee_size 5 --fixed_leader_for_gpuvid 1
+just async_std example_fixed_leader orchestrator-webserver -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://127.0.0.1:4444 --total_nodes 10 --da_committee_size 5 --fixed_leader_for_gpuvid 1
 just async_std example_gpuvid_leader multi-validator-webserver -- 1 http://127.0.0.1:4444
 sleep 1m
 just async_std example_fixed_leader multi-validator-webserver -- 9 http://127.0.0.1:4444
@@ -56,7 +56,7 @@ If you don't have a gpu but want to test out fixed leader, you can run:
 ```
 just async_std example webserver -- http://127.0.0.1:9000 
 just async_std example webserver -- http://127.0.0.1:9001 
-just async_std example orchestrator-webserver -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://127.0.0.1:4444 --total_nodes 10 --da_committee_size 5 --transactions_per_round 1 --transaction_size 512 --rounds 10 --fixed_leader_for_gpuvid 2 --webserver_url http://127.0.0.1:9000 --da_webserver_url http://127.0.0.1:9001 
+just async_std example_fixed_leader orchestrator-webserver -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://127.0.0.1:4444 --total_nodes 10 --da_committee_size 5 --transactions_per_round 1 --transaction_size 512 --rounds 10 --fixed_leader_for_gpuvid 2 --webserver_url http://127.0.0.1:9000 --da_webserver_url http://127.0.0.1:9001 
 just async_std example_fixed_leader multi-validator-webserver -- 2 http://127.0.0.1:4444
 sleep 1m
 just async_std example_fixed_leader multi-validator-webserver -- 8 http://127.0.0.1:4444

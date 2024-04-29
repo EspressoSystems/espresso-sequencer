@@ -507,6 +507,8 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     pub random_builder: Option<RandomBuilderConfig>,
 }
 
+impl<K: SignatureKey> NetworkConfigFile<K> {}
+
 impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
     fn from(val: NetworkConfigFile<K>) -> Self {
         NetworkConfig {
@@ -742,7 +744,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             staked_committee_nodes,
             known_da_nodes,
             non_staked_committee_nodes: 0,
-            fixed_leader_for_gpuvid: 0,
+            fixed_leader_for_gpuvid: 1,
             next_view_timeout: 10000,
             view_sync_timeout: Duration::from_millis(1000),
             timeout_ratio: (11, 10),

@@ -296,7 +296,7 @@ impl TestDescription {
             my_own_validator_config,
             da_staked_committee_size,
             da_non_staked_committee_size,
-            fixed_leader_for_gpuvid: 0,
+            fixed_leader_for_gpuvid: 1,
             next_view_timeout: 500,
             view_sync_timeout: Duration::from_millis(250),
             timeout_ratio: (11, 10),
