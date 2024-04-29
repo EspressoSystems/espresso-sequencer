@@ -47,18 +47,18 @@ ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
 # Hotshot imports
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.43" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.12" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.12" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.44" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "rm/update-hotshot" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.13" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.12" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.44" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.13" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -99,3 +99,19 @@ vbs = "0.1"
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
+
+[patch."https://github.com/EspressoSystems/HotShot"]
+hotshot = { path = "../HotShot/crates/hotshot" }
+hotshot-orchestrator = { path = "../HotShot/crates/orchestrator" }
+hotshot-builder-api = { path = "../HotShot/crates/builder-api" }
+hotshot-stake-table = { path = "../HotShot/crates/hotshot-stake-table" }
+hotshot-task = { path = "../HotShot/crates/task" }
+hotshot-testing = { path = "../HotShot/crates/testing" }
+hotshot-types = { path = "../HotShot/crates/types" }
+hotshot-web-server = { path = "../HotShot/crates/web_server" }
+
+[patch."https://github.com/EspressoSystems/hotshot-builder-core"]
+hotshot-builder-core = { path = "../hotshot-builder-core" }
+
+[patch."https://github.com/EspressoSystems/hotshot-query-service"]
+hotshot-query-service = { path = "../hotshot-query-service" }

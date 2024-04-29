@@ -254,6 +254,7 @@ mod test_helpers {
                                             &*metrics,
                                             STAKE_TABLE_CAPACITY_FOR_TEST,
                                             SEQUENCER_VERSION,
+                                            true,
                                         )
                                         .await
                                     }
@@ -272,6 +273,7 @@ mod test_helpers {
                                 &NoMetrics,
                                 STAKE_TABLE_CAPACITY_FOR_TEST,
                                 SEQUENCER_VERSION,
+                                true,
                             )
                             .await
                         }
@@ -945,6 +947,7 @@ mod test {
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
+                true,
             )
             .await;
         let mut events = node.get_event_stream();

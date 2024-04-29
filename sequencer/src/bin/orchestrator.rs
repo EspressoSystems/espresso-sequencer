@@ -2,7 +2,6 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
-use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot_orchestrator::config::Libp2pConfig;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{options::parse_duration, PubKey};
@@ -197,7 +196,7 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = Args::parse();
-    let mut config = NetworkConfig::<PubKey, StaticElectionConfig> {
+    let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
@@ -215,8 +214,6 @@ async fn main() {
         mesh_outbound_min: args.libp2p_mesh_n / 2,
         mesh_n: args.libp2p_mesh_n,
         next_view_timeout: config.next_view_timeout,
-        propose_min_round_time: config.propose_min_round_time,
-        propose_max_round_time: config.propose_max_round_time,
         online_time: 10,
         num_txn_per_round: 0,
         server_mode: false,
@@ -225,6 +222,7 @@ async fn main() {
     config.config.num_nodes_with_stake = args.num_nodes;
     config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
+    config.config.known_da_nodes = Vec::new();
     config.config.known_nodes_without_stake = vec![];
     config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;

@@ -170,6 +170,10 @@ pub struct PermissionedBuilderOptions {
         default_value = "15"
     )]
     pub buffer_view_num_count: usize,
+
+    /// Whether or not we are a DA node.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
+    pub is_da: bool,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -277,6 +281,7 @@ async fn main() -> anyhow::Result<()> {
         NoStorage,
         max_response_timeout,
         buffer_view_num_count,
+        opt.is_da,
     )
     .await?;
 

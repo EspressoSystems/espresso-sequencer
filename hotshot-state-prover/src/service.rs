@@ -52,10 +52,7 @@ type F = ark_ed_on_bn254::Fq;
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 
-type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<
-    BLSPubKey,
-    hotshot::traits::election::static_committee::StaticElectionConfig,
->;
+type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<BLSPubKey>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]

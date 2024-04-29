@@ -10,7 +10,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+        election::static_committee::GeneralStaticCommittee,
         implementations::{NetworkingMetricsValue, WebServerNetwork},
     },
     types::{SignatureKey, SystemContextHandle},
@@ -153,7 +153,7 @@ pub mod testing {
         state_signature::StateSignatureMemStorage, ChainConfig,
     };
     use sequencer::{Event, Transaction};
-    use std::{num::NonZeroUsize, time::Duration};
+    use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
     use crate::non_permissioned::BuilderConfig;
     use crate::permissioned::{init_hotshot, BuilderContext};
@@ -166,12 +166,11 @@ pub mod testing {
     };
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
-    type ElectionConfig = StaticElectionConfig;
     use snafu::{guide::feature_flags, *};
 
     #[derive(Clone)]
     pub struct HotShotTestConfig {
-        pub config: HotShotConfig<PubKey, ElectionConfig>,
+        pub config: HotShotConfig<PubKey>,
         priv_keys_staking_nodes: Vec<BLSPrivKey>,
         priv_keys_non_staking_nodes: Vec<BLSPrivKey>,
         staking_nodes_state_key_pairs: Vec<StateKeyPair>,
@@ -207,12 +206,13 @@ pub mod testing {
 
             let builder_url = hotshot_builder_url();
 
-            let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+            let config: HotShotConfig<PubKey> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
                 num_nodes_without_stake,
                 min_transactions: 1,
                 max_transactions: 10000.try_into().unwrap(),
+                known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake,
                 known_nodes_without_stake: known_nodes_without_stake_pub_keys,
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
@@ -222,7 +222,6 @@ pub mod testing {
                 num_bootstrap: 1usize,
                 propose_min_round_time: Duration::from_secs(0),
                 propose_max_round_time: Duration::from_secs(1),
-                election_config: None,
                 da_staked_committee_size: num_nodes_with_stake,
                 da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
@@ -308,6 +307,7 @@ pub mod testing {
                         .stake_amount
                         .as_u64(),
                     state_key_pair: self.staking_nodes_state_key_pairs[i].clone(),
+                    is_da: true,
                 }
             } else {
                 ValidatorConfig {
@@ -315,6 +315,7 @@ pub mod testing {
                     private_key: self.priv_keys_non_staking_nodes[i].clone(),
                     stake_value: 0,
                     state_key_pair: self.non_staking_nodes_state_key_pairs[i].clone(),
+                    is_da: true,
                 }
             }
         }

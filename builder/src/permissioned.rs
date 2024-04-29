@@ -10,7 +10,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+        election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
             NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
@@ -95,12 +95,11 @@ use hotshot_types::{
     },
 };
 
+use crate::run_builder_api_service;
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
     events_source::{BuilderEvent, EventConsumer, EventsStreamer},
 };
-type ElectionConfig = StaticElectionConfig;
-use crate::run_builder_api_service;
 use std::{num::NonZeroUsize, time::Duration};
 use surf_disco::Client;
 
@@ -142,6 +141,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     persistence: P,
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
+    is_da: bool,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -156,6 +156,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         private_key: network_params.private_staking_key,
         stake_value: 1,
         state_key_pair,
+        is_da,
     };
 
     // Derive our Libp2p public key from our private key
@@ -171,6 +172,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         // can contact us on startup
         Some(network_params.libp2p_advertise_address),
         Some(libp2p_public_key),
+        false,
     )
     .await?
     .0;
@@ -294,7 +296,7 @@ pub async fn init_hotshot<
     P: SequencerPersistence,
     Ver: StaticVersionType + 'static,
 >(
-    config: HotShotConfig<PubKey, ElectionConfig>,
+    config: HotShotConfig<PubKey>,
     stake_table_entries_for_non_voting_nodes: Option<
         Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
     >,
@@ -307,10 +309,6 @@ pub async fn init_hotshot<
     _: Ver,
     persistence: P,
 ) -> (SystemContextHandle<SeqTypes, Node<N, P>>, StateSigner<Ver>) {
-    let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-        config.num_nodes_with_stake.get() as u64,
-        config.num_nodes_without_stake as u64,
-    );
     let combined_known_nodes_with_stake = match stake_table_entries_for_non_voting_nodes {
         Some(stake_table_entries) => {
             let combined_entries = config
@@ -323,16 +321,17 @@ pub async fn init_hotshot<
         }
         None => config.known_nodes_with_stake.clone(),
     };
-    let membership = GeneralStaticCommittee::create_election(
+
+    let quorum_membership = GeneralStaticCommittee::create_election(
+        combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
-        election_config,
         0,
     );
     let memberships = Memberships {
-        quorum_membership: membership.clone(),
-        da_membership: membership.clone(),
-        vid_membership: membership.clone(),
-        view_sync_membership: membership,
+        quorum_membership: quorum_membership.clone(),
+        da_membership: quorum_membership.clone(),
+        vid_membership: quorum_membership.clone(),
+        view_sync_membership: quorum_membership,
     };
     let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
