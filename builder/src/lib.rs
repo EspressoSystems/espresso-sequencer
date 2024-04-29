@@ -695,9 +695,10 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
+        let genesis_state = NodeState::mock();
         let mut parent = {
             // TODO refactor repeated code from other tests
-            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], genesis_state);
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
@@ -706,7 +707,6 @@ mod test {
                     .expect("unable to encode genesis payload");
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = NodeState::mock();
             Header::genesis(
                 &genesis_state,
                 genesis_commitment,

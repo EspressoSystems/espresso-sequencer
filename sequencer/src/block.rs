@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{BlockBuildingSnafu, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::BlockPayload;
+use hotshot_types::traits::{states::InstanceState, BlockPayload};
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -48,6 +48,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction>,
+        _state: Arc<dyn InstanceState>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let payload = Payload::from_txs(txs)?;
         let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
@@ -62,7 +63,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     }
 
     fn genesis() -> (Self, Self::Metadata) {
-        Self::from_transactions([]).unwrap()
+        unimplemented!("TODO remove from trait");
     }
 
     fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {

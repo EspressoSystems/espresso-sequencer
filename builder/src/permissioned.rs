@@ -397,8 +397,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
-
-        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([]);
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
