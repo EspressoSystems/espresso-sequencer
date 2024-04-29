@@ -1,5 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+};
 use async_broadcast::{Receiver, Sender};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
@@ -26,16 +30,13 @@ use hotshot_types::{
         ValidatedState,
     },
     utils::{Terminator, View, ViewInner},
+    vid::vid_scheme,
     vote::{Certificate, HasViewNumber},
 };
+use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
 
 /// Vote dependency types.
 #[derive(Debug, PartialEq)]
@@ -651,6 +652,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     if !validated {
                         return;
                     }
+                }
+                if vid_scheme(self.quorum_membership.total_nodes())
+                    .verify_share(
+                        &disperse.data.share,
+                        &disperse.data.common,
+                        &payload_commitment,
+                    )
+                    .is_err()
+                {
+                    debug!("Invalid VID share.");
+                    return;
                 }
 
                 self.consensus

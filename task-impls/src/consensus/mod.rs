@@ -1,5 +1,17 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use self::proposal_helpers::handle_quorum_proposal_validated;
+use crate::{
+    consensus::{
+        proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able},
+        view_change::update_view,
+    },
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task},
+    vote_collection::{
+        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
+    },
+};
 use anyhow::Result;
 use async_broadcast::Sender;
 use async_lock::RwLock;
@@ -23,6 +35,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         storage::Storage,
     },
+    vid::vid_scheme,
     vote::{Certificate, HasViewNumber},
 };
 #[cfg(not(feature = "dependency-tasks"))]
@@ -31,23 +44,11 @@ use hotshot_types::{
     message::GeneralConsensusMessage,
     simple_vote::QuorumData,
 };
+use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use vbs::version::Version;
-
-use self::proposal_helpers::handle_quorum_proposal_validated;
-use crate::{
-    consensus::{
-        proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able},
-        view_change::update_view,
-    },
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
-    },
-};
 
 /// Helper functions to handler proposal-related functionality.
 pub(crate) mod proposal_helpers;
@@ -286,33 +287,50 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         false
     }
 
-    /// Validates whether the VID Dispersal Proposal is correctly signed
+    /// Validate the VID disperse is correctly signed and has the correct share.
     #[cfg(not(feature = "dependency-tasks"))]
     fn validate_disperse(&self, disperse: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> bool {
         let view = disperse.data.get_view_number();
         let payload_commitment = disperse.data.payload_commitment;
-        // Check whether the data comes from the right leader for this view
-        if self
+
+        // Check whether the data satisfies one of the following.
+        // * From the right leader for this view.
+        // * Calculated and signed by the current node.
+        // * Signed by one of the staked DA committee members.
+        if !self
             .quorum_membership
             .get_leader(view)
             .validate(&disperse.signature, payload_commitment.as_ref())
+            && !self
+                .public_key
+                .validate(&disperse.signature, payload_commitment.as_ref())
         {
-            return true;
-        }
-        // or the data was calculated and signed by the current node
-        if self
-            .public_key
-            .validate(&disperse.signature, payload_commitment.as_ref())
-        {
-            return true;
-        }
-        // or the data was signed by one of the staked DA committee members
-        for da_member in self.committee_membership.get_staked_committee(view) {
-            if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
-                return true;
+            let mut validated = false;
+            for da_member in self.committee_membership.get_staked_committee(view) {
+                if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
+                    validated = true;
+                    break;
+                }
+            }
+            if !validated {
+                return false;
             }
         }
-        false
+
+        // Validate the VID share.
+        if vid_scheme(self.quorum_membership.total_nodes())
+            .verify_share(
+                &disperse.data.share,
+                &disperse.data.common,
+                &payload_commitment,
+            )
+            .is_err()
+        {
+            debug!("Invalid VID share.");
+            return false;
+        }
+
+        true
     }
 
     #[cfg(feature = "dependency-tasks")]
