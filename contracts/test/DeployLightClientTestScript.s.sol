@@ -27,6 +27,23 @@ contract DeployLightClientTestScript is Script {
         return deployContract(state, numBlocksPerEpoch, owner);
     }
 
+    function runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)
+        external
+        returns (address payable, address, LC.LightClientState memory)
+    {
+        address payable lcTestProxy;
+        address admin;
+        LC.LightClientState memory state;
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        (admin,) = deriveRememberKey(seedPhrase, 0);
+        (lcTestProxy, admin, state) = this.run(numBlocksPerEpoch, numInitValidators, admin);
+        LCMock lc = LCMock(lcTestProxy);
+        vm.prank(admin);
+        lc.setPermissionedProver(admin);
+
+        return (lcTestProxy, admin, state);
+    }
+
     function runDemo(uint32 numBlocksPerEpoch, address owner)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)

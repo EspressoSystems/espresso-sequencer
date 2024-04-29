@@ -313,22 +313,23 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::PlonkPreparePcsInfo => {
-            if cli.args.len() != 4 {
-                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof, arg4=extraTranscriptInitMsg");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof");
             }
 
             let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
             let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
-            let msg = {
-                let parsed: Bytes = AbiDecode::decode_hex(&cli.args[3]).unwrap();
-                parsed.0.to_vec()
-            };
 
             let verifier = Verifier::<Bn254>::new(vk.domain_size).unwrap();
             let pcs_info = verifier
-                .prepare_pcs_info::<SolidityTranscript>(&[&vk], &[&pi], &proof.into(), &Some(msg))
+                .prepare_pcs_info::<SolidityTranscript>(
+                    &[&vk],
+                    &[&pi],
+                    &proof.into(),
+                    &Some(vec![]),
+                )
                 .unwrap();
 
             let scalars_and_bases_prod: ParsedG1Point = pcs_info

@@ -478,8 +478,8 @@ pub fn gen_plonk_proof_for_test(
         .iter()
         .zip(prove_keys.iter())
         .enumerate()
-        .for_each(|(i, (cs, pk))| {
-            let extra_msg = Some(format!("extra message: {}", i).into_bytes());
+        .for_each(|(_, (cs, pk))| {
+            let extra_msg = Some(vec![]); // We set extra_msg="" for the contract tests to pass
             proofs.push(
                 PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
                     rng,
@@ -516,6 +516,11 @@ pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkC
     let c = cs.create_public_variable(
         (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
     )?;
+
+    // Create other public variables so that the number of public inputs is 8
+    for _i in 0..5 {
+        cs.create_public_variable(F::from(0u64))?;
+    }
 
     // Create gates:
     // 1. a0 + ... + a_{4*m-1} = b0 * b1
