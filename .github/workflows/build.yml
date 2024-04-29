@@ -72,6 +72,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/pub-key
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -115,6 +116,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/pub-key
 
   build-dockers:
     runs-on: ubuntu-latest

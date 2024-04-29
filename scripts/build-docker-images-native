@@ -83,7 +83,7 @@ cleanup(){
 }
 
 mkdir -p "${WORKDIR}/target/$ARCH/release"
-for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client"; do
+for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key"; do
   cp -v "${CARGO_TARGET_DIR}/release/$binary" "${WORKDIR}/target/$ARCH/release"
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
