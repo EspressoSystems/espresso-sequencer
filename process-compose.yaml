@@ -286,7 +286,7 @@ processes:
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
-    command: cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091
+    command: RUST_LOG=debug cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091
     depends_on:
       keydb:
         condition: process_healthy
@@ -301,7 +301,7 @@ processes:
   # A broker is the main message-routing unit of the CDN
   # as we're running a local demo, we need to operate on different ports
   broker_1:
-    command: cdn-broker 
+    command: RUST_LOG=debug cdn-broker 
       --public-bind-endpoint 0.0.0.0:1740
       --public-advertise-endpoint local_ip:1740
       --private-bind-endpoint 0.0.0.0:1741
