@@ -33,7 +33,6 @@ use tracing::{debug, error, info, instrument, warn};
 
 #[cfg(feature = "dependency-tasks")]
 use crate::consensus::proposal_helpers::handle_quorum_proposal_validated;
-
 use crate::{
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},

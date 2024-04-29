@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
+use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task_impls::events::{HotShotEvent, HotShotEvent::*};
 use hotshot_types::{
@@ -23,6 +24,89 @@ impl<TYPES: NodeType> std::fmt::Debug for EventPredicate<TYPES> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.info)
     }
+}
+
+#[allow(clippy::type_complexity)]
+pub struct TestPredicate<INPUT> {
+    pub function: Arc<RwLock<dyn FnMut(&INPUT) -> PredicateResult + Send + Sync>>,
+    pub info: String,
+}
+
+impl<INPUT> std::fmt::Debug for TestPredicate<INPUT> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.info)
+    }
+}
+
+#[async_trait]
+impl<INPUT> Predicate<INPUT> for TestPredicate<INPUT>
+where
+    INPUT: Send + Sync,
+{
+    async fn evaluate(&self, input: &INPUT) -> PredicateResult {
+        let mut function = self.function.write().await;
+        function(input)
+    }
+
+    async fn info(&self) -> String {
+        self.info.clone()
+    }
+}
+
+pub fn all<TYPES>(events: Vec<HotShotEvent<TYPES>>) -> Box<TestPredicate<Arc<HotShotEvent<TYPES>>>>
+where
+    TYPES: NodeType,
+{
+    let info = format!("{:?}", events);
+    let mut set: HashSet<_> = events.into_iter().collect();
+
+    let function = move |e: &Arc<HotShotEvent<TYPES>>| match set.take(e.as_ref()) {
+        Some(_) => {
+            if set.is_empty() {
+                PredicateResult::Pass
+            } else {
+                PredicateResult::Incomplete
+            }
+        }
+        None => PredicateResult::Fail,
+    };
+
+    Box::new(TestPredicate {
+        function: Arc::new(RwLock::new(function)),
+        info,
+    })
+}
+
+pub fn all_predicates<TYPES: NodeType>(
+    predicates: Vec<Box<EventPredicate<TYPES>>>,
+) -> Box<TestPredicate<Arc<HotShotEvent<TYPES>>>> {
+    let info = format!("{:?}", predicates);
+
+    let mut unsatisfied: Vec<_> = predicates.into_iter().map(Arc::new).collect();
+
+    let function = move |e: &Arc<HotShotEvent<TYPES>>| {
+        if !unsatisfied
+            .clone()
+            .into_iter()
+            .map(|pred| (pred.check)(e.clone()))
+            .any(|val| val)
+        {
+            return PredicateResult::Fail;
+        }
+
+        unsatisfied.retain(|pred| !(pred.check)(e.clone()));
+
+        if unsatisfied.is_empty() {
+            PredicateResult::Pass
+        } else {
+            PredicateResult::Incomplete
+        }
+    };
+
+    Box::new(TestPredicate {
+        function: Arc::new(RwLock::new(function)),
+        info,
+    })
 }
 
 #[async_trait]

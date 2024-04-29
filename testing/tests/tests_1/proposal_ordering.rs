@@ -1,17 +1,14 @@
-use hotshot::{tasks::task_state::CreateTaskState};
-
 use std::sync::Arc;
 
-
-use hotshot_example_types::state_types::TestInstanceState;
-
+use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::{
     block_types::TestMetadata,
     node_types::{MemoryImpl, TestTypes},
+    state_types::TestInstanceState,
 };
 use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
-    predicates::event::{exact, quorum_proposal_send, quorum_proposal_validated},
+    predicates::event::{all_predicates, exact, quorum_proposal_send, quorum_proposal_validated},
     task_helpers::{get_vid_share, vid_scheme_from_view_number},
     test_helpers::permute_input_with_index_order,
     view_generator::TestViewGenerator,
@@ -39,7 +36,6 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
-
 
     let mut vid =
         vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(node_id));
@@ -74,8 +70,10 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
-            quorum_proposal_validated(),
-            exact(QuorumVoteSend(votes[0].clone())),
+            all_predicates(vec![
+                quorum_proposal_validated(),
+                exact(QuorumVoteSend(votes[0].clone())),
+            ]),
         ],
         asserts: vec![],
     };
@@ -91,7 +89,11 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(node_id),
-            null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
+            null_block::builder_fee(
+                quorum_membership.total_nodes(),
+                Arc::new(TestInstanceState {}),
+            )
+            .unwrap(),
         ),
     ];
 
@@ -102,8 +104,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         inputs: view_2_inputs,
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_validated(),
-            quorum_proposal_send(),
+            all_predicates(vec![quorum_proposal_validated(), quorum_proposal_send()]),
         ],
         // We should end on view 2.
         asserts: vec![],
@@ -111,11 +112,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
 
     let script = vec![view_1, view_2];
 
-    let consensus_state = ConsensusTaskState::<
-        TestTypes,
-        MemoryImpl,
-    >::create_from(&handle)
-    .await;
+    let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
     run_test_script(script, consensus_state).await;
 }

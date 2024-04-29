@@ -1,17 +1,12 @@
 #![allow(unused_imports)]
 
-use futures::future::join_all;
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::{
-    consensus::proposal_helpers::{get_parent_leaf_and_state, handle_quorum_proposal_recv},
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
 use async_broadcast::Sender;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use futures::future::join_all;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus},
@@ -27,6 +22,12 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
+
+use crate::{
+    consensus::proposal_helpers::{get_parent_leaf_and_state, handle_quorum_proposal_recv},
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+};
 
 /// The state for the quorum proposal task. Contains all of the information for
 /// handling [`HotShotEvent::QuorumProposalRecv`] events.

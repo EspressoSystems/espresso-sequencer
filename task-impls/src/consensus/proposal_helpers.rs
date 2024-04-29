@@ -1,14 +1,3 @@
-#[cfg(not(feature = "dependency-tasks"))]
-use super::ConsensusTaskState;
-#[cfg(feature = "dependency-tasks")]
-use crate::quorum_proposal::QuorumProposalTaskState;
-#[cfg(feature = "dependency-tasks")]
-use crate::quorum_proposal_recv::QuorumProposalRecvTaskState;
-use crate::{
-    consensus::update_view,
-    events::HotShotEvent,
-    helpers::{broadcast_event, AnyhowTracing},
-};
 use core::time::Duration;
 use std::{
     collections::{HashMap, HashSet},
@@ -47,6 +36,18 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
+
+#[cfg(not(feature = "dependency-tasks"))]
+use super::ConsensusTaskState;
+#[cfg(feature = "dependency-tasks")]
+use crate::quorum_proposal::QuorumProposalTaskState;
+#[cfg(feature = "dependency-tasks")]
+use crate::quorum_proposal_recv::QuorumProposalRecvTaskState;
+use crate::{
+    consensus::update_view,
+    events::HotShotEvent,
+    helpers::{broadcast_event, AnyhowTracing},
+};
 
 /// Validate the state and safety and liveness of a proposal then emit
 /// a `QuorumProposalValidated` event.

@@ -1,9 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -35,6 +31,11 @@ use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+};
 
 /// Vote dependency types.
 #[derive(Debug, PartialEq)]

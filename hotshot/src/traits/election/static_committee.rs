@@ -1,3 +1,5 @@
+use std::{marker::PhantomData, num::NonZeroU64};
+
 use ethereum_types::U256;
 // use ark_bls12_381::Parameters as Param381;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
@@ -8,7 +10,6 @@ use hotshot_types::{
 };
 #[cfg(feature = "randomized-leader-election")]
 use rand::{rngs::StdRng, Rng};
-use std::{marker::PhantomData, num::NonZeroU64};
 use tracing::debug;
 
 /// Dummy implementation of [`Membership`]
