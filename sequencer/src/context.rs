@@ -83,10 +83,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let pub_key = config.my_own_validator_config.public_key;
         tracing::info!(%pub_key, "initializing consensus");
 
-        // Stick our public key in `metrics` so it is easily accessible via the status API.
+        // Stick our public key and node ID in `metrics` so it is easily accessible via the status
+        // API.
         metrics
             .create_label("pub_key".into())
             .set(pub_key.to_string());
+        metrics
+            .create_gauge("node_index".into(), None)
+            .set(node_id as usize);
 
         // Load saved consensus state from storage.
         let initializer = persistence
